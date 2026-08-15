@@ -134,34 +134,53 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
             var fixtureCase = FindCase(inputs, caseId);
             var textureRecord = FindUnique(inputs.textures, fixtureCase.textureId, item => item.id, "texture");
             var meshRecord = FindUnique(inputs.meshes, fixtureCase.meshId, item => item.id, "mesh");
+            var filterMode = ParseFilterMode(fixtureCase.filterMode);
+            var wrapMode = ParseWrapMode(fixtureCase.wrapMode);
 
-            var texture = new Texture2D(
-                textureRecord.width,
-                textureRecord.height,
-                TextureFormat.RGBA32,
-                mipChain: false,
-                linear: true)
+            Texture2D texture = null;
+            Mesh mesh = null;
+            try
             {
-                name = fixtureCase.id + "-texture",
-                filterMode = ParseFilterMode(fixtureCase.filterMode),
-                wrapMode = ParseWrapMode(fixtureCase.wrapMode)
-            };
+                texture = new Texture2D(
+                    textureRecord.width,
+                    textureRecord.height,
+                    TextureFormat.RGBA32,
+                    mipChain: false,
+                    linear: true)
+                {
+                    name = fixtureCase.id + "-texture",
+                    filterMode = filterMode,
+                    wrapMode = wrapMode
+                };
 
-            var pixels = textureRecord.alpha8BottomToTop
-                .Select(alpha => new Color32(255, 255, 255, (byte)alpha))
-                .ToArray();
-            texture.SetPixels32(pixels);
-            texture.Apply(false, false);
+                var pixels = textureRecord.alpha8BottomToTop
+                    .Select(alpha => new Color32(255, 255, 255, (byte)alpha))
+                    .ToArray();
+                texture.SetPixels32(pixels);
+                texture.Apply(false, false);
 
-            var mesh = new Mesh { name = fixtureCase.id + "-mesh" };
-            mesh.vertices = ToVector3Array(meshRecord.positions);
-            if (string.Equals(meshRecord.uv0Status, "Present", StringComparison.Ordinal))
-            {
-                mesh.uv = ToVector2Array(meshRecord.uv0);
+                mesh = new Mesh { name = fixtureCase.id + "-mesh" };
+                mesh.vertices = ToVector3Array(meshRecord.positions);
+                if (string.Equals(meshRecord.uv0Status, "Present", StringComparison.Ordinal))
+                {
+                    mesh.uv = ToVector2Array(meshRecord.uv0);
+                }
+                mesh.triangles = (int[])meshRecord.triangleVertexIndices.Clone();
+
+                return new BuiltReferenceFixture(texture, mesh);
             }
-            mesh.triangles = (int[])meshRecord.triangleVertexIndices.Clone();
-
-            return new BuiltReferenceFixture(texture, mesh);
+            catch
+            {
+                if (texture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(texture);
+                }
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                }
+                throw;
+            }
         }
 
         internal static void Validate(ReferenceFixtureCatalogs catalogs)
