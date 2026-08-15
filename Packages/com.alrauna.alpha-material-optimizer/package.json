@@ -1,0 +1,13 @@
+{
+  "name": "com.alrauna.alpha-material-optimizer",
+  "displayName": "Alpha Material Optimizer",
+  "version": "0.0.1",
+  "unity": "2022.3",
+  "description": "NDMF-based Unity add-on for automatically separating opaque geometry from transparent materials on VRChat avatars.",
+  "vrchatVersion": "2026.3.1",
+  "author": {
+    "name": "Alrauna",
+    "email": "67886220+Alrauna@users.noreply.github.com",
+    "url": "https://github.com/Alrauna/alpha-material-optimizer-ndmf"
+  }
+}
