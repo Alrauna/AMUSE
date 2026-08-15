@@ -146,6 +146,10 @@ Never claim a test passed unless it was actually run and its result observed.
 
 Unity MCP is for integration and observability, not the primary correctness oracle. Discover the current instances, project information, editor state, resources, and enabled tool groups before acting; tool availability can change. Prefer summary-first, paged, read-only queries.
 
+CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.alpha-material-optimizer/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
+
+The public development project exists for deterministic repository tests and package development; the private avatar testbed exists for real-avatar integration testing. When multiple Unity Editor instances are available through MCP, agents MUST use read-only discovery to identify the intended project by project path before any write or broad operation. Never assume a reachable Unity Editor is the correct instance.
+
 Appropriate uses include confirming the connected project and package, inspecting hierarchy/components/materials/renderers, reading Console output, discovering or running Unity tests, exercising NDMF builds, entering Play Mode when required, inspecting generated avatar state, and reproducing failures that cannot reasonably be tested outside the Editor.
 
 Do not use MCP to silently change fixtures, to replace deterministic repository tests, or to operate on a project whose identity is uncertain. Enabling a tool group or invoking a tool does not authorize persistent testbed mutations.
