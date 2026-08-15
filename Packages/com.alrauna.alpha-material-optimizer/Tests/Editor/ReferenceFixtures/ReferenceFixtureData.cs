@@ -146,12 +146,10 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
                     textureRecord.height,
                     TextureFormat.RGBA32,
                     mipChain: false,
-                    linear: true)
-                {
-                    name = fixtureCase.id + "-texture",
-                    filterMode = filterMode,
-                    wrapMode = wrapMode
-                };
+                    linear: true);
+                texture.name = fixtureCase.id + "-texture";
+                texture.filterMode = filterMode;
+                texture.wrapMode = wrapMode;
 
                 var pixels = textureRecord.alpha8BottomToTop
                     .Select(alpha => new Color32(255, 255, 255, (byte)alpha))
@@ -159,7 +157,8 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
                 texture.SetPixels32(pixels);
                 texture.Apply(false, false);
 
-                mesh = new Mesh { name = fixtureCase.id + "-mesh" };
+                mesh = new Mesh();
+                mesh.name = fixtureCase.id + "-mesh";
                 mesh.vertices = ToVector3Array(meshRecord.positions);
                 if (string.Equals(meshRecord.uv0Status, "Present", StringComparison.Ordinal))
                 {
