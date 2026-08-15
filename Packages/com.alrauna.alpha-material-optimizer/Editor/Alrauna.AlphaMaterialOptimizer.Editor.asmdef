@@ -1,6 +1,8 @@
 {
-    "name": "Alrauna.AlphaMaterialOptimizer.Editor.asmdef",
-    "references": [],
+    "name": "Alrauna.AlphaMaterialOptimizer.Editor",
+    "references": [
+        "nadena.dev.ndmf"
+    ],
     "includePlatforms": [
         "Editor"
     ],
