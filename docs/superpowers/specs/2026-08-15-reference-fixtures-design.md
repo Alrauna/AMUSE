@@ -60,6 +60,8 @@ The C# loader parses and validates data. Its builder may translate input records
 
 The builder must not read the expectation catalog. The expectation loader must not inspect or sample constructed Unity objects. Future analyzer tests may join analyzer results to oracle records by case ID only at the assertion boundary.
 
+Building a case must not mutate state observable by another case. Constructed Unity texture and mesh objects are disposable and case-local, or isolated equivalently. Shared logical texture or mesh definitions in the input catalog must not imply shared mutable Unity objects. In particular, setting one case's filter or wrap mode must not change any previously built case.
+
 Unity texture sampling APIs must never derive or rewrite expected outcomes. Expected outcomes are authored directly from the semantic contract in this document. Unity construction verifies that the portable fixture data can be represented in the existing test environment; it is not the oracle.
 
 ## Input catalog schema
@@ -102,7 +104,7 @@ Schema version 1 accepts only `Point` and `Bilinear` filter modes and only `Clam
 
 All JSON numeric values must be finite. Texture dimensions are positive integers. Alpha values are integers from 0 through 255. Position and UV values are JSON numbers. Vertex indices are non-negative integers within the referenced vertex array.
 
-Catalog files use UTF-8 JSON. Array order is significant; JSON object-property order is not. IDs are globally unique across textures, meshes, and cases.
+Catalog files use UTF-8 JSON. Array order is semantically significant for structural numeric arrays such as alpha bytes, positions, UVs, and triangle indices. Collection order of texture, mesh, input-case, and expectation-case records is not semantically significant; those records are identified by ID. JSON object-property order is not significant. IDs are globally unique across textures, meshes, and input cases; expectation case IDs correspond to those input-case IDs.
 
 ## Cross-language coordinate and data conventions
 
@@ -118,6 +120,7 @@ These rules are part of schema version 1 and do not rely on Unity defaults.
 - Each stored value is an unsigned straight-alpha byte. RGB, color space, premultiplication, material cutoff, and shader behavior are outside the schema.
 - Alpha byte `255` is exactly fully opaque. Every byte below `255`, including `254`, `128`, and `0`, is not fully opaque. There is no threshold or rounding that promotes a lower value to `255`.
 - Schema version 1 describes only the base texture level. Mipmaps are neither generated nor sampled.
+- Constructed fixture textures must have mipmaps disabled. The test-only builder must not create mip levels implicitly or explicitly.
 
 ### Wrap and filtering
 
@@ -140,6 +143,14 @@ Fixture coordinates avoid unnecessary exact-seam ambiguity. The one bilinear-bou
 - Triangle index `n` refers to entries `3n`, `3n + 1`, and `3n + 2` in `triangleVertexIndices`. Triangle order is therefore explicit and stable.
 - Nondegenerate version 1 triangles use counter-clockwise order when projected onto the XY plane. Builders preserve the recorded order.
 - Winding has no significance for version 1 alpha classification or expected outcomes. It is specified only to remove cross-language ambiguity. The degenerate triangle has no meaningful winding.
+
+For a nondegenerate geometry triangle with present UV0, let the three indexed vertex UVs be `q0`, `q1`, and `q2`. Its sampling domain is the continuous closed barycentric UV domain
+
+`D = {b0*q0 + b1*q1 + b2*q2 | b0, b1, b2 >= 0 and b0 + b1 + b2 = 1}`.
+
+`D` is a closed triangle when the UV mapping is nondegenerate and may collapse to a closed line segment or point when the UV mapping is degenerate.
+
+Semantic outcomes consider every UV reachable anywhere in `D`, including its interior, edges, and vertices, together with the case's wrap and filter footprint. Testing only vertex UVs, texel centers, or any other finite sample set does not satisfy the fixture contract.
 
 ## Expectation catalog and outcome semantics
 
@@ -217,8 +228,9 @@ The EditMode integrity tests validate the framework, not a nonexistent classifie
 9. Every input case has exactly one expectation record and no expectation lacks an input case.
 10. Every expected triangle index exists, occurs exactly once, and together the outcomes cover every triangle in the referenced mesh.
 11. Filter, wrap, UV-state, and outcome strings are from the closed schema version 1 sets.
-12. Building the same input twice produces textures and meshes with identical dimensions, alpha bytes, positions, UV state/data, index order, filter mode, and wrap mode.
-13. The catalog contains exactly the thirteen approved case IDs. Targeted contract assertions preserve the alpha-254 `MustRemainTransparent` boundary and the degenerate/missing-UV `Unknown` outcomes without duplicating every oracle value in C#.
+12. Building the same input twice produces isolated textures and meshes with identical dimensions, alpha bytes, positions, UV state/data, index order, filter mode, and wrap mode. Mutating one built case cannot affect another.
+13. Every constructed texture has mipmaps disabled and exposes only the base level.
+14. The catalog contains exactly the thirteen approved case IDs. Targeted contract assertions preserve the alpha-254 `MustRemainTransparent` boundary and the degenerate/missing-UV `Unknown` outcomes without duplicating every oracle value in C#.
 
 Tests do not invoke a classifier, infer an oracle through a test-side classifier, or call Unity sampling APIs to calculate expected outcomes.
 
