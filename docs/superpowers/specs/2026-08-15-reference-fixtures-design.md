@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15
 
-**Status:** Approved architecture with requested refinements; pending written-spec review
+**Status:** Approved
 
 ## Purpose
 
