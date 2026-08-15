@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    { "caseId": "fully-opaque-texture", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "ProvenOpaque" }] },
+    { "caseId": "alpha-254-boundary", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "fully-transparent-texture", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "mixed-alpha-texture", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "triangle-in-opaque-region", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "ProvenOpaque" }] },
+    { "caseId": "triangle-in-transparent-region", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "triangle-crosses-alpha-boundary", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "mixed-triangle-mesh", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "ProvenOpaque" }, { "triangleIndex": 1, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "outside-uv-clamp", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] },
+    { "caseId": "outside-uv-repeat", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "ProvenOpaque" }] },
+    { "caseId": "degenerate-triangle", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "Unknown" }] },
+    { "caseId": "missing-uv0", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "Unknown" }] },
+    { "caseId": "bilinear-filter-boundary", "triangleOutcomes": [{ "triangleIndex": 0, "outcome": "MustRemainTransparent" }] }
+  ]
+}
