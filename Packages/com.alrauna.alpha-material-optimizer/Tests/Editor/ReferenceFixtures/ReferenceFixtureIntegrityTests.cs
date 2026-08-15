@@ -85,5 +85,69 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
 
             Assert.That(triangle.outcome, Is.EqualTo(expectedOutcome));
         }
+
+        [Test]
+        public void EveryCaseBuildsDeterministicallyWithoutMipmaps()
+        {
+            var inputs = ReferenceFixtureData.Load().Inputs;
+
+            foreach (var fixtureCase in inputs.cases)
+            {
+                var textureRecord = inputs.textures.Single(item => item.id == fixtureCase.textureId);
+                var meshRecord = inputs.meshes.Single(item => item.id == fixtureCase.meshId);
+
+                using (var first = ReferenceFixtureData.BuildCase(inputs, fixtureCase.id))
+                using (var second = ReferenceFixtureData.BuildCase(inputs, fixtureCase.id))
+                {
+                    Assert.That(first.Texture, Is.Not.SameAs(second.Texture), fixtureCase.id);
+                    Assert.That(first.Mesh, Is.Not.SameAs(second.Mesh), fixtureCase.id);
+                    Assert.That(first.Texture.mipmapCount, Is.EqualTo(1), fixtureCase.id);
+                    Assert.That(first.Texture.width, Is.EqualTo(textureRecord.width), fixtureCase.id);
+                    Assert.That(first.Texture.height, Is.EqualTo(textureRecord.height), fixtureCase.id);
+                    CollectionAssert.AreEqual(
+                        textureRecord.alpha8BottomToTop.Select(alpha => (byte)alpha),
+                        first.Texture.GetPixels32().Select(pixel => pixel.a),
+                        fixtureCase.id);
+                    CollectionAssert.AreEqual(
+                        meshRecord.positions,
+                        first.Mesh.vertices.SelectMany(vertex => new[] { vertex.x, vertex.y, vertex.z }),
+                        fixtureCase.id);
+                    CollectionAssert.AreEqual(meshRecord.uv0, first.Mesh.uv.SelectMany(uv => new[] { uv.x, uv.y }), fixtureCase.id);
+                    CollectionAssert.AreEqual(meshRecord.triangleVertexIndices, first.Mesh.triangles, fixtureCase.id);
+                    Assert.That(
+                        first.Texture.filterMode,
+                        Is.EqualTo(fixtureCase.filterMode == "Point" ? FilterMode.Point : FilterMode.Bilinear),
+                        fixtureCase.id);
+                    Assert.That(
+                        first.Texture.wrapMode,
+                        Is.EqualTo(fixtureCase.wrapMode == "Clamp" ? TextureWrapMode.Clamp : TextureWrapMode.Repeat),
+                        fixtureCase.id);
+                    CollectionAssert.AreEqual(first.Texture.GetPixels32(), second.Texture.GetPixels32(), fixtureCase.id);
+                    CollectionAssert.AreEqual(first.Mesh.vertices, second.Mesh.vertices, fixtureCase.id);
+                    CollectionAssert.AreEqual(first.Mesh.uv, second.Mesh.uv, fixtureCase.id);
+                    CollectionAssert.AreEqual(first.Mesh.triangles, second.Mesh.triangles, fixtureCase.id);
+                    Assert.That(first.Texture.filterMode, Is.EqualTo(second.Texture.filterMode), fixtureCase.id);
+                    Assert.That(first.Texture.wrapMode, Is.EqualTo(second.Texture.wrapMode), fixtureCase.id);
+                }
+            }
+        }
+
+        [Test]
+        public void SharedLogicalDefinitionsDoNotShareMutableUnityObjects()
+        {
+            var inputs = ReferenceFixtureData.Load().Inputs;
+
+            using (var clamp = ReferenceFixtureData.BuildCase(inputs, "outside-uv-clamp"))
+            using (var repeat = ReferenceFixtureData.BuildCase(inputs, "outside-uv-repeat"))
+            {
+                Assert.That(clamp.Texture, Is.Not.SameAs(repeat.Texture));
+                Assert.That(clamp.Mesh, Is.Not.SameAs(repeat.Mesh));
+                Assert.That(clamp.Texture.wrapMode, Is.EqualTo(TextureWrapMode.Clamp));
+                Assert.That(repeat.Texture.wrapMode, Is.EqualTo(TextureWrapMode.Repeat));
+
+                repeat.Texture.filterMode = FilterMode.Trilinear;
+                Assert.That(clamp.Texture.filterMode, Is.EqualTo(FilterMode.Point));
+            }
+        }
     }
 }
