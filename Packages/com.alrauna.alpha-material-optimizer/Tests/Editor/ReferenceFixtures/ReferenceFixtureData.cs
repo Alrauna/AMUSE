@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -79,6 +80,24 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
         }
     }
 
+    internal sealed class BuiltReferenceFixture : IDisposable
+    {
+        internal Texture2D Texture { get; }
+        internal Mesh Mesh { get; }
+
+        internal BuiltReferenceFixture(Texture2D texture, Mesh mesh)
+        {
+            Texture = texture;
+            Mesh = mesh;
+        }
+
+        public void Dispose()
+        {
+            UnityEngine.Object.DestroyImmediate(Texture);
+            UnityEngine.Object.DestroyImmediate(Mesh);
+        }
+    }
+
     internal static class ReferenceFixtureData
     {
         internal const string InputsPath =
@@ -108,6 +127,41 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
                 JsonUtility.FromJson<FixtureExpectationCatalog>(expectationsAsset.text));
             Validate(catalogs);
             return catalogs;
+        }
+
+        internal static BuiltReferenceFixture BuildCase(FixtureInputCatalog inputs, string caseId)
+        {
+            var fixtureCase = FindCase(inputs, caseId);
+            var textureRecord = FindUnique(inputs.textures, fixtureCase.textureId, item => item.id, "texture");
+            var meshRecord = FindUnique(inputs.meshes, fixtureCase.meshId, item => item.id, "mesh");
+
+            var texture = new Texture2D(
+                textureRecord.width,
+                textureRecord.height,
+                TextureFormat.RGBA32,
+                mipChain: false,
+                linear: true)
+            {
+                name = fixtureCase.id + "-texture",
+                filterMode = ParseFilterMode(fixtureCase.filterMode),
+                wrapMode = ParseWrapMode(fixtureCase.wrapMode)
+            };
+
+            var pixels = textureRecord.alpha8BottomToTop
+                .Select(alpha => new Color32(255, 255, 255, (byte)alpha))
+                .ToArray();
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+
+            var mesh = new Mesh { name = fixtureCase.id + "-mesh" };
+            mesh.vertices = ToVector3Array(meshRecord.positions);
+            if (string.Equals(meshRecord.uv0Status, "Present", StringComparison.Ordinal))
+            {
+                mesh.uv = ToVector2Array(meshRecord.uv0);
+            }
+            mesh.triangles = (int[])meshRecord.triangleVertexIndices.Clone();
+
+            return new BuiltReferenceFixture(texture, mesh);
         }
 
         internal static void Validate(ReferenceFixtureCatalogs catalogs)
@@ -279,6 +333,43 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
 
             Require(triangleIndices.Count == triangleCount,
                 $"Expectation case {expectation.caseId} does not cover every triangle.");
+        }
+
+        private static Vector3[] ToVector3Array(float[] values)
+        {
+            var result = new Vector3[values.Length / 3];
+            for (var index = 0; index < result.Length; index++)
+            {
+                result[index] = new Vector3(
+                    values[index * 3],
+                    values[index * 3 + 1],
+                    values[index * 3 + 2]);
+            }
+            return result;
+        }
+
+        private static Vector2[] ToVector2Array(float[] values)
+        {
+            var result = new Vector2[values.Length / 2];
+            for (var index = 0; index < result.Length; index++)
+            {
+                result[index] = new Vector2(values[index * 2], values[index * 2 + 1]);
+            }
+            return result;
+        }
+
+        private static FilterMode ParseFilterMode(string value)
+        {
+            if (value == "Point") return FilterMode.Point;
+            if (value == "Bilinear") return FilterMode.Bilinear;
+            throw new InvalidDataException($"Unsupported filter mode: {value}");
+        }
+
+        private static TextureWrapMode ParseWrapMode(string value)
+        {
+            if (value == "Clamp") return TextureWrapMode.Clamp;
+            if (value == "Repeat") return TextureWrapMode.Repeat;
+            throw new InvalidDataException($"Unsupported wrap mode: {value}");
         }
 
         private static T FindUnique<T>(
