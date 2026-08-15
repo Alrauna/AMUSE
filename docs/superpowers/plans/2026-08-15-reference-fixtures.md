@@ -355,7 +355,84 @@ Create `fixture-expectations.json` directly from the approved specification. Do 
 
 - [ ] **Step 5: Implement parsing, lookup, and exact structural validation**
 
-Create `ReferenceFixtureData.cs` with the DTOs and interfaces from Shared interfaces. `Load` must load each file as a `TextAsset`, parse with `JsonUtility.FromJson`, construct `ReferenceFixtureCatalogs`, call `Validate`, and return the validated catalogs:
+Create `ReferenceFixtureData.cs` with these task-local DTO and catalog definitions:
+
+```csharp
+[Serializable]
+internal sealed class FixtureInputCatalog
+{
+    public int schemaVersion;
+    public TextureFixtureRecord[] textures;
+    public MeshFixtureRecord[] meshes;
+    public FixtureCaseRecord[] cases;
+}
+
+[Serializable]
+internal sealed class TextureFixtureRecord
+{
+    public string id;
+    public int width;
+    public int height;
+    public int[] alpha8BottomToTop;
+}
+
+[Serializable]
+internal sealed class MeshFixtureRecord
+{
+    public string id;
+    public float[] positions;
+    public string uv0Status;
+    public float[] uv0;
+    public int[] triangleVertexIndices;
+}
+
+[Serializable]
+internal sealed class FixtureCaseRecord
+{
+    public string id;
+    public string textureId;
+    public string meshId;
+    public string filterMode;
+    public string wrapMode;
+}
+
+[Serializable]
+internal sealed class FixtureExpectationCatalog
+{
+    public int schemaVersion;
+    public FixtureExpectationRecord[] cases;
+}
+
+[Serializable]
+internal sealed class FixtureExpectationRecord
+{
+    public string caseId;
+    public TriangleOutcomeRecord[] triangleOutcomes;
+}
+
+[Serializable]
+internal sealed class TriangleOutcomeRecord
+{
+    public int triangleIndex;
+    public string outcome;
+}
+
+internal sealed class ReferenceFixtureCatalogs
+{
+    internal FixtureInputCatalog Inputs { get; }
+    internal FixtureExpectationCatalog Expectations { get; }
+
+    internal ReferenceFixtureCatalogs(
+        FixtureInputCatalog inputs,
+        FixtureExpectationCatalog expectations)
+    {
+        Inputs = inputs;
+        Expectations = expectations;
+    }
+}
+```
+
+`Load` must load each file as a `TextAsset`, parse with `JsonUtility.FromJson`, construct `ReferenceFixtureCatalogs`, call `Validate`, and return the validated catalogs:
 
 ```csharp
 using System;
@@ -582,7 +659,29 @@ Expected: compiler failure because `BuiltReferenceFixture` and `ReferenceFixture
 
 - [ ] **Step 3: Implement fresh case-local Unity construction**
 
-Add `BuiltReferenceFixture` from Shared interfaces and implement `BuildCase` with this flow:
+Add the case-local disposable holder:
+
+```csharp
+internal sealed class BuiltReferenceFixture : IDisposable
+{
+    internal Texture2D Texture { get; }
+    internal Mesh Mesh { get; }
+
+    internal BuiltReferenceFixture(Texture2D texture, Mesh mesh)
+    {
+        Texture = texture;
+        Mesh = mesh;
+    }
+
+    public void Dispose()
+    {
+        UnityEngine.Object.DestroyImmediate(Texture);
+        UnityEngine.Object.DestroyImmediate(Mesh);
+    }
+}
+```
+
+Implement `BuildCase` with this flow:
 
 ```csharp
 internal static BuiltReferenceFixture BuildCase(FixtureInputCatalog inputs, string caseId)
