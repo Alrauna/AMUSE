@@ -1,21 +1,21 @@
-# Alpha Material Optimizer Agent Policy
+# AMUSE Agent Policy
 
 This file governs agentic work in this repository. Direct user instructions take precedence. Treat `MUST`, `NEVER`, and `REQUIRE` as hard requirements; treat `SHOULD` and `PREFER` as defaults that may be changed when the task gives a concrete reason.
 
 ## Project and repository boundaries
 
-Alpha Material Optimizer (`com.alrauna.alpha-material-optimizer`) is an MIT-licensed, NDMF-based Unity add-on that automatically separates opaque geometry from transparent materials on VRChat avatars. Its long-term goal is a safe, zero-configuration optimizer with an Avatar Optimizer-like experience: analyze the built avatar, trace relevant material and animation state, prove which geometry can render opaquely without changing behavior, and transform only those proven cases.
+AMUSE — Alrauna's Material Understanding & Simplification Engine (`com.alrauna.amuse`) is an MIT-licensed material optimization system. Unity/NDMF is its current host integration. AMUSE analyzes material, texture, rendering, and state semantics to plan and apply simplifications only when the active optimization policy has sufficient evidence that they preserve the required behavior.
 
 This Git repository serves two roles:
 
 - It is the public source repository.
 - It is a minimal Unity package-development and test project.
 
-The distributable package lives under `Packages/com.alrauna.alpha-material-optimizer/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
+The distributable package lives under `Packages/com.alrauna.amuse/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
 
 Public fixtures MUST be purpose-built, redistributable, deterministic, minimal, and legally safe to publish. NEVER add private avatars, purchased assets, unredistributable shaders, credentials, or other private testbed content to this repository.
 
-The current repository is an early baseline. Reinspect it rather than relying on this paragraph as a permanent architecture claim. At the time this policy was written, it used Unity 2022.3.22f1, package version 0.0.1, an Editor-only package assembly with placeholder code, no repository test files, and release/listing workflows rather than correctness CI.
+The current production implementation is Editor-only and contains exact alpha analysis plus immutable mesh-separation planning. These are foundational AMUSE subsystems, not the complete product. Reinspect the repository rather than treating this snapshot as a permanent architecture claim.
 
 ## Private Unity avatar testbed
 
@@ -53,20 +53,9 @@ Before completion, inspect the working-tree and staged diffs separately, verify 
 
 ## Development approach
 
-Prefer narrow vertical increments. Do not attempt the entire optimizer unless explicitly tasked. The expected progression is approximately:
+Prefer narrow vertical increments. Do not attempt the entire optimizer unless explicitly tasked. Current alpha analysis and separation planning are one subsystem within AMUSE; later work requires explicit scope or a demonstrated dependency from the current phase.
 
-1. development and test infrastructure;
-2. deterministic synthetic reference fixtures;
-3. pure geometry, UV, and alpha analysis;
-4. mesh transformation;
-5. material transformation;
-6. animation and material-state tracing;
-7. NDMF integration;
-8. compatibility handling;
-9. private real-avatar integration testing;
-10. performance and profitability heuristics.
-
-Later phases require explicit scope or a demonstrated dependency from the current phase.
+Keep the durable product and architecture direction in `docs/architecture/vision.md`, not in this policy. Document future boundaries without creating speculative directories, interfaces, registries, schemas, dependency injection, or orchestration frameworks before implemented behavior needs them.
 
 ## Superpowers and Ponytail
 
@@ -86,13 +75,12 @@ Use Superpowers to determine how work is performed safely; use Ponytail to chall
 
 ## Safety and behavior preservation
 
-The optimizer is conservative:
+AMUSE is proof-first. Under the active optimization policy:
 
-- proven safe: optimize;
-- potentially unsafe: preserve transparent behavior;
-- unknown or unsupported: skip and explain why.
+- proven behavior-preserving: transform;
+- uncertain or unsupported: preserve and explain why.
 
-Additional uncertainty MUST NEVER make optimization more aggressive. False negatives are acceptable when proof is insufficient. False positives—geometry incorrectly declared safe for opaque rendering—are correctness bugs.
+Additional uncertainty MUST NEVER make optimization more aggressive. For the current alpha subsystem, only `ProvenOpaque` may become an opaque candidate; `MustRemainTransparent` and `Unknown` remain on the transparent path. False negatives are acceptable when proof is insufficient. False positives—content transformed without sufficient proof—are correctness bugs.
 
 Do not assume arbitrary shaders, material swaps, animations, UV animation, texture behavior, or other dynamic state is safe. Do not trade avatar behavior for optimization coverage. Prefer actionable diagnostics for skipped optimization over unsafe guessing.
 
@@ -106,7 +94,7 @@ Keep runtime footprint minimal. Separate, when actually needed:
 - Editor-only analysis and build logic;
 - tests.
 
-Most optimizer intelligence SHOULD be Editor-only. Pure analysis SHOULD remain deterministic and avoid unnecessary coupling to NDMF, the VRChat SDK, or live Unity Editor state. Keep geometry and alpha analysis separable from NDMF orchestration where practical.
+Most optimizer intelligence SHOULD be Editor-only. Reusable analysis and planning SHOULD consume normalized immutable inputs, remain deterministic, and avoid unnecessary coupling to NDMF, the VRChat SDK, live Unity objects, assets, MCP, or Editor state. Unity/NDMF owns the current host extraction, build integration, and host-specific transformation boundaries. Keep analysis and planning separable from those boundaries where practical, but do not extract a standalone shared library until another real consumer justifies it.
 
 Before adding a dependency, check Unity, NDMF, the VRChat SDK, the C# standard library, and existing project dependencies. A new dependency requires a concrete need and justification. Do not copy code wholesale from reference projects merely because their license permits it; understand any reused logic and preserve required attribution for copied or substantially derived work.
 
@@ -124,7 +112,7 @@ The private testbed's local package reference to the working-tree package is int
 
 Testing is part of implementation. New deterministic behavior normally requires focused tests. A reproducible bug fix normally requires a regression test that fails before the fix and passes afterward. NEVER weaken, delete, skip, or rewrite a valid test merely because the implementation cannot pass it.
 
-Unit tests SHOULD cover deterministic logic such as geometry classification, UV handling, alpha sampling, texture filter/wrap semantics, material-state set operations, animation-binding analysis, transformation planning, and profitability calculations. Keep tests fast, minimal, isolated where possible, deterministic, and understandable from failures.
+Unit tests SHOULD cover deterministic logic such as geometry classification, UV handling, alpha sampling, texture filter/wrap semantics, normalized material semantics, material-state set operations, animation-binding analysis, optimization planning, transformation planning, and profitability calculations. Keep tests fast, minimal, isolated where possible, deterministic, and understandable from failures.
 
 Where practical, test analysis and optimization planning independently from mutation. The same deterministic input SHOULD first produce a deterministic optimization plan before mesh, material, animation, or NDMF transformation is exercised. This separation should make failures attributable to classification or state-analysis defects, optimization-plan defects, or transformation and execution defects. It is a testing boundary, not a prescribed class hierarchy or implementation architecture.
 
@@ -146,7 +134,7 @@ Never claim a test passed unless it was actually run and its result observed.
 
 Unity MCP is for integration and observability, not the primary correctness oracle. Discover the current instances, project information, editor state, resources, and enabled tool groups before acting; tool availability can change. Prefer summary-first, paged, read-only queries.
 
-CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.alpha-material-optimizer/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
+CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.amuse/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
 
 The public development project exists for deterministic repository tests and package development; the private avatar testbed exists for real-avatar integration testing. When multiple Unity Editor instances are available through MCP, agents MUST use read-only discovery to identify the intended project by project path before any write or broad operation. Never assume a reachable Unity Editor is the correct instance.
 
