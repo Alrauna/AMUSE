@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Alrauna.AlphaMaterialOptimizer.Editor.Analysis
+namespace Alrauna.Amuse.Editor.Analysis
 {
     internal enum SubmeshSeparationDisposition
     {

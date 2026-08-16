@@ -1,8 +1,8 @@
 {
-    "name": "Alrauna.AlphaMaterialOptimizer.Tests.Editor",
-    "rootNamespace": "Alrauna.AlphaMaterialOptimizer.Tests.Editor",
+    "name": "Alrauna.Amuse.Tests.Editor",
+    "rootNamespace": "Alrauna.Amuse.Tests.Editor",
     "references": [
-        "Alrauna.AlphaMaterialOptimizer.Editor"
+        "Alrauna.Amuse.Editor"
     ],
     "includePlatforms": [
         "Editor"

@@ -3,10 +3,10 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using BigInteger = System.Numerics.BigInteger;
-using Alrauna.AlphaMaterialOptimizer.Editor.Analysis;
-using Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures;
+using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Tests.Editor.ReferenceFixtures;
 
-namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.Analysis
+namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
     public sealed class TriangleAlphaClassifierTests
     {
