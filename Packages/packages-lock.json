@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "com.alrauna.alpha-material-optimizer": {
-      "version": "file:com.alrauna.alpha-material-optimizer",
+    "com.alrauna.amuse": {
+      "version": "file:com.alrauna.amuse",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

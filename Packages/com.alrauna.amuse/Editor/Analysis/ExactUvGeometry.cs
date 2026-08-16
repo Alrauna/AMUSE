@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace Alrauna.AlphaMaterialOptimizer.Editor.Analysis
+namespace Alrauna.Amuse.Editor.Analysis
 {
     internal readonly struct ExactDyadic
     {
