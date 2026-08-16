@@ -1,0 +1,16 @@
+{
+  "name": "com.alrauna.amuse",
+  "displayName": "AMUSE",
+  "version": "0.0.1",
+  "unity": "2022.3",
+  "description": "A Unity/NDMF material optimization engine that analyzes and simplifies material, texture, and rendering usage while preserving behavior.",
+  "vpmDependencies": {
+    "nadena.dev.ndmf": ">=1.14.4 <2.0.0-a"
+  },
+  "vrchatVersion": "2026.3.1",
+  "author": {
+    "name": "Alrauna",
+    "email": "67886220+Alrauna@users.noreply.github.com",
+    "url": "https://github.com/Alrauna/amuse"
+  }
+}

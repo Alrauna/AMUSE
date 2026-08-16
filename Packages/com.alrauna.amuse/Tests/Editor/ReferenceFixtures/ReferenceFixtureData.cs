@@ -5,7 +5,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
-namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
+namespace Alrauna.Amuse.Tests.Editor.ReferenceFixtures
 {
     [Serializable]
     internal sealed class FixtureInputCatalog
@@ -101,9 +101,9 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
     internal static class ReferenceFixtureData
     {
         internal const string InputsPath =
-            "Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/Data/fixture-inputs.json";
+            "Packages/com.alrauna.amuse/Tests/Editor/ReferenceFixtures/Data/fixture-inputs.json";
         internal const string ExpectationsPath =
-            "Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/Data/fixture-expectations.json";
+            "Packages/com.alrauna.amuse/Tests/Editor/ReferenceFixtures/Data/fixture-expectations.json";
 
         private const int SupportedSchemaVersion = 1;
         private static readonly HashSet<string> FilterModes =

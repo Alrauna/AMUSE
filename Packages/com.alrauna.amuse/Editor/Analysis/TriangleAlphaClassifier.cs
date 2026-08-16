@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using BigInteger = System.Numerics.BigInteger;
 
-namespace Alrauna.AlphaMaterialOptimizer.Editor.Analysis
+namespace Alrauna.Amuse.Editor.Analysis
 {
     internal enum TriangleAlphaOutcome
     {

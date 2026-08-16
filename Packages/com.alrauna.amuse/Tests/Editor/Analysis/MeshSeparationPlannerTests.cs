@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Alrauna.AlphaMaterialOptimizer.Editor.Analysis;
+using Alrauna.Amuse.Editor.Analysis;
 using NUnit.Framework;
 
-namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.Analysis
+namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
     public sealed class MeshSeparationPlannerTests
     {

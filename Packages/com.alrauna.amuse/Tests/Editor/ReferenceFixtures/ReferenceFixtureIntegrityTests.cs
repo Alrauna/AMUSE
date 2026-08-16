@@ -3,7 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
+namespace Alrauna.Amuse.Tests.Editor.ReferenceFixtures
 {
     public sealed class ReferenceFixtureIntegrityTests
     {

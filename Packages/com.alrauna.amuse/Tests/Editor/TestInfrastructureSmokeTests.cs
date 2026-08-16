@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor
+namespace Alrauna.Amuse.Tests.Editor
 {
     public sealed class TestInfrastructureSmokeTests
     {
