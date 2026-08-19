@@ -33,6 +33,8 @@ These are responsibility boundaries, not a requirement to create one class, asse
 
 AMUSE should model the behavior that determines whether a rendering change is equivalent: mesh topology and UVs, material and shader properties, texture sampling semantics, animation bindings, material swaps, and other state that can alter the result. Shader-specific adapters may eventually translate implementation details into normalized material semantics, while recognized external modifiers may contribute additional semantics to the effective material. Each analyzer should state the domain it supports. Unknown modifiers, unmodeled shader behavior, or incomplete reachable-state information must fail closed.
 
+See `shader-frontend-comparison.md` for what the two implemented shader frontends have actually established as shared, shader-specific, or still unproven.
+
 ## Analysis and combined planning
 
 Individual facts are useful only when combined over the full relevant state space, including reachable animation, material-swap, renderer, and property relationships when those analyzers exist. The planning layer should consume normalized analysis results, produce the same plan for the same input, and remain separable from mutation. Plans should identify what can change, what must remain unchanged, and why.
