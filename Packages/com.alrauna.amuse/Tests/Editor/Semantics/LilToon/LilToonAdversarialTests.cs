@@ -183,5 +183,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     System.Collections.ObjectModel.ReadOnlyCollection<
                         LilToonSemanticDiagnostic>>());
         }
+
+        /// <summary>
+        /// Architectural question — can interpretation be reached without
+        /// attestation? Mirrors the Poiyomi frontend's
+        /// <c>PublicEntry_UnattestedSchemaCompleteShader_IsRefusedBeforeInterpretation</c>.
+        ///
+        /// The contribution over
+        /// <c>AnalyzeBaseMaterial_NonLilToonShader_IsUnsupported</c> is the
+        /// direct contrast: this asserts, in one place, that the very same
+        /// material which interprets to four Complete outputs through the
+        /// verified seam yields four Unknown outputs and a single
+        /// material-scoped diagnostic through the public entry. Attestation
+        /// cannot be bypassed, and no output interpreter runs without it.
+        /// </summary>
+        [Test]
+        public void PublicEntry_RefusesTheSameMaterialTheSeamFullyInterprets()
+        {
+            var material = NewFixtureMaterial();
+
+            var viaSeam = Interpret(material);
+            Assert.That(viaSeam.Semantics.BaseColor.IsComplete, Is.True);
+            Assert.That(viaSeam.Semantics.Alpha.IsComplete, Is.True);
+            Assert.That(viaSeam.Semantics.Emission.IsComplete, Is.True);
+            Assert.That(viaSeam.Semantics.Normal.IsComplete, Is.True);
+
+            var viaPublicEntry =
+                LilToonMaterialSemantics.AnalyzeBaseMaterial(material);
+
+            Assert.That(viaPublicEntry.IsSupportedMaterial, Is.False);
+            Assert.That(
+                viaPublicEntry.Diagnostics.Count,
+                Is.EqualTo(1),
+                "Exactly one diagnostic proves no output interpreter ran.");
+            Assert.That(
+                viaPublicEntry.Diagnostics[0].Output,
+                Is.EqualTo(LilToonSemanticOutput.Material),
+                "The refusal is material-scoped, not output-scoped.");
+            Assert.That(viaPublicEntry.Semantics.BaseColor.IsComplete, Is.False);
+            Assert.That(viaPublicEntry.Semantics.Alpha.IsComplete, Is.False);
+            Assert.That(viaPublicEntry.Semantics.Emission.IsComplete, Is.False);
+            Assert.That(viaPublicEntry.Semantics.Normal.IsComplete, Is.False);
+        }
     }
 }
