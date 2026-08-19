@@ -751,6 +751,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             Material material,
             List<PoiyomiSemanticDiagnostic> diagnostics)
         {
+            // The traced normal writers are independent of _BumpMap: the pinned
+            // source's detail-normal blend perturbs the tangent-space normal
+            // without reading _BumpMap at all, so an unassigned map leaves it
+            // perturbed rather than neutral. The gates are therefore proven
+            // before the unassigned-map short-circuit, not after it — an empty
+            // slot is not evidence that the output is unaffected. Matches the
+            // lilToon frontend's ordering.
+            var failedGate = FirstFailedZeroGate(material, NormalFeatureGates);
+            if (failedGate != null)
+            {
+                return RecordUnknown<NormalSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Normal,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    failedGate);
+            }
+
             if (material.GetTexture(NormalMapProperty) == null)
             {
                 return SemanticOutput<NormalSemanticValue>.Complete(
@@ -768,16 +785,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiSemanticOutput.Normal,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                     NormalStrengthProperty);
-            }
-
-            var failedGate = FirstFailedZeroGate(material, NormalFeatureGates);
-            if (failedGate != null)
-            {
-                return RecordUnknown<NormalSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Normal,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    failedGate);
             }
 
             if (!TryGetSupportedUvMapping(
