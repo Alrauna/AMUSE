@@ -62,3 +62,10 @@ crashlytics-build.properties
 Assets/PackageMakerWindowData.asset*
 .idea
 .vscode
+
+# OS and editor noise (any development platform)
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*~
