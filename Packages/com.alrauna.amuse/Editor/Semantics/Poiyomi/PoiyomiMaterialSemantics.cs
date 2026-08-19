@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -1080,29 +1079,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             Texture texture,
             out TextureSourceId sourceId)
         {
-            sourceId = default;
-            if (texture == null)
-            {
-                return false;
-            }
-
-            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    texture,
-                    out var guid,
-                    out long localId))
-            {
-                return false;
-            }
-
-            if (string.IsNullOrEmpty(guid) || IsAllZeroGuid(guid))
-            {
-                return false;
-            }
-
-            sourceId = new TextureSourceId(
-                "unity-asset:" + guid.ToLowerInvariant() + ":" +
-                localId.ToString(CultureInfo.InvariantCulture));
-            return true;
+            return UnityTextureEvidence.TryGetSourceId(texture, out sourceId);
         }
 
         /// <summary>
@@ -1209,86 +1186,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             Material material,
             out TextureSampling sampling)
         {
-            sampling = default;
-
+            // "The sampler always comes from _MainTex" is Poiyomi-specific
+            // knowledge and stays here; only the texture-level fact is shared.
             var mainTexture = material.HasProperty(MainTextureProperty)
                 ? material.GetTexture(MainTextureProperty)
                 : null;
-            if (mainTexture == null)
-            {
-                return false;
-            }
-
-            if (!TryMapFilterMode(mainTexture.filterMode, out var filter))
-            {
-                return false;
-            }
-
-            if (!TryMapWrapMode(mainTexture.wrapModeU, out var wrapU) ||
-                !TryMapWrapMode(mainTexture.wrapModeV, out var wrapV) ||
-                wrapU != wrapV)
-            {
-                return false;
-            }
-
-            if (mainTexture.mipmapCount > 1 ||
-                mainTexture.mipMapBias != 0f ||
-                mainTexture.anisoLevel > 1)
-            {
-                return false;
-            }
-
-            sampling = new TextureSampling(filter, wrapU);
-            return true;
-        }
-
-        private static bool TryMapFilterMode(
-            FilterMode mode,
-            out TextureFilterMode filter)
-        {
-            switch (mode)
-            {
-                case FilterMode.Point:
-                    filter = TextureFilterMode.Point;
-                    return true;
-                case FilterMode.Bilinear:
-                    filter = TextureFilterMode.Bilinear;
-                    return true;
-                default:
-                    filter = default;
-                    return false;
-            }
-        }
-
-        private static bool TryMapWrapMode(
-            UnityEngine.TextureWrapMode mode,
-            out TextureWrapMode wrap)
-        {
-            switch (mode)
-            {
-                case UnityEngine.TextureWrapMode.Clamp:
-                    wrap = TextureWrapMode.Clamp;
-                    return true;
-                case UnityEngine.TextureWrapMode.Repeat:
-                    wrap = TextureWrapMode.Repeat;
-                    return true;
-                default:
-                    wrap = default;
-                    return false;
-            }
-        }
-
-        private static bool IsAllZeroGuid(string guid)
-        {
-            foreach (var c in guid)
-            {
-                if (c != '0')
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return UnityTextureEvidence.TryGetSampling(mainTexture, out sampling);
         }
 
         private static bool IsFinite(float value)
@@ -1316,16 +1219,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             Texture texture,
             out TextureColorInterpretation interpretation)
         {
-            interpretation = default;
-            if (!TryGetTextureImporter(texture, out var importer))
-            {
-                return false;
-            }
-
-            interpretation = importer.sRGBTexture
-                ? TextureColorInterpretation.Srgb
-                : TextureColorInterpretation.Linear;
-            return true;
+            return UnityTextureEvidence.TryGetColorInterpretation(
+                texture, out interpretation);
         }
 
         /// <summary>
@@ -1335,13 +1230,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)
         {
-            if (!TryGetTextureImporter(texture, out var importer))
-            {
-                return false;
-            }
-
-            return !importer.DoesSourceTextureHaveAlpha() &&
-                   importer.alphaSource == TextureImporterAlphaSource.None;
+            return UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
         }
 
         /// <summary>
@@ -1351,33 +1240,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         internal static bool IsCanonicalNormalMapImport(Texture texture)
         {
-            if (!TryGetTextureImporter(texture, out var importer))
-            {
-                return false;
-            }
-
-            return importer.textureType == TextureImporterType.NormalMap &&
-                   !importer.flipGreenChannel;
-        }
-
-        private static bool TryGetTextureImporter(
-            Texture texture,
-            out TextureImporter importer)
-        {
-            importer = null;
-            if (texture == null)
-            {
-                return false;
-            }
-
-            var path = AssetDatabase.GetAssetPath(texture);
-            if (string.IsNullOrEmpty(path))
-            {
-                return false;
-            }
-
-            importer = AssetImporter.GetAtPath(path) as TextureImporter;
-            return importer != null;
+            return UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
         }
 
         private static void RequireAnalyzableMaterial(Material material)
