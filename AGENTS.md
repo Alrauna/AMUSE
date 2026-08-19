@@ -11,6 +11,8 @@ This Git repository serves two roles:
 - It is the public source repository.
 - It is a minimal Unity package-development and test project.
 
+Where policy or a task needs the repository root, derive it at run time from `git rev-parse --show-toplevel`; this document calls that value `<repo-root>`. Prefer repository-relative paths, written with forward slashes, in code, documentation, tests, and task instructions. NEVER hard-code an absolute checkout path, drive letter, or user home directory into policy, tooling, or a task rule: the same repository is developed from Windows, macOS, and Linux checkouts, and no platform is canonical. When an absolute path is genuinely required, build and compare it through the platform's own path API instead of concatenating separators by hand.
+
 The distributable package lives under `Packages/com.alrauna.amuse/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
 
 Public fixtures MUST be purpose-built, redistributable, deterministic, minimal, and legally safe to publish. NEVER add private avatars, purchased assets, unredistributable shaders, credentials, or other private testbed content to this repository.
@@ -29,7 +31,9 @@ Agents MUST NOT:
 - “fix” an optimizer failure by changing the avatar under test;
 - commit or publish content from the private testbed.
 
-Persistent testbed changes require explicit task scope. Prefer read-only inspection. Before any write, destructive, or broad Unity MCP operation, confirm the connected instance and project root are the intended private testbed, state why the mutation is necessary, keep it minimal and reversible, and avoid saved fixture changes when equivalent validation is possible without them.
+Persistent testbed changes require explicit task scope. Prefer read-only inspection. Before any write, destructive, or broad Unity MCP operation, confirm from the task's explicit scope that the connected instance is the intended private testbed and not the public development project, state why the mutation is necessary, keep it minimal and reversible, and avoid saved fixture changes when equivalent validation is possible without them.
+
+The testbed may live anywhere on disk and MUST NOT be identified by a hard-coded path, a drive letter, or a sibling-directory convention. Identify the public development project positively, by the rule in *Unity MCP use*, and treat every other reachable Unity project as unacceptable for public-project test or evidence work unless a task explicitly says otherwise. Never inspect or modify the testbed merely to work out which project is the public one.
 
 ## Start-of-task discipline
 
@@ -37,7 +41,7 @@ Before editing:
 
 1. Read this file and the direct task.
 2. Inspect `git status`, the current branch, relevant diffs, and recent history. Existing changes belong to the user unless proven otherwise; NEVER overwrite, discard, restage, or fold unrelated work into the task.
-3. Inspect the files, call sites, tests, package metadata, and workflows relevant to the requested change. Repository handoffs and prior summaries are context, not authority; verify claims against current state.
+3. Inspect the files, call sites, tests, package metadata, and workflows relevant to the requested change. Repository handoffs and prior summaries are context, not authority; verify claims against current state. Historical specs and plans under `docs/superpowers/` record the environment of the milestone that produced them; their absolute paths, drive letters, shells, and machine details are history, not current policy.
 4. Inspect the currently installed skill documentation when a skill applies. Do not assume a skill name, trigger, or workflow from memory.
 5. Identify the narrowest validation that can prove the requested result.
 
@@ -136,7 +140,7 @@ Unity MCP is for integration and observability, not the primary correctness orac
 
 CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.amuse/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
 
-The public development project exists for deterministic repository tests and package development; the private avatar testbed exists for real-avatar integration testing. When multiple Unity Editor instances are available through MCP, agents MUST use read-only discovery to identify the intended project by project path before any write or broad operation. Never assume a reachable Unity Editor is the correct instance.
+The public development project exists for deterministic repository tests and package development; the private avatar testbed exists for real-avatar integration testing. The public development project is the Unity project rooted at `<repo-root>`, and its Unity data path is `<repo-root>/Assets`. Before any write or broad operation, and before any test run whose result will be reported, agents MUST use read-only discovery to enumerate the reachable instances and select the one whose `Application.dataPath` equals `<repo-root>/Assets` once both sides are normalized: resolve relative and symbolic segments, unify separators to `/`, and drop any trailing separator. Compare the normalized values exactly. Because filesystems differ in case sensitivity across and within platforms, two paths that match only by letter case are unconfirmed identity: stop and report rather than guessing. Never compare against a hard-coded absolute path, and never assume a reachable Unity Editor is the correct instance.
 
 Appropriate uses include confirming the connected project and package, inspecting hierarchy/components/materials/renderers, reading Console output, discovering or running Unity tests, exercising NDMF builds, entering Play Mode when required, inspecting generated avatar state, and reproducing failures that cannot reasonably be tested outside the Editor.
 

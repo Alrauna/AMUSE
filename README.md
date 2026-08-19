@@ -24,7 +24,7 @@ AMUSE does not yet transform meshes or materials, trace animation or material sw
 
 ## Development setup
 
-After restoring the VPM dependencies, run the temporary NDMF standalone bootstrap before opening Unity:
+After restoring the VPM dependencies, run the temporary NDMF standalone bootstrap before opening Unity. The script targets PowerShell 7, so it needs `pwsh` on `PATH` — available for Windows, macOS, and Linux — and resolves every path relative to its own location:
 
 ```powershell
 pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
