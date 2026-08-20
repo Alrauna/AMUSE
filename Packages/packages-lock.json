@@ -6,6 +6,12 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.alrauna.amuse.research": {
+      "version": "file:com.alrauna.amuse.research",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.coplaydev.unity-mcp": {
       "version": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v10.1.2",
       "depth": 0,
