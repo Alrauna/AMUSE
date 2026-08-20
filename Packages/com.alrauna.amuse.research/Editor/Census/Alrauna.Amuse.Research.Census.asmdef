@@ -1,0 +1,16 @@
+{
+    "name": "Alrauna.Amuse.Research.Census",
+    "rootNamespace": "Alrauna.Amuse.Research.Census",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
