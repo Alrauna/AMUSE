@@ -1,0 +1,21 @@
+{
+    "name": "Alrauna.Amuse.Research.Tests.Editor",
+    "rootNamespace": "Alrauna.Amuse.Research.Tests.Editor",
+    "references": [
+        "Alrauna.Amuse.Research.Census"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
