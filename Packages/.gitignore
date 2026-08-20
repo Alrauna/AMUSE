@@ -3,4 +3,9 @@
 
 # Change this to match your new package name
 !com.alrauna.amuse
+
+# First-party research tooling. Public source, never released; see its
+# package.json. Excluded from releases by the workflows, which build only the
+# single package they are configured with, not by being untracked here.
+!com.alrauna.amuse.research
 !com.vrchat.core.*/
