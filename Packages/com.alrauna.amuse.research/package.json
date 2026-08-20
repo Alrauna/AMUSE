@@ -1,0 +1,12 @@
+{
+  "name": "com.alrauna.amuse.research",
+  "displayName": "AMUSE Research",
+  "version": "0.0.1",
+  "unity": "2022.3",
+  "description": "First-party AMUSE research and development tooling. NEVER RELEASED: this package is deliberately excluded from the AMUSE VPM listing and from release artifacts, which build only the single package named by the release workflow, and it declares no vpmDependencies. AMUSE users never install it and never need it. It holds public source code that helps understand, validate, benchmark, or improve AMUSE. It holds no private data: no avatars, no consent records, no raw measurements, no identity mappings. Those live only in a private research project and never enter this repository.",
+  "author": {
+    "name": "Alrauna",
+    "email": "67886220+Alrauna@users.noreply.github.com",
+    "url": "https://github.com/Alrauna/amuse"
+  }
+}
