@@ -2,11 +2,28 @@
 
 **Branch:** `feat/census-collector`
 **Date:** 2026-08-20
-**Status:** awaiting architectural review; no code written
+**Status:** approved 2026-08-20 with four architectural changes, applied at revision 2 (§0)
 **Predecessors:** `docs/superpowers/specs/2026-08-20-avatar-census-harness-preparation-design.md`
 (the harness architecture, cited below as **HP §n**),
 `docs/superpowers/specs/2026-08-20-census-record-schema-design.md` (tiers 1–3, commit
 `eedadf2`)
+
+## 0. Revision 2 — changes required at architectural review
+
+Revision 1 was approved subject to four changes. All are applied below.
+
+| # | Required change | Where |
+|---|---|---|
+| 1 | Collector architecture unchanged | Nothing to do |
+| 2 | Move `CensusCalibration` out of the production assembly; no permanent calibration seam API in the collector package; no hidden runtime extension points | §3.1, §5.1, §7.3 |
+| 3 | Replace reflection-based frontend discovery with an explicit declared list; tests must still fail when AMUSE gains a frontend; no dependence on namespace or method reflection conventions | §5.4, §7.2 |
+| 4 | Keep the public collector surface minimal; no provider or configuration abstractions unless implementation forces them | §5.1 |
+
+Changes 2 and 4 turned out to pull in the same direction and are resolved together. Moving
+calibration into the test assembly requires that assembly to see AMUSE internals; once it
+can, the parity tests can name AMUSE's enums directly, which **deletes** the public name-list
+projection revision 1 needed. The result is a second friend grant traded for the removal of
+a production class *and* a public API. Net surface goes down, not up — see §3.1.
 
 ## 1. Scope
 
@@ -58,22 +75,53 @@ Packages/com.alrauna.amuse.research/
 zero references, and remains Unity-free and AMUSE-free. The collector depends on the
 census assembly; the dependency never points back.
 
-### 3.1 The single grant
+### 3.1 The friend grants
 
-`Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` gains exactly one line:
+`Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` gains two lines:
 
 ```csharp
 [assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Editor")]
+[assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Tests.Editor")]
 ```
 
-This is the grant HP §4.2 specified and HP §10.1 deferred to this branch. It is required:
-`RendererAlphaAnalysis`, `SubmeshAlphaAnalysis`, `RendererAnalysisRefusal`,
+The first is the grant HP §4.2 specified and HP §10.1 deferred to this branch. It is
+required: `RendererAlphaAnalysis`, `SubmeshAlphaAnalysis`, `RendererAnalysisRefusal`,
 `MeshSeparationPlan`, `SubmeshSeparationDisposition`, `TriangleAlphaOutcome`,
-`AlphaResolutionFailure`, and both shader frontends are all `internal`. Without the grant
-the only alternative is reflection, rejected in HP §4.1.
+`AlphaResolutionFailure`, and both shader frontends are all `internal`. Without it the only
+alternative is reflection, rejected in HP §4.1.
 
-**No second grant to AMUSE.** In particular `Alrauna.Amuse.Research.Tests.Editor` does not
-receive one — see §7.3 for how the calibration tests work without it.
+The second is new at revision 2 and exists **because** of review change 2.
+
+### 3.1.1 Why the second grant is the smaller surface
+
+Revision 1 kept the AMUSE grant at one by putting a `CensusCalibration` class in the
+production research assembly: it constructed AMUSE `MaterialSemantics` values behind
+signatures naming only census types, so the test assembly never had to see AMUSE. Review
+change 2 rejects that, correctly — it is a permanent, hidden extension point living in
+production code whose only caller is a test.
+
+The alternative is to let the *test* assembly see AMUSE, which is what a test assembly is
+for. That single change removes two things from production:
+
+| | Revision 1 | Revision 2 |
+|---|---|---|
+| AMUSE friend grants | 1 | 2 |
+| Production calibration class | `CensusCalibration` (7 members) | **none** |
+| Public API in the research package | `AvatarCensusCollector` + `CensusVocabulary` (4 public name lists) | **`AvatarCensusCollector.Collect` only** |
+| Seam parameter on the public surface | none | none |
+
+The public name lists existed only so tests that could not name an AMUSE enum could still
+compare against one. With the second grant they compare directly, so `CensusVocabulary`
+becomes wholly `internal` and the projection is deleted.
+
+Both grantees are first-party assemblies in this repository, versioned and compiled together,
+and `Alrauna.Amuse.Tests.Editor` already holds a grant of exactly this shape for exactly this
+reason. A test assembly is also strictly narrower in blast radius than a production one: it
+ships in no build and no release artifact, and the research package ships in neither anyway.
+
+The cost is stated plainly: AMUSE internals now have three consumers rather than two, which
+constrains refactoring a little further. That is the direction HP §4.2 already called
+desirable — a rename that breaks the census should break loudly in CI.
 
 ## 4. Design questions answered
 
@@ -162,6 +210,8 @@ fixture file, no Lab. Detail in §7.
 
 ### 5.1 Surface
 
+The entire public API of the research package's collector:
+
 ```csharp
 namespace Alrauna.Amuse.Research.Collection
 {
@@ -172,15 +222,23 @@ namespace Alrauna.Amuse.Research.Collection
 }
 ```
 
-One method, two arguments, no options object, no builder, no configuration. `creatorName`
-is a parameter because it is the one tier 1 field Unity cannot supply (§6.3); the caller
-passes `null` when it is unknown.
+One type, one method, two arguments. No options object, no builder, no configuration, no
+provider parameter, no registry, and no second overload. `creatorName` is a parameter
+because it is the one tier 1 field Unity cannot supply (§6.3); the caller passes `null` when
+it is unknown. Everything else in the assembly — `CensusVocabulary`, `CensusShaderFamily`,
+`RendererObservationBuilder`, `CensusAssetIdentity` — is `internal`.
+
+**The semantics seam is not on this surface.** It sits one level down, as a second overload
+of the internal `RendererObservationBuilder.Build`, mirroring the two-overload shape
+`UnityRendererAlphaAnalysis.Analyze` already uses for its own integration tests. That is a
+pass-through of an existing AMUSE seam at the narrowest scope that can carry it, not a new
+extension point, and no public caller can reach or even name it (§7.3).
 
 Per renderer: call `UnityRendererAlphaAnalysis.Analyze(renderer)`, then read the returned
 immutable result. The collector adds no shader, material, texture, or geometry logic of its
-own — it measures the production pipeline rather than re-deriving it. The only Unity state
-it reads that `Analyze` does not is the mesh, for the refused-renderer counts (§5.3), and
-the material, for identity (§6).
+own — it measures the production pipeline rather than re-deriving it. The only Unity state it
+reads that `Analyze` does not is the mesh, for the refused-renderer counts (§5.3), and the
+material, for identity (§6).
 
 ### 5.2 Counting an analyzed renderer
 
@@ -232,14 +290,22 @@ lilToon — and returns only the resulting `MaterialSemantics`, discarding which
 answered. `RendererAlphaAnalysis` therefore carries no attestation, and HP §6.1 calls
 shader-family coverage the single highest-value number in the census.
 
-**Decision: the collector repeats the trial through AMUSE's own frontends, memoized per
-distinct `Material`, with a drift test pinning the frontend set.**
+**Decision: the collector declares the families it measures explicitly and repeats the trial
+through AMUSE's own frontends, memoized per distinct `Material`. No reflection runs in
+production.**
 
-```
+```csharp
+// The explicit declaration. Two named families, in AMUSE's own trial order.
 PoiyomiMaterialSemantics.AnalyzeBaseMaterial(m).IsSupportedMaterial  → Poiyomi
 LilToonMaterialSemantics.AnalyzeBaseMaterial(m).IsSupportedMaterial  → LilToon
 otherwise                                                            → None
 ```
+
+Revision 1 discovered the frontends by reflecting a namespace for a method named
+`AnalyzeBaseMaterial`. Review change 3 rejects that, and the objection is sound: it made the
+census's own vocabulary depend on AMUSE's naming and folder conventions, so a rename that
+changed nothing semantically could silently change what the census measured. Production now
+names the two types directly, and the compiler checks them.
 
 Considered and rejected: changing AMUSE to report the attesting frontend. That is a
 production result-object change made solely so the census can measure something, forbidden
@@ -253,12 +319,7 @@ The accepted costs, stated plainly:
   seconds, and it buys the census's most important number without touching production.
 - **Duplicated trial order.** The collector re-states "Poiyomi first, then lilToon". If
   AMUSE gained a third frontend, the collector would silently report it as `None` and the
-  census would attribute a real family to `UnknownFamily-x`. Mitigation in §7.2: a test
-  pins the attesting frontend set to exactly two, so a third family fails loudly in CI in
-  the commit that adds it. This is the same "snapshot, made loud" pattern
-  `CensusCategorySnapshotTests` already establishes for the enums.
-
-Neither cost is hidden and neither is a correctness risk once the pin is in place.
+  census would attribute a real family to `UnknownFamily-x`. Detection is §7.2's job.
 
 ## 6. Identity capture and the banned-API amendment
 
@@ -344,42 +405,68 @@ seam (§7.3).
 
 ### 7.2 Drift detection
 
-Three enum-parity tests and one frontend-set test. Their job is to make a future AMUSE change
-fail loudly here rather than silently miscount in a private run — the compile-time coupling
-HP §4.2 argued for, extended to values and types the compiler alone cannot check.
+Four tests, all in the research test assembly, all naming AMUSE's types directly rather than
+discovering them. Their job is to make a future AMUSE change fail loudly here rather than
+silently miscount in a private run — the compile-time coupling HP §4.2 argued for, extended
+to values the compiler alone cannot check.
 
-- `RendererAnalysisRefusal`, `AlphaResolutionFailure`, and `SubmeshSeparationDisposition`
-  each have exactly the member names of their census mirror. A new AMUSE value fails here
-  **and** throws from the mapping's missing default arm.
-- The attesting frontend set is exactly `{PoiyomiMaterialSemantics, LilToonMaterialSemantics}`,
-  discovered by reflecting the `Alrauna.Amuse.Editor.Semantics` namespace for types exposing
-  `AnalyzeBaseMaterial`, excluding the `UnityMaterialSemantics` selector itself. A third
-  frontend fails this test in the commit that adds it (§5.4).
+- **Three enum-parity tests.** `RendererAnalysisRefusal`, `AlphaResolutionFailure`, and
+  `SubmeshSeparationDisposition` each have exactly the member names of their census mirror.
+  A new AMUSE value fails here **and** throws from the mapping's missing default arm. With
+  the second grant (§3.1) these compare `Enum.GetNames` on both sides directly; revision 1's
+  public string projection is gone.
+- **One frontend-set test.** The set of namespaces directly beneath
+  `Alrauna.Amuse.Editor.Semantics` equals the literal
+  `{ "Alrauna.Amuse.Editor.Semantics.LilToon", "Alrauna.Amuse.Editor.Semantics.Poiyomi" }`
+  — verified as the current set. AMUSE gives each vendor frontend its own folder and
+  namespace, so a third adapter fails this test in the commit that adds it, and a human then
+  decides whether the census measures it.
 
-### 7.3 The seam, without a second AMUSE grant
+On the last one, the distinction review change 3 draws is worth keeping sharp. **Production
+depends on no convention** — it names two types, and the compiler checks them. The test is a
+*snapshot pinned to a literal*, the same device `CensusCategorySnapshotTests` already uses for
+the enums; it enumerates in order to compare against a hardcoded expectation, not in order to
+decide behaviour. If the pin ever disagrees with reality, a person resolves it.
+
+Its one blind spot, recorded rather than hidden: a frontend added *inside* an existing vendor
+namespace would not create a new namespace and would not fail this test. Nothing short of
+parsing `UnityMaterialSemantics`'s method body catches that, and a source-parsing test would
+be more fragile than the thing it guards.
+
+### 7.3 The seam
 
 HP §7.1 requires CI to validate `ProvenOpaque` counting through the
 `BaseMaterialSemanticsProvider` seam AMUSE already exposes for its own integration tests.
-That seam and `MaterialSemantics` are both AMUSE-internal, so the research **test** assembly
-cannot name them.
+The public project installs no vendor shader, so that outcome is otherwise unreachable here.
 
-**Resolution: the seam is encapsulated inside `Alrauna.Amuse.Research.Editor`.** It holds an
-`internal` calibration helper whose signature uses only census and Unity types — no AMUSE
-type appears in it — and grants internals to its own test assembly:
+**The seam lives entirely in the test assembly.** With the §3.1 grant, the tests construct
+the `MaterialSemantics` values themselves and pass them to the internal overload:
 
 ```csharp
-// in Alrauna.Amuse.Research.Editor, internal
-internal static ObservedAvatar CollectWithConstantOpaqueAlpha(GameObject root);
-internal static ObservedAvatar CollectWithMissingTextureEvidence(GameObject root);
+// internal to Alrauna.Amuse.Research.Editor, mirroring
+// UnityRendererAlphaAnalysis.Analyze's own two-overload shape
+internal static ObservedRenderer Build(
+    Renderer renderer, string hierarchyPath, CensusShaderFamily families);
+internal static ObservedRenderer Build(
+    Renderer renderer, string hierarchyPath, CensusShaderFamily families,
+    BaseMaterialSemanticsProvider semanticsProvider);
 ```
 
-The AMUSE grant therefore stays at exactly one, as required. The `InternalsVisibleTo` the
-research assembly issues to its own tests is a grant we own and is not a widening of AMUSE
-visibility.
+`AvatarCensusCollector` calls the three-argument form and carries no seam parameter anywhere
+on its own signature. Nothing named "calibration" exists in production; revision 1's
+`CensusCalibration` class is deleted, and the semantics construction it held now sits beside
+the tests that use it.
 
-This is test-support code in a package that is never released and behind `internal`. AMUSE's
-own production path is untouched, so the HP §4.2 promise — no measurement hook, no test-only
-branch, no diagnostic expansion **in AMUSE** — holds exactly as written.
+What remains in production is one internal overload carrying one extra parameter that is a
+straight pass-through to AMUSE's own seam. That is the narrowest place the seam can live and
+still be reachable, it mirrors a shape AMUSE already ships, and no public caller can reach or
+name it. AMUSE's production path is untouched: no measurement hook, no test-only branch, no
+diagnostic expansion.
+
+**Counting is not reachability.** These tests establish that the collector *counts*
+`ProvenOpaque` and `MissingTextureEvidence` correctly. That AMUSE *reaches* those outcomes
+through the production single-argument path in a real project is a separate claim, it needs a
+vendor shader, and it stays a Census Lab obligation before every census run.
 
 ### 7.4 Mutation safety
 
@@ -470,7 +557,8 @@ Per the brief: document, do not expand scope.
    AMUSE explain it. Measuring the size of the blind spot — `Unknown` count on
    `Failure == None` submeshes — is derivable from the tier 1 records this branch produces,
    and belongs to the aggregate, not the collector.
-2. **Attesting frontend not reported by AMUSE** (§5.4). Costs a duplicated trial.
+2. **Attesting frontend not reported by AMUSE** (§5.4). Costs a duplicated trial, and the
+   drift pin cannot see a frontend added inside an existing vendor namespace (§7.2).
 3. **Scene-instance avatars carry no asset identity** (§6.3). Zero downstream effect.
 4. **`CreatorName` has no Unity source** (§6.3). Caller-supplied or `null`.
 5. **HP §8 Layer 3 asset manifest** is a run-level obligation, deferred (§7.4).
@@ -484,7 +572,7 @@ Halt and return for review if implementation appears to require any of:
 - a change to AMUSE analysis behaviour, any result object, a shader adapter, or an evidence
   provider;
 - any public API promotion in `com.alrauna.amuse`;
-- any AMUSE visibility change beyond the single grant in §3.1;
+- any AMUSE visibility change beyond the two grants in §3.1;
 - attribution added to production analysis so the census can measure it;
 - widening the §6.2 amendment beyond `GetAssetPath` and `AssetPathToGUID`;
 - a registry, provider framework, or options/configuration object emerging from what should
@@ -497,12 +585,12 @@ Halt and return for review if implementation appears to require any of:
 | # | Decision |
 |---|---|
 | 1 | Explicit `GameObject` root; `GetComponentsInChildren<Renderer>(true)`; no discovery, no Animator, no VRChat coupling |
-| 2 | One public method, `Collect(GameObject, string creatorName)` |
-| 3 | One `InternalsVisibleTo` grant, to `Alrauna.Amuse.Research.Editor` only |
+| 2 | One public type with one public method, `Collect(GameObject, string creatorName)`. Everything else in the assembly is `internal` |
+| 3 | Two `InternalsVisibleTo` grants — the collector assembly and the research test assembly — traded for the removal of a production calibration class and the whole public parity API (§3.1.1) |
 | 4 | Failure vocabulary reused verbatim; three exhaustive mappings, no default arm; exceptions propagate |
 | 5 | Refused-renderer counts `null` never `0`; `UnsupportedTopology` gets a `null` triangle count |
-| 6 | Shader family via a memoized repeat of AMUSE's own frontend trial, pinned by a drift test |
+| 6 | Shader family via an explicitly declared two-branch trial; no reflection in production; drift caught by a literal namespace-set pin in tests |
 | 7 | The `AssetDatabase` ban is narrowed to writes; `GetAssetPath` and `AssetPathToGUID` permitted (amends HP §8) |
-| 8 | The AMUSE semantics seam is encapsulated behind internal research-side calibration helpers, so the AMUSE grant stays at one |
+| 8 | The AMUSE semantics seam lives in the test assembly; production keeps only one internal pass-through overload on `RendererObservationBuilder`, mirroring AMUSE's own shape |
 | 9 | Mutation safety in three layers, with the source scan as a CI test over `Editor/` only |
 | 10 | The collector's triangle tally is cross-checked against `MeshSeparationPlan`'s independent count |

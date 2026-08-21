@@ -4,23 +4,26 @@
 
 **Goal:** Convert one explicitly supplied Unity avatar root into tier 1 `ObservedAvatar` census records by driving AMUSE's real analysis pipeline, with no anonymization, aggregation, export, persistence, or discovery.
 
-**Architecture:** A new Editor-only assembly `Alrauna.Amuse.Research.Editor` sits between Unity and the existing Unity-free `Alrauna.Amuse.Research.Census` assembly. It receives one `InternalsVisibleTo` grant from `Alrauna.Amuse.Editor` so it can call `UnityRendererAlphaAnalysis.Analyze` and read the internal result types. Traversal is `GetComponentsInChildren<Renderer>(true)` from a caller-supplied root. All counts come from the returned immutable plan; the collector adds no shader, material, or geometry logic of its own.
+**Architecture:** A new Editor-only assembly `Alrauna.Amuse.Research.Editor` sits between Unity and the existing Unity-free `Alrauna.Amuse.Research.Census` assembly. `Alrauna.Amuse.Editor` grants internals to it and to the research test assembly, so the collector can call `UnityRendererAlphaAnalysis.Analyze` and the tests can name AMUSE's enums and semantics types directly. Traversal is `GetComponentsInChildren<Renderer>(true)` from a caller-supplied root. All counts come from the returned immutable plan; the collector adds no shader, material, or geometry logic of its own.
 
 **Tech Stack:** Unity 2022.3, C# (netstandard2.1 profile), NUnit via Unity Test Framework, EditMode tests only.
 
-**Design:** `docs/superpowers/specs/2026-08-20-census-collector-design.md` (cited below as **D §n**). The harness architecture it builds on is `docs/superpowers/specs/2026-08-20-avatar-census-harness-preparation-design.md` (**HP §n**).
+**Design:** `docs/superpowers/specs/2026-08-20-census-collector-design.md` **revision 2** (cited as **D §n**). Revision 2 applies the four changes required at architectural review; D §0 lists them. The harness architecture it builds on is `docs/superpowers/specs/2026-08-20-avatar-census-harness-preparation-design.md` (**HP §n**).
 
 ## Global Constraints
 
-- Branch is `feat/census-collector`, already created from `main` at `fc8577d`. Do not switch branches.
+- Branch is `feat/census-collector`, already created from `main` at `fc8577d`, with the design and plan committed at `6c64218`. Do not switch branches.
 - `Packages/manifest.json` and `Packages/packages-lock.json` are modified in the working tree with pre-existing, unrelated macOS toolchain churn. **Never stage, revert, or commit them.** Always `git add` explicit paths, never `git add -A` or `git add .`.
-- Baseline gate before any change: EditMode suite **770 passed / 0 failed / 0 skipped**. Every task's gate is 770 + the tests added so far, zero failures.
-- Unity instance identity must be confirmed before any reported test run: `Application.dataPath` normalized must equal `<repo-root>/Assets`, i.e. `/Users/user/Documents/AMUSE/Assets` in this checkout. Never hard-code that path in source, tests, or tooling — derive it.
+- Baseline gate before any change: EditMode suite **770 passed / 0 failed / 0 skipped**. This plan adds 32 tests; the final gate is **802**.
+- Unity instance identity must be confirmed before any reported test run: `Application.dataPath` normalized must equal `<repo-root>/Assets`. Never hard-code that path in source, tests, or tooling — derive it. The MCP connection has dropped once during this branch; if a call reports no instance, re-confirm identity before continuing rather than assuming the same editor came back.
 - **A newly created embedded package assembly is invisible to a plain asset refresh.** After adding the new asmdef, run `UnityEditor.PackageManager.Client.Resolve()` then refresh, and confirm `Alrauna.Amuse.Research.Editor` appears in `AppDomain.CurrentDomain.GetAssemblies()` before trusting any test result. A filtered run reporting 0 tests is a failure, not a pass.
 - Every new `.cs` and `.asmdef` file needs its `.meta` file committed alongside it. Never separate or regenerate a `.meta`.
 - The private Census Lab is **not used** by any task in this plan.
-- Exactly one `InternalsVisibleTo` is added to `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs`, naming `Alrauna.Amuse.Research.Editor`. No other AMUSE file changes in this plan.
+- Exactly two `InternalsVisibleTo` lines are added to `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs`, naming `Alrauna.Amuse.Research.Editor` and `Alrauna.Amuse.Research.Tests.Editor`. **That file is the only file in `com.alrauna.amuse` this plan changes.**
 - `Alrauna.Amuse.Research.Census` is not modified by any task. It keeps `noEngineReferences: true` and zero references.
+- **The only public type in `Alrauna.Amuse.Research.Editor` is `AvatarCensusCollector`, and its only public member is `Collect(GameObject, string)`** (D §5.1, review change 4). Everything else is `internal`. Task 5 asserts this.
+- **No reflection in production code** (D §5.4, review change 3). Reflection appears only in tests, and only to compare against a hardcoded literal.
+- **No type named for calibration, and no seam parameter, may exist in production** beyond the single internal `RendererObservationBuilder.Build` overload of D §7.3 (review change 2).
 - Permitted `AssetDatabase` members in the research package: **`GetAssetPath` and `AssetPathToGUID` only** (D §6.2). Everything else is banned and Task 7 enforces it.
 - Namespace for all new production code: `Alrauna.Amuse.Research.Collection`. Namespace for all new tests: `Alrauna.Amuse.Research.Tests.Editor.Collection`.
 - Match the surrounding code style: 4-space indent, `internal` by default, XML doc comments on every type explaining *why*, and comments that record decisions rather than restate code.
@@ -30,27 +33,26 @@
 
 ## File Structure
 
-**Created — production**
+**Created — production** (all under `Packages/com.alrauna.amuse.research/Editor/Collection/`)
 
 | File | Responsibility |
 |---|---|
-| `Packages/com.alrauna.amuse.research/Editor/Collection/Alrauna.Amuse.Research.Editor.asmdef` | Assembly definition |
-| `.../Editor/Collection/AssemblyInfo.cs` | Grants internals to the research test assembly (D §7.3) |
-| `.../Editor/Collection/CensusVocabulary.cs` | The three exhaustive enum mappings, the `RendererKind` mapping, and the parity surface the drift tests read |
-| `.../Editor/Collection/CensusShaderFamily.cs` | Memoized repeat of AMUSE's frontend attestation trial |
-| `.../Editor/Collection/RendererObservationBuilder.cs` | One `Renderer` → one `ObservedRenderer`: analysis call, counting, refused-renderer mesh counts, cross-check invariant |
-| `.../Editor/Collection/AvatarCensusCollector.cs` | Public entry point, traversal, avatar and material identity |
-| `.../Editor/Collection/CensusCalibration.cs` | Internal seam helpers that let CI validate `ProvenOpaque` counting without a second AMUSE grant |
+| `Alrauna.Amuse.Research.Editor.asmdef` | Assembly definition |
+| `AssemblyInfo.cs` | Grants this assembly's internals to the research test assembly |
+| `CensusVocabulary.cs` | The three exhaustive enum mappings and the `RendererKind` mapping. Fully `internal` |
+| `CensusShaderFamily.cs` | The explicitly declared two-branch attestation trial, memoized |
+| `RendererObservationBuilder.cs` | One `Renderer` → one `ObservedRenderer`; also holds `CensusAssetIdentity` |
+| `AvatarCensusCollector.cs` | The one public type: traversal, avatar identity |
 
 **Created — tests** (all under `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/`)
 
 | File | Responsibility |
 |---|---|
 | `CollectorTestScene.cs` | Shared synthetic GameObject/mesh/material construction and teardown |
-| `CensusVocabularyTests.cs` | Mapping exhaustiveness and enum/frontend drift detection |
+| `CensusVocabularyTests.cs` | Grant proof, mapping parity, frontend-set pin, attestation |
 | `RendererRefusalCalibrationTests.cs` | The five CI calibration cases of D §7.1 |
-| `AvatarCensusCollectorTests.cs` | Traversal, scoping, identity, immutability, no-discovery |
-| `CollectorSeamCountingTests.cs` | `ProvenOpaque` and `MissingTextureEvidence` counting through the seam |
+| `AvatarCensusCollectorTests.cs` | Traversal, scoping, identity, immutability, no-discovery, minimal surface |
+| `CollectorSeamCountingTests.cs` | `ProvenOpaque` and `MissingTextureEvidence` counting; **holds the semantics construction that revision 1 wrongly put in production** |
 | `CollectorMutationSafetyTests.cs` | D §7.4 Layer 3 observable proof |
 | `ResearchSourceApiBanTests.cs` | D §7.4 Layer 2 source scan |
 
@@ -58,29 +60,30 @@
 
 | File | Change |
 |---|---|
-| `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` | One `InternalsVisibleTo` line |
-| `Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef` | Add `Alrauna.Amuse.Research.Editor` reference |
+| `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` | Two `InternalsVisibleTo` lines |
+| `Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef` | Add `Alrauna.Amuse.Research.Editor` and `Alrauna.Amuse.Editor` references |
 
 ---
 
-### Task 1: Assembly, grant, and a compiling seam
+### Task 1: Assemblies, both grants, and the first mapping
 
-Establishes that the friend grant works and the new assembly can see AMUSE internals. Everything later depends on this, and if the grant is misconfigured every later task fails confusingly, so it is proven on its own first.
+Proves both friend grants before anything depends on them. A misconfigured grant makes every later task fail confusingly, so it is established on its own first.
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse.research/Editor/Collection/Alrauna.Amuse.Research.Editor.asmdef`
 - Create: `Packages/com.alrauna.amuse.research/Editor/Collection/AssemblyInfo.cs`
+- Create: `Packages/com.alrauna.amuse.research/Editor/Collection/CensusVocabulary.cs`
 - Modify: `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs`
 - Modify: `Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef`
 - Test: `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CensusVocabularyTests.cs`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: assembly `Alrauna.Amuse.Research.Editor`, which can name `Alrauna.Amuse.Editor.Host.RendererAnalysisRefusal`, `Alrauna.Amuse.Editor.Analysis.SubmeshSeparationDisposition`, `Alrauna.Amuse.Editor.Semantics.AlphaResolutionFailure`, `Alrauna.Amuse.Editor.Host.UnityRendererAlphaAnalysis`, `Alrauna.Amuse.Editor.Analysis.TriangleAlphaOutcome`, and both shader frontends.
+- Produces: assembly `Alrauna.Amuse.Research.Editor`, and `internal static Census.RendererRefusal CensusVocabulary.ToCensus(RendererAnalysisRefusal)`.
 
 - [ ] **Step 1: Confirm the Unity instance and record the baseline**
 
-Run, through Unity MCP `execute_code`:
+Through Unity MCP `execute_code`:
 
 ```csharp
 return UnityEngine.Application.dataPath;
@@ -88,7 +91,7 @@ return UnityEngine.Application.dataPath;
 
 Expected: a path whose normalized form equals `<repo-root>/Assets`. If it does not, or if more than one instance is reachable, **stop and report** — do not run tests.
 
-Then run the full EditMode suite and record the totals. Expected: 770 passed, 0 failed, 0 skipped.
+Then run the full EditMode suite. Expected: 770 passed, 0 failed, 0 skipped.
 
 - [ ] **Step 2: Create the assembly definition**
 
@@ -116,7 +119,7 @@ Create `Packages/com.alrauna.amuse.research/Editor/Collection/Alrauna.Amuse.Rese
 }
 ```
 
-- [ ] **Step 3: Add the single AMUSE grant**
+- [ ] **Step 3: Add both AMUSE grants**
 
 `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` becomes exactly:
 
@@ -132,6 +135,15 @@ using System.Runtime.CompilerServices;
 // public API and adds no production code. See
 // docs/superpowers/specs/2026-08-20-avatar-census-harness-preparation-design.md §4.2.
 [assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Editor")]
+
+// The census tests construct MaterialSemantics values to drive AMUSE's existing
+// BaseMaterialSemanticsProvider seam, because the public development project
+// installs no vendor shader and therefore cannot reach ProvenOpaque any other
+// way. The alternative was a permanent calibration class inside the collector's
+// production assembly — a hidden extension point whose only caller is a test.
+// A test assembly ships in no build, so this is the narrower of the two. See
+// docs/superpowers/specs/2026-08-20-census-collector-design.md §3.1.1.
+[assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Tests.Editor")]
 ```
 
 - [ ] **Step 4: Grant the research assembly's internals to its own tests**
@@ -141,21 +153,22 @@ Create `Packages/com.alrauna.amuse.research/Editor/Collection/AssemblyInfo.cs`:
 ```csharp
 using System.Runtime.CompilerServices;
 
-// This grant is issued by the research package to its own test assembly and is
-// not a widening of AMUSE visibility. It exists so the calibration seam of
-// CensusCalibration can stay internal while remaining testable: the seam's
-// signatures name no AMUSE type, which is what keeps the AMUSE grant at one.
+// Issued by the research package to its own test assembly. The collector's
+// entire surface is one public method, so without this the tests could not
+// reach the vocabulary mappings, the attestation trial, or the renderer-level
+// seam overload at all.
 [assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Tests.Editor")]
 ```
 
-- [ ] **Step 5: Reference the new assembly from the test assembly**
+- [ ] **Step 5: Reference both assemblies from the test assembly**
 
 In `Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef`, change `"references"` to:
 
 ```json
     "references": [
         "Alrauna.Amuse.Research.Census",
-        "Alrauna.Amuse.Research.Editor"
+        "Alrauna.Amuse.Research.Editor",
+        "Alrauna.Amuse.Editor"
     ],
 ```
 
@@ -190,6 +203,9 @@ Expected: the list contains `Alrauna.Amuse.Research.Editor`. If it does not, sto
 Create `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CensusVocabularyTests.cs`:
 
 ```csharp
+using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Research.Census;
+using Alrauna.Amuse.Research.Collection;
 using NUnit.Framework;
 
 namespace Alrauna.Amuse.Research.Tests.Editor.Collection
@@ -204,14 +220,17 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
     public sealed class CensusVocabularyTests
     {
         [Test]
-        public void ResearchEditorAssemblyCanReadAmuseInternals()
+        public void FriendGrantsExposeAmuseInternalsToBothResearchAssemblies()
         {
-            // The friend grant, asserted as behaviour rather than assumed. If
-            // this fails, no later collector test means anything.
+            // Naming RendererAnalysisRefusal here proves the grant to the test
+            // assembly; this file would not compile without it. CensusVocabulary
+            // names the same internal enum in its own signature, so it could not
+            // compile without the grant to the collector assembly. Asserted as
+            // behaviour rather than assumed: if either grant is missing, every
+            // later collector test fails for a reason that looks unrelated.
             Assert.That(
-                Alrauna.Amuse.Research.Collection.CensusVocabulary
-                    .AmuseRendererRefusalNames,
-                Is.Not.Empty);
+                CensusVocabulary.ToCensus(RendererAnalysisRefusal.None),
+                Is.EqualTo(RendererRefusal.None));
         }
     }
 }
@@ -222,221 +241,30 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
 Run the EditMode suite filtered to `Alrauna.Amuse.Research.Tests.Editor`.
 Expected: a **compile error** naming `CensusVocabulary`, not a test failure. A compile error is the correct red here — the type does not exist yet.
 
-- [ ] **Step 9: Create the minimal parity surface**
+- [ ] **Step 9: Create the first mapping**
 
 Create `Packages/com.alrauna.amuse.research/Editor/Collection/CensusVocabulary.cs`:
 
 ```csharp
 using System;
-using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
-
-namespace Alrauna.Amuse.Research.Collection
-{
-    /// <summary>
-    /// The census vocabulary's AMUSE-facing half: the enum mappings, and the
-    /// name lists the drift tests compare against
-    /// <c>Alrauna.Amuse.Research.Census.CensusCategories</c>.
-    /// <para>
-    /// The name lists are public and typed in strings on purpose. The research
-    /// test assembly holds no grant into AMUSE and therefore cannot name an
-    /// AMUSE internal enum, so the comparison surface has to be projected here,
-    /// inside the one assembly that can see both sides.
-    /// </para>
-    /// </summary>
-    public static class CensusVocabulary
-    {
-        public static IReadOnlyList<string> AmuseRendererRefusalNames =>
-            Array.AsReadOnly(Enum.GetNames(typeof(RendererAnalysisRefusal)));
-    }
-}
-```
-
-- [ ] **Step 10: Refresh and run the test**
-
-Refresh Unity, then run `CensusVocabularyTests` only.
-Expected: 1 test, PASS. **If the run reports 0 tests, that is a failure** — return to Step 6.
-
-- [ ] **Step 11: Inspect the diff, then commit**
-
-```bash
-git status --short
-```
-
-Expected: the four new/modified files above plus three new `.meta` files; `Packages/manifest.json` and `Packages/packages-lock.json` still modified and **not staged**.
-
-```bash
-git add Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs Packages/com.alrauna.amuse.research/Editor/Collection Packages/com.alrauna.amuse.research/Editor/Collection.meta Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef Packages/com.alrauna.amuse.research/Tests/Editor/Collection Packages/com.alrauna.amuse.research/Tests/Editor/Collection.meta
-git commit -m "feat(research): add collector assembly and the single AMUSE friend grant"
-```
-
----
-
-### Task 2: The vocabulary mappings and drift detection
-
-Locks the census enums to AMUSE's before any counting code exists, so a mapping gap is a compile-time or test-time failure rather than a silent recategorization later.
-
-**Files:**
-- Modify: `Packages/com.alrauna.amuse.research/Editor/Collection/CensusVocabulary.cs`
-- Test: `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CensusVocabularyTests.cs`
-
-**Interfaces:**
-- Consumes: `CensusVocabulary.AmuseRendererRefusalNames` from Task 1.
-- Produces:
-  - `internal static Census.RendererRefusal CensusVocabulary.ToCensus(RendererAnalysisRefusal)`
-  - `internal static Census.AlphaResolutionFailure CensusVocabulary.ToCensus(AlphaResolutionFailure)`
-  - `internal static Census.SeparationDisposition CensusVocabulary.ToCensus(SubmeshSeparationDisposition)`
-  - `internal static Census.RendererKind CensusVocabulary.KindOf(Renderer)`
-  - `public static IReadOnlyList<string>` × 3: `AmuseRendererRefusalNames`, `AmuseAlphaResolutionFailureNames`, `AmuseSeparationDispositionNames`
-  - `public static IReadOnlyList<string> AttestingFrontendTypeNames`
-
-- [ ] **Step 1: Write the failing drift tests**
-
-Replace the body of `CensusVocabularyTests` with the grant test from Task 1 plus:
-
-```csharp
-        [Test]
-        public void RendererRefusalMirrorsAmuse()
-        {
-            CollectionAssert.AreEquivalent(
-                System.Enum.GetNames(
-                    typeof(Alrauna.Amuse.Research.Census.RendererRefusal)),
-                Alrauna.Amuse.Research.Collection.CensusVocabulary
-                    .AmuseRendererRefusalNames);
-        }
-
-        [Test]
-        public void AlphaResolutionFailureMirrorsAmuse()
-        {
-            CollectionAssert.AreEquivalent(
-                System.Enum.GetNames(
-                    typeof(Alrauna.Amuse.Research.Census.AlphaResolutionFailure)),
-                Alrauna.Amuse.Research.Collection.CensusVocabulary
-                    .AmuseAlphaResolutionFailureNames);
-        }
-
-        [Test]
-        public void SeparationDispositionMirrorsAmuse()
-        {
-            CollectionAssert.AreEquivalent(
-                System.Enum.GetNames(
-                    typeof(Alrauna.Amuse.Research.Census.SeparationDisposition)),
-                Alrauna.Amuse.Research.Collection.CensusVocabulary
-                    .AmuseSeparationDispositionNames);
-        }
-
-        [Test]
-        public void ExactlyTwoShaderFrontendsAttestMaterials()
-        {
-            // The collector re-states UnityMaterialSemantics' exclusive trial
-            // order (Poiyomi, then lilToon) because AMUSE does not report which
-            // frontend answered. A third frontend would be silently reported as
-            // an unknown family, so it has to break this test in the commit that
-            // adds it.
-            CollectionAssert.AreEquivalent(
-                new[] { "PoiyomiMaterialSemantics", "LilToonMaterialSemantics" },
-                Alrauna.Amuse.Research.Collection.CensusVocabulary
-                    .AttestingFrontendTypeNames);
-        }
-```
-
-- [ ] **Step 2: Run and verify failure**
-
-Run `CensusVocabularyTests`.
-Expected: compile error naming the three missing members. That is the red state.
-
-- [ ] **Step 3: Implement the mappings and the parity surface**
-
-Rewrite `CensusVocabulary.cs`:
-
-```csharp
-using System;
-using System.Collections.Generic;
-using System.Reflection;
-using Alrauna.Amuse.Editor.Analysis;
-using Alrauna.Amuse.Editor.Host;
-using Alrauna.Amuse.Editor.Semantics;
-using UnityEngine;
 using Census = Alrauna.Amuse.Research.Census;
 
 namespace Alrauna.Amuse.Research.Collection
 {
     /// <summary>
-    /// The census vocabulary's AMUSE-facing half: three total mappings from
-    /// AMUSE's internal enums onto their census mirrors, plus the name lists the
-    /// drift tests compare.
+    /// The census vocabulary's AMUSE-facing half: total mappings from AMUSE's
+    /// internal enums onto their census mirrors.
     /// <para>
-    /// None of the mappings has a default arm. An AMUSE value with no census
-    /// counterpart throws rather than being folded into an existing category,
-    /// because a stopped run is better than a silent miscount — the same rule
+    /// No mapping has a default arm. An AMUSE value with no census counterpart
+    /// throws rather than being folded into an existing category, because a
+    /// stopped run is better than a silent miscount — the same rule
     /// <c>CensusAnonymizer.ShaderFamily</c> already applies on the other side of
     /// the pipeline.
     /// </para>
-    /// <para>
-    /// The name lists are public and typed in strings because the research test
-    /// assembly holds no grant into AMUSE and cannot name an AMUSE internal
-    /// enum. The comparison surface has to be projected from the one assembly
-    /// that can see both sides.
-    /// </para>
     /// </summary>
-    public static class CensusVocabulary
+    internal static class CensusVocabulary
     {
-        public static IReadOnlyList<string> AmuseRendererRefusalNames =>
-            Array.AsReadOnly(Enum.GetNames(typeof(RendererAnalysisRefusal)));
-
-        public static IReadOnlyList<string> AmuseAlphaResolutionFailureNames =>
-            Array.AsReadOnly(Enum.GetNames(typeof(AlphaResolutionFailure)));
-
-        public static IReadOnlyList<string> AmuseSeparationDispositionNames =>
-            Array.AsReadOnly(
-                Enum.GetNames(typeof(SubmeshSeparationDisposition)));
-
-        /// <summary>
-        /// Every AMUSE type that attests a base material, discovered rather than
-        /// listed, so the drift test observes AMUSE instead of repeating the
-        /// collector's own assumption. <c>UnityMaterialSemantics</c> is excluded:
-        /// it selects among frontends rather than attesting anything itself.
-        /// </summary>
-        public static IReadOnlyList<string> AttestingFrontendTypeNames
-        {
-            get
-            {
-                var names = new List<string>();
-                foreach (var type in typeof(UnityMaterialSemantics)
-                             .Assembly.GetTypes())
-                {
-                    if (type.Namespace == null ||
-                        !type.Namespace.StartsWith(
-                            "Alrauna.Amuse.Editor.Semantics",
-                            StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    if (type == typeof(UnityMaterialSemantics))
-                    {
-                        continue;
-                    }
-
-                    var method = type.GetMethod(
-                        "AnalyzeBaseMaterial",
-                        BindingFlags.Static | BindingFlags.Public |
-                        BindingFlags.NonPublic,
-                        null,
-                        new[] { typeof(Material) },
-                        null);
-
-                    if (method != null)
-                    {
-                        names.Add(type.Name);
-                    }
-                }
-
-                names.Sort(StringComparer.Ordinal);
-                return Array.AsReadOnly(names.ToArray());
-            }
-        }
-
         internal static Census.RendererRefusal ToCensus(
             RendererAnalysisRefusal refusal)
         {
@@ -463,7 +291,140 @@ namespace Alrauna.Amuse.Research.Collection
                         "Unmapped AMUSE renderer refusal: " + refusal);
             }
         }
+    }
+}
+```
 
+- [ ] **Step 10: Refresh and run the test**
+
+Refresh Unity, then run `CensusVocabularyTests`.
+Expected: 1 test, PASS. **If the run reports 0 tests, that is a failure** — return to Step 6.
+
+- [ ] **Step 11: Inspect the diff, then commit**
+
+```bash
+git status --short
+```
+
+Expected: the new and modified files above plus their new `.meta` files; `Packages/manifest.json` and `Packages/packages-lock.json` still modified and **not staged**.
+
+```bash
+git add Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs Packages/com.alrauna.amuse.research/Editor/Collection Packages/com.alrauna.amuse.research/Editor/Collection.meta Packages/com.alrauna.amuse.research/Tests/Editor/Alrauna.Amuse.Research.Tests.Editor.asmdef Packages/com.alrauna.amuse.research/Tests/Editor/Collection Packages/com.alrauna.amuse.research/Tests/Editor/Collection.meta
+git commit -m "feat(research): add collector assembly and the AMUSE friend grants"
+```
+
+---
+
+### Task 2: The remaining mappings and enum drift detection
+
+Locks the census enums to AMUSE's before any counting code exists, so a mapping gap is a compile-time or test-time failure rather than a silent recategorization later.
+
+**Files:**
+- Modify: `Packages/com.alrauna.amuse.research/Editor/Collection/CensusVocabulary.cs`
+- Test: `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CensusVocabularyTests.cs`
+
+**Interfaces:**
+- Consumes: `CensusVocabulary.ToCensus(RendererAnalysisRefusal)` from Task 1.
+- Produces:
+  - `internal static Census.AlphaResolutionFailure CensusVocabulary.ToCensus(AlphaResolutionFailure)`
+  - `internal static Census.SeparationDisposition CensusVocabulary.ToCensus(SubmeshSeparationDisposition)`
+  - `internal static Census.RendererKind CensusVocabulary.KindOf(Renderer)`
+
+- [ ] **Step 1: Write the failing drift tests**
+
+Append to `CensusVocabularyTests`, inside the class:
+
+```csharp
+        [Test]
+        public void RendererRefusalMirrorsAmuse()
+        {
+            CollectionAssert.AreEquivalent(
+                System.Enum.GetNames(typeof(RendererRefusal)),
+                System.Enum.GetNames(typeof(RendererAnalysisRefusal)));
+        }
+
+        [Test]
+        public void AlphaResolutionFailureMirrorsAmuse()
+        {
+            CollectionAssert.AreEquivalent(
+                System.Enum.GetNames(typeof(AlphaResolutionFailure)),
+                System.Enum.GetNames(
+                    typeof(Alrauna.Amuse.Editor.Semantics
+                        .AlphaResolutionFailure)));
+        }
+
+        [Test]
+        public void SeparationDispositionMirrorsAmuse()
+        {
+            CollectionAssert.AreEquivalent(
+                System.Enum.GetNames(typeof(SeparationDisposition)),
+                System.Enum.GetNames(
+                    typeof(Alrauna.Amuse.Editor.Analysis
+                        .SubmeshSeparationDisposition)));
+        }
+```
+
+Note that `AlphaResolutionFailure` is deliberately ambiguous between the census and AMUSE namespaces, so the AMUSE side is fully qualified while the census side comes from the file's `using`. Do not add a `using` for `Alrauna.Amuse.Editor.Semantics`.
+
+- [ ] **Step 2: Run and verify failure**
+
+Run `CensusVocabularyTests`.
+Expected: the three new tests **fail or the file fails to compile**. If all three pass immediately, that is fine and expected — they compare AMUSE against the census schema, which the schema branch already got right. The red state that matters is Step 4's.
+
+- [ ] **Step 3: Write the failing mapping tests**
+
+Append:
+
+```csharp
+        [Test]
+        public void EveryAmuseAlphaFailureMaps()
+        {
+            // Exhaustiveness, checked by driving every value through the
+            // mapping. A missing arm throws rather than guessing, so a gap
+            // surfaces here rather than as a miscategorized census row.
+            foreach (Alrauna.Amuse.Editor.Semantics.AlphaResolutionFailure value
+                     in System.Enum.GetValues(
+                         typeof(Alrauna.Amuse.Editor.Semantics
+                             .AlphaResolutionFailure)))
+            {
+                Assert.That(
+                    System.Enum.IsDefined(
+                        typeof(AlphaResolutionFailure),
+                        CensusVocabulary.ToCensus(value)),
+                    Is.True,
+                    "Unmapped: " + value);
+            }
+        }
+
+        [Test]
+        public void EveryAmuseDispositionMaps()
+        {
+            foreach (Alrauna.Amuse.Editor.Analysis.SubmeshSeparationDisposition
+                         value in System.Enum.GetValues(
+                             typeof(Alrauna.Amuse.Editor.Analysis
+                                 .SubmeshSeparationDisposition)))
+            {
+                Assert.That(
+                    System.Enum.IsDefined(
+                        typeof(SeparationDisposition),
+                        CensusVocabulary.ToCensus(value)),
+                    Is.True,
+                    "Unmapped: " + value);
+            }
+        }
+```
+
+- [ ] **Step 4: Run and verify failure**
+
+Expected: compile error naming the two missing `ToCensus` overloads.
+
+- [ ] **Step 5: Implement the remaining mappings**
+
+Add to `CensusVocabulary.cs` — extend the `using` block with
+`using Alrauna.Amuse.Editor.Analysis;`, `using Alrauna.Amuse.Editor.Semantics;`, and
+`using UnityEngine;`, then add inside the class:
+
+```csharp
         internal static Census.AlphaResolutionFailure ToCensus(
             AlphaResolutionFailure failure)
         {
@@ -525,14 +486,16 @@ namespace Alrauna.Amuse.Research.Collection
 }
 ```
 
-- [ ] **Step 4: Refresh and run**
+If the added `using` directives make `AlphaResolutionFailure` ambiguous inside
+`CensusVocabulary.cs`, keep the AMUSE `using` and qualify the census side as
+`Census.AlphaResolutionFailure`, which the existing `Census` alias already provides.
+
+- [ ] **Step 6: Refresh and run**
 
 Run `CensusVocabularyTests`.
-Expected: 5 tests, all PASS. Confirm the count is 5 and not 0.
+Expected: 6 tests, all PASS. Confirm the count is 6 and not 0.
 
-If `AttestingFrontendTypeNames` returns more or fewer than the two expected names, **stop and report** — that is the drift signal doing its job, and it means the design's §5.4 assumption no longer holds.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add Packages/com.alrauna.amuse.research/Editor/Collection/CensusVocabulary.cs Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CensusVocabularyTests.cs
@@ -541,7 +504,7 @@ git commit -m "feat(research): map AMUSE analysis vocabulary onto census categor
 
 ---
 
-### Task 3: Shader family attestation
+### Task 3: Shader family attestation, declared explicitly
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse.research/Editor/Collection/CensusShaderFamily.cs`
@@ -551,7 +514,7 @@ git commit -m "feat(research): map AMUSE analysis vocabulary onto census categor
 - Consumes: nothing from earlier tasks.
 - Produces: `internal sealed class CensusShaderFamily` with `internal Census.ShaderFamilyAttestation Of(Material material)`. One instance per collection run; the memo lives and dies with it.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 Append to `CensusVocabularyTests`:
 
@@ -563,12 +526,9 @@ Append to `CensusVocabularyTests`:
                 UnityEngine.Shader.Find("Standard"));
             try
             {
-                var families =
-                    new Alrauna.Amuse.Research.Collection.CensusShaderFamily();
                 Assert.That(
-                    families.Of(material),
-                    Is.EqualTo(Alrauna.Amuse.Research.Census
-                        .ShaderFamilyAttestation.None));
+                    new CensusShaderFamily().Of(material),
+                    Is.EqualTo(ShaderFamilyAttestation.None));
             }
             finally
             {
@@ -580,12 +540,46 @@ Append to `CensusVocabularyTests`:
         public void NullMaterialHasNoShaderFamily()
         {
             // An empty material slot is an ordinary observation, not an error.
-            var families =
-                new Alrauna.Amuse.Research.Collection.CensusShaderFamily();
             Assert.That(
-                families.Of(null),
-                Is.EqualTo(Alrauna.Amuse.Research.Census
-                    .ShaderFamilyAttestation.None));
+                new CensusShaderFamily().Of(null),
+                Is.EqualTo(ShaderFamilyAttestation.None));
+        }
+
+        [Test]
+        public void AmuseDeclaresNoShaderFrontendTheCensusDoesNotMeasure()
+        {
+            // The census names Poiyomi and lilToon directly in its attestation
+            // trial; production depends on no naming convention. This is the
+            // other half of that bargain: a pin against a literal, so a third
+            // vendor adapter fails here in the commit that adds it and a person
+            // decides whether the census should measure it.
+            //
+            // Blind spot, recorded rather than hidden: a frontend added inside
+            // an existing vendor namespace creates no new namespace and would
+            // not fail this test.
+            var namespaces = new System.Collections.Generic.SortedSet<string>(
+                System.StringComparer.Ordinal);
+            foreach (var type in typeof(RendererAnalysisRefusal).Assembly
+                         .GetTypes())
+            {
+                if (type.Namespace == null) continue;
+                if (!type.Namespace.StartsWith(
+                        "Alrauna.Amuse.Editor.Semantics.",
+                        System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                namespaces.Add(type.Namespace);
+            }
+
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    "Alrauna.Amuse.Editor.Semantics.LilToon",
+                    "Alrauna.Amuse.Editor.Semantics.Poiyomi",
+                },
+                namespaces);
         }
 ```
 
@@ -609,13 +603,20 @@ namespace Alrauna.Amuse.Research.Collection
     /// <summary>
     /// Which AMUSE shader frontend attests a material, or none.
     /// <para>
+    /// The two families the census measures are named here, directly, and the
+    /// compiler checks them. Nothing is discovered: an earlier draft reflected a
+    /// namespace for a method called <c>AnalyzeBaseMaterial</c>, which made the
+    /// census's own vocabulary depend on AMUSE's folder and naming conventions,
+    /// so a rename that changed nothing semantically could silently change what
+    /// was measured. <c>CensusVocabularyTests</c> pins the frontend set instead.
+    /// </para>
+    /// <para>
     /// AMUSE's own selector runs this same exclusive trial and then discards
     /// which frontend answered, and the census's highest-value number is exactly
     /// that answer. Repeating the trial here costs a second attestation per
     /// distinct material; changing AMUSE to report it would be a production
     /// result-object change made solely so the census could measure something,
-    /// which the harness design forbids. The duplicated trial order is watched
-    /// by <c>CensusVocabularyTests.ExactlyTwoShaderFrontendsAttestMaterials</c>.
+    /// which the harness design forbids.
     /// </para>
     /// <para>
     /// Attestation hashes the whole normalized shader source, and avatars repeat
@@ -644,6 +645,8 @@ namespace Alrauna.Amuse.Research.Collection
                 return cached;
             }
 
+            // AMUSE's own trial order, restated. No material can be attested by
+            // both frontends, so the order affects cost, not the answer.
             var family = Census.ShaderFamilyAttestation.None;
             if (PoiyomiMaterialSemantics
                 .AnalyzeBaseMaterial(material).IsSupportedMaterial)
@@ -665,7 +668,9 @@ namespace Alrauna.Amuse.Research.Collection
 
 - [ ] **Step 4: Run**
 
-Expected: 7 tests in `CensusVocabularyTests`, all PASS.
+Expected: 9 tests in `CensusVocabularyTests`, all PASS.
+
+If `AmuseDeclaresNoShaderFrontendTheCensusDoesNotMeasure` fails, **stop and report** — that is the drift signal doing its job, and it means D §5.4's assumption no longer holds.
 
 - [ ] **Step 5: Commit**
 
@@ -687,10 +692,11 @@ The harness design names this the most likely miscount in the whole system, so i
 
 **Interfaces:**
 - Consumes: `CensusVocabulary.ToCensus`, `CensusVocabulary.KindOf`, `CensusShaderFamily`.
-- Produces: `internal static class RendererObservationBuilder` with
-  `internal static Census.ObservedRenderer Build(Renderer renderer, string hierarchyPath, CensusShaderFamily families, BaseMaterialSemanticsProvider semanticsProvider)`.
-  `semanticsProvider` may be `null`, meaning the production single-argument analysis path.
-- Produces test helper `CollectorTestScene` with `GameObject NewRoot(string name)`, `Mesh NewTriangleMesh(int submeshCount)`, `Mesh NewQuadMesh()`, `Material NewStandardMaterial()`, and `Dispose()`-style teardown.
+- Produces: `internal static class RendererObservationBuilder` with two overloads mirroring `UnityRendererAlphaAnalysis.Analyze`:
+  - `internal static Census.ObservedRenderer Build(Renderer renderer, string hierarchyPath, CensusShaderFamily families)`
+  - `internal static Census.ObservedRenderer Build(Renderer renderer, string hierarchyPath, CensusShaderFamily families, BaseMaterialSemanticsProvider semanticsProvider)`
+- Produces: `internal static class CensusAssetIdentity` with `PathOf(Object)` and `GuidOf(Object)`.
+- Produces test helper `CollectorTestScene` with `NewRoot`, `NewChild`, `NewTriangleMesh`, `NewQuadMesh`, `NewStandardMaterial`, `NewMeshRenderer`, `Destroy`.
 
 - [ ] **Step 1: Write the shared test scene helper**
 
@@ -842,7 +848,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         private ObservedRenderer Observe(Renderer renderer)
         {
             return RendererObservationBuilder.Build(
-                renderer, "Path", new CensusShaderFamily(), null);
+                renderer, "Path", new CensusShaderFamily());
         }
 
         [Test]
@@ -1012,6 +1018,29 @@ namespace Alrauna.Amuse.Research.Collection
     /// </summary>
     internal static class RendererObservationBuilder
     {
+        /// <summary>The production path.</summary>
+        internal static Census.ObservedRenderer Build(
+            Renderer renderer,
+            string hierarchyPath,
+            CensusShaderFamily families)
+        {
+            return Build(renderer, hierarchyPath, families, null);
+        }
+
+        /// <summary>
+        /// The same observation, with AMUSE's own semantics seam substituted.
+        /// <para>
+        /// This overload exists because the public development project installs
+        /// no vendor shader, so <c>ProvenOpaque</c> and
+        /// <c>MissingTextureEvidence</c> are otherwise unreachable in CI and the
+        /// collector's counting of them could not be validated at all. It is a
+        /// straight pass-through to the two-overload shape
+        /// <c>UnityRendererAlphaAnalysis.Analyze</c> already ships for its own
+        /// integration tests — not a new extension point. It is internal, no
+        /// public caller can name it, and nothing in the collector's own public
+        /// surface carries a provider parameter.
+        /// </para>
+        /// </summary>
         internal static Census.ObservedRenderer Build(
             Renderer renderer,
             string hierarchyPath,
@@ -1028,9 +1057,10 @@ namespace Alrauna.Amuse.Research.Collection
 
             if (analysis.Refusal != RendererAnalysisRefusal.None)
             {
-                var mesh = SharedMeshOf(renderer);
                 CountRefusedMesh(
-                    mesh, out var submeshCount, out var triangleCount);
+                    SharedMeshOf(renderer),
+                    out var submeshCount,
+                    out var triangleCount);
 
                 return new Census.ObservedRenderer(
                     hierarchyPath,
@@ -1265,8 +1295,8 @@ git commit -m "feat(research): observe one renderer, recording unknown counts as
 - Create: `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/AvatarCensusCollectorTests.cs`
 
 **Interfaces:**
-- Consumes: `RendererObservationBuilder.Build`, `CensusShaderFamily`, `CensusAssetIdentity`.
-- Produces: `public static Census.ObservedAvatar AvatarCensusCollector.Collect(GameObject root, string creatorName)` and the internal seam overload `internal static Census.ObservedAvatar Collect(GameObject root, string creatorName, BaseMaterialSemanticsProvider semanticsProvider)`.
+- Consumes: `RendererObservationBuilder.Build` (three-argument overload), `CensusShaderFamily`, `CensusAssetIdentity`.
+- Produces: `public static Census.ObservedAvatar AvatarCensusCollector.Collect(GameObject root, string creatorName)`. **This is the only public member the assembly gains, and there is no seam overload on it.**
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1432,6 +1462,29 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         }
 
         [Test]
+        public void ThePublicSurfaceIsExactlyOneTypeWithOneMethod()
+        {
+            // Review change 4, asserted rather than promised. A configuration
+            // object, a provider parameter, or a second entry point would all
+            // show up here.
+            var exported = typeof(AvatarCensusCollector).Assembly
+                .GetExportedTypes();
+
+            CollectionAssert.AreEqual(
+                new[] { typeof(AvatarCensusCollector) }, exported);
+
+            var methods = new List<string>();
+            foreach (var method in typeof(AvatarCensusCollector).GetMethods(
+                         BindingFlags.Public | BindingFlags.Static |
+                         BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            {
+                methods.Add(method.Name);
+            }
+
+            CollectionAssert.AreEqual(new[] { "Collect" }, methods);
+        }
+
+        [Test]
         public void NoPublicEntryPointCanCollectWithoutACallerSuppliedRoot()
         {
             // The privacy requirement expressed as a signature: there is no
@@ -1485,7 +1538,6 @@ Create `Packages/com.alrauna.amuse.research/Editor/Collection/AvatarCensusCollec
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
 using Census = Alrauna.Amuse.Research.Census;
 
@@ -1498,14 +1550,20 @@ namespace Alrauna.Amuse.Research.Collection
     /// <para>
     /// It does not anonymize, aggregate, export, serialize, persist, or
     /// transmit anything, and it opens no window and adds no menu item. Those
-    /// are separate stages, and keeping them separate is what lets
-    /// non-leakage be a unit test rather than a promise.
+    /// are separate stages, and keeping them separate is what lets non-leakage
+    /// be a unit test rather than a promise.
     /// </para>
     /// <para>
     /// It also does not discover. There is no zero-argument entry point, no
     /// scene scan, and no project search: the caller names the root, always.
     /// That is the privacy requirement expressed as a signature rather than as
     /// a rule someone has to remember.
+    /// </para>
+    /// <para>
+    /// This method is the entire public surface of the assembly. There is
+    /// deliberately no options object, no configuration, and no provider
+    /// parameter; the semantics seam the calibration tests need lives one level
+    /// down, internal to <c>RendererObservationBuilder</c>.
     /// </para>
     /// <para>
     /// Reads only. The analysis path uses <c>sharedMesh</c> and
@@ -1524,20 +1582,6 @@ namespace Alrauna.Amuse.Research.Collection
         /// </param>
         public static Census.ObservedAvatar Collect(
             GameObject root, string creatorName)
-        {
-            return Collect(root, creatorName, null);
-        }
-
-        /// <summary>
-        /// The seam overload. <paramref name="semanticsProvider"/> is AMUSE's
-        /// existing test seam, passed straight through; null means the
-        /// production path. It is internal because the type is, which is
-        /// precisely what keeps the AMUSE friend grant at one assembly.
-        /// </summary>
-        internal static Census.ObservedAvatar Collect(
-            GameObject root,
-            string creatorName,
-            BaseMaterialSemanticsProvider semanticsProvider)
         {
             if (ReferenceEquals(root, null))
             {
@@ -1564,8 +1608,7 @@ namespace Alrauna.Amuse.Research.Collection
                 observed.Add(RendererObservationBuilder.Build(
                     renderer,
                     RelativePath(root.transform, renderer.transform),
-                    families,
-                    semanticsProvider));
+                    families));
             }
 
             return new Census.ObservedAvatar(
@@ -1621,7 +1664,9 @@ namespace Alrauna.Amuse.Research.Collection
 - [ ] **Step 4: Run**
 
 Run `AvatarCensusCollectorTests`.
-Expected: 10 tests, all PASS.
+Expected: 11 tests, all PASS.
+
+If `ThePublicSurfaceIsExactlyOneTypeWithOneMethod` fails, something in the assembly is public that should not be — fix the accessibility, not the test.
 
 - [ ] **Step 5: Commit**
 
@@ -1636,22 +1681,26 @@ git commit -m "feat(research): collect tier 1 records from an explicit avatar ro
 
 The public development project installs no vendor shader, so `ProvenOpaque` is unreachable through the production path here. This validates the collector's *counting* of that outcome; that AMUSE *reaches* it in a real project is a separate claim and stays a Lab check.
 
+Note where this code lives: the semantics construction is **in the test file**, not in production. Revision 1 put it in a production `CensusCalibration` class, and review change 2 correctly rejected that as a hidden extension point whose only caller is a test.
+
 **Files:**
-- Create: `Packages/com.alrauna.amuse.research/Editor/Collection/CensusCalibration.cs`
 - Create: `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CollectorSeamCountingTests.cs`
 
 **Interfaces:**
-- Consumes: `AvatarCensusCollector.Collect(GameObject, string, BaseMaterialSemanticsProvider)`.
-- Produces: `internal static Census.ObservedAvatar CensusCalibration.CollectWithConstantOpaqueAlpha(GameObject root)` and `internal static Census.ObservedAvatar CensusCalibration.CollectWithMissingTextureEvidence(GameObject root)`.
+- Consumes: `RendererObservationBuilder.Build(Renderer, string, CensusShaderFamily, BaseMaterialSemanticsProvider)`.
+- Produces: nothing consumed by later tasks. **No production file is created or modified by this task.**
 
 - [ ] **Step 1: Write the failing tests**
 
 Create `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CollectorSeamCountingTests.cs`:
 
 ```csharp
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Research.Census;
 using Alrauna.Amuse.Research.Collection;
 using NUnit.Framework;
+using UnityEngine;
+using Semantics = Alrauna.Amuse.Editor.Semantics;
 
 namespace Alrauna.Amuse.Research.Tests.Editor.Collection
 {
@@ -1662,6 +1711,17 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
     /// is checked in the Census Lab, not here. Conflating the two would let a
     /// census report near-total SemanticsUnknown — a true statement about the
     /// project and a false one about AMUSE — and call it a pass.
+    /// <para>
+    /// The substituted semantics are constructed here rather than in the
+    /// collector package, so no production type exists whose only purpose is to
+    /// be called by a test. The seam itself is AMUSE's own
+    /// BaseMaterialSemanticsProvider, used exactly as AMUSE's own integration
+    /// tests use it.
+    /// </para>
+    /// <para>
+    /// The Semantics alias is not decoration: AMUSE declares its own
+    /// TextureWrapMode, which collides by name with UnityEngine.TextureWrapMode.
+    /// </para>
     /// </summary>
     public sealed class CollectorSeamCountingTests
     {
@@ -1673,21 +1733,74 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         [TearDown]
         public void TearDown() => _scene.Destroy();
 
+        /// <summary>
+        /// Alpha only. The other three channels stay Unknown, because the census
+        /// measures alpha and a seam that claimed base colour, emission, or
+        /// normals would be asserting something it has no basis for.
+        /// </summary>
+        private static Semantics.MaterialSemantics ConstantOpaque()
+        {
+            return new Semantics.MaterialSemantics(
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
+                    .Complete(Semantics.ScalarSemanticValue.Constant(1f)),
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
+                    .Unknown());
+        }
+
+        /// <summary>
+        /// Alpha sampled from a texture identity the evidence provider was never
+        /// given. The UV mapping is the identity — channel 0, unit scale, zero
+        /// offset — and the sampling is the plainest supported pair, so the only
+        /// thing the resolver can refuse on is the missing texture evidence.
+        /// </summary>
+        private static Semantics.MaterialSemantics AbsentTextureAlpha()
+        {
+            var sample = new Semantics.TextureSample(
+                new Semantics.TextureSourceId(
+                    "census-calibration-absent-texture"),
+                new Semantics.UvMapping(0, Vector2.one, Vector2.zero),
+                new Semantics.TextureSampling(
+                    Semantics.TextureFilterMode.Bilinear,
+                    Semantics.TextureWrapMode.Clamp));
+
+            return new Semantics.MaterialSemantics(
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
+                    .Complete(Semantics.ScalarSemanticValue.Texture(
+                        sample, Semantics.TextureChannel.Alpha)),
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
+                    .Unknown());
+        }
+
+        private ObservedRenderer Observe(
+            Renderer renderer, Semantics.MaterialSemantics semantics)
+        {
+            BaseMaterialSemanticsProvider provider = material => semantics;
+            return RendererObservationBuilder.Build(
+                renderer, "Path", new CensusShaderFamily(), provider);
+        }
+
         [Test]
         public void ConstantOpaqueAlphaCountsEveryTriangleAsProvenOpaque()
         {
             var root = _scene.NewRoot("Avatar");
-            _scene.NewMeshRenderer(
+            var go = _scene.NewMeshRenderer(
                 root, "Mesh", _scene.NewTriangleMesh(2),
                 _scene.NewStandardMaterial(), _scene.NewStandardMaterial());
 
-            var observed =
-                CensusCalibration.CollectWithConstantOpaqueAlpha(root);
-            var renderer = observed.Renderers[0];
+            var observed = Observe(
+                go.GetComponent<MeshRenderer>(), ConstantOpaque());
 
-            Assert.That(renderer.Refusal, Is.EqualTo(RendererRefusal.None));
-            Assert.That(renderer.TriangleCount, Is.EqualTo(2));
-            foreach (var submesh in renderer.Submeshes)
+            Assert.That(observed.Refusal, Is.EqualTo(RendererRefusal.None));
+            Assert.That(observed.TriangleCount, Is.EqualTo(2));
+            foreach (var submesh in observed.Submeshes)
             {
                 Assert.That(
                     submesh.AlphaFailure,
@@ -1709,13 +1822,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             // completely different next step from "we do not understand this
             // shader", so the two must never merge.
             var root = _scene.NewRoot("Avatar");
-            _scene.NewMeshRenderer(
+            var go = _scene.NewMeshRenderer(
                 root, "Mesh", _scene.NewTriangleMesh(1),
                 _scene.NewStandardMaterial());
 
-            var observed =
-                CensusCalibration.CollectWithMissingTextureEvidence(root);
-            var submesh = observed.Renderers[0].Submeshes[0];
+            var observed = Observe(
+                go.GetComponent<MeshRenderer>(), AbsentTextureAlpha());
+            var submesh = observed.Submeshes[0];
 
             Assert.That(
                 submesh.AlphaFailure,
@@ -1731,136 +1844,27 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
 }
 ```
 
-- [ ] **Step 2: Run and verify failure**
-
-Expected: compile error naming `CensusCalibration`.
-
-- [ ] **Step 3: Implement the seam helper**
-
-Create `Packages/com.alrauna.amuse.research/Editor/Collection/CensusCalibration.cs`:
-
-```csharp
-using Alrauna.Amuse.Editor.Host;
-using UnityEngine;
-using Census = Alrauna.Amuse.Research.Census;
-using Semantics = Alrauna.Amuse.Editor.Semantics;
-
-namespace Alrauna.Amuse.Research.Collection
-{
-    /// <summary>
-    /// Calibration entry points for the two outcomes the public development
-    /// project cannot reach, because it installs no vendor shader.
-    /// <para>
-    /// They exist here, rather than in the test assembly, for one structural
-    /// reason: AMUSE's semantics seam and its <c>MaterialSemantics</c> type are
-    /// both internal to AMUSE, and the research test assembly holds no grant
-    /// into AMUSE. Encapsulating the seam behind signatures that name only
-    /// census and Unity types is what keeps that grant at exactly one assembly.
-    /// </para>
-    /// <para>
-    /// This is test-support code in a package that is never released, behind
-    /// <c>internal</c>. AMUSE's own production path is untouched: no measurement
-    /// hook, no test-only branch, no diagnostic expansion. The seam itself is
-    /// AMUSE's existing <c>BaseMaterialSemanticsProvider</c>, used exactly as
-    /// AMUSE's own integration tests use it.
-    /// </para>
-    /// <para>
-    /// The <c>Semantics</c> alias is not decoration: AMUSE declares its own
-    /// <c>TextureWrapMode</c>, which collides by name with
-    /// <c>UnityEngine.TextureWrapMode</c>.
-    /// </para>
-    /// </summary>
-    internal static class CensusCalibration
-    {
-        /// <summary>
-        /// Every material resolves to a constant alpha of exactly one, so every
-        /// triangle should be ProvenOpaque without any texture being consulted.
-        /// </summary>
-        internal static Census.ObservedAvatar CollectWithConstantOpaqueAlpha(
-            GameObject root)
-        {
-            var semantics = ConstantOpaqueSemantics();
-            return AvatarCensusCollector.Collect(
-                root, null, material => semantics);
-        }
-
-        /// <summary>
-        /// Every material resolves to alpha sampled from a texture identity the
-        /// evidence provider was never given, so the resolver should refuse with
-        /// MissingTextureEvidence and every triangle should be Unknown.
-        /// </summary>
-        internal static Census.ObservedAvatar CollectWithMissingTextureEvidence(
-            GameObject root)
-        {
-            var semantics = AbsentTextureAlphaSemantics();
-            return AvatarCensusCollector.Collect(
-                root, null, material => semantics);
-        }
-
-        /// <summary>
-        /// Alpha only. The other three channels stay Unknown, because the census
-        /// measures alpha and a seam that claimed base colour, emission, or
-        /// normals would be asserting something it has no basis for.
-        /// </summary>
-        private static Semantics.MaterialSemantics ConstantOpaqueSemantics()
-        {
-            return new Semantics.MaterialSemantics(
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
-                    .Complete(Semantics.ScalarSemanticValue.Constant(1f)),
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
-                    .Unknown());
-        }
-
-        /// <summary>
-        /// The UV mapping is the identity — channel 0, unit scale, zero offset —
-        /// and the sampling is the plainest supported pair, so the only thing
-        /// the resolver can refuse on is the missing texture evidence. If this
-        /// case ever reports UnsupportedUvMapping or UnsupportedSampling
-        /// instead, the mapping or sampling has stopped being the supported one
-        /// and the calibration is measuring the wrong refusal.
-        /// </summary>
-        private static Semantics.MaterialSemantics AbsentTextureAlphaSemantics()
-        {
-            var sample = new Semantics.TextureSample(
-                new Semantics.TextureSourceId(
-                    "census-calibration-absent-texture"),
-                new Semantics.UvMapping(0, Vector2.one, Vector2.zero),
-                new Semantics.TextureSampling(
-                    Semantics.TextureFilterMode.Bilinear,
-                    Semantics.TextureWrapMode.Clamp));
-
-            return new Semantics.MaterialSemantics(
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
-                    .Complete(Semantics.ScalarSemanticValue.Texture(
-                        sample, Semantics.TextureChannel.Alpha)),
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
-                    .Unknown());
-        }
-    }
-}
-```
-
-- [ ] **Step 4: Run**
+- [ ] **Step 2: Run**
 
 Run `CollectorSeamCountingTests`.
-Expected: 2 tests, PASS.
+Expected: 2 tests, PASS. No production change is needed — Task 4 already built the overload.
 
 If `ConstantOpaqueAlphaCountsEveryTriangleAsProvenOpaque` produces `Unknown` triangles, the semantics construction is wrong — fix the construction. **Do not weaken the assertion.**
 
 If `MissingTextureEvidenceIsRecordedAsItsOwnFailure` reports `UnsupportedUvMapping` or `UnsupportedSampling` instead, read `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs` to find which mapping and sampling pair it accepts, and use that pair — the case must fail on the missing texture and nothing else.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Confirm no production file changed**
 
 ```bash
-git add Packages/com.alrauna.amuse.research/Editor/Collection/CensusCalibration.cs Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CollectorSeamCountingTests.cs
+git status --short
+```
+
+Expected: exactly one new untracked test file and its `.meta`. **If any file under `Editor/Collection/` appears, the seam has leaked back into production** — undo it.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CollectorSeamCountingTests.cs
 git commit -m "test(research): validate proven-opaque counting through the AMUSE semantics seam"
 ```
 
@@ -2047,7 +2051,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                 Directory.Exists(root), Is.True,
                 "Research package Editor source not found at " + root);
 
-            var files = Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
+            var files =
+                Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories);
 
             // A mis-globbed path must fail rather than pass vacuously.
             Assert.That(
@@ -2097,15 +2102,57 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
 
             CollectionAssert.IsEmpty(offences);
         }
+
+        [Test]
+        public void ProductionSourceHoldsNoCalibrationOrSeamType()
+        {
+            // Review change 2, asserted rather than promised. The semantics seam
+            // is one internal pass-through parameter on
+            // RendererObservationBuilder.Build and nothing else; a type that
+            // exists only to be called by a test does not belong in production.
+            var root = Path.GetFullPath(
+                "Packages/com.alrauna.amuse.research/Editor");
+
+            var offences = new List<string>();
+            foreach (var file in Directory.GetFiles(
+                         root, "*.cs", SearchOption.AllDirectories))
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (name.IndexOf("Calibration", System.StringComparison
+                        .OrdinalIgnoreCase) >= 0)
+                {
+                    offences.Add(name);
+                }
+            }
+
+            CollectionAssert.IsEmpty(offences);
+
+            // And the seam appears in exactly one production file.
+            var carriers = new List<string>();
+            foreach (var file in Directory.GetFiles(
+                         root, "*.cs", SearchOption.AllDirectories))
+            {
+                if (File.ReadAllText(file)
+                    .Contains("BaseMaterialSemanticsProvider"))
+                {
+                    carriers.Add(Path.GetFileName(file));
+                }
+            }
+
+            CollectionAssert.AreEqual(
+                new[] { "RendererObservationBuilder.cs" }, carriers);
+        }
     }
 }
 ```
 
 - [ ] **Step 4: Run**
 
-Expected: 1 test, PASS.
+Expected: 2 tests, PASS.
 
-If it fails, read each reported offence. A hit inside a **comment or doc string** is still a hit — reword the comment rather than weakening the scan. A hit on real code is a genuine defect. **Do not add an exemption without reporting it.**
+If `ProductionSourceNamesNoMutatingApi` fails, read each reported offence. A hit inside a **comment or doc string** is still a hit — reword the comment rather than weakening the scan. A hit on real code is a genuine defect. **Do not add an exemption without reporting it.**
+
+Note that `RendererObservationBuilder.cs`'s doc comment mentions `MeshFilter.mesh` — that is a bare `MeshFilter.mesh` with no leading dot on `mesh`... it will match `\.mesh\b`. Reword that comment to say "the instantiating `mesh` property" rather than adding an exemption.
 
 - [ ] **Step 5: Commit**
 
@@ -2129,7 +2176,18 @@ Re-run the `Application.dataPath` check. Normalized, it must equal `<repo-root>/
 
 Run the whole suite, not a filter.
 
-Expected: **770 + the tests added by Tasks 1–7**, zero failures, zero skipped. Record the observed total. A total that is not at least 770 means an assembly failed to compile and the run is invalid regardless of its colour.
+Expected: **802 passed, 0 failed, 0 skipped** — 770 baseline plus 32 added:
+
+| Test class | Count |
+|---|---|
+| `CensusVocabularyTests` | 9 |
+| `RendererRefusalCalibrationTests` | 6 |
+| `AvatarCensusCollectorTests` | 11 |
+| `CollectorSeamCountingTests` | 2 |
+| `CollectorMutationSafetyTests` | 2 |
+| `ResearchSourceApiBanTests` | 2 |
+
+Record the observed total. A total that is not at least 770 means an assembly failed to compile and the run is invalid regardless of its colour. **If the total differs from 802, reconcile it against this table before reporting rather than restating the expectation.**
 
 - [ ] **Step 3: Check the console**
 
@@ -2147,17 +2205,20 @@ Expected: `Packages/manifest.json` and `Packages/packages-lock.json` still showi
 
 ```bash
 git diff main...HEAD --stat
+git diff main...HEAD -- Packages/com.alrauna.amuse
 ```
 
-Expected: only files listed in the File Structure table, plus their `.meta` files. Confirm that `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` is the **only** file changed inside `com.alrauna.amuse`, and that its diff is exactly the one added `InternalsVisibleTo` line plus its comment.
+Expected: only files listed in the File Structure table, plus their `.meta` files. The second command must show **only** `Editor/AssemblyInfo.cs`, and its diff must be exactly the two added `InternalsVisibleTo` lines plus their comments.
 
 - [ ] **Step 6: Review against the design, line by line**
 
-Walk D §10's ten decisions and confirm each is honoured by the code as written. Confirm specifically that:
+Walk D §10's ten decisions and D §0's four review changes, and confirm each is honoured by the code as written. Confirm specifically that:
 
 - no D §9 stop condition was crossed;
 - no test claims a vendor frontend was exercised;
 - the `Alrauna.Amuse.Research.Census` assembly is unmodified and still declares `noEngineReferences: true` with zero references;
+- no production file in the research package contains the word "calibration";
+- no reflection appears in any production file;
 - the private Census Lab was not used.
 
 - [ ] **Step 7: Record the observed validation in the design document**
