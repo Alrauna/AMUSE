@@ -1,5 +1,7 @@
 using System;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
+using UnityEngine;
 using Census = Alrauna.Amuse.Research.Census;
 
 namespace Alrauna.Amuse.Research.Collection
@@ -42,6 +44,64 @@ namespace Alrauna.Amuse.Research.Collection
                         nameof(refusal),
                         "Unmapped AMUSE renderer refusal: " + refusal);
             }
+        }
+
+        internal static Census.AlphaResolutionFailure ToCensus(
+            AlphaResolutionFailure failure)
+        {
+            switch (failure)
+            {
+                case AlphaResolutionFailure.None:
+                    return Census.AlphaResolutionFailure.None;
+                case AlphaResolutionFailure.SemanticsUnknown:
+                    return Census.AlphaResolutionFailure.SemanticsUnknown;
+                case AlphaResolutionFailure.UnsupportedMultiplier:
+                    return Census.AlphaResolutionFailure.UnsupportedMultiplier;
+                case AlphaResolutionFailure.UnsupportedUvMapping:
+                    return Census.AlphaResolutionFailure.UnsupportedUvMapping;
+                case AlphaResolutionFailure.UnsupportedSampling:
+                    return Census.AlphaResolutionFailure.UnsupportedSampling;
+                case AlphaResolutionFailure.MissingTextureEvidence:
+                    return Census.AlphaResolutionFailure.MissingTextureEvidence;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(failure),
+                        "Unmapped AMUSE alpha resolution failure: " + failure);
+            }
+        }
+
+        internal static Census.SeparationDisposition ToCensus(
+            SubmeshSeparationDisposition disposition)
+        {
+            switch (disposition)
+            {
+                case SubmeshSeparationDisposition.Unchanged:
+                    return Census.SeparationDisposition.Unchanged;
+                case SubmeshSeparationDisposition.WhollyOpaqueCandidate:
+                    return Census.SeparationDisposition.WhollyOpaqueCandidate;
+                case SubmeshSeparationDisposition.Split:
+                    return Census.SeparationDisposition.Split;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(disposition),
+                        "Unmapped AMUSE separation disposition: " + disposition);
+            }
+        }
+
+        /// <summary>
+        /// The one mapping that is deliberately not one-to-one. Everything AMUSE
+        /// does not analyze collapses to <c>Other</c> rather than throwing,
+        /// because an unsupported renderer type is an observation the census
+        /// exists to count, not a defect.
+        /// </summary>
+        internal static Census.RendererKind KindOf(Renderer renderer)
+        {
+            if (renderer is SkinnedMeshRenderer)
+                return Census.RendererKind.SkinnedMeshRenderer;
+            if (renderer is MeshRenderer)
+                return Census.RendererKind.MeshRenderer;
+
+            return Census.RendererKind.Other;
         }
     }
 }
