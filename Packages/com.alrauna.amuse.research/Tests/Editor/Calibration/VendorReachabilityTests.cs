@@ -78,5 +78,20 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     + "census run would measure the mismatch rather than AMUSE.");
             }
         }
+
+        [Test]
+        public void TheSceneHelperTracksAndDestroysAnArbitraryShaderMaterial()
+        {
+            var material = _scene.NewMaterial(
+                Shader.Find("Standard"), "CensusGateProbe");
+
+            Assert.That(material, Is.Not.Null);
+            Assert.That(material.name, Is.EqualTo("CensusGateProbe"));
+
+            _scene.Destroy();
+
+            // Unity's overloaded equality reports a destroyed object as null.
+            Assert.That(material == null, Is.True);
+        }
     }
 }
