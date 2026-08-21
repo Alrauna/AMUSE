@@ -13,27 +13,29 @@ This Git repository serves two roles:
 
 Where policy or a task needs the repository root, derive it at run time from `git rev-parse --show-toplevel`; this document calls that value `<repo-root>`. Prefer repository-relative paths, written with forward slashes, in code, documentation, tests, and task instructions. NEVER hard-code an absolute checkout path, drive letter, or user home directory into policy, tooling, or a task rule: the same repository is developed from Windows, macOS, and Linux checkouts, and no platform is canonical. When an absolute path is genuinely required, build and compare it through the platform's own path API instead of concatenating separators by hand.
 
-The distributable package lives under `Packages/com.alrauna.amuse/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
+The distributable package lives under `Packages/com.alrauna.amuse/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. Reusable first-party research and development tooling lives under `Packages/com.alrauna.amuse.research/`. It is public source but is never released as part of the AMUSE package or VPM listing. Code belongs in this repository even when it is intended to operate only on private fixtures; the boundary is public source versus private data, not production code versus research code. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
 
-Public fixtures MUST be purpose-built, redistributable, deterministic, minimal, and legally safe to publish. NEVER add private avatars, purchased assets, unredistributable shaders, credentials, or other private testbed content to this repository.
+Public fixtures MUST be purpose-built, redistributable, deterministic, minimal, and legally safe to publish. NEVER add private avatars, purchased assets, unredistributable shaders, credentials, or other private Census Lab content to this repository.
 
 The current production implementation is Editor-only and contains exact alpha analysis plus immutable mesh-separation planning. These are foundational AMUSE subsystems, not the complete product. Reinspect the repository rather than treating this snapshot as a permanent architecture claim.
 
-## Private Unity avatar testbed
+## Private research environment: AMUSE-Census-Lab
 
-A separate private Unity project contains real VRChat avatars and real-world dependencies. It references this working tree's package as a local Unity package and is accessible through the CoplayDev-connected Unity MCP. Treat it as an external integration-test appliance, NEVER as optimizer source or a source of publishable fixtures.
+AMUSE-Census-Lab is a separate private Unity project, and the only private environment this policy recognizes. It serves two roles: real-avatar integration testbed, and host for census measurement runs. It holds real VRChat avatars under recorded consent, vendor shader packages, and other real-world dependencies; it references this working tree's packages as local Unity packages, never as copies; and it is reachable through the CoplayDev-connected Unity MCP. Treat the Lab as an external execution and data environment, NEVER as a second source-code home, optimizer source, or source of publishable fixtures. It is disposable and may be deleted and recreated freely; deleting it must not destroy publicly releasable AMUSE tooling or source.
 
 Agents MUST NOT:
 
-- copy private testbed assets or derived private content into this repository;
-- assume any testbed asset, shader, package, path, or avatar is publishable;
-- persistently alter testbed scenes, prefabs, materials, assets, project settings, or package state merely to make a test pass;
+- copy Lab assets, private data, or derived private content into this repository;
+- assume any Lab asset, shader, package, path, avatar, or measurement is publishable;
+- persistently alter Lab scenes, prefabs, materials, assets, project settings, or package state merely to make a test pass;
 - “fix” an optimizer failure by changing the avatar under test;
-- commit or publish content from the private testbed.
+- commit or publish private content from the Lab.
 
-Persistent testbed changes require explicit task scope. Prefer read-only inspection. Before any write, destructive, or broad Unity MCP operation, confirm from the task's explicit scope that the connected instance is the intended private testbed and not the public development project, state why the mutation is necessary, keep it minimal and reversible, and avoid saved fixture changes when equivalent validation is possible without them.
+Private avatars, consent records, vendor packages, identity mappings, and raw or intermediate Tier 1 and Tier 2 census data remain in the Lab. Only privacy-reviewed aggregate output may leave it. Executable AMUSE and reusable research tooling remain in this repository even when the Lab is their only execution environment.
 
-The testbed may live anywhere on disk and MUST NOT be identified by a hard-coded path, a drive letter, or a sibling-directory convention. Identify the public development project positively, by the rule in *Unity MCP use*, and treat every other reachable Unity project as unacceptable for public-project test or evidence work unless a task explicitly says otherwise. Never inspect or modify the testbed merely to work out which project is the public one.
+Persistent Lab changes require explicit task scope. Prefer read-only inspection. Before any write, destructive, or broad Unity MCP operation, confirm from the task's explicit scope that the connected instance is the intended Lab and not the public development project, state why the mutation is necessary, keep it minimal and reversible, and avoid saved fixture changes when equivalent validation is possible without them.
+
+The Lab may live anywhere on disk and MUST NOT be identified by a hard-coded path, a drive letter, or a sibling-directory convention. Identify the public development project positively, by the rule in *Unity MCP use*, and treat every other reachable Unity project as unacceptable for public-project test or evidence work unless a task explicitly says otherwise. Never inspect or modify the Lab merely to work out which project is the public one.
 
 ## Start-of-task discipline
 
@@ -124,7 +126,7 @@ git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json
 
 Inspect the full diff first, and NEVER run that restore when anything else changed in either file — an intentional dependency edit and machine churn can land in the same file, and the restore discards both. Report the occurrence rather than silently absorbing it. NEVER carry these changes forward across feature branches, fold them into unrelated work, or stage them to make a tree look clean.
 
-The private testbed's local package reference to the working-tree package is intentional. Normal development and testing MUST NOT replace it with copied, exported, or duplicated package contents. Assets, materials, and meshes generated during NDMF or build-time optimization are disposable build outputs unless the task explicitly defines them as source fixtures; do not persist them back into avatar or package source accidentally.
+The Census Lab's local package references to the working-tree packages are intentional. Normal development and testing MUST NOT replace them with copied, exported, or duplicated package contents. Assets, materials, and meshes generated during NDMF or build-time optimization are disposable build outputs unless the task explicitly defines them as source fixtures; do not persist them back into avatar or package source accidentally.
 
 ## Testing policy
 
@@ -138,9 +140,9 @@ Synthetic reference fixtures are executable specifications. Prefer tiny fixtures
 
 Smoke tests complement unit tests; they do not replace them. As applicable, verify that Unity imports without relevant compile errors, the package resolves, assemblies load, NDMF integration initializes, representative processing completes, generated output is structurally valid, source assets remain unchanged, and no unexpected Console errors appear.
 
-Use the private testbed for real-world integration and compatibility, not as the only test oracle. When it reveals a reproducible bug:
+Use the Census Lab for real-world integration and compatibility, not as the only test oracle. When it reveals a reproducible bug:
 
-1. understand the failure in the private testbed;
+1. understand the failure in the Census Lab;
 2. reduce it to a minimal public synthetic or redistributable fixture when practical;
 3. add the public regression test;
 4. implement the fix;
@@ -154,15 +156,15 @@ Unity MCP is for integration and observability, not the primary correctness orac
 
 CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.amuse/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
 
-The public development project exists for deterministic repository tests and package development; the private avatar testbed exists for real-avatar integration testing. The public development project is the Unity project rooted at `<repo-root>`, and its Unity data path is `<repo-root>/Assets`. Before any write or broad operation, and before any test run whose result will be reported, agents MUST use read-only discovery to enumerate the reachable instances and select the one whose `Application.dataPath` equals `<repo-root>/Assets` once both sides are normalized: resolve relative and symbolic segments, unify separators to `/`, and drop any trailing separator. Compare the normalized values exactly. Because filesystems differ in case sensitivity across and within platforms, two paths that match only by letter case are unconfirmed identity: stop and report rather than guessing. Never compare against a hard-coded absolute path, and never assume a reachable Unity Editor is the correct instance.
+The public development project exists for deterministic repository tests and package development; the private Census Lab exists for real-avatar integration testing and census measurement runs. The public development project is the Unity project rooted at `<repo-root>`, and its Unity data path is `<repo-root>/Assets`. Before any write or broad operation, and before any test run whose result will be reported, agents MUST use read-only discovery to enumerate the reachable instances and select the one whose `Application.dataPath` equals `<repo-root>/Assets` once both sides are normalized: resolve relative and symbolic segments, unify separators to `/`, and drop any trailing separator. Compare the normalized values exactly. Because filesystems differ in case sensitivity across and within platforms, two paths that match only by letter case are unconfirmed identity: stop and report rather than guessing. Never compare against a hard-coded absolute path, and never assume a reachable Unity Editor is the correct instance.
 
 Appropriate uses include confirming the connected project and package, inspecting hierarchy/components/materials/renderers, reading Console output, discovering or running Unity tests, exercising NDMF builds, entering Play Mode when required, inspecting generated avatar state, and reproducing failures that cannot reasonably be tested outside the Editor.
 
-Do not use MCP to silently change fixtures, to replace deterministic repository tests, or to operate on a project whose identity is uncertain. Enabling a tool group or invoking a tool does not authorize persistent testbed mutations.
+Do not use MCP to silently change fixtures, to replace deterministic repository tests, or to operate on a project whose identity is uncertain. Enabling a tool group or invoking a tool does not authorize persistent Lab mutations.
 
 ## CI and release safety
 
-CI MUST reproduce important validation without the private testbed. Progressively add the cheapest deterministic gates that cover project/package compilation, fast unit/EditMode tests, reference-fixture tests, NDMF/package integration, package validation, and release construction as those layers become real.
+CI MUST reproduce important validation without the Census Lab. Progressively add the cheapest deterministic gates that cover project/package compilation, fast unit/EditMode tests, reference-fixture tests, NDMF/package integration, package validation, and release construction as those layers become real.
 
 Ordinary correctness CI MUST NOT depend on private avatars, commercial assets, the developer's Unity MCP session, or secrets that are unrelated to the test. When a feature introduces a validation layer that should remain an ongoing gate, update CI in the same branch.
 
@@ -183,6 +185,6 @@ Report:
 - what tests or validation ran and their observed results;
 - what validation was skipped and why;
 - remaining risks or unsupported cases;
-- whether the private Unity MCP testbed was used and whether it was modified.
+- whether the private Census Lab was used and whether it was modified.
 
 Do not equate code written, one successful compile, or an agent/subagent report with completion. Evidence precedes completion claims.
