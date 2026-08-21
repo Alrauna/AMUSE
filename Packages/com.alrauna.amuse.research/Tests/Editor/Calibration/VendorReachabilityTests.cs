@@ -273,5 +273,48 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 + "this fails, the deferred investigation in the design's "
                 + "section 6 needs revisiting, not this test.");
         }
+
+        /// <summary>
+        /// Gate case 6. In a project with no vendor package, the vendor cases
+        /// above assert nothing - correct, and dangerous if unnoticed. This
+        /// records which families were actually exercised, so a vacuous run is
+        /// visible as vacuous rather than reading as a pass.
+        /// <para>
+        /// The name is deliberately a warning rather than a description: this
+        /// test's row is the only place in a green CI list where the difference
+        /// between "the gate passed" and "the gate proved something" is
+        /// visible, and a reader scanning names must not be able to miss it.
+        /// </para>
+        /// <para>
+        /// Assert.Ignore is deliberately not used anywhere in this file: an
+        /// ignored test in the Lab, where a vendor package might genuinely have
+        /// gone missing, reports a pass-shaped result for a condition that must
+        /// abort a census.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void AGreenRunProvesNothingUnlessThisNamesAnInstalledVendorFamily()
+        {
+            var installed = CensusVendorProbe.ProbeAll()
+                .Where(p => p.IsInstalled)
+                .Select(p => p.ExpectedPackageName + " " + p.InstalledPackageVersion)
+                .ToList();
+
+            if (installed.Count == 0)
+            {
+                Assert.Pass(
+                    "VENDOR REACHABILITY NOT PROVEN - no attested vendor family "
+                    + "is installed. This is the EXPECTED state in the public "
+                    + "development project, which installs no vendor shader. "
+                    + "Every vendor case in this file asserted nothing. A green "
+                    + "run here says only that the gate compiles; it does not "
+                    + "establish that AMUSE reaches ProvenOpaque. A census run "
+                    + "in this environment must abort rather than report.");
+            }
+
+            Assert.Pass(
+                "VENDOR REACHABILITY EXERCISED for: "
+                + string.Join(", ", installed));
+        }
     }
 }
