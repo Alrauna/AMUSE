@@ -349,7 +349,7 @@ Append to `CensusVocabularyTests`, inside the class:
             CollectionAssert.AreEquivalent(
                 System.Enum.GetNames(typeof(AlphaResolutionFailure)),
                 System.Enum.GetNames(
-                    typeof(Alrauna.Amuse.Editor.Semantics
+                    typeof(Alrauna.Amuse.Editor.Analysis
                         .AlphaResolutionFailure)));
         }
 
@@ -364,7 +364,7 @@ Append to `CensusVocabularyTests`, inside the class:
         }
 ```
 
-Note that `AlphaResolutionFailure` is deliberately ambiguous between the census and AMUSE namespaces, so the AMUSE side is fully qualified while the census side comes from the file's `using`. Do not add a `using` for `Alrauna.Amuse.Editor.Semantics`.
+Note that `AlphaResolutionFailure` is deliberately ambiguous between the census and AMUSE namespaces, so the AMUSE side is fully qualified while the census side comes from the file's `using`. It lives in `Alrauna.Amuse.Editor.Analysis` — beside `AlphaSemanticsResolver` — **not** in `.Semantics`; do not add a `using` for either.
 
 - [ ] **Step 2: Run and verify failure**
 
@@ -382,9 +382,9 @@ Append:
             // Exhaustiveness, checked by driving every value through the
             // mapping. A missing arm throws rather than guessing, so a gap
             // surfaces here rather than as a miscategorized census row.
-            foreach (Alrauna.Amuse.Editor.Semantics.AlphaResolutionFailure value
+            foreach (Alrauna.Amuse.Editor.Analysis.AlphaResolutionFailure value
                      in System.Enum.GetValues(
-                         typeof(Alrauna.Amuse.Editor.Semantics
+                         typeof(Alrauna.Amuse.Editor.Analysis
                              .AlphaResolutionFailure)))
             {
                 Assert.That(
