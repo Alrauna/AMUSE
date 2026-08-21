@@ -51,5 +51,32 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 }
             }
         }
+
+        /// <summary>
+        /// Gate case 1. Attestation is exact-version: PoiyomiMaterialSemantics
+        /// pins 9.3.64 and LilToonSourceAttestation pins 2.3.4, and a mismatch
+        /// makes every material of that family unattested. An installed family
+        /// at the wrong version is therefore a gate failure, not a census
+        /// result.
+        /// </summary>
+        [Test]
+        public void AnInstalledFamilyMatchesTheVersionAmuseAttests()
+        {
+            foreach (var presence in CensusVendorProbe.ProbeAll())
+            {
+                if (!presence.IsInstalled)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    presence.InstalledPackageVersion,
+                    Is.EqualTo(presence.ExpectedPackageVersion),
+                    presence.ExpectedPackageName
+                    + " is installed at a version AMUSE does not attest. "
+                    + "Every material of this family will be unattested, and a "
+                    + "census run would measure the mismatch rather than AMUSE.");
+            }
+        }
     }
 }
