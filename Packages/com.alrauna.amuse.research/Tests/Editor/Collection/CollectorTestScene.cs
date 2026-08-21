@@ -87,6 +87,19 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             return material;
         }
 
+        /// <summary>
+        /// A tracked material on a caller-supplied shader, for the gate cases,
+        /// which need vendor shaders rather than Standard. Tracked and
+        /// destroyed exactly as every other object here, so a gate run leaves
+        /// no material behind in the Lab.
+        /// </summary>
+        internal Material NewMaterial(Shader shader, string name)
+        {
+            var material = new Material(shader) { name = name };
+            _created.Add(material);
+            return material;
+        }
+
         internal GameObject NewMeshRenderer(
             GameObject parent, string name, Mesh mesh, params Material[] materials)
         {
