@@ -123,6 +123,9 @@ The cost is stated plainly: AMUSE internals now have three consumers rather than
 constrains refactoring a little further. That is the direction HP §4.2 already called
 desirable — a rename that breaks the census should break loudly in CI.
 
+The single-grant constraint this revises was approved as a deliberate revision at final
+review; §12.2.1 records what is and is not true of the grant as shipped.
+
 ## 4. Design questions answered
 
 ### 4.1 A — avatar traversal
@@ -283,6 +286,16 @@ own denominator.
 already; the refused half is the collector's responsibility and is the first calibration
 case (§7.1).
 
+**`MalformedMeshData` is the one row with no test**, here or anywhere in the repository —
+AMUSE does not test that refusal either. Measured on Unity 2022.3 during the final review:
+`Mesh.SetIndices` with a non-multiple-of-3 index count and `MeshTopology.Triangles` is
+**rejected outright** — Unity logs an error and leaves the submesh with zero indices rather
+than storing the malformed buffer. AMUSE's four `MalformedMeshData` guards are therefore
+defensive against states the public `Mesh` API will not produce, and a calibration case for
+them cannot be constructed the way the other six were. The row is recorded as untested rather
+than quietly dropped; note also that the same measurement is what makes
+`GetIndexCount(i) / 3` safe from silent truncation.
+
 ### 5.4 Shader family attestation
 
 `UnityMaterialSemantics.AnalyzeBaseMaterial` runs an exclusive trial — Poiyomi, then
@@ -394,7 +407,12 @@ avatar, never stored as assets.
 | `UnsupportedTopology` | Mesh with one `MeshTopology.Quads` submesh | Refusal mapped; `SubmeshCount == 1`; `TriangleCount` is `null` (§5.3) |
 | `MaterialPropertyOverridesPresent` | `MeshRenderer` + `SetPropertyBlock` with one value | Refusal mapped; counts read from the mesh, not `null` |
 | `UnprovenMaterialSlotMapping` | 2-submesh mesh bound to 1 shared material | Refusal mapped; counts read from the mesh |
+| `MissingMesh` | `MeshFilter` with no `sharedMesh` | Refusal mapped; counts **`null`, not `0`** — the second of the two null-versus-zero guards |
 | `SemanticsUnknown` | `MeshRenderer`, 2 triangles, Unity Standard material | `Refusal.None`; one submesh; `AlphaFailure == SemanticsUnknown`; all triangles `Unknown`; `Disposition == Unchanged`; `ShaderFamilyAttestation == None` |
+
+`MissingMesh` is a sixth case beyond HP §7.1's five. It costs three lines and guards the same
+null-versus-zero rule from the other direction — an absent mesh rather than an unsupported
+renderer — so it was implemented rather than left to the one case HP happened to name.
 
 `SetPropertyBlock` appears in the third case's *test*, never in collector source, and the
 §7.4 scan covers `Editor/` only for that reason.
@@ -421,6 +439,20 @@ to values the compiler alone cannot check.
   — verified as the current set. AMUSE gives each vendor frontend its own folder and
   namespace, so a third adapter fails this test in the commit that adds it, and a human then
   decides whether the census measures it.
+
+Three further tests in the same class are not drift detection and are listed here so §7
+accounts for every test that exists:
+
+- **One grant proof.** `CensusVocabulary.ToCensus` is called across the assembly boundary, so
+  a misconfigured friend grant fails once, by name, rather than as a confusing cascade in
+  every later collector test.
+- **Two mapping-totality tests.** Every AMUSE `AlphaResolutionFailure` and
+  `SubmeshSeparationDisposition` value is driven through its mapping and the result checked
+  to be a defined census value. The parity tests compare *names*; these prove the *switch*
+  actually handles each one rather than reaching its throwing default arm.
+
+`CensusShaderFamily` adds two more, for an unattested material and for an empty slot,
+covering the two answers the public project can reach without a vendor shader.
 
 On the last one, the distinction review change 3 draws is worth keeping sharp. **Production
 depends on no convention** — it names two types, and the compiler checks them. The test is a
@@ -661,3 +693,131 @@ from `.sharedMaterials`.
 **Not used, not accessed, not modified**, at any point on this branch. Unity MCP was used
 only against the confirmed public development project, and only for identity checks, asset
 refreshes, and test runs.
+
+## 12. Final branch review
+
+An independent pass over the finished branch, treating §11 as a claim to re-verify rather
+than as a result. Everything below was re-measured; nothing is carried over.
+
+### 12.1 Re-verified
+
+| Check | Result |
+|---|---|
+| Instance identity | `Application.dataPath` = `<repo-root>/Assets`, `productName` = `AMUSE`, single reachable instance, not in Play Mode |
+| Complete EditMode suite | **802 passed / 0 failed / 0 skipped**, 32.6 s — reproduced, not quoted |
+| Research assembly alone, console cleared first | **107 passed**, and the console afterwards held **zero** errors, warnings, or logs from the tests |
+| Branch position | 10 ahead, **0 behind** `origin/main` (`fc8577d`) after a fresh fetch; `origin/main` is an ancestor of `HEAD`, so the merge is a fast-forward. Never pushed; no upstream configured |
+| Editor left clean | After 802 tests: scene not dirty, **zero** surviving `CensusTest*` meshes or materials. The two scene roots are Unity's default camera and light |
+
+### 12.2 Scope
+
+Every file the branch touches lives under `Packages/` or `docs/`. No `Assets/` fixture (the
+directory still holds only `.gitkeep`), no workflow, no `package.json`, no `vpm-manifest.json`,
+no `packages-lock.json`, no `Library/`, `Temp/`, `Logs/`, or `UserSettings/`.
+
+`Packages/com.alrauna.amuse` changed in exactly one file, `Editor/AssemblyInfo.cs`, purely
+additively: two `InternalsVisibleTo` attributes and their comments. **Zero lines of AMUSE
+code changed**, so no analysis behaviour, result object, shader adapter, or evidence provider
+moved.
+
+`Packages/com.alrauna.amuse.research/Editor/Census/` has a zero-line diff and still declares
+`"references": []` with `noEngineReferences: true` — the Unity-free, AMUSE-free assembly the
+schema branch built is untouched.
+
+### 12.2.1 The single-grant constraint was intentionally revised
+
+The original brief asked for one grant, to `Alrauna.Amuse.Research.Editor`. The branch
+carries two. This is a **deliberate revision of that constraint, approved at final review**,
+not a drift from it, and the reasoning is worth stating plainly because the constraint and
+its revision look contradictory out of context.
+
+The original constraint was written while a production calibration seam was still expected to
+exist. Against that assumption, holding the grant at one was the right call: a second grant
+*plus* a production seam would have widened both the visibility surface and the runtime API
+at once. Review change 2 removed the seam. Once calibration construction moved into the test
+assembly, the second grant stopped being an expansion of anything that ships and became the
+mechanism that let the production surface shrink.
+
+What is actually true of the finished branch:
+
+- **AMUSE production code was not changed for census functionality.** `Editor/AssemblyInfo.cs`
+  is the only file touched in `com.alrauna.amuse`, and it gained two attributes and their
+  comments. Zero lines of analysis, adapter, or evidence code changed.
+- **The research collector has no calibration API.** No production type or file is named for
+  calibration; `ProductionSourceHoldsNoCalibrationOrSeamType` asserts it. The semantics
+  substitution lives in `CollectorSeamCountingTests`.
+- **The second grant exists only so the test assembly can reach existing internal behaviour.**
+  It grants `Alrauna.Amuse.Research.Tests.Editor` read access to internals AMUSE already had;
+  it adds no member, no hook, and no runtime extension point. A test assembly ships in no
+  build and in no release artifact, and the research package ships in neither regardless.
+
+Net effect, measured rather than argued: one additional friend grant to a test assembly,
+traded for the deletion of a production class and four public members (§3.1.1).
+
+### 12.3 Architecture
+
+376 lines of production code across five types: one `public static`, three `internal static`,
+one `internal sealed` (the attestation memo). Grepped and confirmed absent: interfaces,
+abstract or virtual members, declared delegates, generics, and any type named for options,
+configuration, a registry, a factory, a provider, a manager, or a service.
+
+Also grepped and confirmed absent from the whole research package, production and tests
+alike: `UnityWebRequest`, `HttpClient`, `System.Net`, sockets, `EditorPrefs`, `PlayerPrefs`,
+`Process.Start`, serialization, and every file-writing API. The only file I/O anywhere is
+`File.ReadAllText` and `Directory.GetFiles` inside the source-scan test, which reads this
+repository's own source. **No telemetry, no networking, no persistence, no private-data
+storage.**
+
+`AssetDatabase` appears at exactly two call sites, both in `CensusAssetIdentity`, both the
+approved read-only members.
+
+### 12.4 Test quality
+
+Vacuity was checked rather than assumed:
+
+- `ProductionSourceNamesNoMutatingApi` — proven to fail (§11.3).
+- `ProductionSourceHoldsNoCalibrationOrSeamType` — carries a positive assertion, that
+  `BaseMaterialSemanticsProvider` appears in exactly one named production file, so an empty
+  scan fails.
+- `AmuseDeclaresNoShaderFrontendTheCensusDoesNotMeasure` — compares to a two-element literal;
+  finding nothing fails.
+- `NoPublicEntryPointCanCollectWithoutACallerSuppliedRoot` — asserts a list is empty, which
+  would pass vacuously if it examined nothing. Measured: it examines exactly **one** method,
+  `AvatarCensusCollector.Collect`. Its blind spot — it would also pass if `Collect` were
+  deleted — is covered by `ThePublicSurfaceIsExactlyOneTypeWithOneMethod`, which asserts the
+  surface positively. The pair is sound; neither alone is.
+
+Reflection over the built assembly confirms the exported surface is exactly
+`[AvatarCensusCollector]` with one declared public method, and that
+`CensusVocabulary`, `CensusShaderFamily`, `RendererObservationBuilder`, and
+`CensusAssetIdentity` are all internal.
+
+### 12.5 Risks and future work
+
+1. **`MalformedMeshData` is untested and effectively unreachable** through the public `Mesh`
+   API (§5.3). Not a defect introduced here — AMUSE does not test it either — but it means
+   one row of the refusal table has never executed.
+2. **Two AMUSE consumers of internals instead of one.** A rename now breaks the census at
+   compile time. That is the intended direction (HP §4.2), but it does constrain refactoring
+   further than before.
+3. **Attestation runs twice per distinct material** (§5.4). Bounded by the memo and
+   acceptable for a one-shot run; it would matter if the collector were ever used per-frame,
+   which it is not designed for.
+4. **The frontend-set pin cannot see a frontend added inside an existing vendor namespace**
+   (§7.2).
+5. **Reachability of `ProvenOpaque` and `MissingTextureEvidence` remains unproven** through
+   the production path (§11.5) and is the first gate of the Lab run.
+6. **No CI gate.** Validation is local. The source scan and the drift pins are exactly the
+   checks that lose their value when nobody runs them, so wiring the EditMode suite into CI
+   is the strongest follow-up available — and it belongs to its own branch.
+7. **No invocation surface.** Nothing calls the collector outside tests; the runner is the
+   next phase.
+
+### 12.6 Merge readiness
+
+The branch is complete against its objective and ready to merge as a fast-forward.
+`Packages/manifest.json` and `Packages/packages-lock.json` remain modified in the working
+tree with the previously characterized macOS toolchain churn — additive only, exactly
+`com.unity.toolchain.macos-arm64-linux-x86_64`, `com.unity.sysroot`, and
+`com.unity.sysroot.linux-x86_64`, nothing removed. They are not part of this branch and were
+deliberately left untouched.
