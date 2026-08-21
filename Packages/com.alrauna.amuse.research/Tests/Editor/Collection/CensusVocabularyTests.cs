@@ -92,5 +92,68 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                     "Unmapped: " + value);
             }
         }
+
+        [Test]
+        public void UnattestedMaterialHasNoShaderFamily()
+        {
+            var material = new UnityEngine.Material(
+                UnityEngine.Shader.Find("Standard"));
+            try
+            {
+                Assert.That(
+                    new CensusShaderFamily().Of(material),
+                    Is.EqualTo(ShaderFamilyAttestation.None));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+
+        [Test]
+        public void NullMaterialHasNoShaderFamily()
+        {
+            // An empty material slot is an ordinary observation, not an error.
+            Assert.That(
+                new CensusShaderFamily().Of(null),
+                Is.EqualTo(ShaderFamilyAttestation.None));
+        }
+
+        [Test]
+        public void AmuseDeclaresNoShaderFrontendTheCensusDoesNotMeasure()
+        {
+            // The census names Poiyomi and lilToon directly in its attestation
+            // trial; production depends on no naming convention. This is the
+            // other half of that bargain: a pin against a literal, so a third
+            // vendor adapter fails here in the commit that adds it and a person
+            // decides whether the census should measure it.
+            //
+            // Blind spot, recorded rather than hidden: a frontend added inside
+            // an existing vendor namespace creates no new namespace and would
+            // not fail this test.
+            var namespaces = new System.Collections.Generic.SortedSet<string>(
+                System.StringComparer.Ordinal);
+            foreach (var type in typeof(RendererAnalysisRefusal).Assembly
+                         .GetTypes())
+            {
+                if (type.Namespace == null) continue;
+                if (!type.Namespace.StartsWith(
+                        "Alrauna.Amuse.Editor.Semantics.",
+                        System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                namespaces.Add(type.Namespace);
+            }
+
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    "Alrauna.Amuse.Editor.Semantics.LilToon",
+                    "Alrauna.Amuse.Editor.Semantics.Poiyomi",
+                },
+                namespaces);
+        }
     }
 }
