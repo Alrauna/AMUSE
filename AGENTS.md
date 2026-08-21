@@ -110,6 +110,20 @@ NEVER commit generated or local Unity state such as `Library/`, `Temp/`, `Logs/`
 
 `Packages/manifest.json`, `Packages/packages-lock.json`, and `Packages/vpm-manifest.json` SHOULD change only when dependency or package configuration actually changes. Inspect incidental Unity Package Manager churn rather than blindly staging or accepting it.
 
+### Unity-generated package churn
+
+Opening the project mutates `Packages/manifest.json` and `Packages/packages-lock.json` on any machine whose Unity install carries extra build-target modules. Unity adds the dependency that matches *that editor install*, so the entry describes the developer's machine, not the project. Before staging any Unity Package Manager change, establish which of the two it is; treat "Unity wrote it" as evidence of neither intent nor need.
+
+Host-specific toolchain packages announce themselves in their own names: `com.unity.toolchain.<host>-<hostarch>-<target>-<targetarch>` pins a host OS and CPU, and `com.unity.sysroot*` entries arrive only as its transitive dependencies. Agents MUST NOT commit these — nor any other package that encodes a host platform — unless the repository has a documented, in-tree requirement for that build capability. Portable-looking JSON is not the test: these entries carry hundred-megabyte payloads that every contributor on a different host resolves, downloads, and can never execute. AMUSE builds no player for any platform, and CI never opens Unity, so no such requirement exists today. If one ever does, document it alongside the dependency in the same commit.
+
+When the diff to those two files contains nothing but such generated entries, restore them and continue:
+
+```
+git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json
+```
+
+Inspect the full diff first, and NEVER run that restore when anything else changed in either file — an intentional dependency edit and machine churn can land in the same file, and the restore discards both. Report the occurrence rather than silently absorbing it. NEVER carry these changes forward across feature branches, fold them into unrelated work, or stage them to make a tree look clean.
+
 The private testbed's local package reference to the working-tree package is intentional. Normal development and testing MUST NOT replace it with copied, exported, or duplicated package contents. Assets, materials, and meshes generated during NDMF or build-time optimization are disposable build outputs unless the task explicitly defines them as source fixtures; do not persist them back into avatar or package source accidentally.
 
 ## Testing policy
