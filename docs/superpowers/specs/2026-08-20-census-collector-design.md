@@ -594,3 +594,70 @@ Halt and return for review if implementation appears to require any of:
 | 8 | The AMUSE semantics seam lives in the test assembly; production keeps only one internal pass-through overload on `RendererObservationBuilder`, mirroring AMUSE's own shape |
 | 9 | Mutation safety in three layers, with the source scan as a CI test over `Editor/` only |
 | 10 | The collector's triangle tally is cross-checked against `MeshSeparationPlan`'s independent count |
+
+## 11. Validation performed
+
+Observed on 2026-08-20 at the end of implementation, not inferred.
+
+### 11.1 Instance identity
+
+`Application.dataPath` reported `/Users/user/Documents/AMUSE/Assets`, which equals
+`<repo-root>/Assets` exactly, same case, from the single reachable instance. Re-confirmed
+immediately before the final run. The MCP connection dropped once mid-branch and identity was
+re-confirmed rather than assumed on reconnect.
+
+### 11.2 Gate
+
+| | |
+|---|---|
+| Baseline, before any change | **770 passed / 0 failed / 0 skipped**, 29.9 s |
+| Final, complete EditMode suite | **802 passed / 0 failed / 0 skipped**, 35.1 s |
+| Added by this branch | **32**, matching the plan's prediction exactly |
+
+Per class: `CensusVocabularyTests` 9, `RendererRefusalCalibrationTests` 6,
+`AvatarCensusCollectorTests` 11, `CollectorSeamCountingTests` 2,
+`CollectorMutationSafetyTests` 2, `ResearchSourceApiBanTests` 2.
+
+Console: **zero** errors or warnings matching `Alrauna` after the final run. (Unrelated
+`mprotect returned EACCES` entries appear on this macOS host during domain reloads; they
+carry no file or line and predate this branch.)
+
+### 11.3 The source scan was verified non-vacuous
+
+A passing guard proves nothing until it has been seen to fail. A `renderer.material` read and
+an `AssetDatabase.CreateAsset` call were temporarily appended to a production file;
+`ProductionSourceNamesNoMutatingApi` failed, naming both — `"CensusVocabulary.cs: \.material\b"`
+and `"CensusVocabulary.cs: AssetDatabase.CreateAsset"` — and the probe was reverted. The
+scan is confirmed to see the embedded package's real source and to distinguish `.material`
+from `.sharedMaterials`.
+
+### 11.4 Review changes, checked in the code
+
+| Change | Evidence |
+|---|---|
+| 2 — no calibration in production | No production type or file named for calibration; the only occurrence of the word is one doc-comment reference. `BaseMaterialSemanticsProvider` appears in exactly one production file, as one internal overload. Asserted by `ProductionSourceHoldsNoCalibrationOrSeamType` |
+| 3 — no reflection in production | `grep` for `System.Reflection`, `GetTypes()`, `GetMethod(`, and `.Assembly` over `Editor/` returns nothing. The frontends are named directly |
+| 4 — minimal public surface | `GetExportedTypes()` returns exactly `[AvatarCensusCollector]`, whose only declared public method is `Collect`. Asserted by `ThePublicSurfaceIsExactlyOneTypeWithOneMethod` |
+| Census assembly untouched | Zero diff under `Editor/Census/`; still `"references": []` and `noEngineReferences: true` |
+| AMUSE package | One file changed, `Editor/AssemblyInfo.cs`, containing exactly the two grant lines and their comments |
+
+### 11.5 Not validated, and why
+
+- **Reachability of `ProvenOpaque` and `MissingTextureEvidence` through the production
+  single-argument path.** §7.3's tests establish *counting* only. Reaching those outcomes
+  needs an attested vendor material, the public project installs no vendor shader, and this
+  branch did not use the Census Lab. **This remains a Lab obligation before every census
+  run**, and a census whose production path cannot reach `ProvenOpaque` must abort rather
+  than report near-total `SemanticsUnknown`.
+- **The three arithmetic invariants have no negative test** (§7.5). They are enforced in code
+  and exercised by every calibration case; forcing a violation would require faking an AMUSE
+  plan and would test the fake.
+- **Real-avatar behaviour.** Nothing here has observed an avatar. Every fixture is synthetic
+  and built in code.
+- **CI.** No workflow gate was added; this branch's validation ran locally in the Editor.
+
+### 11.6 Census Lab
+
+**Not used, not accessed, not modified**, at any point on this branch. Unity MCP was used
+only against the confirmed public development project, and only for identity checks, asset
+refreshes, and test runs.
