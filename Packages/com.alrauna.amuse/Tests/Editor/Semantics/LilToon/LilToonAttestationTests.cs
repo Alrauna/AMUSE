@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
 
@@ -46,6 +48,196 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 source, ShaderDir, ProjectRoot, Tree());
         }
 
+        private static LilToonCanonicalizationAnalysis Analyze(string source)
+        {
+            return LilToonSourceAttestation.AnalyzeCanonicalization(
+                source, ShaderDir, ProjectRoot, Tree());
+        }
+
+        private static LilToonCanonicalizationAnalysis EmptyShaderAnalysis()
+        {
+            return Analyze("Shader \"lilToon\"\n{\n}\n");
+        }
+
+        private static LilToonCanonicalizationAnalysis PassAnalysis(
+            IEnumerable<string> settingRecords,
+            string beforeSecondEnd = null)
+        {
+            return Analyze(
+                "HLSLINCLUDE\n" +
+                "    #define LIL_RENDER 0\n" +
+                "ENDHLSL\n" +
+                "HLSLINCLUDE\n" +
+                string.Join("\n", settingRecords.Select(line => "    " + line)) +
+                "\n    #pragma target 3.5\n" +
+                (beforeSecondEnd ?? string.Empty) +
+                "ENDHLSL\n");
+        }
+
+        private static List<string> DefaultStandaloneRecords()
+        {
+            var identifiers = new[]
+            {
+                "LIL_FEATURE_ANIMATE_MAIN_UV",
+                "LIL_FEATURE_MAIN_TONE_CORRECTION",
+                "LIL_FEATURE_MAIN_GRADATION_MAP",
+                "LIL_FEATURE_MAIN2ND",
+                "LIL_FEATURE_MAIN3RD",
+                "LIL_FEATURE_DECAL",
+                "LIL_FEATURE_ANIMATE_DECAL",
+                "LIL_FEATURE_LAYER_DISSOLVE",
+                "LIL_FEATURE_ALPHAMASK",
+                "LIL_FEATURE_SHADOW",
+                "LIL_FEATURE_RECEIVE_SHADOW",
+                "LIL_FEATURE_SHADOW_3RD",
+                "LIL_FEATURE_SHADOW_LUT",
+                "LIL_FEATURE_RIMSHADE",
+                "LIL_FEATURE_EMISSION_1ST",
+                "LIL_FEATURE_EMISSION_2ND",
+                "LIL_FEATURE_ANIMATE_EMISSION_UV",
+                "LIL_FEATURE_ANIMATE_EMISSION_MASK_UV",
+                "LIL_FEATURE_EMISSION_GRADATION",
+                "LIL_FEATURE_NORMAL_1ST",
+                "LIL_FEATURE_NORMAL_2ND",
+                "LIL_FEATURE_ANISOTROPY",
+                "LIL_FEATURE_REFLECTION",
+                "LIL_FEATURE_MATCAP",
+                "LIL_FEATURE_MATCAP_2ND",
+                "LIL_FEATURE_RIMLIGHT",
+                "LIL_FEATURE_RIMLIGHT_DIRECTION",
+                "LIL_FEATURE_GLITTER",
+                "LIL_FEATURE_BACKLIGHT",
+                "LIL_FEATURE_PARALLAX",
+                "LIL_FEATURE_POM",
+                "LIL_FEATURE_DISTANCE_FADE",
+                "LIL_FEATURE_AUDIOLINK",
+                "LIL_FEATURE_AUDIOLINK_VERTEX",
+                "LIL_FEATURE_AUDIOLINK_LOCAL",
+                "LIL_FEATURE_DISSOLVE",
+                "LIL_FEATURE_DITHER",
+                "LIL_FEATURE_IDMASK",
+                "LIL_FEATURE_UDIMDISCARD",
+                "LIL_FEATURE_OUTLINE_TONE_CORRECTION",
+                "LIL_FEATURE_OUTLINE_RECEIVE_SHADOW",
+                "LIL_FEATURE_ANIMATE_OUTLINE_UV",
+                "LIL_FEATURE_FUR_COLLISION",
+                "LIL_FEATURE_MainGradationTex",
+                "LIL_FEATURE_MainColorAdjustMask",
+                "LIL_FEATURE_Main2ndTex",
+                "LIL_FEATURE_Main2ndBlendMask",
+                "LIL_FEATURE_Main2ndDissolveMask",
+                "LIL_FEATURE_Main2ndDissolveNoiseMask",
+                "LIL_FEATURE_Main3rdTex",
+                "LIL_FEATURE_Main3rdBlendMask",
+                "LIL_FEATURE_Main3rdDissolveMask",
+                "LIL_FEATURE_Main3rdDissolveNoiseMask",
+                "LIL_FEATURE_AlphaMask",
+                "LIL_FEATURE_BumpMap",
+                "LIL_FEATURE_Bump2ndMap",
+                "LIL_FEATURE_Bump2ndScaleMask",
+                "LIL_FEATURE_AnisotropyTangentMap",
+                "LIL_FEATURE_AnisotropyScaleMask",
+                "LIL_FEATURE_AnisotropyShiftNoiseMask",
+                "LIL_FEATURE_ShadowBorderMask",
+                "LIL_FEATURE_ShadowBlurMask",
+                "LIL_FEATURE_ShadowStrengthMask",
+                "LIL_FEATURE_ShadowColorTex",
+                "LIL_FEATURE_Shadow2ndColorTex",
+                "LIL_FEATURE_Shadow3rdColorTex",
+                "LIL_FEATURE_RimShadeMask",
+                "LIL_FEATURE_BacklightColorTex",
+                "LIL_FEATURE_SmoothnessTex",
+                "LIL_FEATURE_MetallicGlossMap",
+                "LIL_FEATURE_ReflectionColorTex",
+                "LIL_FEATURE_ReflectionCubeTex",
+                "LIL_FEATURE_MatCapTex",
+                "LIL_FEATURE_MatCapBlendMask",
+                "LIL_FEATURE_MatCapBumpMap",
+                "LIL_FEATURE_MatCap2ndTex",
+                "LIL_FEATURE_MatCap2ndBlendMask",
+                "LIL_FEATURE_MatCap2ndBumpMap",
+                "LIL_FEATURE_RimColorTex",
+                "LIL_FEATURE_GlitterColorTex",
+                "LIL_FEATURE_GlitterShapeTex",
+                "LIL_FEATURE_EmissionMap",
+                "LIL_FEATURE_EmissionBlendMask",
+                "LIL_FEATURE_EmissionGradTex",
+                "LIL_FEATURE_Emission2ndMap",
+                "LIL_FEATURE_Emission2ndBlendMask",
+                "LIL_FEATURE_Emission2ndGradTex",
+                "LIL_FEATURE_ParallaxMap",
+                "LIL_FEATURE_AudioLinkMask",
+                "LIL_FEATURE_AudioLinkLocalMap",
+                "LIL_FEATURE_DissolveMask",
+                "LIL_FEATURE_DissolveNoiseMask",
+                "LIL_FEATURE_OutlineTex",
+                "LIL_FEATURE_OutlineWidthMask",
+                "LIL_FEATURE_OutlineVectorTex",
+                "LIL_FEATURE_FurNoiseMask",
+                "LIL_FEATURE_FurMask",
+                "LIL_FEATURE_FurLengthMask",
+                "LIL_FEATURE_FurVectorTex",
+                "LIL_OPTIMIZE_APPLY_SHADOW_FA",
+                "LIL_OPTIMIZE_USE_FORWARDADD",
+                "LIL_OPTIMIZE_USE_VERTEXLIGHT",
+            };
+            var records = identifiers
+                .Select(identifier => "#define " + identifier)
+                .ToList();
+            records.Add("#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE");
+            Assert.That(records, Has.Count.EqualTo(103));
+            return records;
+        }
+
+        private static List<string> StrippedStandaloneRecords()
+        {
+            var removed = new HashSet<string>(new[]
+            {
+                "#define LIL_FEATURE_RECEIVE_SHADOW",
+                "#define LIL_FEATURE_EMISSION_1ST",
+                "#define LIL_FEATURE_EMISSION_2ND",
+                "#define LIL_FEATURE_ANIMATE_EMISSION_UV",
+                "#define LIL_FEATURE_ANIMATE_EMISSION_MASK_UV",
+                "#define LIL_FEATURE_EMISSION_GRADATION",
+                "#define LIL_FEATURE_NORMAL_1ST",
+                "#define LIL_FEATURE_NORMAL_2ND",
+                "#define LIL_FEATURE_BACKLIGHT",
+                "#define LIL_FEATURE_OUTLINE_RECEIVE_SHADOW",
+                "#define LIL_FEATURE_BumpMap",
+                "#define LIL_FEATURE_EmissionMap",
+            }, StringComparer.Ordinal);
+            var records = DefaultStandaloneRecords()
+                .Where(record => !removed.Contains(record))
+                .ToList();
+            Assert.That(records, Has.Count.EqualTo(91));
+            return records;
+        }
+
+        private static void InsertAfter(
+            List<string> records,
+            string predecessor,
+            string record)
+        {
+            records.Insert(records.IndexOf(predecessor) + 1, record);
+        }
+
+        private static readonly object[] GeneratorDependencies =
+        {
+            new object[] { "LIL_FEATURE_DECAL", new[] { "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD" } },
+            new object[] { "LIL_FEATURE_ANIMATE_DECAL", new[] { "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD" } },
+            new object[] { "LIL_FEATURE_LAYER_DISSOLVE", new[] { "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD" } },
+            new object[] { "LIL_FEATURE_RECEIVE_SHADOW", new[] { "LIL_FEATURE_SHADOW" } },
+            new object[] { "LIL_FEATURE_SHADOW_3RD", new[] { "LIL_FEATURE_SHADOW" } },
+            new object[] { "LIL_FEATURE_SHADOW_LUT", new[] { "LIL_FEATURE_SHADOW" } },
+            new object[] { "LIL_FEATURE_ANIMATE_EMISSION_UV", new[] { "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND" } },
+            new object[] { "LIL_FEATURE_ANIMATE_EMISSION_MASK_UV", new[] { "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND" } },
+            new object[] { "LIL_FEATURE_EMISSION_GRADATION", new[] { "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND" } },
+            new object[] { "LIL_FEATURE_RIMLIGHT_DIRECTION", new[] { "LIL_FEATURE_RIMLIGHT" } },
+            new object[] { "LIL_FEATURE_POM", new[] { "LIL_FEATURE_PARALLAX" } },
+            new object[] { "LIL_FEATURE_AUDIOLINK_VERTEX", new[] { "LIL_FEATURE_AUDIOLINK" } },
+            new object[] { "LIL_FEATURE_AUDIOLINK_LOCAL", new[] { "LIL_FEATURE_AUDIOLINK" } },
+        };
+
         private static LilToonSourceEvidence Evidence(
             string shaderName = "lilToon",
             string assetGuid = "df12117ecd77c31469c224178886498e",
@@ -60,7 +252,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             string includeDigest = UsePin,
             bool hasRenderMode = true,
             int renderMode = 0,
-            IReadOnlyCollection<string> features = null)
+            IReadOnlyCollection<string> features = null,
+            bool hasShaderCanonicalization = true,
+            LilToonCanonicalizationAnalysis shaderCanonicalization = null,
+            bool hasPassCanonicalization = true,
+            LilToonCanonicalizationAnalysis passCanonicalization = null)
         {
             return new LilToonSourceEvidence(
                 shaderName,
@@ -82,7 +278,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     : includeDigest,
                 hasRenderMode,
                 renderMode,
-                features ?? new string[0]);
+                features ?? new string[0],
+                hasShaderCanonicalization
+                    ? shaderCanonicalization ?? EmptyShaderAnalysis()
+                    : null,
+                hasPassCanonicalization
+                    ? passCanonicalization ?? PassAnalysis(DefaultStandaloneRecords())
+                    : null);
         }
 
         /// <summary>Adds <paramref name="steps"/> ULPs to a float.</summary>
@@ -120,6 +322,143 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // --- R1: the setting region ---
+
+        [Test]
+        public void AnalyzeCanonicalization_RecordsEveryHlslIncludeRegionInOrder()
+        {
+            const string source =
+                "HLSLINCLUDE\n" +
+                "    #define LIL_RENDER 0\n" +
+                "ENDHLSL\n" +
+                "HLSLINCLUDE\n" +
+                "    #define LIL_FEATURE_MAIN2ND\n" +
+                "    #pragma skip_variants LIGHTPROBE_SH\n" +
+                "    #pragma target 3.5\n" +
+                "ENDHLSL\n";
+
+            var analysis = Analyze(source);
+
+            Assert.That(analysis.RemovedRegions, Has.Count.EqualTo(2));
+            Assert.That(analysis.RemovedRegions[0].HlslIncludeOrdinal, Is.Zero);
+            Assert.That(analysis.RemovedRegions[0].HlslIncludeLineIndex, Is.Zero);
+            Assert.That(analysis.RemovedRegions[0].Records, Is.Empty);
+            Assert.That(analysis.RemovedRegions[1].HlslIncludeOrdinal, Is.EqualTo(1));
+            Assert.That(analysis.RemovedRegions[1].HlslIncludeLineIndex, Is.EqualTo(3));
+            Assert.That(analysis.RemovedRegions[1].Records, Has.Count.EqualTo(2));
+            Assert.That(analysis.RemovedRegions[1].Records[0].LineIndex, Is.EqualTo(4));
+            Assert.That(analysis.RemovedRegions[1].Records[0].OffsetInRegion, Is.Zero);
+            Assert.That(
+                analysis.RemovedRegions[1].Records[0].Kind,
+                Is.EqualTo(LilToonRemovedRecordKind.Define));
+            Assert.That(
+                analysis.RemovedRegions[1].Records[0].Text,
+                Is.EqualTo("#define LIL_FEATURE_MAIN2ND"));
+            Assert.That(
+                analysis.RemovedRegions[1].Records[1].Kind,
+                Is.EqualTo(LilToonRemovedRecordKind.SkipVariants));
+        }
+
+        [Test]
+        public void AnalyzeCanonicalization_RecordsKnownActivatorsAnywhere()
+        {
+            const string source =
+                "#define LIL_FEATURE_LTCGI\n" +
+                "HLSLINCLUDE\n" +
+                "  #define  LIL_FEATURE_AUDIOLINK_PACKAGE\n" +
+                "  #pragma target 3.5\n" +
+                "#define LIL_FEATURE_VRCLIGHTVOLUMES 1\n";
+
+            var analysis = Analyze(source);
+
+            Assert.That(
+                analysis.Activators.Select(value => value.Identifier),
+                Is.EqualTo(new[]
+                {
+                    "LIL_FEATURE_LTCGI",
+                    "LIL_FEATURE_AUDIOLINK_PACKAGE",
+                    "LIL_FEATURE_VRCLIGHTVOLUMES",
+                }));
+            Assert.That(
+                analysis.Activators.Select(value => value.LineIndex),
+                Is.EqualTo(new[] { 0, 2, 4 }));
+        }
+
+        [Test]
+        public void AnalyzeCanonicalization_IgnoresNonDefineActivatorMentions()
+        {
+            const string source =
+                "// #define LIL_FEATURE_LTCGI\n" +
+                "const char* name = \"LIL_FEATURE_LTCGI\";\n" +
+                "#undef LIL_FEATURE_LTCGI\n";
+
+            Assert.That(Analyze(source).Activators, Is.Empty);
+        }
+
+        [Test]
+        public void AnalyzeCanonicalization_HiddenUnknownRecordKeepsOldCanonicalOutput()
+        {
+            const string clean =
+                "HLSLINCLUDE\n" +
+                "    #define LIL_FEATURE_MAIN2ND\n" +
+                "    #pragma target 3.5\n";
+            const string mutated =
+                "HLSLINCLUDE\n" +
+                "    #define LIL_FEATURE_MAIN2ND\n" +
+                "    #define LIL_FEATURE_AMUSE_UNKNOWN\n" +
+                "    #pragma target 3.5\n";
+
+            Assert.That(
+                Analyze(mutated).CanonicalSource,
+                Is.EqualTo(Analyze(clean).CanonicalSource));
+            Assert.That(
+                Analyze(mutated).RemovedRegions[0].Records
+                    .Select(value => value.Text),
+                Does.Contain("#define LIL_FEATURE_AMUSE_UNKNOWN"));
+        }
+
+        [Test]
+        public void ProvenanceCollections_DefensivelyCopyAndExposeReadOnlyViews()
+        {
+            var recordInput = new List<LilToonRemovedRecord>
+            {
+                new LilToonRemovedRecord(
+                    1, 0, LilToonRemovedRecordKind.Define,
+                    "#define LIL_FEATURE_MAIN2ND"),
+            };
+            var region = new LilToonRemovedRegion(0, 0, recordInput);
+            var regionInput = new List<LilToonRemovedRegion> { region };
+            var activatorInput = new List<LilToonActivatorOccurrence>
+            {
+                new LilToonActivatorOccurrence(
+                    2,
+                    "LIL_FEATURE_LTCGI",
+                    "#define LIL_FEATURE_LTCGI"),
+            };
+            var analysis = new LilToonCanonicalizationAnalysis(
+                string.Empty, regionInput, activatorInput);
+
+            recordInput.Clear();
+            regionInput.Clear();
+            activatorInput.Clear();
+
+            Assert.That(region.Records, Has.Count.EqualTo(1));
+            Assert.That(region.Records, Is.Not.InstanceOf<LilToonRemovedRecord[]>());
+            Assert.That(analysis.RemovedRegions, Has.Count.EqualTo(1));
+            Assert.That(analysis.Activators, Has.Count.EqualTo(1));
+            Assert.That(
+                analysis.RemovedRegions,
+                Is.Not.InstanceOf<LilToonRemovedRegion[]>());
+            Assert.That(
+                analysis.Activators,
+                Is.Not.InstanceOf<LilToonActivatorOccurrence[]>());
+
+            Assert.Throws<NotSupportedException>(() =>
+                ((IList<LilToonRemovedRecord>)region.Records).Clear());
+            Assert.Throws<NotSupportedException>(() =>
+                ((IList<LilToonRemovedRegion>)analysis.RemovedRegions).Clear());
+            Assert.Throws<NotSupportedException>(() =>
+                ((IList<LilToonActivatorOccurrence>)analysis.Activators).Clear());
+        }
 
         [Test]
         public void Canonicalize_DropsSettingRegionInsideHlslInclude()
@@ -527,6 +866,370 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // --- verification conjunction ---
+
+        [Test]
+        public void OfficialSettingIdentifierDomain_Has109UniqueEntries()
+        {
+            var field = typeof(LilToonSourceAttestation).GetField(
+                "OfficialSettingIdentifiers",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null);
+            var identifiers = (string[])field.GetValue(null);
+
+            Assert.That(identifiers, Has.Length.EqualTo(109));
+            Assert.That(
+                identifiers.Distinct(StringComparer.Ordinal).Count(),
+                Is.EqualTo(109));
+        }
+
+        [Test]
+        public void Verify_DefaultStandaloneGeneratorRecord_Succeeds()
+        {
+            var analysis = PassAnalysis(DefaultStandaloneRecords());
+            Assert.That(analysis.RemovedRegions[1].Records, Has.Count.EqualTo(103));
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: analysis), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [Test]
+        public void Verify_StrippedStandaloneGeneratorRecord_Succeeds()
+        {
+            var analysis = PassAnalysis(StrippedStandaloneRecords());
+            Assert.That(analysis.RemovedRegions[1].Records, Has.Count.EqualTo(91));
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: analysis), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [TestCase("pom")]
+        [TestCase("clipping")]
+        [TestCase("forwardadd-shadow")]
+        [TestCase("bundled-light-volumes")]
+        [TestCase("input-optimized")]
+        public void Verify_StandaloneGrammarWitness_Succeeds(string witness)
+        {
+            var records = DefaultStandaloneRecords();
+            switch (witness)
+            {
+                case "pom":
+                    records.Remove("#define LIL_FEATURE_POM");
+                    InsertAfter(
+                        records,
+                        "#define LIL_FEATURE_PARALLAX",
+                        "#define LIL_FEATURE_POM");
+                    break;
+                case "clipping":
+                    InsertAfter(
+                        records,
+                        "#define LIL_FEATURE_POM",
+                        "#define LIL_FEATURE_CLIPPING_CANCELLER");
+                    break;
+                case "forwardadd-shadow":
+                    InsertAfter(
+                        records,
+                        "#define LIL_OPTIMIZE_USE_FORWARDADD",
+                        "#define LIL_OPTIMIZE_USE_FORWARDADD_SHADOW");
+                    break;
+                case "bundled-light-volumes":
+                    InsertAfter(
+                        records,
+                        "#define LIL_OPTIMIZE_USE_VERTEXLIGHT",
+                        "#define LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE");
+                    break;
+                case "input-optimized":
+                    records.Add("#define LIL_INPUT_OPTIMIZED");
+                    break;
+                default:
+                    Assert.Fail("unknown witness " + witness);
+                    break;
+            }
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.True);
+        }
+
+        [Test]
+        public void Verify_LightmapOptimizationAndInverseSkipStates_Succeed()
+        {
+            var lightmap = DefaultStandaloneRecords();
+            lightmap.Remove("#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE");
+            InsertAfter(
+                lightmap,
+                "#define LIL_OPTIMIZE_USE_VERTEXLIGHT",
+                "#define LIL_OPTIMIZE_USE_LIGHTMAP");
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(lightmap)), out _),
+                Is.True);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(
+                        DefaultStandaloneRecords())), out _),
+                Is.True,
+                "without LIL_OPTIMIZE_USE_LIGHTMAP the inverse skip is required");
+        }
+
+        [TestCase("LIL_FEATURE_VRCLIGHTVOLUMES")]
+        [TestCase("LIL_FEATURE_AUDIOLINK_PACKAGE")]
+        [TestCase("LIL_FEATURE_LTCGI")]
+        public void Verify_HiddenExternalActivatorWithOldCanonicalOutput_IsRefused(
+            string identifier)
+        {
+            var clean = PassAnalysis(DefaultStandaloneRecords());
+            var records = DefaultStandaloneRecords();
+            records.Insert(1, "#define " + identifier);
+            var mutated = PassAnalysis(records);
+
+            Assert.That(mutated.CanonicalSource, Is.EqualTo(clean.CanonicalSource));
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: mutated), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+            Assert.That(diagnostic.Detail, Does.Contain(identifier));
+        }
+
+        [TestCase("#define LIL_FEATURE_AMUSE_UNKNOWN")]
+        [TestCase("#define LIL_OPTIMIZE_AMUSE_UNKNOWN")]
+        [TestCase("#pragma skip_variants AMUSE_UNKNOWN")]
+        [TestCase("#pragma skip_variants LIGHTPROBE_SH AMUSE_UNKNOWN")]
+        public void Verify_HiddenUnknownRecordWithOldCanonicalOutput_IsRefused(
+            string record)
+        {
+            var clean = PassAnalysis(DefaultStandaloneRecords());
+            var records = DefaultStandaloneRecords();
+            records.Insert(1, record);
+            var mutated = PassAnalysis(records);
+
+            Assert.That(mutated.CanonicalSource, Is.EqualTo(clean.CanonicalSource));
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: mutated), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [Test]
+        public void Verify_DuplicateOrReorderedKnownRecord_IsRefused()
+        {
+            var duplicate = DefaultStandaloneRecords();
+            duplicate.Insert(4, "#define LIL_FEATURE_MAIN2ND");
+            var reordered = DefaultStandaloneRecords();
+            var swap = reordered[4];
+            reordered[4] = reordered[5];
+            reordered[5] = swap;
+
+            foreach (var records in new[] { duplicate, reordered })
+            {
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                        Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                    Is.False);
+            }
+        }
+
+        [TestCase("LIL_FEATURE_Main2ndDissolveNoiseMask")]
+        [TestCase("LIL_FEATURE_Main3rdDissolveNoiseMask")]
+        [TestCase("LIL_FEATURE_DissolveNoiseMask")]
+        public void Verify_MissingMandatoryNoiseRecord_IsRefused(string identifier)
+        {
+            var records = DefaultStandaloneRecords();
+            records.Remove("#define " + identifier);
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [TestCaseSource(nameof(GeneratorDependencies))]
+        public void Verify_DependencyWithoutParent_IsRefused(
+            string child,
+            string[] parents)
+        {
+            var records = DefaultStandaloneRecords();
+            if (child == "LIL_FEATURE_POM")
+            {
+                InsertAfter(
+                    records,
+                    "#define LIL_FEATURE_PARALLAX",
+                    "#define LIL_FEATURE_POM");
+            }
+            foreach (var parent in parents)
+            {
+                records.Remove("#define " + parent);
+            }
+
+            Assert.That(records, Does.Contain("#define " + child));
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [TestCase("reflection")]
+        [TestCase("vertex-light")]
+        [TestCase("lightmap")]
+        public void Verify_InverseSkipMismatch_IsRefused(string relationship)
+        {
+            var records = DefaultStandaloneRecords();
+            switch (relationship)
+            {
+                case "reflection":
+                    records.Insert(
+                        records.Count - 1,
+                        "#pragma skip_variants _REFLECTION_PROBE_BOX_PROJECTION");
+                    break;
+                case "vertex-light":
+                    records.Insert(
+                        records.Count - 1,
+                        "#pragma skip_variants LIGHTPROBE_SH");
+                    break;
+                case "lightmap":
+                    records.Remove(
+                        "#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE");
+                    break;
+            }
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [Test]
+        public void Verify_InputOptimizedBeforePragma_IsRefused()
+        {
+            var records = DefaultStandaloneRecords();
+            records.Insert(records.Count - 1, "#define LIL_INPUT_OPTIMIZED");
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [Test]
+        public void Verify_BothLightVolumesForms_AreRefused()
+        {
+            var records = DefaultStandaloneRecords();
+            InsertAfter(
+                records,
+                "#define LIL_OPTIMIZE_USE_VERTEXLIGHT",
+                "#define LIL_FEATURE_VRCLIGHTVOLUMES");
+            InsertAfter(
+                records,
+                "#define LIL_FEATURE_VRCLIGHTVOLUMES",
+                "#define LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE");
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [Test]
+        public void Verify_RecordInShaderScopeRegion_IsRefused()
+        {
+            var pass = Analyze(
+                "HLSLINCLUDE\n" +
+                "    #define LIL_FEATURE_MAIN2ND\n" +
+                "    #define LIL_RENDER 0\n" +
+                "ENDHLSL\n" +
+                "HLSLINCLUDE\n" +
+                string.Join("\n", DefaultStandaloneRecords()) +
+                "\n#pragma target 3.5\nENDHLSL\n");
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: pass), out _),
+                Is.False);
+        }
+
+        [Test]
+        public void Verify_NonGeneratorWhitespace_IsRefused()
+        {
+            var records = DefaultStandaloneRecords();
+            records[3] = "#define  LIL_FEATURE_MAIN2ND";
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
+                Is.False);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void Verify_MissingCanonicalizationAnalysis_IsRefused(bool shader)
+        {
+            var evidence = shader
+                ? Evidence(hasShaderCanonicalization: false)
+                : Evidence(hasPassCanonicalization: false);
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    evidence, out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.MissingSourceEvidence));
+        }
+
+        [TestCase("LIL_FEATURE_VRCLIGHTVOLUMES", true)]
+        [TestCase("LIL_FEATURE_VRCLIGHTVOLUMES", false)]
+        [TestCase("LIL_FEATURE_AUDIOLINK_PACKAGE", true)]
+        [TestCase("LIL_FEATURE_AUDIOLINK_PACKAGE", false)]
+        [TestCase("LIL_FEATURE_LTCGI", true)]
+        [TestCase("LIL_FEATURE_LTCGI", false)]
+        public void Verify_ExternalActivatorOutsideR1_IsRefused(
+            string identifier,
+            bool shader)
+        {
+            var evidence = shader
+                ? Evidence(shaderCanonicalization: Analyze(
+                    "#define " + identifier + " 1\n"))
+                : Evidence(passCanonicalization: PassAnalysis(
+                    DefaultStandaloneRecords(),
+                    "#define " + identifier + " 1\n"));
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    evidence, out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+        }
+
+        [Test]
+        public void Verify_DuplicatedRelocatedActivatorKeepsOldCanonicalOutputAndRefuses()
+        {
+            var clean = PassAnalysis(DefaultStandaloneRecords());
+            var records = DefaultStandaloneRecords();
+            records.Insert(1, "#define LIL_FEATURE_AUDIOLINK_PACKAGE");
+            records.Insert(20, "#define LIL_FEATURE_AUDIOLINK_PACKAGE");
+            var mutated = PassAnalysis(records);
+
+            Assert.That(mutated.CanonicalSource, Is.EqualTo(clean.CanonicalSource));
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: mutated), out _),
+                Is.False);
+        }
 
         [Test]
         public void Verify_CanonicalEvidence_Succeeds()
