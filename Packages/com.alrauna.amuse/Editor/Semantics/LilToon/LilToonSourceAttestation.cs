@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -166,6 +167,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal bool HasRenderMode { get; }
         internal int RenderMode { get; }
         internal IReadOnlyCollection<string> CompiledFeatures { get; }
+        internal LilToonCanonicalizationAnalysis ShaderCanonicalization { get; }
+        internal LilToonCanonicalizationAnalysis PassCanonicalization { get; }
 
         internal LilToonSourceEvidence(
             string shaderName,
@@ -181,7 +184,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             string includeTreeDigest,
             bool hasRenderMode,
             int renderMode,
-            IReadOnlyCollection<string> compiledFeatures)
+            IReadOnlyCollection<string> compiledFeatures,
+            LilToonCanonicalizationAnalysis shaderCanonicalization,
+            LilToonCanonicalizationAnalysis passCanonicalization)
         {
             ShaderName = shaderName;
             AssetGuid = assetGuid;
@@ -198,6 +203,104 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             RenderMode = renderMode;
             CompiledFeatures = compiledFeatures
                 ?? throw new ArgumentNullException(nameof(compiledFeatures));
+            ShaderCanonicalization = shaderCanonicalization;
+            PassCanonicalization = passCanonicalization;
+        }
+    }
+
+    internal enum LilToonRemovedRecordKind
+    {
+        Define,
+        SkipVariants,
+    }
+
+    internal readonly struct LilToonRemovedRecord
+    {
+        internal int LineIndex { get; }
+        internal int OffsetInRegion { get; }
+        internal LilToonRemovedRecordKind Kind { get; }
+        internal string Text { get; }
+
+        internal LilToonRemovedRecord(
+            int lineIndex,
+            int offsetInRegion,
+            LilToonRemovedRecordKind kind,
+            string text)
+        {
+            LineIndex = lineIndex;
+            OffsetInRegion = offsetInRegion;
+            Kind = kind;
+            Text = text ?? throw new ArgumentNullException(nameof(text));
+        }
+    }
+
+    internal sealed class LilToonRemovedRegion
+    {
+        internal int HlslIncludeOrdinal { get; }
+        internal int HlslIncludeLineIndex { get; }
+        internal IReadOnlyList<LilToonRemovedRecord> Records { get; }
+
+        internal LilToonRemovedRegion(
+            int hlslIncludeOrdinal,
+            int hlslIncludeLineIndex,
+            IEnumerable<LilToonRemovedRecord> records)
+        {
+            if (records == null)
+            {
+                throw new ArgumentNullException(nameof(records));
+            }
+
+            HlslIncludeOrdinal = hlslIncludeOrdinal;
+            HlslIncludeLineIndex = hlslIncludeLineIndex;
+            Records = new ReadOnlyCollection<LilToonRemovedRecord>(
+                new List<LilToonRemovedRecord>(records));
+        }
+    }
+
+    internal readonly struct LilToonActivatorOccurrence
+    {
+        internal int LineIndex { get; }
+        internal string Identifier { get; }
+        internal string Text { get; }
+
+        internal LilToonActivatorOccurrence(
+            int lineIndex,
+            string identifier,
+            string text)
+        {
+            LineIndex = lineIndex;
+            Identifier = identifier
+                ?? throw new ArgumentNullException(nameof(identifier));
+            Text = text ?? throw new ArgumentNullException(nameof(text));
+        }
+    }
+
+    internal sealed class LilToonCanonicalizationAnalysis
+    {
+        internal string CanonicalSource { get; }
+        internal IReadOnlyList<LilToonRemovedRegion> RemovedRegions { get; }
+        internal IReadOnlyList<LilToonActivatorOccurrence> Activators { get; }
+
+        internal LilToonCanonicalizationAnalysis(
+            string canonicalSource,
+            IEnumerable<LilToonRemovedRegion> removedRegions,
+            IEnumerable<LilToonActivatorOccurrence> activators)
+        {
+            if (removedRegions == null)
+            {
+                throw new ArgumentNullException(nameof(removedRegions));
+            }
+            if (activators == null)
+            {
+                throw new ArgumentNullException(nameof(activators));
+            }
+
+            CanonicalSource = canonicalSource
+                ?? throw new ArgumentNullException(nameof(canonicalSource));
+            RemovedRegions = new ReadOnlyCollection<LilToonRemovedRegion>(
+                new List<LilToonRemovedRegion>(removedRegions));
+            Activators = new ReadOnlyCollection<LilToonActivatorOccurrence>(
+                new List<LilToonActivatorOccurrence>(activators));
         }
     }
 
@@ -248,6 +351,136 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly Regex SkipVariants = new Regex(
             @"^#pragma\s+skip_variants\s+\S",
             RegexOptions.Compiled);
+
+        private static readonly Regex ExternalActivatorDefine = new Regex(
+            @"^#define\s+(?<identifier>" +
+            @"LIL_FEATURE_VRCLIGHTVOLUMES|" +
+            @"LIL_FEATURE_AUDIOLINK_PACKAGE|" +
+            @"LIL_FEATURE_LTCGI)(?:\s.*)?$",
+            RegexOptions.Compiled);
+
+        // Closed BuildShaderSettingString/BuildShaderSettingStringMulti domain
+        // for official lilToon 2.3.4, in generator order. Prefix membership is
+        // intentionally insufficient.
+        private static readonly string[] OfficialSettingIdentifiers =
+        {
+            "LIL_FEATURE_ANIMATE_MAIN_UV",
+            "LIL_FEATURE_MAIN_TONE_CORRECTION",
+            "LIL_FEATURE_MAIN_GRADATION_MAP",
+            "LIL_FEATURE_MAIN2ND",
+            "LIL_FEATURE_MAIN3RD",
+            "LIL_FEATURE_DECAL",
+            "LIL_FEATURE_ANIMATE_DECAL",
+            "LIL_FEATURE_LAYER_DISSOLVE",
+            "LIL_FEATURE_ALPHAMASK",
+            "LIL_FEATURE_SHADOW",
+            "LIL_FEATURE_RECEIVE_SHADOW",
+            "LIL_FEATURE_SHADOW_3RD",
+            "LIL_FEATURE_SHADOW_LUT",
+            "LIL_FEATURE_RIMSHADE",
+            "LIL_FEATURE_EMISSION_1ST",
+            "LIL_FEATURE_EMISSION_2ND",
+            "LIL_FEATURE_ANIMATE_EMISSION_UV",
+            "LIL_FEATURE_ANIMATE_EMISSION_MASK_UV",
+            "LIL_FEATURE_EMISSION_GRADATION",
+            "LIL_FEATURE_NORMAL_1ST",
+            "LIL_FEATURE_NORMAL_2ND",
+            "LIL_FEATURE_ANISOTROPY",
+            "LIL_FEATURE_REFLECTION",
+            "LIL_FEATURE_MATCAP",
+            "LIL_FEATURE_MATCAP_2ND",
+            "LIL_FEATURE_RIMLIGHT",
+            "LIL_FEATURE_RIMLIGHT_DIRECTION",
+            "LIL_FEATURE_GLITTER",
+            "LIL_FEATURE_BACKLIGHT",
+            "LIL_FEATURE_PARALLAX",
+            "LIL_FEATURE_POM",
+            "LIL_FEATURE_CLIPPING_CANCELLER",
+            "LIL_FEATURE_DISTANCE_FADE",
+            "LIL_FEATURE_AUDIOLINK",
+            "LIL_FEATURE_AUDIOLINK_VERTEX",
+            "LIL_FEATURE_AUDIOLINK_LOCAL",
+            "LIL_FEATURE_DISSOLVE",
+            "LIL_FEATURE_DITHER",
+            "LIL_FEATURE_IDMASK",
+            "LIL_FEATURE_UDIMDISCARD",
+            "LIL_FEATURE_OUTLINE_TONE_CORRECTION",
+            "LIL_FEATURE_OUTLINE_RECEIVE_SHADOW",
+            "LIL_FEATURE_ANIMATE_OUTLINE_UV",
+            "LIL_FEATURE_FUR_COLLISION",
+            "LIL_FEATURE_MainGradationTex",
+            "LIL_FEATURE_MainColorAdjustMask",
+            "LIL_FEATURE_Main2ndTex",
+            "LIL_FEATURE_Main2ndBlendMask",
+            "LIL_FEATURE_Main2ndDissolveMask",
+            "LIL_FEATURE_Main2ndDissolveNoiseMask",
+            "LIL_FEATURE_Main3rdTex",
+            "LIL_FEATURE_Main3rdBlendMask",
+            "LIL_FEATURE_Main3rdDissolveMask",
+            "LIL_FEATURE_Main3rdDissolveNoiseMask",
+            "LIL_FEATURE_AlphaMask",
+            "LIL_FEATURE_BumpMap",
+            "LIL_FEATURE_Bump2ndMap",
+            "LIL_FEATURE_Bump2ndScaleMask",
+            "LIL_FEATURE_AnisotropyTangentMap",
+            "LIL_FEATURE_AnisotropyScaleMask",
+            "LIL_FEATURE_AnisotropyShiftNoiseMask",
+            "LIL_FEATURE_ShadowBorderMask",
+            "LIL_FEATURE_ShadowBlurMask",
+            "LIL_FEATURE_ShadowStrengthMask",
+            "LIL_FEATURE_ShadowColorTex",
+            "LIL_FEATURE_Shadow2ndColorTex",
+            "LIL_FEATURE_Shadow3rdColorTex",
+            "LIL_FEATURE_RimShadeMask",
+            "LIL_FEATURE_BacklightColorTex",
+            "LIL_FEATURE_SmoothnessTex",
+            "LIL_FEATURE_MetallicGlossMap",
+            "LIL_FEATURE_ReflectionColorTex",
+            "LIL_FEATURE_ReflectionCubeTex",
+            "LIL_FEATURE_MatCapTex",
+            "LIL_FEATURE_MatCapBlendMask",
+            "LIL_FEATURE_MatCapBumpMap",
+            "LIL_FEATURE_MatCap2ndTex",
+            "LIL_FEATURE_MatCap2ndBlendMask",
+            "LIL_FEATURE_MatCap2ndBumpMap",
+            "LIL_FEATURE_RimColorTex",
+            "LIL_FEATURE_GlitterColorTex",
+            "LIL_FEATURE_GlitterShapeTex",
+            "LIL_FEATURE_EmissionMap",
+            "LIL_FEATURE_EmissionBlendMask",
+            "LIL_FEATURE_EmissionGradTex",
+            "LIL_FEATURE_Emission2ndMap",
+            "LIL_FEATURE_Emission2ndBlendMask",
+            "LIL_FEATURE_Emission2ndGradTex",
+            "LIL_FEATURE_ParallaxMap",
+            "LIL_FEATURE_AudioLinkMask",
+            "LIL_FEATURE_AudioLinkLocalMap",
+            "LIL_FEATURE_DissolveMask",
+            "LIL_FEATURE_DissolveNoiseMask",
+            "LIL_FEATURE_OutlineTex",
+            "LIL_FEATURE_OutlineWidthMask",
+            "LIL_FEATURE_OutlineVectorTex",
+            "LIL_FEATURE_FurNoiseMask",
+            "LIL_FEATURE_FurMask",
+            "LIL_FEATURE_FurLengthMask",
+            "LIL_FEATURE_FurVectorTex",
+            "LIL_OPTIMIZE_APPLY_SHADOW_FA",
+            "LIL_OPTIMIZE_USE_FORWARDADD",
+            "LIL_OPTIMIZE_USE_FORWARDADD_SHADOW",
+            "LIL_OPTIMIZE_USE_VERTEXLIGHT",
+            "LIL_OPTIMIZE_USE_LIGHTMAP",
+            "LIL_FEATURE_VRCLIGHTVOLUMES",
+            "LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE",
+            "LIL_FEATURE_AUDIOLINK_PACKAGE",
+            "LIL_INPUT_OPTIMIZED",
+        };
+
+        private static readonly string[] OfficialSkipVariantRecords =
+        {
+            "#pragma skip_variants _REFLECTION_PROBE_BOX_PROJECTION",
+            "#pragma skip_variants LIGHTPROBE_SH",
+            "#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE",
+        };
 
         // R2 anchor: the fixed terminal line of the BRP lil_multi_compile_forward
         // expansion. The template places lil_skip_variants_{base,outline}_shadows
@@ -337,6 +570,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             string projectRoot,
             LilToonIncludeTree includeTree)
         {
+            return AnalyzeCanonicalization(
+                rawShaderSource, shaderDirectory, projectRoot, includeTree)
+                .CanonicalSource;
+        }
+
+        internal static LilToonCanonicalizationAnalysis AnalyzeCanonicalization(
+            string rawShaderSource,
+            string shaderDirectory,
+            string projectRoot,
+            LilToonIncludeTree includeTree)
+        {
             if (rawShaderSource == null)
             {
                 throw new ArgumentNullException(nameof(rawShaderSource));
@@ -347,10 +591,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var lines = Normalize(rawShaderSource).Split('\n');
+            var regions = new List<LilToonRemovedRegion>();
+            var activators = new List<LilToonActivatorOccurrence>();
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var trimmed = lines[i].Trim();
+                var activator = ExternalActivatorDefine.Match(trimmed);
+                if (activator.Success)
+                {
+                    activators.Add(new LilToonActivatorOccurrence(
+                        i,
+                        activator.Groups["identifier"].Value,
+                        trimmed));
+                }
+            }
 
             // Mark the setting region before emitting, so a same-shaped line
             // outside it can never be dropped.
             var inSettingRegion = new bool[lines.Length];
+            var hlslIncludeOrdinal = 0;
             for (var i = 0; i < lines.Length; i++)
             {
                 // Region A: after HLSLINCLUDE, the maximal run of D1/D2 lines. A
@@ -363,17 +623,29 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
+                var records = new List<LilToonRemovedRecord>();
                 for (var j = i + 1; j < lines.Length; j++)
                 {
                     var candidate = lines[j].Trim();
-                    if (!SettingDefine.IsMatch(candidate) &&
-                        !SkipVariants.IsMatch(candidate))
+                    var isDefine = SettingDefine.IsMatch(candidate);
+                    var isSkipVariants = SkipVariants.IsMatch(candidate);
+                    if (!isDefine && !isSkipVariants)
                     {
                         break;
                     }
 
                     inSettingRegion[j] = true;
+                    records.Add(new LilToonRemovedRecord(
+                        j,
+                        records.Count,
+                        isDefine
+                            ? LilToonRemovedRecordKind.Define
+                            : LilToonRemovedRecordKind.SkipVariants,
+                        candidate));
                 }
+
+                regions.Add(new LilToonRemovedRegion(
+                    hlslIncludeOrdinal++, i, records));
             }
 
             var builder = new StringBuilder(rawShaderSource.Length);
@@ -405,7 +677,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         line, shaderDirectory, projectRoot, includeTree));
             }
 
-            return builder.ToString();
+            return new LilToonCanonicalizationAnalysis(
+                builder.ToString(), regions, activators);
         }
 
         /// <summary>
@@ -613,6 +886,189 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return found;
         }
 
+        private static bool TryVerifyStandaloneCanonicalizationProvenance(
+            LilToonCanonicalizationAnalysis shader,
+            LilToonCanonicalizationAnalysis pass,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            if (shader == null || pass == null)
+            {
+                diagnostic = MaterialDiagnostic(
+                    LilToonSemanticDiagnosticCode.MissingSourceEvidence,
+                    (shader == null ? SupportedShaderName : PassShaderName) +
+                    " canonicalization provenance");
+                return false;
+            }
+
+            foreach (var occurrence in shader.Activators.Concat(pass.Activators))
+            {
+                diagnostic = MaterialDiagnostic(
+                    LilToonSemanticDiagnosticCode.UnsupportedShaderVariant,
+                    occurrence.Identifier);
+                return false;
+            }
+
+            if (shader.RemovedRegions.Count != 0 ||
+                pass.RemovedRegions.Count != 2 ||
+                pass.RemovedRegions[0].HlslIncludeOrdinal != 0 ||
+                pass.RemovedRegions[1].HlslIncludeOrdinal != 1 ||
+                pass.RemovedRegions[0].Records.Count != 0 ||
+                !TryVerifyOfficialSettingRecord(pass.RemovedRegions[1]))
+            {
+                diagnostic = MaterialDiagnostic(
+                    LilToonSemanticDiagnosticCode.ModifiedShaderSource,
+                    (shader.RemovedRegions.Count != 0
+                        ? SupportedShaderName
+                        : PassShaderName) + " canonicalization provenance");
+                return false;
+            }
+
+            diagnostic = null;
+            return true;
+        }
+
+        private static bool TryVerifyOfficialSettingRecord(
+            LilToonRemovedRegion region)
+        {
+            var identifiers = new HashSet<string>(StringComparer.Ordinal);
+            var pragmas = new HashSet<string>(StringComparer.Ordinal);
+            var lastDefineOrder = -1;
+            var lastPragmaOrder = -1;
+            var sawPragma = false;
+
+            for (var i = 0; i < region.Records.Count; i++)
+            {
+                var record = region.Records[i];
+                if (record.OffsetInRegion != i ||
+                    record.LineIndex != region.HlslIncludeLineIndex + i + 1)
+                {
+                    return false;
+                }
+
+                if (record.Kind == LilToonRemovedRecordKind.Define)
+                {
+                    const string prefix = "#define ";
+                    if (!record.Text.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    var identifier = record.Text.Substring(prefix.Length);
+                    var order = Array.IndexOf(OfficialSettingIdentifiers, identifier);
+                    if (order < 0 ||
+                        !string.Equals(
+                            record.Text, prefix + identifier, StringComparison.Ordinal) ||
+                        !identifiers.Add(identifier))
+                    {
+                        return false;
+                    }
+
+                    if (string.Equals(
+                            identifier, "LIL_INPUT_OPTIMIZED",
+                            StringComparison.Ordinal))
+                    {
+                        if (i != region.Records.Count - 1)
+                        {
+                            return false;
+                        }
+                    }
+                    else if (sawPragma || order <= lastDefineOrder)
+                    {
+                        return false;
+                    }
+
+                    lastDefineOrder = order;
+                    continue;
+                }
+
+                if (record.Kind != LilToonRemovedRecordKind.SkipVariants)
+                {
+                    return false;
+                }
+
+                sawPragma = true;
+                var pragmaOrder = Array.IndexOf(
+                    OfficialSkipVariantRecords, record.Text);
+                if (pragmaOrder < 0 ||
+                    pragmaOrder <= lastPragmaOrder ||
+                    !pragmas.Add(record.Text))
+                {
+                    return false;
+                }
+                lastPragmaOrder = pragmaOrder;
+            }
+
+            return
+                identifiers.Contains("LIL_FEATURE_Main2ndDissolveNoiseMask") &&
+                identifiers.Contains("LIL_FEATURE_Main3rdDissolveNoiseMask") &&
+                identifiers.Contains("LIL_FEATURE_DissolveNoiseMask") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_DECAL",
+                    "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_ANIMATE_DECAL",
+                    "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_LAYER_DISSOLVE",
+                    "LIL_FEATURE_MAIN2ND", "LIL_FEATURE_MAIN3RD") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_RECEIVE_SHADOW",
+                    "LIL_FEATURE_SHADOW") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_SHADOW_3RD",
+                    "LIL_FEATURE_SHADOW") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_SHADOW_LUT",
+                    "LIL_FEATURE_SHADOW") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_ANIMATE_EMISSION_UV",
+                    "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_ANIMATE_EMISSION_MASK_UV",
+                    "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_EMISSION_GRADATION",
+                    "LIL_FEATURE_EMISSION_1ST", "LIL_FEATURE_EMISSION_2ND") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_RIMLIGHT_DIRECTION",
+                    "LIL_FEATURE_RIMLIGHT") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_POM", "LIL_FEATURE_PARALLAX") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_AUDIOLINK_VERTEX",
+                    "LIL_FEATURE_AUDIOLINK") &&
+                HasRequiredParent(
+                    identifiers, "LIL_FEATURE_AUDIOLINK_LOCAL",
+                    "LIL_FEATURE_AUDIOLINK") &&
+                identifiers.Contains("LIL_FEATURE_REFLECTION") ==
+                !pragmas.Contains(OfficialSkipVariantRecords[0]) &&
+                identifiers.Contains("LIL_OPTIMIZE_USE_VERTEXLIGHT") ==
+                !pragmas.Contains(OfficialSkipVariantRecords[1]) &&
+                identifiers.Contains("LIL_OPTIMIZE_USE_LIGHTMAP") ==
+                !pragmas.Contains(OfficialSkipVariantRecords[2]);
+        }
+
+        private static bool HasRequiredParent(
+            HashSet<string> identifiers,
+            string child,
+            params string[] parents)
+        {
+            if (!identifiers.Contains(child))
+            {
+                return true;
+            }
+
+            foreach (var parent in parents)
+            {
+                if (identifiers.Contains(parent))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static bool TryVerifyLilToonIdentity(
             LilToonSourceEvidence evidence,
             out LilToonSemanticDiagnostic diagnostic)
@@ -692,6 +1148,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.MissingSourceEvidence,
                     PassShaderName);
+                return false;
+            }
+
+            if (!TryVerifyStandaloneCanonicalizationProvenance(
+                    evidence.ShaderCanonicalization,
+                    evidence.PassCanonicalization,
+                    out diagnostic))
+            {
                 return false;
             }
 
@@ -798,15 +1262,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 : ComputeIncludeTreeDigest(includeTree.Files);
 
             var shaderText = ReadTextOrNull(shaderFullPath);
-            var shaderDigest = shaderText == null
+            var shaderAnalysis = shaderText == null
                 ? null
-                : Sha256(Canonicalize(
-                    shaderText, shaderDirectory, projectRoot, includeTree));
+                : AnalyzeCanonicalization(
+                    shaderText, shaderDirectory, projectRoot, includeTree);
+            var shaderDigest = shaderAnalysis == null
+                ? null
+                : Sha256(shaderAnalysis.CanonicalSource);
 
             var passShader = Shader.Find(PassShaderName);
             string passGuid = null;
             string passDigest = null;
             string passText = null;
+            LilToonCanonicalizationAnalysis passAnalysis = null;
             if (passShader != null)
             {
                 AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
@@ -819,11 +1287,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 {
                     // The pass resolves its own includes relative to its own
                     // directory, which need not be the material shader's.
-                    passDigest = Sha256(Canonicalize(
+                    passAnalysis = AnalyzeCanonicalization(
                         passText,
                         Path.GetDirectoryName(passFullPath),
                         projectRoot,
-                        includeTree));
+                        includeTree);
+                    passDigest = Sha256(passAnalysis.CanonicalSource);
                 }
             }
 
@@ -843,7 +1312,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 includeDigest,
                 hasRenderMode,
                 renderMode,
-                ScanCompiledFeatures(passText));
+                ScanCompiledFeatures(passText),
+                shaderAnalysis,
+                passAnalysis);
         }
 
         /// <summary>
