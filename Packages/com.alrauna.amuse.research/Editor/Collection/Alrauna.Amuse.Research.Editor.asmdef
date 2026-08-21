@@ -1,9 +1,8 @@
 {
-    "name": "Alrauna.Amuse.Research.Tests.Editor",
-    "rootNamespace": "Alrauna.Amuse.Research.Tests.Editor",
+    "name": "Alrauna.Amuse.Research.Editor",
+    "rootNamespace": "Alrauna.Amuse.Research.Collection",
     "references": [
         "Alrauna.Amuse.Research.Census",
-        "Alrauna.Amuse.Research.Editor",
         "Alrauna.Amuse.Editor"
     ],
     "includePlatforms": [
@@ -16,8 +15,5 @@
     "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false,
-    "optionalUnityReferences": [
-        "TestAssemblies"
-    ]
+    "noEngineReferences": false
 }
