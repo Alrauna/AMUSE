@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
 
@@ -173,6 +174,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_MainVertexColoringEnabled",
         };
 
+        internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
+            CreateAlphaEvidenceRequest();
+
         // Enabled source blocks the pinned source uses to perturb or replace
         // the tangent-space normal: detail normals, RGBA-mask normal
         // replacement, the four decals, and internal/offset parallax. Each is
@@ -229,7 +233,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             RequireAnalyzableMaterial(material);
 
-            var evidence = GatherSourceEvidence(material);
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+            })[0];
+            var evidence = GatherSourceEvidence(material.shader, captured);
             if (!TryVerifyPoiyomiIdentity(evidence, out var diagnostic))
             {
                 return Unsupported(diagnostic);
@@ -237,7 +245,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             return InterpretVerifiedMaterial(
                 material,
-                QualitySettings.activeColorSpace);
+                QualitySettings.activeColorSpace,
+                captured);
         }
 
         /// <summary>
@@ -253,6 +262,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             RequireAnalyzableMaterial(material);
 
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+            })[0];
+            return InterpretVerifiedMaterial(
+                material, activeColorSpace, captured);
+        }
+
+        private static PoiyomiSemanticResult InterpretVerifiedMaterial(
+            Material material,
+            ColorSpace activeColorSpace,
+            CapturedMaterialEvidence captured)
+        {
             // A verified material is a supported material; each output is proven
             // independently and stays Unknown, with a diagnostic, when its
             // equation is not representable.
@@ -260,7 +282,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var baseColor = InterpretBaseColor(
                 material, activeColorSpace, diagnostics);
-            var alpha = InterpretAlpha(material, diagnostics);
+            var alpha = InterpretAlpha(captured, diagnostics);
             var emission = InterpretEmission(
                 material, activeColorSpace, diagnostics);
             var normal = InterpretNormal(material, diagnostics);
@@ -421,6 +443,121 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
+        private static bool TryInterpretMainSample(
+            CapturedMaterialEvidence evidence,
+            PoiyomiSemanticOutput output,
+            bool requireColorInterpretation,
+            List<PoiyomiSemanticDiagnostic> diagnostics,
+            out TextureSample sample,
+            out TextureColorInterpretation interpretation)
+        {
+            sample = default;
+            interpretation = default;
+
+            if (!TryGetSupportedUvMapping(evidence, out var mapping))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    output,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    MainTexUvProperty);
+                return false;
+            }
+
+            var failedGate = FirstFailedZeroGate(
+                evidence, MainSamplingModeGates);
+            if (failedGate != null)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    output,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    failedGate);
+                return false;
+            }
+
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var assignment) ||
+                !assignment.IsAssigned ||
+                assignment.Texture == null ||
+                !assignment.Texture.HasSourceIdentity)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    output,
+                    PoiyomiSemanticDiagnosticCode.UnstableTextureIdentity,
+                    MainTextureProperty);
+                return false;
+            }
+
+            if (!assignment.Texture.HasSampling)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    output,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
+                    MainTextureProperty);
+                return false;
+            }
+
+            if (requireColorInterpretation &&
+                !assignment.Texture.HasColorInterpretation)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    output,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedTextureImport,
+                    MainTextureProperty);
+                return false;
+            }
+
+            interpretation = assignment.Texture.ColorInterpretation;
+            sample = new TextureSample(
+                assignment.Texture.SourceIdentity,
+                mapping,
+                assignment.Texture.Sampling);
+            return true;
+        }
+
+        private static bool TryGetSupportedUvMapping(
+            CapturedMaterialEvidence evidence,
+            out UvMapping mapping)
+        {
+            mapping = default;
+            if (!evidence.TryGetScalar(
+                    MainTexUvProperty, out var rawChannel) ||
+                !IsFinite(rawChannel))
+            {
+                return false;
+            }
+
+            var channel = Mathf.RoundToInt(rawChannel);
+            if (channel < 0 || channel > 3 || channel != rawChannel)
+            {
+                return false;
+            }
+
+            if (!evidence.TryGetVector(MainTexPanProperty, out var pan) ||
+                !IsFinite(pan) ||
+                pan.x != 0f || pan.y != 0f || pan.z != 0f || pan.w != 0f)
+            {
+                return false;
+            }
+
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var assignment) ||
+                !assignment.HasScaleOffset ||
+                !IsFinite(assignment.Scale) ||
+                !IsFinite(assignment.Offset))
+            {
+                return false;
+            }
+
+            mapping = new UvMapping(
+                channel, assignment.Scale, assignment.Offset);
+            return true;
+        }
+
         // --- Alpha equation (Task 4) ----------------------------------------
 
         /// <summary>
@@ -432,11 +569,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// Unknown with one diagnostic. Alpha is a raw scalar, so no color-import
         /// evidence is required.
         /// </summary>
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
+            CapturedMaterialEvidence evidence)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            return InterpretAlpha(
+                evidence, new List<PoiyomiSemanticDiagnostic>());
+        }
+
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
-            Material material,
+            CapturedMaterialEvidence evidence,
             List<PoiyomiSemanticDiagnostic> diagnostics)
         {
-            var coverageGate = FirstFailedZeroGate(material, AlphaCoverageGates);
+            var coverageGate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
             if (coverageGate != null)
             {
                 return RecordUnknown<ScalarSemanticValue>(
@@ -447,7 +596,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!TryReadBinary(
-                    material, AlphaForceOpaqueProperty, out var forceOpaque))
+                    evidence, AlphaForceOpaqueProperty, out var forceOpaque))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -462,7 +611,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     ScalarSemanticValue.Constant(1f));
             }
 
-            var featureGate = FirstFailedZeroGate(material, AlphaFeatureGates);
+            var featureGate = FirstFailedZeroGate(evidence, AlphaFeatureGates);
             if (featureGate != null)
             {
                 return RecordUnknown<ScalarSemanticValue>(
@@ -473,7 +622,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!TryReadBinary(
-                    material, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
+                    evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -482,8 +631,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     IgnoreMainTexAlphaProperty);
             }
 
-            var colorAlpha = material.GetColor(ColorProperty).a;
-            if (!IsFinite(colorAlpha))
+            if (!evidence.TryGetColor(ColorProperty, out var color) ||
+                !IsFinite(color.a))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -492,14 +641,25 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     ColorProperty);
             }
 
-            if (ignoreAlpha || material.GetTexture(MainTextureProperty) == null)
+            var colorAlpha = color.a;
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var mainTexture))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    MainTextureProperty);
+            }
+
+            if (ignoreAlpha || !mainTexture.IsAssigned)
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(colorAlpha));
             }
 
             if (!TryInterpretMainSample(
-                    material,
+                    evidence,
                     PoiyomiSemanticOutput.Alpha,
                     requireColorInterpretation: false,
                     diagnostics,
@@ -533,6 +693,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var value = material.GetFloat(property);
             if (!IsFinite(value) || (value != 0f && value != 1f))
+            {
+                return false;
+            }
+
+            isSet = value == 1f;
+            return true;
+        }
+
+        private static bool TryReadBinary(
+            CapturedMaterialEvidence evidence,
+            string property,
+            out bool isSet)
+        {
+            isSet = false;
+            if (!evidence.TryGetScalar(property, out var value) ||
+                !IsFinite(value) || (value != 0f && value != 1f))
             {
                 return false;
             }
@@ -1004,13 +1180,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        private static PoiyomiSourceEvidence GatherSourceEvidence(Material material)
+        internal static PoiyomiSourceEvidence GatherAlphaSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
         {
-            var shader = material.shader;
-            var shaderName = shader.name;
-            var isLocked =
-                material.HasProperty(ShaderOptimizerEnabledProperty) &&
-                material.GetFloat(ShaderOptimizerEnabledProperty) != 0f;
+            return GatherSourceEvidence(shader, evidence);
+        }
+
+        private static PoiyomiSourceEvidence GatherSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            var shaderName = evidence.HasShaderName
+                ? evidence.ShaderName
+                : null;
+            var isLocked = evidence.TryGetScalar(
+                ShaderOptimizerEnabledProperty, out var optimizerEnabled) &&
+                optimizerEnabled != 0f;
 
             var assetPath = AssetDatabase.GetAssetPath(shader);
 
@@ -1057,20 +1243,51 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 package != null,
                 package?.name,
                 package?.version,
-                HasRequiredSchema(material));
+                HasRequiredSchema(evidence));
         }
 
-        private static bool HasRequiredSchema(Material material)
+        private static bool HasRequiredSchema(CapturedMaterialEvidence evidence)
         {
             foreach (var property in RequiredSchemaProperties)
             {
-                if (!material.HasProperty(property))
+                if (!evidence.HasProperty(property))
                 {
                     return false;
                 }
             }
 
             return true;
+        }
+
+        private static MaterialEvidenceRequest CreateAlphaEvidenceRequest()
+        {
+            var scalars = new HashSet<string>(StringComparer.Ordinal)
+            {
+                ShaderOptimizerEnabledProperty,
+                MainTexUvProperty,
+                AlphaForceOpaqueProperty,
+                IgnoreMainTexAlphaProperty,
+            };
+            scalars.UnionWith(MainSamplingModeGates);
+            scalars.UnionWith(AlphaCoverageGates);
+            scalars.UnionWith(AlphaFeatureGates);
+
+            return new MaterialEvidenceRequest(
+                shaderName: true,
+                activeColorSpace: false,
+                presenceProperties: RequiredSchemaProperties,
+                scalarProperties: scalars,
+                colorProperties: new[] { ColorProperty },
+                vectorProperties: new[] { MainTexPanProperty },
+                textureProperties: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        MainTextureProperty,
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.Sampling |
+                        TextureEvidenceKinds.AlphaChannel),
+                });
         }
 
         // --- Texture evidence extraction (Task 3) ---------------------------
@@ -1174,6 +1391,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 var value = material.GetFloat(property);
                 if (!IsFinite(value) || value != 0f)
+                {
+                    return property;
+                }
+            }
+
+            return null;
+        }
+
+        private static string FirstFailedZeroGate(
+            CapturedMaterialEvidence evidence,
+            params string[] properties)
+        {
+            foreach (var property in properties)
+            {
+                if (!evidence.TryGetScalar(property, out var value) ||
+                    !IsFinite(value) || value != 0f)
                 {
                     return property;
                 }
