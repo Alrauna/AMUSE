@@ -1,5 +1,7 @@
 using System;
+using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf;
+using UnityEngine;
 
 [assembly: ExportsPlugin(typeof(Alrauna.Amuse.Editor.Build.AmusePlatformFinishPlugin))]
 
@@ -34,6 +36,31 @@ namespace Alrauna.Amuse.Editor.Build
     {
         internal static void Execute(BuildContext context)
         {
+            var state = PendingState(context);
+            Execute(
+                context,
+                state,
+                HostLifecycleCapability.CaptureAndEvaluate(context));
+        }
+
+        internal static void Execute(
+            BuildContext context,
+            HostLifecycleFacts facts)
+        {
+            if (facts == null)
+            {
+                throw new ArgumentNullException(nameof(facts));
+            }
+
+            Execute(
+                context,
+                PendingState(context),
+                HostLifecycleCapability.Evaluate(facts));
+        }
+
+        private static AmusePlatformFinishState PendingState(
+            BuildContext context)
+        {
             if (context == null)
             {
                 throw new ArgumentNullException(nameof(context));
@@ -45,8 +72,39 @@ namespace Alrauna.Amuse.Editor.Build
                 throw new InvalidOperationException("AMUSE PlatformFinish barrier executed more than once.");
             }
 
-            state.Lifecycle = HostLifecycleCapability.CaptureAndEvaluate(context);
+            return state;
+        }
+
+        private static void Execute(
+            BuildContext context,
+            AmusePlatformFinishState state,
+            HostLifecycleCapability lifecycle)
+        {
+            state.Lifecycle = lifecycle;
             state.HasExecuted = true;
+            if (!lifecycle.MayUsePositiveMutation)
+            {
+                return;
+            }
+
+            foreach (var renderer in context.AvatarRootObject
+                         .GetComponentsInChildren<Renderer>(true))
+            {
+                var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+                var analysis = extraction.Refusal ==
+                               RendererAnalysisRefusal.None
+                    ? UnityRendererAlphaAnalysis.Analyze(extraction.Snapshot)
+                    : RendererAlphaAnalysis.Refused(extraction.Refusal);
+                if (analysis.Refusal != RendererAnalysisRefusal.None)
+                {
+                    state.SemanticallyRefusedRendererCount++;
+                    continue;
+                }
+
+                state.AnalyzedRendererCount++;
+                state.OpaqueCandidateTriangleCount +=
+                    analysis.Plan.OpaqueTriangleCount;
+            }
         }
     }
 }
