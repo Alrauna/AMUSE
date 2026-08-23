@@ -31,7 +31,7 @@ namespace Alrauna.Amuse.Editor.Host
     /// </summary>
     internal sealed class UnityAlphaFieldEvidence
     {
-        private readonly Dictionary<TextureSourceId, Texture2D> _texturesBySource;
+        private readonly Dictionary<TextureSourceId, AlphaTextureData> _fieldsBySource;
 
         /// <summary>
         /// Resolves the supplied textures to their stable project identities through
@@ -53,32 +53,117 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new ArgumentNullException(nameof(textures));
             }
 
-            _texturesBySource = new Dictionary<TextureSourceId, Texture2D>();
+            _fieldsBySource = new Dictionary<TextureSourceId, AlphaTextureData>();
             foreach (var texture in textures)
             {
-                // Unity's overloaded equality is required: it is true for a destroyed
-                // object, where ReferenceEquals would be false. A non-Texture2D
-                // (RenderTexture, Cubemap, array, 3D) yields a real null here and is
-                // skipped for the same reason it would be refused at lookup.
-                var texture2D = texture as Texture2D;
-                if (texture2D == null)
-                {
-                    continue;
-                }
-
-                if (!UnityTextureEvidence.TryGetSourceId(texture2D, out var source))
+                if (!TryCapture(texture, out var source, out var field))
                 {
                     continue;
                 }
 
                 // Two textures resolving to one identity are the same asset, so the
                 // first wins and the duplicate is not an error.
-                if (_texturesBySource.ContainsKey(source))
+                if (_fieldsBySource.ContainsKey(source))
                 {
                     continue;
                 }
 
-                _texturesBySource.Add(source, texture2D);
+                _fieldsBySource.Add(source, field);
+            }
+        }
+
+        /// <summary>
+        /// Captures the complete immutable alpha field for one supported texture.
+        /// Every validation predicate belongs here so lookup never needs to touch a
+        /// Unity object after construction.
+        /// </summary>
+        internal static bool TryCapture(
+            Texture texture,
+            out TextureSourceId source,
+            out AlphaTextureData field)
+        {
+            source = default;
+            field = null;
+
+            // Unity's overloaded equality is required: it is true for a destroyed
+            // object, where ReferenceEquals would be false. A non-Texture2D
+            // (RenderTexture, Cubemap, array, 3D) is skipped for the same reason it
+            // was refused at lookup.
+            var texture2D = texture as Texture2D;
+            if (texture2D == null)
+            {
+                return false;
+            }
+
+            if (!UnityTextureEvidence.TryGetSourceId(texture2D, out source))
+            {
+                return false;
+            }
+
+            try
+            {
+                // Without a CPU copy there is no route to the data.
+                if (!texture2D.isReadable)
+                {
+                    return false;
+                }
+
+                // The classifier models exactly one texel grid, so a mipmapped
+                // texture is outside the represented domain.
+                if (texture2D.mipmapCount != 1)
+                {
+                    return false;
+                }
+
+                if (!IsSupportedFormat(texture2D.format))
+                {
+                    return false;
+                }
+
+                var width = texture2D.width;
+                var height = texture2D.height;
+                if (width <= 0 || height <= 0)
+                {
+                    return false;
+                }
+
+                Color32[] pixels;
+                try
+                {
+                    pixels = texture2D.GetPixels32(0);
+                }
+                catch (ArgumentException)
+                {
+                    // Measured: raised when the data is not readable, corrupted, or
+                    // absent, and for an invalid mip level. An unprovable read is a
+                    // refusal, never a partial field.
+                    return false;
+                }
+
+                if (pixels == null || pixels.Length != (long)width * height)
+                {
+                    return false;
+                }
+
+                // GetPixels32 is row-major bottom-to-top and so is AlphaTextureData,
+                // so the alpha bytes copy straight across with no flip or transpose.
+                var alpha = new byte[pixels.Length];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    alpha[index] = pixels[index].a;
+                }
+
+                field = new AlphaTextureData(width, height, alpha);
+                return true;
+            }
+            catch (MissingReferenceException)
+            {
+                // Measured: raised by any member access on a destroyed object,
+                // including isReadable, and its base type is SystemException rather
+                // than UnityException. Guards every Unity-object read above.
+                source = default;
+                field = null;
+                return false;
             }
         }
 
@@ -114,81 +199,12 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            if (!_texturesBySource.TryGetValue(source, out var texture))
+            if (!_fieldsBySource.TryGetValue(source, out field))
             {
                 return false;
             }
 
-            // Destroyed between construction and this call.
-            if (texture == null)
-            {
-                return false;
-            }
-
-            try
-            {
-                // Without a CPU copy there is no non-GPU route to the data.
-                if (!texture.isReadable)
-                {
-                    return false;
-                }
-
-                // The classifier models exactly one texel grid, so a mipmapped
-                // texture is outside the represented domain.
-                if (texture.mipmapCount != 1)
-                {
-                    return false;
-                }
-
-                if (!IsSupportedFormat(texture.format))
-                {
-                    return false;
-                }
-
-                var width = texture.width;
-                var height = texture.height;
-                if (width <= 0 || height <= 0)
-                {
-                    return false;
-                }
-
-                Color32[] pixels;
-                try
-                {
-                    pixels = texture.GetPixels32(0);
-                }
-                catch (ArgumentException)
-                {
-                    // Measured: raised when the data is not readable, corrupted, or
-                    // absent, and for an invalid mip level. An unprovable read is a
-                    // refusal, never a partial field.
-                    return false;
-                }
-
-                if (pixels == null || pixels.Length != (long)width * height)
-                {
-                    return false;
-                }
-
-                // GetPixels32 is row-major bottom-to-top and so is AlphaTextureData,
-                // so the alpha bytes copy straight across with no flip or transpose.
-                var alpha = new byte[pixels.Length];
-                for (var index = 0; index < pixels.Length; index++)
-                {
-                    alpha[index] = pixels[index].a;
-                }
-
-                field = new AlphaTextureData(width, height, alpha);
-                return true;
-            }
-            catch (MissingReferenceException)
-            {
-                // Measured: raised by any member access on a destroyed object,
-                // including isReadable, and its base type is SystemException rather
-                // than UnityException. Guards every Unity-object read above.
-                field = null;
-                return false;
-            }
+            return true;
         }
 
         /// <summary>
