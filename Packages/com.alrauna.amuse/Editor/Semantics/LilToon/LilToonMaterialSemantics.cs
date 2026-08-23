@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -127,7 +128,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             RequireAnalyzableMaterial(material);
 
-            var evidence = LilToonSourceAttestation.GatherSourceEvidence(material);
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+            })[0];
+            var evidence = LilToonSourceAttestation.GatherSourceEvidence(
+                material.shader, captured);
             if (!LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     evidence, out var diagnostic))
             {
@@ -137,7 +143,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return InterpretVerifiedMaterial(
                 material,
                 QualitySettings.activeColorSpace,
-                evidence.CompiledFeatures);
+                evidence.CompiledFeatures,
+                captured);
         }
 
         /// <summary>
@@ -159,6 +166,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(compiledFeatures));
             }
 
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+            })[0];
+            return InterpretVerifiedMaterial(
+                material,
+                activeColorSpace,
+                compiledFeatures,
+                captured);
+        }
+
+        private static LilToonSemanticResult InterpretVerifiedMaterial(
+            Material material,
+            ColorSpace activeColorSpace,
+            IReadOnlyCollection<string> compiledFeatures,
+            CapturedMaterialEvidence captured)
+        {
             // A verified material is a supported material; each output is proven
             // independently and stays Unknown, with a diagnostic, when its
             // equation is not representable.
@@ -166,7 +190,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var baseColor = InterpretBaseColor(
                 material, activeColorSpace, diagnostics);
-            var alpha = InterpretAlpha(material, diagnostics);
+            var alpha = InterpretAlpha(captured, diagnostics);
             var emission = InterpretEmission(
                 material, activeColorSpace, compiledFeatures, diagnostics);
             var normal = InterpretNormal(material, compiledFeatures, diagnostics);
@@ -455,6 +479,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             "_UDIMDiscardCompile",
         };
 
+        internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
+            new MaterialEvidenceRequest(
+                shaderName: true,
+                activeColorSpace: false,
+                presenceProperties: Array.Empty<string>(),
+                scalarProperties: new[]
+                {
+                    LilToonSourceAttestation.ShaderFormatVersionProperty,
+                    "_Invisible",
+                    "_UDIMDiscardCompile",
+                },
+                colorProperties: Array.Empty<string>(),
+                vectorProperties: Array.Empty<string>(),
+                textureProperties:
+                    Array.Empty<TexturePropertyEvidenceRequest>());
+
         /// <summary>
         /// Proves the normalized alpha term. The attested opaque variant forces
         /// alpha to one, so the value is independent of <c>_Color.a</c>,
@@ -462,11 +502,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <c>_UseDither</c>. Two coverage gates remain because they remove
         /// fragments rather than change the value.
         /// </summary>
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
+            CapturedMaterialEvidence evidence)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            return InterpretAlpha(
+                evidence, new List<LilToonSemanticDiagnostic>());
+        }
+
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
-            Material material,
+            CapturedMaterialEvidence evidence,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
-            var coverageGate = FirstFailedZeroGate(material, AlphaCoverageGates);
+            var coverageGate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
             if (coverageGate != null)
             {
                 return RecordUnknown<ScalarSemanticValue>(
@@ -983,6 +1035,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
                 var value = material.GetFloat(property);
                 if (!IsFinite(value) || value != 0f)
+                {
+                    return property;
+                }
+            }
+
+            return null;
+        }
+
+        private static string FirstFailedZeroGate(
+            CapturedMaterialEvidence evidence,
+            params string[] properties)
+        {
+            foreach (var property in properties)
+            {
+                if (!evidence.TryGetScalar(property, out var value) ||
+                    !IsFinite(value) || value != 0f)
                 {
                     return property;
                 }
