@@ -127,6 +127,16 @@ namespace Alrauna.Amuse.Editor.Build
 
             if (!decision.IsPrepared)
             {
+                // Only Refused(reason) may reach this branch. A defaulted struct
+                // would otherwise preserve the input while explaining nothing,
+                // so it is reported as the preparation defect it is.
+                if (string.IsNullOrEmpty(decision.RefusalReason))
+                {
+                    throw new InvalidOperationException(
+                        "A preparation refusal must be created through " +
+                        "AmusePreparationDecision.Refused(reason).");
+                }
+
                 return new AmuseBuildOperationResult(
                     AmuseBuildOperationOutcome.PreparationRefused,
                     lifecycle,

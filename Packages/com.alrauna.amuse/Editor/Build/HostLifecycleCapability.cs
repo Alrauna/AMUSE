@@ -85,6 +85,11 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal static HostLifecycleCapability Evaluate(HostLifecycleFacts facts)
         {
+            if (facts == null)
+            {
+                throw new ArgumentNullException(nameof(facts));
+            }
+
             if (!EqualsOrdinal(facts.UnityVersion, SupportedUnityVersion))
             {
                 return Refused(HostLifecycleRefusal.UnsupportedUnityVersion);
