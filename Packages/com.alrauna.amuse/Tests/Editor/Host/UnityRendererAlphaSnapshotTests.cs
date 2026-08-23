@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
@@ -35,9 +36,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var renderer = NewRenderer(originalMesh, originalMaterial);
 
             var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var originalCapturedMaterial = extraction.Snapshot.Materials[0];
 
             renderer.sharedMesh = Triangle();
-            renderer.sharedMaterials = new[] { NewMaterial() };
+            var replacementMaterial = NewMaterial();
+            replacementMaterial.color = new Color(1f, 1f, 1f, 0f);
+            renderer.sharedMaterials = new[] { replacementMaterial };
             originalMesh.vertices = new[]
             {
                 new Vector3(10f, 10f, 10f),
@@ -49,17 +53,48 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             originalMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
             originalMaterial.color = new Color(1f, 1f, 1f, 0f);
 
+            var freshExtraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var replacementCapturedMaterial =
+                freshExtraction.Snapshot.Materials[0];
+            MaterialSemantics Resolve(CapturedAlphaMaterial material)
+            {
+                if (ReferenceEquals(material, originalCapturedMaterial))
+                {
+                    return ConstantAlpha(1f);
+                }
+
+                if (ReferenceEquals(material, replacementCapturedMaterial))
+                {
+                    return ConstantAlpha(0f);
+                }
+
+                return UnityMaterialSemantics.AllUnknown();
+            }
+
             var captured = UnityRendererAlphaAnalysis.Analyze(
-                extraction.Snapshot, ConstantOpaque);
+                extraction.Snapshot, Resolve);
             var fresh = UnityRendererAlphaAnalysis.Analyze(
-                UnityRendererAlphaAnalysis.Capture(renderer).Snapshot,
-                ConstantOpaque);
+                freshExtraction.Snapshot, Resolve);
 
             Assert.That(captured.Plan.OpaqueTriangleCount, Is.EqualTo(2));
             Assert.That(
                 fresh.Plan.OpaqueTriangleCount,
+                Is.Zero,
+                "A fresh capture must observe replacement material semantics.");
+            Assert.That(
+                fresh.Submeshes[0].Failure,
+                Is.EqualTo(AlphaResolutionFailure.None));
+            Assert.That(
+                fresh.Plan.Source.Submeshes[0].Outcomes,
+                Is.EqualTo(new[]
+                {
+                    TriangleAlphaOutcome.MustRemainTransparent,
+                }));
+            Assert.That(
+                fresh.Plan.TransparentTriangleCount,
                 Is.EqualTo(1),
-                "A fresh capture must observe the replacement mesh.");
+                "A fresh capture must also observe the one-triangle " +
+                "replacement mesh.");
         }
 
         [Test]
@@ -99,13 +134,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(extraction.MutationTarget, Is.Null);
         }
 
-        private static MaterialSemantics ConstantOpaque(
-            CapturedAlphaMaterial material)
+        private static MaterialSemantics ConstantAlpha(float alpha)
         {
             return new MaterialSemantics(
                 SemanticOutput<ColorSemanticValue>.Unknown(),
                 SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(1f)),
+                    ScalarSemanticValue.Constant(alpha)),
                 SemanticOutput<ColorSemanticValue>.Unknown(),
                 SemanticOutput<NormalSemanticValue>.Unknown());
         }
