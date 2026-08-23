@@ -1,5 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
@@ -16,17 +22,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// </summary>
     public sealed class UnityMaterialSemanticsTests
     {
+        private const string TempFolder = "Assets/AmuseTests_MaterialDispatch";
+
         private Material _material;
+        private readonly List<Material> _batchMaterials = new List<Material>();
+
+        [SetUp]
+        public void SetUp()
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "AmuseTests_MaterialDispatch");
+            }
+        }
 
         [TearDown]
         public void TearDown()
         {
             if (_material != null)
             {
-                Object.DestroyImmediate(_material);
+                UnityEngine.Object.DestroyImmediate(_material);
             }
 
             _material = null;
+
+            foreach (var material in _batchMaterials)
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+
+            _batchMaterials.Clear();
+            if (AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.DeleteAsset(TempFolder);
+            }
         }
 
         private static void AssertAllUnknown(MaterialSemantics semantics)
@@ -48,7 +80,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void DestroyedMaterialIsAllUnknown()
         {
             var material = new Material(Shader.Find("Unlit/Color"));
-            Object.DestroyImmediate(material);
+            UnityEngine.Object.DestroyImmediate(material);
 
             AssertAllUnknown(UnityMaterialSemantics.AnalyzeBaseMaterial(material));
         }
@@ -66,6 +98,132 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void AllUnknownIsUnknownInEveryOutput()
         {
             AssertAllUnknown(UnityMaterialSemantics.AllUnknown());
+        }
+
+        [Test]
+        public void CaptureAlphaMaterialsKeepsFamilyRequestsIsolated()
+        {
+            var poiyomi = NewMaterial(
+                "poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+            var lilToon = NewMaterial(
+                "liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIM"", Int) = 0");
+
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { poiyomi, lilToon });
+
+            Assert.That(captured.Count, Is.EqualTo(2));
+            Assert.That(
+                captured[0].Family, Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                captured[1].Family, Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+            Assert.Throws<ArgumentException>(
+                () => captured[0].Evidence.TryGetScalar("_Invisible", out _));
+            Assert.Throws<ArgumentException>(
+                () => captured[1].Evidence.TryGetScalar(
+                    "_AlphaForceOpaque", out _));
+
+            var poiyomiAlpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                captured[0].Evidence);
+            var lilToonAlpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
+                captured[1].Evidence);
+            Assert.That(poiyomiAlpha.IsComplete, Is.True);
+            Assert.That(
+                poiyomiAlpha.GetCompleteValue().GetConstantValue(), Is.EqualTo(1f));
+            Assert.That(lilToonAlpha.IsComplete, Is.True);
+            Assert.That(
+                lilToonAlpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void AnalyzeAlphaMaterialUnsupportedFamilyIsAllUnknown()
+        {
+            _material = new Material(Shader.Find("Unlit/Color"));
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { _material });
+
+            Assert.That(captured.Count, Is.EqualTo(1));
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            AssertAllUnknown(
+                UnityMaterialSemantics.AnalyzeAlphaMaterial(captured[0]));
+        }
+
+        private Material NewMaterial(
+            string fileName,
+            string shaderName,
+            string properties)
+        {
+            var path = TempFolder + "/" + fileName;
+            File.WriteAllText(
+                path,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    Properties\n    {" + properties +
+                "\n    }\n    SubShader { Pass {} }\n}\n");
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(shader, Is.Not.Null, path);
+            var material = new Material(shader);
+            _batchMaterials.Add(material);
+            return material;
+        }
+
+        private static string PoiyomiProperties()
+        {
+            return @"
+        shader_master_label (""Master"", Float) = 0
+        _ShaderOptimizerEnabled (""Locked"", Float) = 0
+        _MainTex (""Main"", 2D) = ""white"" {}
+        _Color (""Color"", Color) = (1,1,1,1)
+        _BumpMap (""Bump"", 2D) = ""bump"" {}
+        _EmissionMap (""Emission"", 2D) = ""white"" {}
+        _EnableEmission (""Emission 0"", Float) = 0
+        _EnableEmission1 (""Emission 1"", Float) = 0
+        _EnableEmission2 (""Emission 2"", Float) = 0
+        _EnableEmission3 (""Emission 3"", Float) = 0
+        _AlphaForceOpaque (""Force Opaque"", Float) = 1
+        _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
+        _AlphaToCoverage (""Coverage"", Float) = 0
+        _AlphaSharpenedA2C (""Sharpened"", Float) = 0
+        _AlphaDithering (""Dither"", Float) = 0
+        _EnableDissolve (""Dissolve"", Float) = 0
+        _EnableUDIMDiscardOptions (""UDIM"", Float) = 0
+        _AlphaMod (""Alpha Mod"", Float) = 0
+        _MainAlphaMaskMode (""Mask Mode"", Float) = 0
+        _AlphaDistanceFade (""Distance"", Float) = 0
+        _AlphaFresnel (""Fresnel"", Float) = 0
+        _AlphaAngular (""Angular"", Float) = 0
+        _AlphaAudioLinkEnabled (""Audio Alpha"", Float) = 0
+        _EnableAudioLink (""Audio"", Float) = 0
+        _AlphaGlobalMask (""Global Mask"", Float) = 0
+        _AlphaPremultiply (""Premultiply"", Float) = 0
+        _BackFaceEnabled (""Backface"", Float) = 0
+        _RGBMaskEnabled (""RGB Mask"", Float) = 0
+        _DecalEnabled (""Decal 0"", Float) = 0
+        _DecalEnabled1 (""Decal 1"", Float) = 0
+        _DecalEnabled2 (""Decal 2"", Float) = 0
+        _DecalEnabled3 (""Decal 3"", Float) = 0
+        _EnableFlipbook (""Flipbook"", Float) = 0
+        _EnableRimLighting (""Rim"", Float) = 0
+        _EnableRim2Lighting (""Rim 2"", Float) = 0
+        _EnableDepthRimLighting (""Depth Rim"", Float) = 0
+        _EnableEnvironmentalRim (""Env Rim"", Float) = 0
+        _VideoEffectsEnable (""Video"", Float) = 0
+        _EnableTouchGlow (""Touch"", Float) = 0
+        _MainVertexColoringEnabled (""Vertex"", Float) = 0
+        _MainTexUV (""UV"", Float) = 0
+        _MainTexPan (""Pan"", Vector) = (0,0,0,0)
+        _MainPixelMode (""Pixel"", Float) = 0
+        _MainTexStochastic (""Stochastic"", Float) = 0";
         }
     }
 }
