@@ -180,6 +180,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 () => AmusePreparationDecision.Refused(string.Empty));
         }
 
+        /// <summary>
+        /// Only <see cref="AmusePreparationDecision.Refused"/> may produce a
+        /// refusal, because only it guarantees the explanation AMUSE owes for a
+        /// preserved input. A defaulted struct - trivially written as
+        /// <c>return default;</c> - would otherwise reach the refusal branch
+        /// carrying no reason at all, so it is treated as the preparation defect
+        /// it is rather than as an ordinary conservative outcome.
+        /// </summary>
+        [Test]
+        public void DefaultedPreparationDecisionIsADefectAndNeverInvokesApply()
+        {
+            var applied = false;
+
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                AmuseBuildOperation.Execute(
+                    SupportedCapability(),
+                    new RecordingAssetSaver(),
+                    _ => default(AmusePreparationDecision),
+                    () => applied = true));
+
+            StringAssert.Contains(
+                "AmusePreparationDecision.Refused", exception.Message);
+            Assert.That(applied, Is.False);
+        }
+
         [Test]
         public void GeneratedMeshIsOwnedByTheActiveNdmfAssetSaver()
         {

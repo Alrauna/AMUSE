@@ -265,11 +265,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 extraction.Snapshot,
                 material => supported.Contains(material)
                     ? new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.Constant(1f)),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown())
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<ScalarSemanticValue>.Complete(
+                            ScalarSemanticValue.Constant(1f)),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown())
                     : UnityMaterialSemantics.AllUnknown());
         }
 

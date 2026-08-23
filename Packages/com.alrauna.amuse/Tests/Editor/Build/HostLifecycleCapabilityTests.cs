@@ -1,3 +1,4 @@
+using System;
 using Alrauna.Amuse.Editor.Build;
 using NUnit.Framework;
 
@@ -58,6 +59,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(result.MayUsePositiveMutation, Is.False);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        /// <summary>
+        /// The version lookup returns null when the package is not registered at
+        /// all, which is how a missing NDMF install reaches evaluation: Unity
+        /// 2022.3.22f1 has no PackageInfo.FindForPackageName, so the capture
+        /// selects by exact ordinal name over GetAllRegisteredPackages() and
+        /// yields null on a miss. An absent package is not a supported host.
+        /// </summary>
+        [Test]
+        public void MissingNdmfPackageRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: null));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        [Test]
+        public void MissingFactsAreRejected()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => HostLifecycleCapability.Evaluate(null));
         }
 
         [Test]
