@@ -447,20 +447,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(field, Is.Not.Null);
         }
 
-        /// <summary>
-        /// The primary destroyed-object guard is Unity's overloaded <c>== null</c>,
-        /// which is true for a destroyed object where <c>ReferenceEquals</c> is
-        /// false. Deleting the asset destroys the loaded object, which is the
-        /// deterministic way to reach that state through the real API.
-        /// </summary>
         [Test]
-        public void TextureDestroyedAfterConstruction_RefusesWithoutThrowing()
+        public void TextureDestroyedAfterConstruction_DoesNotChangeCapturedField()
         {
-            var texture = ImportAsymmetric("destroyed");
+            var texture = ImportAsymmetric("destroyed-after-capture");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
             var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var before), Is.True);
 
-            AssetDatabase.DeleteAsset(TempFolder + "/destroyed.png");
+            AssetDatabase.DeleteAsset(TempFolder + "/destroyed-after-capture.png");
 
             Assert.That(texture == null, Is.True, "Unity's overloaded equality sees the destruction.");
             Assert.That(
@@ -468,11 +463,27 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.False,
                 "ReferenceEquals does not, which is why the producer must not use it.");
 
-            AlphaTextureData field = null;
             Assert.That(
-                () => evidence.TryGetAlphaField(source, TextureChannel.Alpha, out field),
-                Throws.Nothing);
-            Assert.That(field, Is.Null);
+                evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var after),
+                Is.True);
+            AssertSameField(before, after, "Captured alpha must not re-read Texture2D.");
+        }
+
+        [Test]
+        public void TexturePixelsMutatedAfterConstruction_DoNotChangeCapturedField()
+        {
+            var texture = ImportAsymmetric("mutated-after-capture");
+            Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
+            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var before), Is.True);
+
+            texture.SetPixels32(UniformPixels(texture.width, texture.height, 17));
+            texture.Apply();
+
+            Assert.That(
+                evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var after),
+                Is.True);
+            AssertSameField(before, after, "Captured alpha must not re-read mutated Texture2D.");
         }
 
         // --- Malformed input ---------------------------------------------------
@@ -626,7 +637,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void SeparateCalls_ReturnIndependentFields()
+        public void SeparateCalls_ReturnTheCapturedImmutableField()
         {
             var texture = ImportAsymmetric("independence");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
@@ -637,9 +648,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(
                 ReferenceEquals(first, second),
-                Is.False,
-                "No buffer is shared between results, and none is cached.");
-            AssertSameField(first, second, "independent fields still agree");
+                Is.True,
+                "The immutable captured field is safe to share between lookups.");
+            AssertSameField(first, second, "captured fields still agree");
         }
 
         // --- Architecture boundary ---------------------------------------------
