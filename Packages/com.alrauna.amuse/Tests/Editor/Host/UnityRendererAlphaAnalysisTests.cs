@@ -241,22 +241,36 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// A provider that proves constant alpha 1 for one nominated material
-        /// and knows nothing about any other. A constant alpha is
+        /// A captured-material resolver that proves constant alpha 1 for the
+        /// nominated slots and knows nothing about any other. A constant alpha is
         /// geometry-independent, so it isolates composition from evidence — and
         /// it is exactly the resolution that must still prove opacity when UV0
         /// is unavailable.
         /// </summary>
-        private static BaseMaterialSemanticsProvider OpaqueFor(Material supported)
+        private static RendererAlphaAnalysis AnalyzeOpaque(
+            Renderer renderer,
+            params int[] supportedSlots)
         {
-            return material => ReferenceEquals(material, supported)
-                ? new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.Constant(1f)),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown())
-                : UnityMaterialSemantics.AllUnknown();
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            var supported = new HashSet<CapturedAlphaMaterial>();
+            foreach (var slot in supportedSlots)
+            {
+                supported.Add(extraction.Snapshot.Materials[slot]);
+            }
+
+            return UnityRendererAlphaAnalysis.Analyze(
+                extraction.Snapshot,
+                material => supported.Contains(material)
+                    ? new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<ScalarSemanticValue>.Complete(
+                            ScalarSemanticValue.Constant(1f)),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown())
+                    : UnityMaterialSemantics.AllUnknown());
         }
 
         /// <summary>Two submeshes: one triangle, then two triangles.</summary>
@@ -291,8 +305,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewMaterial();
             var renderer = NewSkinned(Quad(), material);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var result = AnalyzeOpaque(renderer, 0);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(result.Plan, Is.Not.Null);
@@ -316,8 +329,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var renderer = gameObject.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { material };
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var result = AnalyzeOpaque(renderer, 0);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(result.Plan.OpaqueTriangleCount, Is.EqualTo(2));
@@ -330,8 +342,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var unsupported = NewMaterial();
             var renderer = NewSkinned(TwoSubmeshMesh(), unsupported, supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(supported));
+            var result = AnalyzeOpaque(renderer, 1);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -356,8 +367,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var supported = NewMaterial();
             var renderer = NewSkinned(TwoSubmeshMesh(), NewMaterial(), supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(supported));
+            var result = AnalyzeOpaque(renderer, 1);
 
             for (var index = 0; index < result.Submeshes.Count; index++)
             {
@@ -376,8 +386,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewMaterial();
             var renderer = NewSkinned(TwoSubmeshMesh(), material, material);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var result = AnalyzeOpaque(renderer, 0, 1);
 
             Assert.That(
                 result.Submeshes[0].Failure,
@@ -428,8 +437,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var supported = NewMaterial();
             var renderer = NewSkinned(mesh, NewMaterial(), supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(supported));
+            var result = AnalyzeOpaque(renderer, 1);
 
             Assert.That(result.Plan.Submeshes[0].OpaqueTriangleOrdinals, Is.Empty);
             Assert.That(
@@ -453,8 +461,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewMaterial();
             var renderer = NewSkinned(mesh, material);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var result = AnalyzeOpaque(renderer, 0);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -485,8 +492,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewMaterial();
             var renderer = NewSkinned(mesh, material, material);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var result = AnalyzeOpaque(renderer, 0, 1);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -502,10 +508,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewMaterial();
             var renderer = NewSkinned(TwoSubmeshMesh(), material, material);
 
-            var first = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
-            var second = UnityRendererAlphaAnalysis.Analyze(
-                renderer, OpaqueFor(material));
+            var first = AnalyzeOpaque(renderer, 0, 1);
+            var second = AnalyzeOpaque(renderer, 0, 1);
 
             Assert.That(
                 second.Plan.OpaqueTriangleCount,
