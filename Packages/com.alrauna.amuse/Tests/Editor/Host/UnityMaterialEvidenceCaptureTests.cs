@@ -122,6 +122,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "_EmissionStrength",
                 "_BumpScale",
                 "_BumpMapUV",
+                "_BumpMap",
+                "_EmissionMap",
+                "_EnableEmission",
+                "_EnableEmission1",
+                "_EnableEmission2",
+                "_EnableEmission3",
             })
             {
                 Assert.That(Requests(poiyomi, property), Is.False, property);
