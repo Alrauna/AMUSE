@@ -116,16 +116,11 @@ namespace Alrauna.Amuse.Editor.Host
         }
     }
 
-    /// <summary>
-    /// Supplies normalized semantics for one base material. The production
-    /// implementation is <see cref="UnityMaterialSemantics.AnalyzeBaseMaterial"/>;
-    /// the parameter exists because the public development project installs no
-    /// vendor shader and therefore cannot attest one, so deterministic tests
-    /// substitute this single link through each frontend's existing
-    /// verified-material seam. It mirrors the established
-    /// <see cref="AlphaFieldProvider"/> precedent: one delegate, one production
-    /// implementation, no registry.
-    /// </summary>
+    internal delegate MaterialSemantics CapturedAlphaMaterialSemanticsResolver(
+        CapturedAlphaMaterial material);
+
+    // Kept temporarily for the separately packaged census collector. New proof
+    // paths use CapturedAlphaMaterialSemanticsResolver exclusively.
     internal delegate MaterialSemantics BaseMaterialSemanticsProvider(
         Material material);
 
@@ -153,20 +148,53 @@ namespace Alrauna.Amuse.Editor.Host
     {
         internal static RendererAlphaAnalysis Analyze(Renderer renderer)
         {
-            return Analyze(renderer, UnityMaterialSemantics.AnalyzeBaseMaterial);
+            var extraction = Capture(renderer);
+            return extraction.Refusal == RendererAnalysisRefusal.None
+                ? Analyze(extraction.Snapshot)
+                : RendererAlphaAnalysis.Refused(extraction.Refusal);
         }
 
+        // Compatibility for the research package's current test seam. The
+        // provider is evaluated during eager capture and only captured values
+        // cross into proof and planning.
         internal static RendererAlphaAnalysis Analyze(
             Renderer renderer,
             BaseMaterialSemanticsProvider semanticsProvider)
         {
-            if (ReferenceEquals(renderer, null))
-            {
-                throw new ArgumentNullException(nameof(renderer));
-            }
             if (semanticsProvider == null)
             {
                 throw new ArgumentNullException(nameof(semanticsProvider));
+            }
+
+            var extraction = Capture(
+                renderer,
+                semanticsProvider,
+                out var capturedSemantics);
+            return extraction.Refusal == RendererAnalysisRefusal.None
+                ? Analyze(
+                    extraction.Snapshot,
+                    material => capturedSemantics.TryGetValue(
+                        material, out var semantics)
+                            ? semantics
+                            : UnityMaterialSemantics.AllUnknown())
+                : RendererAlphaAnalysis.Refused(extraction.Refusal);
+        }
+
+        internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
+        {
+            return Capture(renderer, null, out _);
+        }
+
+        private static UnityRendererAlphaExtraction Capture(
+            Renderer renderer,
+            BaseMaterialSemanticsProvider legacySemanticsProvider,
+            out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
+                legacySemantics)
+        {
+            legacySemantics = null;
+            if (ReferenceEquals(renderer, null))
+            {
+                throw new ArgumentNullException(nameof(renderer));
             }
 
             // Unity's overloaded equality reports a destroyed object as null.
@@ -179,7 +207,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             if (!IsSupportedRendererType(renderer))
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.UnsupportedRendererType);
             }
 
@@ -189,21 +217,21 @@ namespace Alrauna.Amuse.Editor.Host
             // which is a false negative and therefore the safe direction.
             if (renderer.HasPropertyBlock())
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.MaterialPropertyOverridesPresent);
             }
 
             var mesh = SharedMeshOf(renderer);
             if (mesh == null)
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.MissingMesh);
             }
 
             var materials = renderer.sharedMaterials;
             if (materials == null || materials.Length != mesh.subMeshCount)
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.UnprovenMaterialSlotMapping);
             }
 
@@ -211,7 +239,7 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 if (mesh.GetTopology(submesh) != MeshTopology.Triangles)
                 {
-                    return RendererAlphaAnalysis.Refused(
+                    return UnityRendererAlphaExtraction.Refused(
                         RendererAnalysisRefusal.UnsupportedTopology);
                 }
             }
@@ -227,7 +255,7 @@ namespace Alrauna.Amuse.Editor.Host
             var uv = mesh.uv;
             if (positions == null || positions.Length != mesh.vertexCount)
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.MalformedMeshData);
             }
 
@@ -236,16 +264,11 @@ namespace Alrauna.Amuse.Editor.Host
             var hasUv0 = uv != null && uv.Length == mesh.vertexCount;
             if (!hasUv0 && uv != null && uv.Length != 0)
             {
-                return RendererAlphaAnalysis.Refused(
+                return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.MalformedMeshData);
             }
 
-            var evidence = new UnityAlphaFieldEvidence(
-                GatherCandidateTextures(materials));
-            var resolutions = new Dictionary<Material, AlphaResolution>();
-            var submeshInputs = new List<SubmeshSeparationInput>(materials.Length);
-            var records = new List<SubmeshAlphaAnalysis>(materials.Length);
-
+            var submeshes = new UnitySubmeshAlphaSnapshot[mesh.subMeshCount];
             for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
             {
                 var indices = mesh.GetIndices(submesh);
@@ -255,7 +278,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // conservative if it happens before the throw.
                 if (indices == null || indices.Length % 3 != 0)
                 {
-                    return RendererAlphaAnalysis.Refused(
+                    return UnityRendererAlphaExtraction.Refused(
                         RendererAnalysisRefusal.MalformedMeshData);
                 }
 
@@ -263,83 +286,137 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (indices[index] < 0 || indices[index] >= mesh.vertexCount)
                     {
-                        return RendererAlphaAnalysis.Refused(
+                        return UnityRendererAlphaExtraction.Refused(
                             RendererAnalysisRefusal.MalformedMeshData);
                     }
                 }
 
-                var material = materials[submesh];
-                var resolution = ResolveFor(
-                    material, semanticsProvider, evidence, resolutions);
-                var outcomes = Classify(
-                    indices, positions, hasUv0 ? uv : null, resolution);
+                submeshes[submesh] = new UnitySubmeshAlphaSnapshot(
+                    submesh, submesh, indices);
+            }
 
-                submeshInputs.Add(
-                    new SubmeshSeparationInput(submesh, indices, outcomes));
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(materials);
+            var capturedSlots = new CapturedAlphaMaterial[captured.Count];
+            for (var index = 0; index < captured.Count; index++)
+            {
+                capturedSlots[index] = materials[index] == null
+                    ? null
+                    : captured[index];
+            }
+
+            if (legacySemanticsProvider != null)
+            {
+                legacySemantics = new Dictionary<
+                    CapturedAlphaMaterial, MaterialSemantics>();
+                var byLiveMaterial = new Dictionary<Material, MaterialSemantics>();
+                for (var index = 0; index < materials.Length; index++)
+                {
+                    var material = materials[index];
+                    if (material == null || capturedSlots[index] == null)
+                    {
+                        continue;
+                    }
+
+                    if (!byLiveMaterial.TryGetValue(material, out var semantics))
+                    {
+                        semantics = legacySemanticsProvider(material)
+                            ?? UnityMaterialSemantics.AllUnknown();
+                        byLiveMaterial.Add(material, semantics);
+                    }
+
+                    legacySemantics.Add(capturedSlots[index], semantics);
+                }
+            }
+
+            var snapshot = new UnityRendererAlphaSnapshot(
+                mesh.vertexCount,
+                positions,
+                hasUv0 ? uv : Array.Empty<Vector2>(),
+                hasUv0,
+                submeshes,
+                capturedSlots);
+            var target = new UnityRendererMutationTarget(
+                renderer, mesh, materials.Length);
+            return UnityRendererAlphaExtraction.Accepted(snapshot, target);
+        }
+
+        internal static RendererAlphaAnalysis Analyze(
+            UnityRendererAlphaSnapshot snapshot,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
+            var fields = GatherAlphaFields(snapshot.Materials);
+            return Analyze(
+                snapshot,
+                resolveSemantics,
+                (TextureSourceId source,
+                 TextureChannel channel,
+                 out AlphaTextureData field) =>
+                {
+                    field = null;
+                    return channel == TextureChannel.Alpha &&
+                           fields.TryGetValue(source, out field);
+                });
+        }
+
+        private static RendererAlphaAnalysis Analyze(
+            UnityRendererAlphaSnapshot snapshot,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics,
+            AlphaFieldProvider alphaFields)
+        {
+            var resolutions = new Dictionary<
+                CapturedAlphaMaterial, AlphaResolution>();
+            var submeshInputs = new List<SubmeshSeparationInput>(
+                snapshot.Submeshes.Count);
+            var records = new List<SubmeshAlphaAnalysis>(
+                snapshot.Submeshes.Count);
+
+            foreach (var submesh in snapshot.Submeshes)
+            {
+                var material = snapshot.Materials[submesh.MaterialSlotIndex];
+                var resolution = ResolveFor(
+                    material, resolveSemantics, alphaFields, resolutions);
+                var outcomes = Classify(
+                    submesh.Indices,
+                    snapshot.Positions,
+                    snapshot.HasUv0 ? snapshot.Uv0 : null,
+                    resolution);
+
+                submeshInputs.Add(new SubmeshSeparationInput(
+                    submesh.MaterialSlotIndex, submesh.Indices, outcomes));
                 records.Add(new SubmeshAlphaAnalysis(
-                    submesh,
-                    submesh,
+                    submesh.SubmeshIndex,
+                    submesh.MaterialSlotIndex,
                     material != null,
                     resolution.Failure));
             }
 
             var plan = MeshSeparationPlanner.Create(
-                new MeshSeparationInput(mesh.vertexCount, submeshInputs));
+                new MeshSeparationInput(snapshot.VertexCount, submeshInputs));
             return RendererAlphaAnalysis.Planned(plan, records);
         }
 
-        /// <summary>
-        /// Every texture the renderer's own materials reference, read through
-        /// each shader's declared texture properties so no AMUSE code names a
-        /// property. The set is a superset of what the alpha semantics will ask
-        /// for, which is correct and cheap: the provider stores identity only
-        /// and reads pixels lazily, and a texture that was not gathered simply
-        /// refuses with MissingTextureEvidence.
-        /// <para>
-        /// A null, destroyed, or shaderless material contributes nothing.
-        /// Skipping the shaderless case is not a semantic decision — such a
-        /// material is all-Unknown either way — it only keeps evidence gathering
-        /// from turning that conservative result into an exception.
-        /// </para>
-        /// </summary>
-        private static IEnumerable<Texture> GatherCandidateTextures(
-            Material[] materials)
-        {
-            foreach (var material in materials)
-            {
-                if (material == null || material.shader == null)
-                {
-                    continue;
-                }
-
-                foreach (var propertyName in material.GetTexturePropertyNames())
-                {
-                    yield return material.GetTexture(propertyName);
-                }
-            }
-        }
-
-        /// <summary>
-        /// One resolution per distinct material. Attestation hashes the whole
-        /// shader source, and avatars repeat material references across slots,
-        /// so this memo removes real repeated work. It is local to one analysis
-        /// and is discarded when it returns.
-        /// </summary>
         private static AlphaResolution ResolveFor(
-            Material material,
-            BaseMaterialSemanticsProvider semanticsProvider,
-            UnityAlphaFieldEvidence evidence,
-            Dictionary<Material, AlphaResolution> memo)
+            CapturedAlphaMaterial material,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics,
+            AlphaFieldProvider alphaFields,
+            Dictionary<CapturedAlphaMaterial, AlphaResolution> memo)
         {
             if (material != null && memo.TryGetValue(material, out var cached))
             {
                 return cached;
             }
 
-            var semantics = semanticsProvider(material)
-                ?? UnityMaterialSemantics.AllUnknown();
+            var semantics = material == null
+                ? UnityMaterialSemantics.AllUnknown()
+                : resolveSemantics(material) ?? UnityMaterialSemantics.AllUnknown();
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Alpha, evidence.TryGetAlphaField);
+                semantics.Alpha, alphaFields);
 
             if (material != null)
             {
@@ -347,6 +424,31 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return resolution;
+        }
+
+        private static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
+            GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
+        {
+            var fields = new Dictionary<TextureSourceId, AlphaTextureData>();
+            foreach (var material in materials)
+            {
+                if (material == null)
+                {
+                    continue;
+                }
+
+                foreach (var texture in material.Evidence.Textures)
+                {
+                    if (texture.HasSourceIdentity &&
+                        texture.HasAlphaChannel &&
+                        !fields.ContainsKey(texture.SourceIdentity))
+                    {
+                        fields.Add(texture.SourceIdentity, texture.AlphaChannel);
+                    }
+                }
+            }
+
+            return fields;
         }
 
         /// <summary>
@@ -370,12 +472,12 @@ namespace Alrauna.Amuse.Editor.Host
         /// </para>
         /// </summary>
         private static TriangleAlphaOutcome[] Classify(
-            int[] indices,
-            Vector3[] positions,
-            Vector2[] uv,
+            IReadOnlyList<int> indices,
+            IReadOnlyList<Vector3> positions,
+            IReadOnlyList<Vector2> uv,
             AlphaResolution resolution)
         {
-            var outcomes = new TriangleAlphaOutcome[indices.Length / 3];
+            var outcomes = new TriangleAlphaOutcome[indices.Count / 3];
             if (!resolution.IsResolved)
             {
                 for (var triangle = 0; triangle < outcomes.Length; triangle++)

@@ -13,8 +13,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     /// <summary>
     /// The renderer-to-plan vertical slice: a real Renderer, a real Mesh with
     /// two submeshes and two material slots, a real imported Texture2D, the real
-    /// UnityAlphaFieldEvidence provider, the real AlphaSemanticsResolver, the
-    /// real exact TriangleAlphaClassifier, and the real MeshSeparationPlanner.
+    /// request-selective captured alpha evidence, the real
+    /// AlphaSemanticsResolver, the real exact TriangleAlphaClassifier, and the
+    /// real MeshSeparationPlanner.
     /// <para>
     /// Exactly one link is substituted: vendor shader source attestation. The
     /// public development project installs neither Poiyomi nor lilToon, so no
@@ -138,29 +139,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// Genuine Poiyomi interpreter output for the nominated materials, and
-        /// all-Unknown for anything else. Only attestation is bypassed.
-        /// </summary>
-        private static BaseMaterialSemanticsProvider VerifiedSemanticsFor(
-            params Material[] supported)
-        {
-            return material =>
-            {
-                foreach (var candidate in supported)
-                {
-                    if (ReferenceEquals(material, candidate))
-                    {
-                        return PoiyomiMaterialSemantics
-                            .InterpretVerifiedMaterial(material, ColorSpace.Linear)
-                            .Semantics;
-                    }
-                }
-
-                return UnityMaterialSemantics.AllUnknown();
-            };
-        }
-
-        /// <summary>
         /// Submesh 0: two triangles whose UVs lie in the fully opaque region,
         /// bound to the unsupported slot. Submesh 1: three triangles, two in the
         /// opaque region and one wholly inside the non-opaque texel, bound to
@@ -208,6 +186,77 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return renderer;
         }
 
+        /// <summary>
+        /// Captures the renderer normally, then substitutes the fixture's exact
+        /// Poiyomi alpha request for nominated slots. Only immutable requested
+        /// evidence and a captured-material resolver cross into analysis.
+        /// </summary>
+        private static RendererAlphaAnalysis AnalyzeVerified(
+            Renderer renderer,
+            params Material[] verifiedSlots)
+        {
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                verifiedSlots.Length,
+                Is.EqualTo(extraction.Snapshot.Materials.Count));
+
+            var inputs = new List<MaterialEvidenceCaptureInput>();
+            var slotIndices = new List<int>();
+            for (var slot = 0; slot < verifiedSlots.Length; slot++)
+            {
+                if (verifiedSlots[slot] == null)
+                {
+                    continue;
+                }
+
+                inputs.Add(new MaterialEvidenceCaptureInput(
+                    verifiedSlots[slot],
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+                slotIndices.Add(slot);
+            }
+
+            var capturedEvidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var materials = new CapturedAlphaMaterial[
+                extraction.Snapshot.Materials.Count];
+            for (var slot = 0; slot < materials.Length; slot++)
+            {
+                materials[slot] = extraction.Snapshot.Materials[slot];
+            }
+
+            var verified = new HashSet<CapturedAlphaMaterial>();
+            for (var index = 0; index < capturedEvidence.Count; index++)
+            {
+                var material = new CapturedAlphaMaterial(
+                    CapturedAlphaMaterialFamily.Unsupported,
+                    capturedEvidence[index],
+                    default(PoiyomiSourceEvidence),
+                    null);
+                materials[slotIndices[index]] = material;
+                verified.Add(material);
+            }
+
+            var snapshot = new UnityRendererAlphaSnapshot(
+                extraction.Snapshot.VertexCount,
+                extraction.Snapshot.Positions,
+                extraction.Snapshot.Uv0,
+                extraction.Snapshot.HasUv0,
+                extraction.Snapshot.Submeshes,
+                materials);
+            return UnityRendererAlphaAnalysis.Analyze(
+                snapshot,
+                material => verified.Contains(material)
+                    ? new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                            material.Evidence),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown())
+                    : UnityMaterialSemantics.AllUnknown());
+        }
+
         [Test]
         public void RendererToPlanSeparatesProvenOpaqueGeometryFromPreservedGeometry()
         {
@@ -217,8 +266,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var renderer = NewRenderer(
                 BuildFixtureMesh(), unsupported, supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, VerifiedSemanticsFor(supported));
+            var result = AnalyzeVerified(renderer, null, supported);
 
             Assert.That(
                 result.Refusal,
@@ -285,8 +333,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             mesh.uv = null;
             var renderer = NewRenderer(mesh, supported, supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, VerifiedSemanticsFor(supported));
+            var result = AnalyzeVerified(renderer, supported, supported);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -319,8 +366,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             mesh.uv = uv;
             var renderer = NewRenderer(mesh, supported, supported);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, VerifiedSemanticsFor(supported));
+            var result = AnalyzeVerified(renderer, supported, supported);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -339,9 +385,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// plan must survive.
         /// <para>
         /// The fixture deliberately creates the refusal. No importer state is
-        /// toggled to work around it, and UnityAlphaFieldEvidence is unchanged:
-        /// non-readable texture support is deferred, and this milestone measures
-        /// the blast radius rather than removing it.
+        /// toggled to work around it. Non-readable texture support is deferred,
+        /// and this milestone measures the blast radius rather than removing it.
         /// </para>
         /// </summary>
         [Test]
@@ -353,8 +398,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var proven = NewSampledAlphaMaterial(readable);
             var renderer = NewRenderer(BuildFixtureMesh(), blocked, proven);
 
-            var result = UnityRendererAlphaAnalysis.Analyze(
-                renderer, VerifiedSemanticsFor(blocked, proven));
+            var result = AnalyzeVerified(renderer, blocked, proven);
 
             // Where the refusal emerges, and its shape.
             Assert.That(
@@ -412,8 +456,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var beforeMainTex = supported.GetTexture("_MainTex");
             var beforeColor = supported.GetColor("_Color");
 
-            UnityRendererAlphaAnalysis.Analyze(
-                renderer, VerifiedSemanticsFor(supported));
+            AnalyzeVerified(renderer, supported, supported);
 
             Assert.That(
                 AssetDatabase.GetAssetDependencyHash(texturePath),
@@ -438,6 +481,27 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 supported.GetTexture("_MainTex"), Is.SameAs(beforeMainTex));
             Assert.That(supported.GetColor("_Color"), Is.EqualTo(beforeColor));
+        }
+
+        [Test]
+        public void LegacySemanticsCannotConsumeUnrequestedTextureEvidence()
+        {
+            var texture = ImportTexture("legacy_unrequested", readable: true);
+            var material = NewSampledAlphaMaterial(texture);
+            var renderer = NewRenderer(BuildFixtureMesh(), material, material);
+
+            var result = UnityRendererAlphaAnalysis.Analyze(
+                renderer,
+                value => PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
+                    value, ColorSpace.Linear).Semantics);
+
+            Assert.That(
+                result.Submeshes[0].Failure,
+                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+            Assert.That(
+                result.Submeshes[1].Failure,
+                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+            Assert.That(result.Plan.OpaqueTriangleCount, Is.Zero);
         }
     }
 }
