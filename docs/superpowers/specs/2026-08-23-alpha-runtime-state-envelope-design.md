@@ -2,16 +2,16 @@
 
 ## Status and scope
 
-**Proposed architecture for proving alpha opacity under runtime state. Awaiting approval. Implementation has not started.**
+**Approved as AMUSE's normative architecture for proving alpha opacity under runtime state.**
 
 - Branch: `feat/alpha-runtime-state-envelope`
 - Base: `origin/main` at `d9facec`
-- Intended repository change: this design document only
+- Repository change from the design phase: this design document only
 - Census Lab/private avatars: not used
 
 This specification defines the minimum correctness architecture that lets AMUSE classify a face `ProvenOpaque` only when it is proven opaque under every runtime state that can affect that proof. It covers what animation state AMUSE observes, how that observation becomes immutable evidence, how a finite set of admitted material states is derived from it, and how the existing alpha proof pipeline is reused unchanged across those states.
 
-This branch adds no production code, no tests, no Unity assets, no package changes, and no NDMF pass changes. It does not invoke the implementation-planning workflow.
+The design phase that produced this document added no production code, no tests, no Unity assets, no package changes, and no NDMF pass changes. Implementation proceeds under a separate plan and is governed by this specification; the *Non-goals* list below remains binding on that implementation.
 
 ### Non-goals
 
