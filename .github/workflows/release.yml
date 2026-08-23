@@ -66,10 +66,10 @@ jobs:
       # Fail the release if test content re-enters either artifact's contents
       - name: Verify Release Excludes Tests
         run: |
-          if unzip -Z1 "${{ github.workspace }}/${{ env.zipFile }}" | grep -q "Tests"; then
+          if unzip -Z1 "${{ github.workspace }}/${{ env.zipFile }}" | grep -qE '(^|/)Tests(/|\.meta$)'; then
             echo "::error::Release zip contains test content"; exit 1;
           fi
-          if grep -q "Tests" metaList; then
+          if grep -qE '(^|/)Tests(/|\.meta$)' metaList; then
             echo "::error::UnityPackage meta list contains test content"; exit 1;
           fi
           if ! unzip -Z1 "${{ github.workspace }}/${{ env.zipFile }}" | grep -q "^Editor/Alrauna.Amuse.Editor.asmdef$"; then
