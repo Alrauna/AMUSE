@@ -2,7 +2,8 @@
     "name": "Alrauna.Amuse.Tests.Editor",
     "rootNamespace": "Alrauna.Amuse.Tests.Editor",
     "references": [
-        "Alrauna.Amuse.Editor"
+        "Alrauna.Amuse.Editor",
+        "nadena.dev.ndmf"
     ],
     "includePlatforms": [
         "Editor"
