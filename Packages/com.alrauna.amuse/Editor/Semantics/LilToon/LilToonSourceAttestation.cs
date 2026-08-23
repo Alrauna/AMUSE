@@ -7,6 +7,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
 
@@ -201,8 +202,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             IncludeTreeDigest = includeTreeDigest;
             HasRenderMode = hasRenderMode;
             RenderMode = renderMode;
-            CompiledFeatures = compiledFeatures
-                ?? throw new ArgumentNullException(nameof(compiledFeatures));
+            if (compiledFeatures == null)
+            {
+                throw new ArgumentNullException(nameof(compiledFeatures));
+            }
+
+            CompiledFeatures = new ReadOnlyCollection<string>(
+                new List<string>(compiledFeatures));
             ShaderCanonicalization = shaderCanonicalization;
             PassCanonicalization = passCanonicalization;
         }
@@ -1222,22 +1228,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// Reads identity evidence from a live material. Every filesystem access
-        /// resolves through an explicit project root derived from
+        /// Reads identity evidence from a live shader and already-captured
+        /// material facts. Every filesystem access resolves through an explicit
+        /// project root derived from
         /// <see cref="Application.dataPath"/>; nothing relies on the process
         /// working directory. Unreadable evidence is omitted rather than
         /// guessed, so the conjunction refuses.
         /// </summary>
-        internal static LilToonSourceEvidence GatherSourceEvidence(Material material)
+        internal static LilToonSourceEvidence GatherSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
         {
-            var shader = material.shader;
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
 
-            var hasVersion = material.HasProperty(ShaderFormatVersionProperty);
-            var version = hasVersion
-                ? material.GetFloat(ShaderFormatVersionProperty)
-                : float.NaN;
+            var hasVersion = evidence.TryGetScalar(
+                ShaderFormatVersionProperty, out var version);
+            if (!hasVersion)
+            {
+                version = float.NaN;
+            }
 
             // Project-relative: Unity asset APIs consume this form directly.
             var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
@@ -1299,7 +1309,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var hasRenderMode = TryScanRenderMode(passText, out var renderMode);
 
             return new LilToonSourceEvidence(
-                shader.name,
+                evidence.HasShaderName ? evidence.ShaderName : null,
                 assetGuid?.ToLowerInvariant(),
                 hasVersion,
                 version,
