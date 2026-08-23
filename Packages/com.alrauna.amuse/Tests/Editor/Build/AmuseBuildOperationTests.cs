@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Build;
@@ -19,6 +20,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     public sealed class AmuseBuildOperationTests
     {
         private const string GeneratedAssetRoot = "Assets/AMUSE-GeneratedAssetTests";
+
+        /// <summary>
+        /// The prefix NDMF's ErrorReport.ReportError writes to the console for
+        /// every recorded error that is not a StackTraceError.
+        /// </summary>
+        private const string NdmfReportedErrorPrefix = "[NDMF] Error Reported: ";
 
         [Test]
         public void PreparationCompletesBeforeFirstMutation()
@@ -295,6 +302,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             filter.sharedMesh = sourceMesh;
             renderer.sharedMaterials = new[] { sourceMaterial };
 
+            var reported = new List<string>();
+            Application.LogCallback record = (condition, stackTrace, type) =>
+            {
+                if (type == LogType.Exception || condition.StartsWith(
+                        NdmfReportedErrorPrefix, StringComparison.Ordinal))
+                {
+                    reported.Add(type + ": " + condition);
+                }
+            };
+
+            Application.logMessageReceived += record;
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
@@ -311,17 +329,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(renderer.sharedMaterial, Is.SameAs(sourceMaterial));
                 Assert.That(sourceMesh.vertexCount, Is.EqualTo(3));
                 Assert.That(sourceMaterial.color, Is.EqualTo(Color.green));
-                // An explicit refusal is ordinary: the build stays successful, and
-                // the test framework fails this test if NDMF logged any error or
-                // exception while it ran.
+
+                // An explicit refusal must record nothing at all, not merely
+                // nothing fatal. NDMF's ErrorReport.ReportError logs every error
+                // it records - Debug.LogException for a StackTraceError, and a
+                // "[NDMF] Error Reported: " warning for every other IError - so an
+                // empty capture proves no entry of any severity was recorded
+                // during this build. BuildContext.Successful alone would not:
+                // it only trips at ErrorSeverity.Error and above, and a warning
+                // never fails a Unity test on its own.
+                Assert.That(
+                    reported,
+                    Is.Empty,
+                    "an explicit preparation refusal must report no error, but " +
+                    "NDMF recorded: " + string.Join(" || ", reported));
                 Assert.That(context.Successful, Is.True);
             }
             finally
             {
+                Application.logMessageReceived -= record;
                 Object.DestroyImmediate(root);
                 Object.DestroyImmediate(sourceMesh);
                 Object.DestroyImmediate(sourceMaterial);
             }
+        }
+
+        /// <summary>
+        /// A standing guard for the asset-ownership boundary: generated output
+        /// belongs to the NDMF asset saver, so no AMUSE Editor source may reach
+        /// past it into the asset database itself. This runs with every suite, so
+        /// a future change that adds custom persistence fails here rather than
+        /// waiting for someone to repeat a one-off scan by hand.
+        /// </summary>
+        [Test]
+        public void ProductionEditorCodePersistsOnlyThroughTheNdmfAssetSaver()
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(
+                typeof(AmuseBuildOperation).Assembly);
+            Assert.That(
+                package,
+                Is.Not.Null,
+                "could not resolve the AMUSE package from its Editor assembly, so " +
+                "the production source could not be scanned");
+
+            var editorRoot = Path.Combine(package.resolvedPath, "Editor");
+            Assert.That(
+                Directory.Exists(editorRoot),
+                Is.True,
+                "expected AMUSE Editor sources at " + editorRoot);
+
+            var sources = Directory.GetFiles(
+                editorRoot, "*.cs", SearchOption.AllDirectories);
+            Assert.That(
+                sources,
+                Is.Not.Empty,
+                "scanned no AMUSE Editor source files under " + editorRoot +
+                ", so this test proved nothing");
+
+            var offenders = sources
+                .Where(path =>
+                {
+                    var text = File.ReadAllText(path);
+                    return text.Contains("AssetDatabase.CreateAsset") ||
+                           text.Contains("AssetDatabase.AddObjectToAsset");
+                })
+                .Select(path => path
+                    .Substring(package.resolvedPath.Length)
+                    .Replace('\\', '/')
+                    .TrimStart('/'))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList();
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "AMUSE production code must persist generated output only through " +
+                "BuildContext.AssetSaver, but these files call the asset database " +
+                "directly: " + string.Join(", ", offenders));
         }
 
         /// <summary>
