@@ -555,6 +555,18 @@ namespace Alrauna.Amuse.Editor.Host
                         identified.Add(source, shared);
                     }
 
+                    // Evidence for one texture source is captured once for the
+                    // whole batch, so this union is deliberately batch-wide: the
+                    // single captured object handed to every assignment of that
+                    // source may carry facts a different material's request asked
+                    // for. That is a capture-cost decision, not a widening of any
+                    // request - a consumer must still read only the facts its own
+                    // request named, exactly as the material-property getters
+                    // enforce by throwing for an unrequested name. Only Poiyomi
+                    // requests texture evidence today, so no material can observe
+                    // another's facts. If a second texture-consuming request is
+                    // ever added, narrow CapturedTextureAssignment's view to its
+                    // own RequestedEvidence: that is the enforcement point.
                     shared.Evidence |= texture.RequestedEvidence;
                     texture.Shared = shared;
                 }
