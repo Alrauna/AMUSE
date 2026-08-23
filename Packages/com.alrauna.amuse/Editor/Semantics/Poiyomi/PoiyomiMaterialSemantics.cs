@@ -72,6 +72,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_EnableEmission3",
         };
 
+        private static readonly string[] AlphaRequiredSchemaProperties =
+        {
+            "shader_master_label",
+            ShaderOptimizerEnabledProperty,
+            MainTextureProperty,
+            ColorProperty,
+        };
+
         // _MainTex sampling-mode flags whose enabled state changes sampling
         // beyond the single supported tap. Proven exactly off before a texture
         // sample is claimed for any output.
@@ -177,6 +185,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
             CreateAlphaEvidenceRequest();
 
+        private static MaterialEvidenceRequest FullMaterialEvidenceRequest { get; } =
+            MaterialEvidenceRequest.Combine(
+                AlphaEvidenceRequest,
+                new MaterialEvidenceRequest(
+                    shaderName: false,
+                    activeColorSpace: false,
+                    presenceProperties: RequiredSchemaProperties,
+                    scalarProperties: Array.Empty<string>(),
+                    colorProperties: Array.Empty<string>(),
+                    vectorProperties: Array.Empty<string>(),
+                    textureProperties:
+                        Array.Empty<TexturePropertyEvidenceRequest>()));
+
         // Enabled source blocks the pinned source uses to perturb or replace
         // the tangent-space normal: detail normals, RGBA-mask normal
         // replacement, the four decals, and internal/offset parallax. Each is
@@ -235,9 +256,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
-                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    material, FullMaterialEvidenceRequest),
             })[0];
-            var evidence = GatherSourceEvidence(material.shader, captured);
+            var evidence = GatherSourceEvidence(
+                material.shader, captured, RequiredSchemaProperties);
             if (!TryVerifyPoiyomiIdentity(evidence, out var diagnostic))
             {
                 return Unsupported(diagnostic);
@@ -1184,12 +1207,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             Shader shader,
             CapturedMaterialEvidence evidence)
         {
-            return GatherSourceEvidence(shader, evidence);
+            return GatherSourceEvidence(
+                shader, evidence, AlphaRequiredSchemaProperties);
         }
 
         private static PoiyomiSourceEvidence GatherSourceEvidence(
             Shader shader,
-            CapturedMaterialEvidence evidence)
+            CapturedMaterialEvidence evidence,
+            IReadOnlyCollection<string> requiredSchemaProperties)
         {
             var shaderName = evidence.HasShaderName
                 ? evidence.ShaderName
@@ -1243,12 +1268,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 package != null,
                 package?.name,
                 package?.version,
-                HasRequiredSchema(evidence));
+                HasRequiredSchema(evidence, requiredSchemaProperties));
         }
 
-        private static bool HasRequiredSchema(CapturedMaterialEvidence evidence)
+        private static bool HasRequiredSchema(
+            CapturedMaterialEvidence evidence,
+            IReadOnlyCollection<string> requiredSchemaProperties)
         {
-            foreach (var property in RequiredSchemaProperties)
+            foreach (var property in requiredSchemaProperties)
             {
                 if (!evidence.HasProperty(property))
                 {
@@ -1275,7 +1302,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return new MaterialEvidenceRequest(
                 shaderName: true,
                 activeColorSpace: false,
-                presenceProperties: RequiredSchemaProperties,
+                presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
                 colorProperties: new[] { ColorProperty },
                 vectorProperties: new[] { MainTexPanProperty },
