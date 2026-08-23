@@ -243,18 +243,20 @@ git commit -m "test: prove animator bindings survive context deactivation"
 
 ---
 
-## Task 2: Characterize float binding names, including colour and vector components
+## Task 2: Discover the material bindings Unity actually generates
 
-Verification obligation 2. Establishes the exact binding forms Tasks 11–13 depend on, for **scalar, colour, and vector** properties.
+Verification obligation 2. **This must not be a round-trip test.** Writing an `EditorCurveBinding` you guessed and reading it back proves only that `AnimationUtility` stores what you gave it; it proves nothing about the names Unity actually generates or how they target material slots. Discovery must come from Unity itself.
+
+The public discovery API is `AnimationUtility.GetAnimatableBindings(GameObject targetObject, GameObject root)`, which returns the bindings Unity generates for a real component. **Verify it exists and returns material bindings before relying on it.** If it does not surface material properties in this Unity version, do not fall back to a round trip: leave obligation 2 unknown and take the conservative branch named in Step 5.
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the recorded `EditorCurveBinding.propertyName` forms for per-slot scalar, colour-component, and vector-component animation.
+- Produces: the **generated** `EditorCurveBinding.propertyName` forms for scalar, colour-component, vector-component, and per-slot material animation, which Task 11 parses.
 
-- [ ] **Step 1: Write the failing characterization test**
+- [ ] **Step 1: Write the failing discovery test**
 
 ```csharp
 using System.Linq;
@@ -266,77 +268,65 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 {
     public sealed class UnityAnimationCharacterizationTests
     {
-        private static string[] RoundTripFloatBindings(params string[] properties)
+        private static GameObject BuildTwoSlotRenderer(out Material a, out Material b)
         {
-            var clip = new AnimationClip { name = "characterization" };
+            var root = new GameObject("binding discovery root");
+            var child = new GameObject("Body");
+            child.transform.SetParent(root.transform);
+
+            var mesh = new Mesh();
+            mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
+            mesh.SetIndices(new[] { 0, 1, 2 }, MeshTopology.Triangles, 0);
+            var renderer = child.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+
+            a = new Material(Shader.Find("Standard"));
+            b = new Material(Shader.Find("Standard"));
+            renderer.sharedMaterials = new[] { a, b };
+            return root;
+        }
+
+        [Test]
+        public void UnityGeneratesTheMaterialBindingsWeParse()
+        {
+            var root = BuildTwoSlotRenderer(out var a, out var b);
             try
             {
-                foreach (var property in properties)
+                var child = root.transform.Find("Body").gameObject;
+
+                var generated = AnimationUtility
+                    .GetAnimatableBindings(child, root)
+                    .Select(binding => binding.propertyName)
+                    .ToArray();
+
+                Assert.That(generated, Is.Not.Empty,
+                    "GetAnimatableBindings returned nothing; discovery is " +
+                    "unavailable and obligation 2 must stay unknown");
+
+                var materialBindings = generated
+                    .Where(name => name.StartsWith("material", System.StringComparison.Ordinal))
+                    .OrderBy(name => name, System.StringComparer.Ordinal)
+                    .ToArray();
+
+                TestContext.WriteLine("generated material bindings:");
+                foreach (var name in materialBindings)
                 {
-                    AnimationUtility.SetEditorCurve(
-                        clip,
-                        EditorCurveBinding.FloatCurve(
-                            "", typeof(SkinnedMeshRenderer), property),
-                        AnimationCurve.Constant(0f, 1f, 0.5f));
+                    TestContext.WriteLine("  " + name);
                 }
 
-                return AnimationUtility.GetCurveBindings(clip)
-                    .Select(b => b.propertyName)
-                    .OrderBy(n => n, System.StringComparer.Ordinal)
-                    .ToArray();
+                Assert.That(materialBindings, Is.Not.Empty,
+                    "Unity generated no material bindings; obligation 2 cannot be " +
+                    "closed from this environment");
+
+                // Step 3 replaces this with the exact generated forms.
+                Assert.That(materialBindings.Length, Is.GreaterThan(0));
             }
             finally
             {
-                Object.DestroyImmediate(clip);
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(a);
+                Object.DestroyImmediate(b);
             }
-        }
-
-        [Test]
-        public void ScalarAndSlotBindingNamesAreRecorded()
-        {
-            var bindings = RoundTripFloatBindings(
-                "material._Cutoff", "material[1]._Cutoff");
-
-            // Records exactly what Unity round-trips. If this fails, change the
-            // CODE and the spec's obligation 2 -- not the expectation -- because
-            // the slot mapping rule in Task 11 would then be wrong.
-            Assert.That(bindings, Is.EqualTo(new[]
-            {
-                "material._Cutoff",
-                "material[1]._Cutoff",
-            }));
-        }
-
-        [Test]
-        public void ColourComponentBindingNamesAreRecorded()
-        {
-            var bindings = RoundTripFloatBindings(
-                "material._Color.r", "material._Color.g",
-                "material._Color.b", "material._Color.a");
-
-            Assert.That(bindings, Is.EqualTo(new[]
-            {
-                "material._Color.a",
-                "material._Color.b",
-                "material._Color.g",
-                "material._Color.r",
-            }));
-        }
-
-        [Test]
-        public void VectorComponentBindingNamesAreRecorded()
-        {
-            var bindings = RoundTripFloatBindings(
-                "material._MainTex_ST.x", "material._MainTex_ST.y",
-                "material._MainTex_ST.z", "material._MainTex_ST.w");
-
-            Assert.That(bindings, Is.EqualTo(new[]
-            {
-                "material._MainTex_ST.w",
-                "material._MainTex_ST.x",
-                "material._MainTex_ST.y",
-                "material._MainTex_ST.z",
-            }));
         }
     }
 }
@@ -344,126 +334,178 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
 - [ ] **Step 2: Run to verify it fails**
 
-Expected: FAIL — file does not exist.
+Expected: FAIL — the file does not exist.
 
-- [ ] **Step 3: Run and reconcile with observed reality**
+- [ ] **Step 3: Run, read the generated names, and convert to an exact specification**
 
-No production code in this task. Run the tests and adjust the **expected** arrays to whatever Unity actually produced. This is the one place in the plan where matching the test to observed behavior is correct, because recording reality is the test's purpose. If a component suffix differs from `.r/.g/.b/.a` or `.x/.y/.z/.w`, record the real form — Task 11 parses exactly what is recorded here.
+Record from the output: the scalar form, the colour-component form and its suffixes, the vector-component form and its suffixes, and **how the second material slot is expressed** — whether as an indexed `material[1].` prefix, as a separate binding set, or not at all. Replace the placeholder assertion with exact expected values, for example:
 
-- [ ] **Step 4: Run and verify all three pass**
+```csharp
+                Assert.That(materialBindings, Contains.Item("material._Color.r"));
+                Assert.That(materialBindings, Contains.Item("material._Color.a"));
+                Assert.That(materialBindings, Contains.Item("material._MainTex_ST.x"));
+```
 
-Expected: PASS.
+plus an exact assertion for whatever slot-1 form was observed. **The `Is.GreaterThan(0)` assertion must be gone when this task completes.**
 
-- [ ] **Step 5: Update the spec's obligation 2 with the recorded forms**
+- [ ] **Step 4: Add a separate parser-storage test, clearly labelled**
+
+A round-trip test is still useful for pinning `AnimationUtility` storage behavior, but it must not be read as host semantics. Add it with an explicit header comment:
+
+```csharp
+        // STORAGE TEST ONLY. This pins that AnimationUtility round-trips the
+        // property names we construct. It does NOT establish that Unity generates
+        // or applies these forms -- UnityGeneratesTheMaterialBindingsWeParse does
+        // that, and it is the only test that may close obligation 2.
+```
+
+- [ ] **Step 5: Update the spec's obligation 2**
+
+Record the generated forms and the slot-targeting semantics observed.
+
+**Conservative branch.** If `GetAnimatableBindings` is unavailable or surfaces no material bindings, record obligation 2 as **unobserved**, and change Task 11 so that a `material` binding whose slot cannot be positively determined resolves to a new refusal `RendererAnalysisRefusal.UnresolvedAnimatedMaterialSlot` rather than defaulting to slot 0. Guessing a slot is a false-positive risk; refusing is not.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs \
         docs/superpowers/specs/2026-08-23-alpha-runtime-state-envelope-design.md
-git commit -m "test: characterize scalar, colour, and vector binding names"
+git commit -m "test: discover the material bindings Unity generates"
 ```
 
 ---
 
-## Task 3: Characterize object-reference and array-size binding categories
+## Task 3: Observe structural and object binding categories and their effect
 
-Verification obligation 3, plus the category question Task 15 depends on. **Ends as an exact executable specification — no disjunctive assertion survives this task.**
+Verification obligation 3, plus the category question Task 16 depends on. Discovery again comes from Unity, and where the plan **relies on an effect**, the effect is sampled rather than assumed.
+
+Sampling uses `AnimationMode.StartAnimationMode()` / `BeginSampling()` / `SampleAnimationClip(GameObject, AnimationClip, float)` / `EndSampling()` / `StopAnimationMode()`, all public `UnityEditor` APIs. **Verify they exist and that sampling actually applies material state before relying on them.** All sampling happens on a throwaway `GameObject` built in the test; no project asset is touched.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: recorded facts — whether texture-reference object curves on materials exist, and which curve category carries `m_Materials.Array.size`.
+- Produces: whether texture-reference object curves on materials exist; which curve category carries `m_Materials.Array.size`; and the observed effect of a material-slot object curve.
 
-- [ ] **Step 1: Write the failing exploratory test**
+- [ ] **Step 1: Write the failing discovery test**
 
 ```csharp
         [Test]
-        public void ObjectReferenceAndArraySizeCategoriesAreRecorded()
+        public void StructuralBindingCategoriesAreDiscovered()
         {
-            var clip = new AnimationClip { name = "category characterization" };
-            var texture = new Texture2D(1, 1);
-            var material = new Material(Shader.Find("Unlit/Color"));
+            var root = BuildTwoSlotRenderer(out var a, out var b);
             try
             {
-                AnimationUtility.SetObjectReferenceCurve(
-                    clip,
-                    EditorCurveBinding.PPtrCurve(
-                        "", typeof(SkinnedMeshRenderer), "material._MainTex"),
-                    new[] { new ObjectReferenceKeyframe { time = 0f, value = texture } });
+                var child = root.transform.Find("Body").gameObject;
 
+                var generated = AnimationUtility.GetAnimatableBindings(child, root);
+
+                var structural = generated
+                    .Where(binding =>
+                        binding.propertyName.StartsWith(
+                            "m_Materials", System.StringComparison.Ordinal) ||
+                        binding.propertyName == "m_Mesh")
+                    .Select(binding => binding.propertyName + " => " + binding.type.Name +
+                        " isPPtr=" + binding.isPPtrCurve)
+                    .OrderBy(text => text, System.StringComparer.Ordinal)
+                    .ToArray();
+
+                TestContext.WriteLine("generated structural bindings:");
+                foreach (var text in structural)
+                {
+                    TestContext.WriteLine("  " + text);
+                }
+
+                // Step 3 replaces this with exact expectations, including the
+                // isPPtrCurve flag for m_Materials.Array.size.
+                Assert.That(structural, Is.Not.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(a);
+                Object.DestroyImmediate(b);
+            }
+        }
+
+        [Test]
+        public void MaterialSlotObjectCurveActuallySwapsTheSlot()
+        {
+            var root = BuildTwoSlotRenderer(out var a, out var b);
+            var replacement = new Material(Shader.Find("Standard"));
+            var clip = new AnimationClip { name = "slot swap effect" };
+            try
+            {
+                var child = root.transform.Find("Body").gameObject;
                 AnimationUtility.SetObjectReferenceCurve(
                     clip,
                     EditorCurveBinding.PPtrCurve(
-                        "", typeof(SkinnedMeshRenderer),
+                        "Body", typeof(SkinnedMeshRenderer),
                         "m_Materials.Array.data[0]"),
-                    new[] { new ObjectReferenceKeyframe { time = 0f, value = material } });
+                    new[]
+                    {
+                        new ObjectReferenceKeyframe { time = 0f, value = replacement },
+                    });
 
-                AnimationUtility.SetEditorCurve(
-                    clip,
-                    EditorCurveBinding.FloatCurve(
-                        "", typeof(SkinnedMeshRenderer), "m_Materials.Array.size"),
-                    AnimationCurve.Constant(0f, 1f, 2f));
+                AnimationMode.StartAnimationMode();
+                try
+                {
+                    AnimationMode.BeginSampling();
+                    AnimationMode.SampleAnimationClip(root, clip, 0f);
+                    AnimationMode.EndSampling();
 
-                var floats = AnimationUtility.GetCurveBindings(clip)
-                    .Select(b => b.propertyName).OrderBy(n => n).ToArray();
-                var objects = AnimationUtility.GetObjectReferenceCurveBindings(clip)
-                    .Select(b => b.propertyName).OrderBy(n => n).ToArray();
+                    var applied = child.GetComponent<SkinnedMeshRenderer>()
+                        .sharedMaterials[0];
 
-                TestContext.WriteLine("float bindings: " + string.Join(", ", floats));
-                TestContext.WriteLine("object bindings: " + string.Join(", ", objects));
-
-                // Temporary during Step 3 only. Step 5 replaces this with exact
-                // expected arrays. This assertion must NOT survive the task.
-                Assert.That(floats.Length + objects.Length, Is.GreaterThan(0));
+                    // Positively establishes slot targeting: the curve must have
+                    // replaced slot 0 and left slot 1 alone.
+                    Assert.That(applied, Is.SameAs(replacement));
+                    Assert.That(child.GetComponent<SkinnedMeshRenderer>()
+                        .sharedMaterials[1], Is.SameAs(b));
+                }
+                finally
+                {
+                    AnimationMode.StopAnimationMode();
+                }
             }
             finally
             {
                 Object.DestroyImmediate(clip);
-                Object.DestroyImmediate(texture);
-                Object.DestroyImmediate(material);
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(a);
+                Object.DestroyImmediate(b);
+                Object.DestroyImmediate(replacement);
             }
         }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 2: Run to verify they fail**
 
-Expected: FAIL — method not defined.
+Expected: FAIL — methods not defined.
 
-- [ ] **Step 3: Run and read the recorded output**
+- [ ] **Step 3: Run, read the output, and convert to exact specifications**
 
-Note precisely: whether `material._MainTex` survives as an object binding, and whether `m_Materials.Array.size` lands in the float list or the object list.
+Replace the placeholder assertion in `StructuralBindingCategoriesAreDiscovered` with exact expected entries including each binding's `isPPtrCurve` flag. **No non-specific assertion may survive this task.**
 
-- [ ] **Step 4: Rewrite the test as an exact specification**
+If `MaterialSlotObjectCurveActuallySwapsTheSlot` cannot be made to pass because `AnimationMode` sampling does not apply object curves in EditMode, do **not** weaken it to a round trip. Delete it, record slot-swap effect as **unobserved** in the spec, and take the conservative branch in Step 5.
 
-Replace the whole method with two exact assertions using the observed values, for example:
+- [ ] **Step 4: Determine whether texture-reference object curves exist**
 
-```csharp
-                Assert.That(floats, Is.EqualTo(new[] { "m_Materials.Array.size" }));
-                Assert.That(objects, Is.EqualTo(new[]
-                {
-                    "m_Materials.Array.data[0]",
-                }));
-```
+Search the generated bindings for a PPtr binding whose property name begins with `material` and names a texture property. Assert exactly what was found — present or absent.
 
-using whatever was actually observed. **The `Is.GreaterThan(0)` assertion must be gone.** Add a comment naming this the executable specification for obligation 3 and for the slot-count category.
+- [ ] **Step 5: Update the spec's obligation 3**
 
-- [ ] **Step 5: Run and verify it passes**
+If texture-reference object curves **exist**, stop and raise it with the user before Task 10: texture assignment would become an admitted-state dimension the spec's admitted-state construction does not cover, which is a design change, not a plan change.
 
-Expected: PASS.
+**Conservative branch.** If the slot-swap effect could not be observed, Task 10 must treat every `m_Materials.Array.data[n]` object curve as affecting an **undetermined** slot, which conservatively admits its keyframe materials into **every** slot of that renderer. That over-approximates, which is the safe direction, and it is recorded as a coverage cost rather than an assumption.
 
-- [ ] **Step 6: Update the spec's obligation 3**
-
-Record whether texture-reference object curves exist. If they do, add a note that texture assignment is an admitted-state dimension and raise it with the user before Task 10 — the spec's admitted-state construction does not currently cover it, and adding it is a design change, not a plan change. If they do not, record that it is structurally impossible.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs \
         docs/superpowers/specs/2026-08-23-alpha-runtime-state-envelope-design.md
-git commit -m "test: specify object reference and array size binding categories"
+git commit -m "test: observe structural binding categories and slot effect"
 ```
 
 ---
@@ -526,40 +568,73 @@ git commit -m "test: characterize curve interpolation bounds"
 
 ---
 
-## Task 5: Characterize animation of a property absent from a material
+## Task 5: Observe animation of a property absent from a material
 
-Determines the presence semantics Task 17's substitution must preserve. Without this, substitution would invent a material property that does not exist.
+Determines the presence semantics Task 18's substitution must preserve. **`Material.SetFloat` does not characterize this**: it exercises the material API, not the Animator applying a material-property curve. The observation must sample an actual clip.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
 
 **Interfaces:**
-- Consumes: nothing.
-- Produces: the recorded rule for "animation binds `material._X`, admitted material has no `_X`".
+- Consumes: the sampling approach verified in Task 3.
+- Produces: the recorded rule for "a clip binds `material._X`, the renderer's material has no `_X`".
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing observation test**
 
 ```csharp
         [Test]
-        public void AbsentPropertyAssignmentSemanticsAreRecorded()
+        public void AnimatingAnAbsentMaterialPropertyIsObserved()
         {
+            var root = new GameObject("absent property root");
+            var child = new GameObject("Body");
+            child.transform.SetParent(root.transform);
+            var mesh = new Mesh();
+            mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
+            mesh.SetIndices(new[] { 0, 1, 2 }, MeshTopology.Triangles, 0);
+            var renderer = child.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+
+            // Unlit/Color has no _Cutoff.
             var material = new Material(Shader.Find("Unlit/Color"));
+            renderer.sharedMaterials = new[] { material };
+
+            var clip = new AnimationClip { name = "absent property" };
+            AnimationUtility.SetEditorCurve(
+                clip,
+                EditorCurveBinding.FloatCurve(
+                    "Body", typeof(SkinnedMeshRenderer), "material._Cutoff"),
+                AnimationCurve.Constant(0f, 1f, 0.25f));
+
             try
             {
-                Assert.That(material.HasProperty("_NotInThisShader"), Is.False);
+                Assert.That(material.HasProperty("_Cutoff"), Is.False,
+                    "fixture precondition: the property must be absent");
 
-                material.SetFloat("_NotInThisShader", 0.25f);
+                AnimationMode.StartAnimationMode();
+                try
+                {
+                    AnimationMode.BeginSampling();
+                    AnimationMode.SampleAnimationClip(root, clip, 0f);
+                    AnimationMode.EndSampling();
 
-                // Records whether assigning an absent property makes it present.
-                // Task 17 must preserve whatever is observed here; it must never
-                // set HasValue merely because a substitution occurred.
-                TestContext.WriteLine(
-                    "absent property became present: " +
-                    material.HasProperty("_NotInThisShader"));
-                Assert.That(material.HasProperty("_NotInThisShader"), Is.False);
+                    var applied = child.GetComponent<SkinnedMeshRenderer>()
+                        .sharedMaterials[0];
+                    TestContext.WriteLine(
+                        "after sampling, absent property present: " +
+                        applied.HasProperty("_Cutoff"));
+
+                    // Step 3 replaces this with the exact observed behavior.
+                    Assert.That(applied, Is.Not.Null);
+                }
+                finally
+                {
+                    AnimationMode.StopAnimationMode();
+                }
             }
             finally
             {
+                Object.DestroyImmediate(clip);
+                Object.DestroyImmediate(root);
                 Object.DestroyImmediate(material);
             }
         }
@@ -569,24 +644,28 @@ Determines the presence semantics Task 17's substitution must preserve. Without 
 
 Expected: FAIL — method not defined.
 
-- [ ] **Step 3: Run and reconcile with observed reality**
+- [ ] **Step 3: Run and convert to an exact specification**
 
-If `HasProperty` remains false, the recorded rule is **absent stays absent, and the animated binding is ineffective on that material**; keep the assertion as written. If it becomes true, invert the assertion to record that, and Task 17 must instead refuse — see that task's branch.
+Replace the placeholder with the exact observed behavior. Three outcomes are possible and each selects a different Task 18 branch:
+
+1. **The property stays absent and the sample has no effect.** Record that; Task 18 preserves `HasValue == false` and ignores the substituted value.
+2. **The property becomes present or otherwise takes effect.** Record that; Task 18 must add `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and refuse that admitted state.
+3. **The behavior cannot be observed soundly here** — sampling does not apply material float curves in EditMode, or the result is not deterministic. Then obligation 4 stays **unknown**, and Task 18 takes the refusal branch anyway, because a conservative refusal is the correct response to an unobserved runtime effect.
+
+Do not use `Material.SetFloat` to decide between these. If a `SetFloat` test is kept at all, mark it a storage test as in Task 2 Step 4, and state in its comment that it does not close this obligation.
 
 - [ ] **Step 4: Run and verify it passes**
 
-Expected: PASS with whichever behavior was observed.
+Expected: PASS with whichever behavior was observed, or the test deleted and outcome 3 recorded.
 
-- [ ] **Step 5: Record the rule in the spec's obligation 4 section as a new sub-note**
-
-State the observed behavior and which Task 17 branch it selects. Do not restructure the spec.
+- [ ] **Step 5: Record the rule and the selected Task 18 branch in the spec**
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs \
         docs/superpowers/specs/2026-08-23-alpha-runtime-state-envelope-design.md
-git commit -m "test: characterize animation of an absent material property"
+git commit -m "test: observe animation of an absent material property"
 ```
 
 ---
@@ -702,7 +781,11 @@ Expected: FAIL — new probe fields are not defined.
 
 Expected: PASS.
 
-**If either assertion fails, take the spec's conservative alternate path** stated in obligation 1: the barrier pass must not call `GetInnateControllers`. Instead the Task 1 capture pass records the innate `(key, controller)` pairs into `AmusePlatformFinishState` while the context is active, and Task 7 consumes those recorded pairs, re-resolving each key's committed controller from the avatar after commit. Do not assume stability; follow whichever branch is observed and note it in the spec.
+**If either assertion fails, STOP and return to design.**
+
+The tempting fallback — have the capture pass record the innate `(key, controller)` pairs and have the barrier "re-resolve each key" after commit — is not usable as written, because **no concrete public re-resolution mechanism has been identified**. The keys are opaque (`VRCAvatarDescriptor.AnimLayerType` values, `Animator` components, `IVirtualizeAnimatorController` instances), and mapping a key back to its *committed* controller without the VRChat SDK reference or `IPlatformAnimatorBindings` is exactly the problem the two-pass design exists to solve. Recording pre-commit controllers instead would reintroduce the staleness the design rejects.
+
+Do not proceed on that phrase. If a concrete, public, tested re-resolution mechanism is found during this task, report it and let the user decide; otherwise this is an architectural blocker like Task 1's.
 
 Note the scope limit honestly in the spec: this fixture has no VRChat avatar descriptor, so it exercises the generic bindings path. Record that the descriptor-specific side effects noted in obligation 1 (`customizeAnimationLayers`, descriptor editor instantiation) remain unverified here and are covered only by the conservative path.
 
@@ -734,7 +817,7 @@ Verification obligation 5.
   - `internal sealed class CommittedControllerGraphResult { internal AvatarAnimationRefusal Refusal { get; } internal IReadOnlyList<CommittedLayer> Layers { get; } }`
   - `internal static CommittedControllerGraphResult CommittedControllerGraph.Enumerate(GameObject avatarRoot, IPlatformAnimatorBindings bindings)`
 
-`CommittedLayer` deliberately holds live `AnimationClip` and `StateMachineBehaviour` references. It is **transient host enumeration**, consumed only by Task 8, never by proof. The Task 20 guard applies to captured evidence, not to this type.
+`CommittedLayer` deliberately holds live `AnimationClip` and `StateMachineBehaviour` references. It is **transient host enumeration**, consumed only by Tasks 8 and 10, never by proof. The Task 22 guard applies to captured evidence, not to this type.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -887,26 +970,75 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
-        [Test]
-        public void InterpolatingCurveIsNotFiniteExact()
+        private static bool ObserveFiniteExact(AnimationCurve curve)
         {
-            var clip = new AnimationClip { name = "interpolating" };
-            AnimationUtility.SetEditorCurve(
-                clip,
-                EditorCurveBinding.FloatCurve(
-                    "Body", typeof(SkinnedMeshRenderer), "material._Cutoff"),
-                AnimationCurve.Linear(0f, 0f, 1f, 1f));
-
+            var clip = new AnimationClip { name = "finite exact probe" };
             try
             {
-                var observed = LiveAnimationObservation.ObserveClip(clip, false);
-
-                Assert.That(observed.Floats.Single().IsFiniteExact, Is.False);
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        "Body", typeof(SkinnedMeshRenderer), "material._Cutoff"),
+                    curve);
+                return LiveAnimationObservation.ObserveClip(clip, false)
+                    .Floats.Single().IsFiniteExact;
             }
             finally
             {
                 Object.DestroyImmediate(clip);
             }
+        }
+
+        [Test]
+        public void InterpolatingCurveIsNotFiniteExact()
+        {
+            Assert.That(ObserveFiniteExact(
+                AnimationCurve.Linear(0f, 0f, 1f, 1f)), Is.False);
+        }
+
+        [Test]
+        public void EqualEndpointsWithNonZeroTangentsAreNotFiniteExact()
+        {
+            // REGRESSION: a segment can leave its endpoint value and return to it.
+            // Equal endpoint values alone must never prove finite exactness.
+            var overshooting = new AnimationCurve(
+                new Keyframe(0f, 1f) { outTangent = 5f },
+                new Keyframe(1f, 1f) { inTangent = -5f });
+
+            Assert.That(overshooting.Evaluate(0.5f), Is.Not.EqualTo(1f),
+                "fixture precondition: this segment must actually overshoot");
+            Assert.That(ObserveFiniteExact(overshooting), Is.False);
+        }
+
+        [Test]
+        public void EqualEndpointsWithZeroTangentsAreFiniteExact()
+        {
+            Assert.That(ObserveFiniteExact(new AnimationCurve(
+                new Keyframe(0f, 1f) { outTangent = 0f },
+                new Keyframe(1f, 1f) { inTangent = 0f })), Is.True);
+        }
+
+        [Test]
+        public void SteppedSegmentIsFiniteExact()
+        {
+            Assert.That(ObserveFiniteExact(new AnimationCurve(
+                new Keyframe(0f, 0f) { outTangent = float.PositiveInfinity },
+                new Keyframe(1f, 1f) { inTangent = float.PositiveInfinity })),
+                Is.True);
+        }
+
+        [Test]
+        public void WeightedKeysAreNeverFiniteExact()
+        {
+            var weighted = new AnimationCurve(
+                new Keyframe(0f, 1f)
+                {
+                    outTangent = 0f,
+                    weightedMode = WeightedMode.Both,
+                },
+                new Keyframe(1f, 1f) { inTangent = 0f });
+
+            Assert.That(ObserveFiniteExact(weighted), Is.False);
         }
     }
 }
@@ -918,7 +1050,15 @@ Expected: FAIL — `LiveAnimationObservation` does not exist.
 
 - [ ] **Step 3: Implement observation**
 
-Read `AnimationUtility.GetCurveBindings` and `GetObjectReferenceCurveBindings`, copying every keyframe value. `IsFiniteExact` is true only when every segment is constant: a single key; or every consecutive key pair where `outTangent` and the next `inTangent` are both `float.PositiveInfinity`, or both keys carry the same value. Any `weightedMode` other than `WeightedMode.None` sets it false. Wrap collections in `ReadOnlyCollection<T>`.
+Read `AnimationUtility.GetCurveBindings` and `GetObjectReferenceCurveBindings`, copying every keyframe value. Wrap collections in `ReadOnlyCollection<T>`.
+
+`IsFiniteExact` must be **positively proven**, never inferred from endpoint values alone. Equal endpoints do not make a segment constant: a segment from `(0, 1)` to `(1, 1)` with `outTangent = 5` and `inTangent = -5` leaves the value 1 in between and returns to it. Accept only:
+
+- a curve with a **single key**; or
+- a **true stepped segment**, where `outTangent` of the left key and `inTangent` of the right key are both `float.PositiveInfinity`; or
+- an **equal-value segment with both tangents exactly zero** — `left.value == right.value`, `left.outTangent == 0f`, and `right.inTangent == 0f`.
+
+Any other segment sets `IsFiniteExact` false, and any key whose `weightedMode` is not `WeightedMode.None` sets it false regardless of tangents. When in doubt, false.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1162,24 +1302,97 @@ git commit -m "feat: close material dependencies and freeze animation evidence"
 
 ---
 
-## Task 11: Proof-relevant binding discovery for scalar, colour, and vector
+## Task 11: Proof-relevant binding discovery, including texture-derived inputs
 
-Uses exactly the binding forms recorded in Task 2. `_Color.a` and `_MainTex_ST.x` must resolve to their parent colour and vector properties, never fall through scalar-only handling.
+Relevance must cover four sources, not three:
+
+```
+scalar requests
+color requests
+vector requests
+texture-evidence-derived animated inputs, especially ScaleOffset
+```
+
+The fourth is load-bearing and easy to miss. `_MainTex_ST` is **not** in any frontend's `VectorProperties` — Poiyomi's vector request is `_MainTexPan`. The `_ST` dependency exists only because `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`, and `AlphaSemanticsResolver.IsSupportedMapping` proves opacity only when scale is exactly `(1,1)` and offset exactly `(0,0)`. An animated `_MainTex_ST.x` therefore changes a proof input while appearing in no vector request. Relevance must derive it.
+
+`_Color.a` and `_MainTex_ST.x` must resolve to their parent properties, never fall through scalar-only handling.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAnimationEvidenceCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs`
 
 **Interfaces:**
-- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10; Task 2's recorded forms.
+- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10; the generated forms recorded in Task 2.
 - Produces:
-  - `internal enum AnimatedPropertyKind { Scalar, ColorComponent, VectorComponent }`
+  - `internal enum AnimatedPropertyKind { Scalar, ColorComponent, VectorComponent, TextureScaleOffsetComponent }`
   - `internal readonly struct AnimatedPropertyRef { internal int SlotIndex { get; } internal string PropertyName { get; } internal AnimatedPropertyKind Kind { get; } internal int ComponentIndex { get; } }`
+  - `internal static IReadOnlyCollection<string> UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(MaterialEvidenceRequest relevance)`
   - `internal static bool UnityAnimationEvidenceCapture.TryResolveProofRelevant(CapturedFloatBinding binding, string rendererPath, MaterialEvidenceRequest relevance, out AnimatedPropertyRef reference)`
 
-`ComponentIndex` is 0–3 in `r,g,b,a` order for colours and `x,y,z,w` order for vectors, and is `-1` for scalars.
+`ComponentIndex` is 0–3 in the suffix order Task 2 recorded, and `-1` for scalars. For `TextureScaleOffsetComponent`, `PropertyName` is the derived `<texture>_ST` name.
 
 - [ ] **Step 1: Write the failing test**
+
+The decisive test builds relevance from the **real frontend request** and never adds `_MainTex_ST` to `VectorProperties` by hand.
+
+```csharp
+        [Test]
+        public void ScaleOffsetRequestMakesTheDerivedStPropertyRelevant()
+        {
+            // Built from the real Poiyomi alpha request. _MainTex_ST appears in no
+            // VectorProperties; it is relevant only because _MainTex is requested
+            // with ScaleOffset evidence.
+            var relevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+
+            Assert.That(relevance.VectorProperties, Does.Not.Contain("_MainTex_ST"),
+                "fixture precondition: _MainTex_ST must not be a vector request, " +
+                "or this test would not prove derivation");
+            Assert.That(relevance.TextureProperties.Any(t =>
+                t.PropertyName == "_MainTex" &&
+                (t.Evidence & TextureEvidenceKinds.ScaleOffset) != 0), Is.True,
+                "fixture precondition: _MainTex must request ScaleOffset");
+
+            Assert.That(
+                UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(
+                    relevance),
+                Contains.Item("_MainTex_ST"));
+
+            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
+                Bound("material._MainTex_ST.x"), "Body", relevance,
+                out var reference), Is.True,
+                "an animated texture scale/offset component must be proof-relevant");
+            Assert.That(reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
+            Assert.That(reference.PropertyName, Is.EqualTo("_MainTex_ST"));
+            Assert.That(reference.ComponentIndex, Is.Zero);
+        }
+
+        [Test]
+        public void ScaleOffsetIsNotDerivedWhenTheEvidenceKindIsNotRequested()
+        {
+            var relevance = new MaterialEvidenceRequest(
+                shaderName: false,
+                activeColorSpace: false,
+                presenceProperties: System.Array.Empty<string>(),
+                scalarProperties: System.Array.Empty<string>(),
+                colorProperties: System.Array.Empty<string>(),
+                vectorProperties: System.Array.Empty<string>(),
+                textureProperties: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex", TextureEvidenceKinds.SourceIdentity),
+                });
+
+            Assert.That(
+                UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(
+                    relevance), Is.Empty);
+            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
+                Bound("material._MainTex_ST.x"), "Body", relevance, out _),
+                Is.False);
+        }
+```
+
+Plus the scalar, colour, vector, slot, and path cases:
 
 ```csharp
         private static MaterialEvidenceRequest Relevance()
@@ -1190,7 +1403,7 @@ Uses exactly the binding forms recorded in Task 2. `_Color.a` and `_MainTex_ST.x
                 presenceProperties: System.Array.Empty<string>(),
                 scalarProperties: new[] { "_Cutoff" },
                 colorProperties: new[] { "_Color" },
-                vectorProperties: new[] { "_MainTex_ST" },
+                vectorProperties: new[] { "_MainTexPan" },
                 textureProperties:
                     System.Array.Empty<TexturePropertyEvidenceRequest>());
         }
@@ -1214,8 +1427,6 @@ Uses exactly the binding forms recorded in Task 2. `_Color.a` and `_MainTex_ST.x
         }
 
         [TestCase("material._Color.r", 0)]
-        [TestCase("material._Color.g", 1)]
-        [TestCase("material._Color.b", 2)]
         [TestCase("material._Color.a", 3)]
         public void ColourComponentResolvesToItsParent(string property, int component)
         {
@@ -1227,21 +1438,23 @@ Uses exactly the binding forms recorded in Task 2. `_Color.a` and `_MainTex_ST.x
             Assert.That(reference.ComponentIndex, Is.EqualTo(component));
         }
 
-        [TestCase("material._MainTex_ST.x", 0)]
-        [TestCase("material._MainTex_ST.w", 3)]
+        [TestCase("material._MainTexPan.x", 0)]
+        [TestCase("material._MainTexPan.w", 3)]
         public void VectorComponentResolvesToItsParent(string property, int component)
         {
             Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
                 Bound(property), "Body", Relevance(), out var reference), Is.True);
             Assert.That(reference.Kind,
                 Is.EqualTo(AnimatedPropertyKind.VectorComponent));
-            Assert.That(reference.PropertyName, Is.EqualTo("_MainTex_ST"));
+            Assert.That(reference.PropertyName, Is.EqualTo("_MainTexPan"));
             Assert.That(reference.ComponentIndex, Is.EqualTo(component));
         }
 
         [Test]
-        public void SlotIndexIsTakenFromTheBindingForm()
+        public void SlotIndexIsTakenFromTheGeneratedBindingForm()
         {
+            // Uses the slot form Task 2 recorded. If Task 2 took its conservative
+            // branch, replace this with the UnresolvedAnimatedMaterialSlot case.
             Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
                 Bound("material[2]._Cutoff"), "Body", Relevance(), out var reference),
                 Is.True);
@@ -1267,11 +1480,21 @@ Uses exactly the binding forms recorded in Task 2. `_Color.a` and `_MainTex_ST.x
 
 - [ ] **Step 2: Run to verify it fails**
 
-Expected: FAIL — the type and method are not defined.
+Expected: FAIL — the type and methods are not defined.
 
-- [ ] **Step 3: Implement resolution**
+- [ ] **Step 3: Implement derivation and resolution**
 
-Match `Path` against the renderer's avatar-relative path with `StringComparison.Ordinal`. Parse the `material` prefix in exactly the form Task 2 recorded, extracting the slot index where present and defaulting to 0. Then: if the remaining name ends in a recorded colour suffix and its stem is in `ColorProperties`, produce `ColorComponent`; if it ends in a recorded vector suffix and its stem is in `VectorProperties`, produce `VectorComponent`; if the whole name is in `ScalarProperties`, produce `Scalar`; otherwise return false. A component suffix whose stem is not requested returns false — it must never degrade into a scalar match.
+`DeriveTextureScaleOffsetProperties` returns `<PropertyName> + "_ST"` for every `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`, and nothing for the others.
+
+`TryResolveProofRelevant` matches `Path` against the renderer's avatar-relative path with `StringComparison.Ordinal`, parses the `material` prefix in exactly the form Task 2 recorded (extracting the slot index, or refusing under Task 2's conservative branch), then classifies the remaining name in this order:
+
+1. a recorded component suffix whose stem is a derived `_ST` name → `TextureScaleOffsetComponent`;
+2. a recorded component suffix whose stem is in `ColorProperties` → `ColorComponent`;
+3. a recorded component suffix whose stem is in `VectorProperties` → `VectorComponent`;
+4. the whole name in `ScalarProperties` → `Scalar`;
+5. otherwise false.
+
+A component suffix whose stem is not requested returns false and must never degrade into a scalar match.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1282,7 +1505,7 @@ Expected: PASS.
 ```bash
 git add Packages/com.alrauna.amuse/Editor/Host/UnityAnimationEvidenceCapture.cs \
         Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs
-git commit -m "feat: resolve scalar, colour, and vector animated bindings"
+git commit -m "feat: derive texture scale offset relevance from evidence requests"
 ```
 
 ---
@@ -1616,7 +1839,113 @@ git commit -m "feat: authorize behaviours by assembly-qualified identity"
 
 ---
 
-## Task 15: Structural invalidation
+## Task 15: AnimationEvents as an unbounded runtime writer
+
+An `AnimationEvent` is not a curve binding, so nothing earlier in this plan sees it. It invokes a method by name on the animated hierarchy, which is a runtime code path outside the animation value model entirely. Silently ignoring events would leave a proof surface unexamined.
+
+Two facts are established locally and must be carried into the code as comments:
+
+- NDMF **drops** animation events when it clones a clip that has them: the `VirtualClip` constructor builds a fresh `AnimationClip` and copies only curves, because Unity provides no way to delete events ([VirtualClip.cs:229-233](Packages/nadena.dev.ndmf/Editor/API/AnimatorServices/VirtualObjects/VirtualClip.cs:229)). So most committed clips carry no events.
+- **Marker clips are the exception.** They are committed by identity and never cloned, so any events on them survive verbatim.
+
+Whether such an event can execute in the supported VRChat avatar runtime **cannot be established in this environment** — the VRChat SDK is not installed and no public API here characterizes it. Under the spec's fail-closed rule an uncharacterized runtime writer refuses.
+
+**Scope.** An event's target method is resolved by name against the animated hierarchy and its effect is unbounded, so no layer-, clip-, or renderer-scope containment is sound. The refusal is **avatar-scoped**, matching the unallowlisted-behaviour rule for the same reason.
+
+**Files:**
+- Modify: `Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs`
+- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/CommittedControllerGraphTests.cs`
+
+**Interfaces:**
+- Consumes: `CommittedLayer.Clips` from Task 7.
+- Produces: `AvatarAnimationRefusal.AnimationEventPresent`.
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+        [Test]
+        public void AClipCarryingAnAnimationEventRefusesTheWholeAvatar()
+        {
+            var root = new GameObject("animation event fixture");
+            var controller = new AnimatorController();
+            var clip = new AnimationClip { name = "carries an event" };
+            try
+            {
+                AnimationUtility.SetAnimationEvents(clip, new[]
+                {
+                    new AnimationEvent { time = 0f, functionName = "AnyMethod" },
+                });
+                Assert.That(clip.events.Length, Is.EqualTo(1),
+                    "fixture precondition: the event must be present");
+
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(clip);
+                Object.DestroyImmediate(controller);
+            }
+        }
+
+        [Test]
+        public void AClipWithoutEventsIsNotRefused()
+        {
+            var root = new GameObject("no event fixture");
+            var controller = new AnimatorController();
+            var clip = new AnimationClip { name = "no events" };
+            try
+            {
+                Assert.That(clip.events, Is.Empty);
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(clip);
+                Object.DestroyImmediate(controller);
+            }
+        }
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Expected: FAIL — the enum member does not exist.
+
+- [ ] **Step 3: Implement**
+
+Add `AnimationEventPresent` to `AvatarAnimationRefusal`. In `Enumerate`, after collecting reachable clips, return that refusal with empty `Layers` when any clip has `events.Length > 0`. Add a code comment recording the NDMF clone-drop behavior, the marker-clip exception, and that the runtime executability of events is uncharacterized in this environment — so the refusal is conservative rather than a claim that events do execute.
+
+- [ ] **Step 4: Run and verify it passes**
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs \
+        Packages/com.alrauna.amuse/Tests/Editor/Host/CommittedControllerGraphTests.cs
+git commit -m "feat: refuse avatars whose clips carry animation events"
+```
+
+---
+
+## Task 16: Structural invalidation
 
 Uses the binding **category** recorded in Task 3 for `m_Materials.Array.size`. Do not assume it is an object binding.
 
@@ -1722,7 +2051,7 @@ git commit -m "feat: refuse renderers with animated structural invalidation"
 
 ---
 
-## Task 16: Admitted-state product budgeting
+## Task 17: Admitted-state product budgeting
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
@@ -1801,7 +2130,7 @@ git commit -m "feat: bound the admitted state product before materialization"
 
 ---
 
-## Task 17: Presence-preserving immutable evidence substitution
+## Task 18: Presence-preserving immutable evidence substitution
 
 The single new pure operation the spec allows. **Substitution must never invent a property that the captured material does not have.**
 
@@ -1955,16 +2284,192 @@ git commit -m "feat: derive captured evidence with presence-preserving substitut
 
 ---
 
-## Task 18: Resolve admitted states and deduplicate exactly
+## Task 19: Resolve admitted states per slot
 
-Dedup is **performance-only**. Correctness is defined over all distinct semantic resolutions.
+This is the operation that turns admitted states into `AlphaResolution`s. It is separate from deduplication, which is performance-only.
+
+The algorithm, per renderer slot:
+
+```
+per renderer slot
+  -> enumerate admitted materials
+  -> obtain THAT admitted material's serialized captured defaults
+  -> gather that slot's proof-relevant animated bindings
+  -> run scalar/color/vector singleton admission
+  -> derive presence-preserving substituted CapturedMaterialEvidence
+  -> AlphaSemanticsResolver.Resolve
+  -> return all conservative AlphaResolutions for that slot
+```
+
+The defaults must come from **each admitted material individually**. A renderer-wide default would be wrong the moment two admitted materials disagree, and that error is in the false-positive direction.
+
+**Files:**
+- Modify: `Packages/com.alrauna.amuse/Editor/Host/CapturedAnimationEvidence.cs`
+- Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
+- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
+
+**Interfaces:**
+- Consumes: `AdmitScalar`/`AdmitColor`/`AdmitVector` (Tasks 12–13), `AnimatedPropertyRef` (Task 11), the substitution methods (Task 18), `AlphaSemanticsResolver.Resolve` (unchanged).
+- Produces:
+  - `internal sealed class CapturedMaterialSlotEvidence { internal int SlotIndex { get; } internal IReadOnlyList<int> AdmittedMaterialIndices { get; } }`
+  - `internal sealed class SlotResolutionResult { internal bool IsResolved { get; } internal RendererAnalysisRefusal Refusal { get; } internal IReadOnlyList<AlphaResolution> Resolutions { get; } }`
+  - `internal static SlotResolutionResult AdmittedMaterialStates.ResolveSlot(CapturedMaterialSlotEvidence slot, IReadOnlyList<CapturedAlphaMaterial> admittedMaterials, IReadOnlyList<(CapturedFloatBinding Binding, AnimatedPropertyRef Reference)> slotBindings, AlphaFieldProvider alphaFields)`
+
+`CapturedMaterialSlotEvidence` is built for **every** slot, animated or not. An unanimated slot has exactly one admitted material index — its current assignment — so current materials are preserved rather than dropped.
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+        [Test]
+        public void UnanimatedSlotResolvesItsCurrentMaterialOnly()
+        {
+            var fixture = SlotFixture.WithMaterials(
+                AttestedOpaqueMaterial(), AttestedTransparentMaterial());
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                fixture.AdmittedMaterials,
+                System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                fixture.AlphaFields);
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(result.Resolutions.Count, Is.EqualTo(1));
+            Assert.That(result.Resolutions[0].Classify(AnyTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void SwappedSlotResolvesEveryAdmittedMaterial()
+        {
+            var fixture = SlotFixture.WithMaterials(
+                AttestedOpaqueMaterial(), AttestedTransparentMaterial());
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0, 1 }),
+                fixture.AdmittedMaterials,
+                System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                fixture.AlphaFields);
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(result.Resolutions.Count, Is.EqualTo(2));
+
+            var outcomes = result.Resolutions
+                .Select(r => r.Classify(AnyTriangle())).ToArray();
+            Assert.That(outcomes, Contains.Item(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(outcomes,
+                Contains.Item(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void EachAdmittedMaterialUsesItsOwnSerializedDefaults()
+        {
+            // Two admitted materials whose serialized _AlphaForceOpaque values
+            // DIFFER, with an animated binding on a DIFFERENT property. If the
+            // algorithm used one renderer-wide default, both would resolve the
+            // same way and this test would fail.
+            var fixture = SlotFixture.WithMaterials(
+                AttestedMaterialWithForcedOpaque(true),
+                AttestedMaterialWithForcedOpaque(false));
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0, 1 }),
+                fixture.AdmittedMaterials,
+                new[]
+                {
+                    (UnrelatedSingletonBinding(), UnrelatedScalarReference()),
+                },
+                fixture.AlphaFields);
+
+            Assert.That(result.IsResolved, Is.True);
+            var outcomes = result.Resolutions
+                .Select(r => r.Classify(AnyTriangle())).Distinct().ToArray();
+            Assert.That(outcomes.Length, Is.EqualTo(2),
+                "the two admitted materials must resolve differently, proving each " +
+                "used its own serialized defaults rather than one shared default");
+        }
+
+        [Test]
+        public void AnimatedPropertyIsSubstitutedIntoEachAdmittedMaterial()
+        {
+            // The animated singleton must override the serialized default in every
+            // admitted material that has the property.
+            var fixture = SlotFixture.WithMaterials(
+                AttestedMaterialWithForcedOpaque(false));
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                fixture.AdmittedMaterials,
+                new[] { (ForceOpaqueBinding(1f), ForceOpaqueReference()) },
+                fixture.AlphaFields);
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(result.Resolutions.Single().Classify(AnyTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "the animated value must have been substituted into the evidence");
+        }
+
+        [Test]
+        public void ANonSingletonBindingRefusesTheSlot()
+        {
+            var fixture = SlotFixture.WithMaterials(AttestedOpaqueMaterial());
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                fixture.AdmittedMaterials,
+                new[] { (DisagreeingBinding(), ForceOpaqueReference()) },
+                fixture.AlphaFields);
+
+            Assert.That(result.IsResolved, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(
+                RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton));
+        }
+```
+
+Write `SlotFixture`, `AttestedOpaqueMaterial`, `AttestedTransparentMaterial`, `AttestedMaterialWithForcedOpaque`, `AnyTriangle`, and the binding/reference helpers in the test file, building materials through the existing attested Poiyomi and lilToon fixture helpers so every resolution runs through a real frontend. A stock Unity shader resolves all-Unknown and would make these tests pass vacuously.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Expected: FAIL — `ResolveSlot` and `CapturedMaterialSlotEvidence` are not defined.
+
+- [ ] **Step 3: Implement**
+
+For each admitted material index in the slot:
+
+1. take that material's own `CapturedMaterialEvidence`;
+2. group the slot's proof-relevant bindings by `AnimatedPropertyRef.PropertyName` and `Kind`;
+3. read the serialized default for that property **from that material's own captured evidence**;
+4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `TextureScaleOffsetComponent` uses the vector path against the derived `_ST` property;
+5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; on `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`;
+6. derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18;
+7. resolve semantics for the substituted evidence and call `AlphaSemanticsResolver.Resolve`.
+
+Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already.
+
+- [ ] **Step 4: Run and verify it passes**
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/com.alrauna.amuse/Editor/Host/CapturedAnimationEvidence.cs \
+        Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs \
+        Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs
+git commit -m "feat: resolve admitted material states per renderer slot"
+```
+
+---
+
+## Task 20: Deduplicate admitted resolutions
+
+Dedup is **performance-only**. Correctness is defined over all distinct semantic resolutions produced by Task 19; failing to deduplicate costs work and can never change the proof.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
 
 **Interfaces:**
-- Consumes: `AlphaSemanticsResolver.Resolve` (unchanged); the substitution methods from Task 17.
+- Consumes: the `AlphaResolution` list produced per slot by Task 19.
 - Produces: `internal static IReadOnlyList<AlphaResolution> AdmittedMaterialStates.DistinctResolutions(IReadOnlyList<AlphaResolution> resolutions)`
 
 - [ ] **Step 1: Write the failing test**
@@ -2050,14 +2555,14 @@ git commit -m "feat: deduplicate admitted resolutions conservatively"
 
 ---
 
-## Task 19: Per-triangle intersection
+## Task 21: Per-triangle intersection
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityRendererAlphaAnalysis.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityRendererAlphaAnalysisTests.cs`
 
 **Interfaces:**
-- Consumes: `DistinctResolutions` from Task 18; the existing private `Classify` helper.
+- Consumes: `DistinctResolutions` from Task 20; the existing private `Classify` helper.
 - Produces: `internal static TriangleAlphaOutcome[] UnityRendererAlphaAnalysis.IntersectOutcomes(IReadOnlyList<TriangleAlphaOutcome[]> perResolutionOutcomes)`
 
 - [ ] **Step 1: Write the failing test**
@@ -2143,7 +2648,7 @@ git commit -m "feat: intersect triangle outcomes across admitted states"
 
 ---
 
-## Task 20: Recursive no-live-Unity-object evidence guard
+## Task 22: Recursive no-live-Unity-object evidence guard
 
 Deferred PlatformFinish finding 1.
 
@@ -2218,7 +2723,7 @@ git commit -m "test: walk the whole captured graph in the Unity object guard"
 
 ---
 
-## Task 21: Named refusal and failure boundary
+## Task 23: Named refusal and failure boundary
 
 Deferred PlatformFinish finding I4.
 
@@ -2326,7 +2831,7 @@ git commit -m "feat: separate domain refusal from implementation defect"
 
 ---
 
-## Task 22: Integrate into the PlatformFinish analysis path
+## Task 24: Integrate into the PlatformFinish analysis path
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs`
@@ -2429,32 +2934,39 @@ git commit -m "feat: prove alpha opacity across admitted runtime states"
 
 | Spec requirement | Produced type / member | Task |
 | --- | --- | --- |
-| Scalar property admission | `AdmittedMaterialStates.AdmitScalar`, `AnimatedPropertyKind.Scalar` | 11, 12 |
-| Colour property admission | `AdmittedMaterialStates.AdmitColor`, `AnimatedPropertyKind.ColorComponent`, `CapturedMaterialEvidence.WithColor` | 11, 13, 17 |
-| Vector property admission | `AdmittedMaterialStates.AdmitVector`, `AnimatedPropertyKind.VectorComponent`, `CapturedMaterialEvidence.WithVector` | 11, 13, 17 |
-| Material swaps | `LiveAnimationObservation.TryParseMaterialSlotBinding`, `CapturedObjectBinding.AdmittedMaterialIndices` | 9, 10 |
+| Texture `ScaleOffset` evidence → animation relevance | `DeriveTextureScaleOffsetProperties`, `AnimatedPropertyKind.TextureScaleOffsetComponent` | 11 |
+| Slot → admitted material set | `LiveAnimationObservation.TryParseMaterialSlotBinding`, `CapturedMaterialSlotEvidence.AdmittedMaterialIndices` | 9, 10, 19 |
+| Admitted material → its own serialized defaults | `ResolveSlot` step 3, proven by `EachAdmittedMaterialUsesItsOwnSerializedDefaults` | 19 |
+| Animated property → substituted evidence | `WithScalar`/`WithColor`/`WithVector`, proven by `AnimatedPropertyIsSubstitutedIntoEachAdmittedMaterial` | 18, 19 |
+| Substituted evidence → `AlphaResolution` | `SlotResolutionResult.Resolutions` via `AlphaSemanticsResolver.Resolve` | 19 |
+| Resolution set → triangle intersection | `DistinctResolutions` then `IntersectOutcomes` | 20, 21 |
+| AnimationEvents / runtime-code paths | `AvatarAnimationRefusal.AnimationEventPresent`; `BehaviourIdentity` for behaviours | 14, 15 |
+| Scalar property admission | `AdmitScalar`, `AnimatedPropertyKind.Scalar` | 11, 12 |
+| Colour property admission | `AdmitColor`, `AnimatedPropertyKind.ColorComponent`, `WithColor` | 11, 13, 18 |
+| Vector property admission | `AdmitVector`, `AnimatedPropertyKind.VectorComponent`, `WithVector` | 11, 13, 18 |
+| Material swaps | `CapturedObjectBinding.AdmittedMaterialIndices` | 9, 10 |
 | Texture/object-reference animation | Task 3 decides existence; if present, escalated to the user as a design change before Task 10 | 3 |
-| Structural invalidation | `RendererAnalysisRefusal.AnimatedMeshReplacement`, `.AnimatedMaterialSlotCount`, `StructuralRefusalFor` | 3, 15 |
-| Behaviour authorization | `BehaviourIdentity.Of`, `.IsAllowed`, `AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour` | 14, 21 |
-| Live-object to immutable transition | `LiveAnimationObservation` (live, transient) → `UnityAnimationEvidenceCapture.Capture` → `CapturedAnimationEvidence` (immutable), enforced by `AssertHasNoUnityObjectFields` | 8, 10, 20 |
+| Structural invalidation | `RendererAnalysisRefusal.AnimatedMeshReplacement`, `.AnimatedMaterialSlotCount` | 3, 16 |
+| Live-object → immutable transition | `LiveAnimationObservation` (live, transient) → `Capture` → `CapturedAnimationEvidence` (immutable), enforced by `AssertHasNoUnityObjectFields` | 8, 10, 22 |
 | Dependency closure ordering | `CapturedAnimationEvidence.IsClosed`, `.RelevanceRequest` | 10 |
-| Singleton rule | `AdmittedPropertyOutcome` | 12, 13 |
-| Budget | `TryBudgetProduct`, `RendererAnalysisRefusal.AdmittedStateBudgetExceeded` | 16 |
-| Dedup as performance-only | `DistinctResolutions` | 18 |
-| Per-triangle intersection | `IntersectOutcomes` | 19 |
-| Failure semantics | `AmusePlatformFinishState.AvatarRefusal`, no `catch` around renderer analysis | 21 |
-| Observation boundary | `Sequence.WithRequiredExtension` capture pass, extension-free barrier | 1, 22 |
+| Finite-exact proof | `IsFiniteExact`, proven by `EqualEndpointsWithNonZeroTangentsAreNotFiniteExact` | 8 |
+| Budget | `TryBudgetProduct`, `.AdmittedStateBudgetExceeded` | 17 |
+| Failure semantics | `AmusePlatformFinishState.AvatarRefusal`, no `catch` around renderer analysis | 23 |
+| Observation boundary | `Sequence.WithRequiredExtension` capture pass, extension-free barrier | 1, 24 |
 | Special motions never gate | `CapturedClipEvidence.IsSpecialMotion` is diagnostic-only | 10 |
+
+**Host-semantics closure.** No obligation is closed by a round trip. Obligation 2 is closed by `AnimationUtility.GetAnimatableBindings` (Task 2); obligation 3 and the slot-swap effect by generated-binding inspection plus `AnimationMode` sampling (Task 3); the absent-property rule by sampling a real clip (Task 5). Each has a named conservative branch if the observation is unavailable, and round-trip tests survive only when explicitly labelled storage tests that close nothing.
 
 **Placeholders.** None. Task 2 Step 3, Task 3 Step 4, Task 5 Step 3, and Task 6 Step 4 deliberately instruct recording an observed value — the defined purpose of a characterization test. Task 3 explicitly requires the disjunctive assertion to be replaced by an exact one before the task completes.
 
 **Type consistency.** `AvatarAnimationRefusal` (7) is used in 14, 21, 22. `LiveFloatObservation`/`LiveObjectObservation`/`LiveClipObservation` (8) are consumed only by 9 and 10 and never after. `CapturedFloatBinding`/`CapturedObjectBinding` (10) are used in 11, 12, 13, 15, 20. `AnimatedPropertyRef` and `AnimatedPropertyKind` (11) feed 13. `AdmitScalar` (12) is called by `AdmitColor`/`AdmitVector` (13). `WithScalar`/`WithColor`/`WithVector` (17) feed 18. `DistinctResolutions` (18) feeds 19.
 
 **Known open risks carried into execution.**
-- Task 2's recorded binding forms drive Task 11's parser; a different component-suffix form changes that parser.
+- Task 2 may find `GetAnimatableBindings` does not surface material bindings; then obligation 2 stays unknown and Task 11 refuses with `UnresolvedAnimatedMaterialSlot` instead of defaulting to slot 0.
+- Task 3 may find `AnimationMode` sampling does not apply object curves; then slot-swap effect is unobserved and Task 10 admits swap materials into every slot of the renderer.
 - Task 3 may find texture-reference object curves exist. That is a **design change**, not a plan change, and must go back to the user before Task 10.
-- Task 5 selects between Task 17's presence-preserving branch and its refusal branch.
-- Task 6 selects between Task 7 calling `GetInnateControllers` directly and the conservative recorded-pairs path.
-- Obligation 4 (`MaterialPropertyBlock` application) may need Play Mode and can remain open; the conservative singleton rule does not depend on it.
+- Task 5 selects between Task 18's presence-preserving branch and its refusal branch, and takes the refusal branch if the behavior cannot be observed.
+- Task 6 has no fallback: if `GetInnateControllers` fails its safety gate, the plan STOPS, because no public re-resolution mechanism has been identified.
 - Task 7's `m_NormalizedBlendValues` serialized access is the only route found in this Unity version; re-check for a public accessor first.
 - Task 14's spoof fixture needs `Reflection.Emit`; a documented fallback is specified if unavailable.
+- **Task 15 needs a spec amendment before execution.** The approved spec does not enumerate AnimationEvents as a proof surface. The task is written and sound, but the user must approve adding it to the spec's refusal list before this plan is executed.
