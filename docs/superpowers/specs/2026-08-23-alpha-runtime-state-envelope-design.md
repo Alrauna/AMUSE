@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Approved as AMUSE's normative architecture for proving alpha opacity under runtime state. Implementation has not started.**
+**Proposed architecture for proving alpha opacity under runtime state. Awaiting approval. Implementation has not started.**
 
 - Branch: `feat/alpha-runtime-state-envelope`
 - Base: `origin/main` at `d9facec`
@@ -64,6 +64,30 @@ AMUSE must not hard-code a global list of "irrelevant" animation. Relevance is d
 The shader frontends already declare their dependencies as data. `MaterialEvidenceRequest` — specifically the alpha evidence requests built by `PoiyomiMaterialSemantics.CreateAlphaEvidenceRequest` and its lilToon counterpart — enumerates exactly the shader name, presence-schema properties, scalar gates, color properties, vector properties, and texture properties on which the supported alpha equation depends, together with the texture evidence kinds it consumes. Downstream, `AlphaSemanticsResolver` adds the mapping and sampling conditions it can prove.
 
 The union of those requests across the frontends attested for a build **is** the animation relevance filter. An animated binding is proof-relevant exactly when it names a property in that union, or when it is one of the structural bindings enumerated below.
+
+### Dependency closure is normative
+
+The relevance filter must be closed over admitted materials before it is used. A material introduced by animation may belong to a different shader family than the initially assigned material, and may therefore introduce alpha-semantic dependencies on properties the initial family never requested. Deriving property relevance from the initially assigned family alone would under-populate the admitted set — a false-positive direction.
+
+The discovery order is normative:
+
+```text
+discover structural material-slot swaps
+      ▼
+enumerate every admitted material
+      ▼
+attest/identify every admitted material family
+      ▼
+union the alpha MaterialEvidenceRequests of all admitted families
+      ▼
+use that closed union to determine proof-relevant animated property bindings
+```
+
+Each step must complete before the next begins. Proof-relevant property bindings are determined from the **closed union**, never from a single slot's current family.
+
+If the closure cannot be established — a slot whose admitted material set cannot be fully enumerated, or an admitted material whose family cannot be attested — the renderer is refused. A partially closed union is not a filter and must never be used as one.
+
+### Consequences
 
 This has three consequences that are part of the design, not incidental:
 
@@ -180,11 +204,23 @@ Two forms are refused outright for any proof-relevant property, independently of
 - **additive layers**, whose output is a base value plus weighted differences from a reference pose;
 - **Direct Blend Trees with normalization disabled**, whose weighted sum is bounded only by unbounded parameters.
 
-### Unrecognized state machine behaviours
+### State machine behaviours
 
-An unrecognized `StateMachineBehaviour` is never assumed inert, and never causes a whole-avatar refusal.
+**No containment theorem is available.** NDMF 1.14.4 handles exactly three VRChat behaviour types specially — `VRCAnimatorLayerControl`, `VRCAnimatorPlayAudio`, and `VRCAvatarParameterDriver` — and passes every other behaviour through untouched. That is a handling table for the types NDMF must rewrite, not a whitelist, and NDMF asserts no completeness. The VRChat SDK is not installed in the public development project, so any platform-level restriction on surviving avatar behaviours cannot be inspected or pinned locally. AMUSE therefore has no proven bound on what an arbitrary behaviour may do.
 
-Its blast radius is the layer. A behaviour is recognized by type name; no SDK reference is required. If the layer it belongs to contributes no proof-relevant binding, the behaviour is irrelevant and nothing is refused. If the layer does contribute a proof-relevant binding, refusal is scoped to the renderers whose bindings that layer touches.
+The previously drafted rule — that an unknown behaviour is irrelevant when its layer carries no proof-relevant binding — is **withdrawn as unsound**. A behaviour is not layer-local merely because it is attached to that layer: `VRCAvatarParameterDriver` writes parameters shared across the whole Animator, `VRCPlayableLayerControl` weights an entire playable layer, and `VRCAnimatorLayerControl` weights a different layer in the same controller. Attachment point does not bound effect.
+
+What *does* bound effect is A′'s own over-approximation. AMUSE performs no reachability analysis: it already admits every clip on every layer of every controller. So a behaviour that only selects states, writes parameters, or changes layer or playable weights **cannot escape the admitted set** — state and parameter selection is already fully over-approximated, and weight-induced blending is contained by the singleton rule together with the additive and unnormalized-Direct-Blend-Tree refusals.
+
+The residual hazard is therefore exactly one thing: **a behaviour running arbitrary code that writes proof-relevant state directly**, outside the animation system — assigning `sharedMaterials`, setting a material property, applying a property block, or replacing a mesh. Such an effect is not layer-local, not path-scoped, and not observable from the controller graph. No scoping is sound against it.
+
+The rule is therefore:
+
+- Behaviours are recognized **by type**, against a version-pinned allowlist. Type identity is read from the behaviour instance; no SDK assembly reference is required.
+- A type may be placed on the allowlist only with a **recorded justification** that its effect is confined to parameters, layer or playable weights, or state selection — that is, to effects already inside A′'s over-approximation.
+- Any behaviour whose type is not on the allowlist causes an **avatar-scoped refusal**, because arbitrary code has unbounded reach.
+
+The allowlist starts empty and grows only with evidence. Populating and justifying it is an implementation-time verification obligation, not an assumption this design may make in advance. This is fail-closed: an unjustified type costs coverage, never correctness.
 
 ### Structural invalidation
 
@@ -202,9 +238,11 @@ The cap is retained despite the singleton rule because it must still hold if a l
 
 ## Proof composition
 
-The admitted-state count is not what multiplies geometry cost. Most admitted states collapse to the same `AlphaResolution` — typically uniform-opaque, uniform-transparent, or refused — so:
+Correctness is defined over **all distinct semantic resolutions** of the admitted states. Deduplication is a **performance measure only**: failing to deduplicate costs work and can never change the proof, because classifying the same resolution twice yields the same outcome and intersection is idempotent.
 
-**Equivalent `AlphaResolution`s are deduplicated per slot before any triangle is classified.** The distinct-resolution count, not the state count, multiplies triangle work.
+Most admitted states collapse to the same `AlphaResolution` — typically uniform-opaque, uniform-transparent, or refused — so equivalent resolutions are deduplicated per slot before any triangle is classified, and the distinct-resolution count rather than the state count multiplies triangle work.
+
+Any dedup equivalence relation must be **exact or conservative**: it may treat two resolutions as distinct when they would have behaved identically, but it must never merge two resolutions that could classify any triangle differently. An approximate or heuristic equivalence is not permitted, because merging distinct resolutions would silently shrink the set the intersection is taken over — a false-positive direction.
 
 The proof then composes as:
 
@@ -231,7 +269,8 @@ The design distinguishes two categories, and the distinction is structural rathe
 - unattested or all-Unknown admitted material;
 - animated mesh replacement or slot-count change;
 - admitted-state product above the cap;
-- unrecognized `StateMachineBehaviour` in a layer contributing a proof-relevant binding;
+- a `StateMachineBehaviour` whose type is not on the allowlist, refused at avatar scope;
+- material-swap dependency closure that cannot be established, because a slot's admitted material set cannot be fully enumerated or an admitted material's family cannot be attested;
 - unsupported `RuntimeAnimatorController` form, including `AnimatorOverrideController` and any subtype AMUSE does not walk;
 - synced-layer motion overrides.
 
@@ -266,11 +305,15 @@ The following are **open questions, not settled facts**. Each is cheap to settle
 3. **Texture-reference object curves on materials.** Whether Unity supports animating a material's texture reference by object curve at all. Affects: whether texture assignment must be an admitted-state dimension, or is structurally impossible.
 4. **`MaterialPropertyBlock` application.** Whether animated material properties are applied at runtime through a `MaterialPropertyBlock`. Affects: how the existing static `HasPropertyBlock` whole-renderer refusal and animated-property handling are reconciled into one coherent rule.
 5. **Committed-controller behavior for `AnimatorOverrideController` and synced layers.** The exact committed forms, where relevant to detecting the two named refusals reliably. Affects: whether those refusals detect their conditions completely, or can be silently bypassed.
-6. **Blending of generic material-property float curves.** Whether Unity in fact interpolates material-property float bindings across layer weights, transitions, and blend-tree children, or applies them discretely. V1 assumes it does, which is the conservative direction and is why float admission is restricted to singletons. Affects: only how far float admission could be widened later; a wrong assumption here costs coverage and can never cost correctness.
+6. **`IPlatformAnimatorBindings` lifetime across context deactivation.** Whether the reference captured while `AnimatorServicesContext` is active remains valid and usable after that context has been deactivated and committed — specifically whether `IsSpecialMotion` and `GetInnateControllers` still behave correctly on it at that point. This is **load-bearing for the two-pass committed-controller architecture**: if the reference does not survive the boundary, the capture pass cannot hand it to the barrier pass and the observation route does not work as designed. If verification shows it does not survive, that must be reported as an **architectural blocker** requiring a design revision — obtaining the bindings by another public route, restructuring the pass split, or reconsidering the observation source. It must not be worked around with a test fixture that papers over the real lifecycle, and no implementation may proceed past this point on the assumption that it holds.
+7. **The `StateMachineBehaviour` allowlist.** Which behaviour types may be allowlisted, and the recorded justification for each that its effect is confined to parameters, layer or playable weights, or state selection. Separately, whether the pinned VRChat platform restricts surviving avatar behaviours to a known set at all — if that is ever established, the allowlist becomes justifiable wholesale and the avatar-scoped refusal narrows accordingly. Until then the allowlist is empty and every behaviour type refuses.
+8. **Blending of generic material-property float curves.** Whether Unity in fact interpolates material-property float bindings across layer weights, transitions, and blend-tree children, or applies them discretely. V1 assumes it does, which is the conservative direction and is why float admission is restricted to singletons. Affects: only how far float admission could be widened later; a wrong assumption here costs coverage and can never cost correctness.
 
 Obligations 2, 3, and 4 bound the completeness of the relevance filter. Until they are settled, the relevance filter cannot be claimed complete, and the claim must not be made in code comments, tests, or diagnostics.
 
-Obligation 6 is the one case where the unverified assumption is deliberately conservative rather than merely unknown, and it is recorded here so that it is revisited as an opportunity rather than mistaken for a settled limit.
+Obligation 6 is the only one that can invalidate the architecture rather than merely bound it, and it is therefore settled first, before any other implementation work.
+
+Obligation 8 is the one case where the unverified assumption is deliberately conservative rather than merely unknown, and it is recorded here so that it is revisited as an opportunity rather than mistaken for a settled limit.
 
 ## Testing strategy
 
