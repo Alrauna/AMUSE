@@ -169,33 +169,29 @@ namespace Alrauna.Amuse.Editor.Host
             var extraction = Capture(
                 renderer,
                 semanticsProvider,
-                out var capturedSemantics,
-                out var legacyAlphaEvidence);
+                out var capturedSemantics);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(
                     extraction.Snapshot,
                     material => capturedSemantics.TryGetValue(
                         material, out var semantics)
                             ? semantics
-                            : UnityMaterialSemantics.AllUnknown(),
-                    legacyAlphaEvidence.TryGetAlphaField)
+                            : UnityMaterialSemantics.AllUnknown())
                 : RendererAlphaAnalysis.Refused(extraction.Refusal);
         }
 
         internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
         {
-            return Capture(renderer, null, out _, out _);
+            return Capture(renderer, null, out _);
         }
 
         private static UnityRendererAlphaExtraction Capture(
             Renderer renderer,
             BaseMaterialSemanticsProvider legacySemanticsProvider,
             out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
-                legacySemantics,
-            out UnityAlphaFieldEvidence legacyAlphaEvidence)
+                legacySemantics)
         {
             legacySemantics = null;
-            legacyAlphaEvidence = null;
             if (ReferenceEquals(renderer, null))
             {
                 throw new ArgumentNullException(nameof(renderer));
@@ -310,8 +306,6 @@ namespace Alrauna.Amuse.Editor.Host
 
             if (legacySemanticsProvider != null)
             {
-                legacyAlphaEvidence = new UnityAlphaFieldEvidence(
-                    GatherCandidateTextures(materials));
                 legacySemantics = new Dictionary<
                     CapturedAlphaMaterial, MaterialSemantics>();
                 var byLiveMaterial = new Dictionary<Material, MaterialSemantics>();
@@ -455,23 +449,6 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return fields;
-        }
-
-        private static IEnumerable<Texture> GatherCandidateTextures(
-            IReadOnlyList<Material> materials)
-        {
-            foreach (var material in materials)
-            {
-                if (material == null || material.shader == null)
-                {
-                    continue;
-                }
-
-                foreach (var propertyName in material.GetTexturePropertyNames())
-                {
-                    yield return material.GetTexture(propertyName);
-                }
-            }
         }
 
         /// <summary>
