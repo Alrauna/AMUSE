@@ -53,14 +53,28 @@ jobs:
           echo "unityPackage=${{ vars.PACKAGE_NAME }}-${{ steps.version.outputs.value }}.unitypackage" >> $GITHUB_ENV
           echo "version=${{ steps.version.outputs.value }}" >> $GITHUB_ENV
 
-      # Zip the Package for release
+      # Zip the Package for release, excluding the editor test assembly.
+      # Tests/ exports synthetic NDMF plugins that must never reach consumers.
       - name: Create Package Zip
         working-directory: "${{ env.packagePath }}"
-        run: zip -r "${{ github.workspace }}/${{ env.zipFile }}" .
+        run: zip -r "${{ github.workspace }}/${{ env.zipFile }}" . -x "Tests/*" "Tests.meta"
       
-      # Build a list of .meta files for future use
+      # Build a list of .meta files for future use, excluding the editor tests
       - name: Track Package Meta Files
-        run: find "${{ env.packagePath }}/" -name \*.meta >> metaList
+        run: find "${{ env.packagePath }}/" -name \*.meta -not -path "*/Tests/*" -not -path "*/Tests.meta" >> metaList
+      
+      # Fail the release if test content re-enters either artifact's contents
+      - name: Verify Release Excludes Tests
+        run: |
+          if unzip -Z1 "${{ github.workspace }}/${{ env.zipFile }}" | grep -q "Tests"; then
+            echo "::error::Release zip contains test content"; exit 1;
+          fi
+          if grep -q "Tests" metaList; then
+            echo "::error::UnityPackage meta list contains test content"; exit 1;
+          fi
+          if ! unzip -Z1 "${{ github.workspace }}/${{ env.zipFile }}" | grep -q "^Editor/Alrauna.Amuse.Editor.asmdef$"; then
+            echo "::error::Release zip is missing the production editor assembly"; exit 1;
+          fi
       
       # Make a UnityPackage version of the Package for release
       - name: Create UnityPackage
