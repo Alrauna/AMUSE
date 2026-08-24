@@ -21,6 +21,7 @@
 - `MaterialSemantics`, `ExactUvGeometry`, and `MeshSeparationPlanner` also remain behaviorally unchanged.
 - **Unsupported or unknown domain behavior returns a named refusal. Unexpected implementation defects propagate.** `catch (Exception) -> skip renderer` is forbidden.
 - **The live-to-immutable boundary is one-way and closes inside host capture.** Transient host observations may hold live Unity references; nothing downstream of Task 10 may. Proof, admitted-state construction, and classification never call back into `AnimatorController`, `AnimationClip`, `AnimationCurve`, `Material`, `Renderer`, or `Mesh`.
+- **V1 property animation authorization supports re-assertion of an already-admitted value, not a proven transition to a different value.** For every proof-relevant property, the admitted set is `{every animated value from every contributing source} ∪ {that admitted material's captured serialized default}`, and admission requires that set to contain exactly one exact value. An animated value never overrides a differing default; a value differing from the admitted material's captured default requires stronger future reachability and blending analysis and is **refused**. This applies equally to scalar, colour, vector, and texture-scale/offset component admission, and is evaluated per admitted material, so the same binding may be admitted against one admitted material and refused against another.
 - The admitted-state cap (`4096`) is an **internal bounded-work parameter**, never a public semantic constant. It must not be `public`, must not appear in any public or `internal` API signature, and must not be asserted as a specific number in any test that is not specifically about the budget.
 - No reflection over NDMF internals, and no private/internal field access to force a positive path.
 - Retain every Unity-generated `.meta` sidecar and inspect GUIDs.
@@ -1593,7 +1594,7 @@ Expected: FAIL — `AdmittedMaterialStates` does not exist.
 
 - [ ] **Step 3: Implement the singleton rule**
 
-Return `NotFiniteExact` if any binding is not finite-exact. Otherwise gather every keyframe value plus the serialized default; if they are not all bit-identical, return `SourcesDisagree`; otherwise `Singleton`. Compare with `==` on `float`, never a tolerance — approximate equality would merge genuinely different states.
+Return `NotFiniteExact` if any binding is not finite-exact. Otherwise form `{every keyframe value} ∪ {the serialized default}`; if that set is not a single bit-identical value, return `SourcesDisagree`; otherwise `Singleton`. There is no override path: an animated value that differs from the default is a disagreement, not a replacement. Compare with `==` on `float`, never a tolerance — approximate equality would merge genuinely different states.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1611,7 +1612,9 @@ git commit -m "feat: admit only singleton finite-exact scalar values"
 
 ## Task 13: Colour and vector reconstruction and singleton analysis
 
-A colour or vector is animated component-wise. The admitted value is reconstructed from the serialized default with each animated component overridden by its own singleton. Any non-singleton component refuses the whole property.
+A colour or vector is animated component-wise. **Each animated component obeys the same singleton rule as a scalar**, applied per component: the component's animated values *together with that component of the admitted material's serialized default* must contain exactly one value. An animated component does **not** override a differing default — that is a disagreement, and it refuses.
+
+Unanimated components come from the serialized default. Animated components are admitted only when their finite-exact singleton **equals** that component of the default, in which case the reconstructed value is simply the default. Any component that disagrees refuses the whole property.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
@@ -1641,16 +1644,28 @@ A colour or vector is animated component-wise. The admitted value is reconstruct
         [Test]
         public void UnanimatedColourComponentsComeFromTheSerializedDefault()
         {
+            // The animated alpha RE-ASSERTS the default's alpha. That is the only
+            // form V1 admits.
             var outcome = AdmittedMaterialStates.AdmitColor(
-                Components((3, 1f)),
+                Components((3, 0.4f)),
                 new Color(0.1f, 0.2f, 0.3f, 0.4f),
                 out var admitted);
 
             Assert.That(outcome, Is.EqualTo(AdmittedPropertyOutcome.Singleton));
-            Assert.That(admitted.r, Is.EqualTo(0.1f));
-            Assert.That(admitted.g, Is.EqualTo(0.2f));
-            Assert.That(admitted.b, Is.EqualTo(0.3f));
-            Assert.That(admitted.a, Is.EqualTo(1f), "the animated alpha must win");
+            Assert.That(admitted, Is.EqualTo(new Color(0.1f, 0.2f, 0.3f, 0.4f)));
+        }
+
+        [Test]
+        public void AnAnimatedColourComponentDifferingFromTheDefaultRefuses()
+        {
+            // An animated value does NOT override the default. Animated values
+            // together with the default must be a singleton, so 1.0 against a
+            // default of 0.4 is a disagreement.
+            Assert.That(AdmittedMaterialStates.AdmitColor(
+                Components((3, 1f)),
+                new Color(0.1f, 0.2f, 0.3f, 0.4f),
+                out _),
+                Is.EqualTo(AdmittedPropertyOutcome.SourcesDisagree));
         }
 
         [Test]
@@ -1672,24 +1687,38 @@ A colour or vector is animated component-wise. The admitted value is reconstruct
             // _Color.a must flow through AdmitColor. If it degraded into scalar
             // handling, the other three components would be lost.
             var outcome = AdmittedMaterialStates.AdmitColor(
-                Components((3, 0f)),
-                new Color(1f, 1f, 1f, 1f),
+                Components((3, 1f)),
+                new Color(0.25f, 0.5f, 0.75f, 1f),
                 out var admitted);
 
             Assert.That(outcome, Is.EqualTo(AdmittedPropertyOutcome.Singleton));
-            Assert.That(admitted, Is.EqualTo(new Color(1f, 1f, 1f, 0f)));
+            Assert.That(admitted, Is.EqualTo(new Color(0.25f, 0.5f, 0.75f, 1f)));
         }
 
         [Test]
         public void VectorComponentsReconstructFromTheSerializedDefault()
         {
+            // Both animated components re-assert their own default components.
             var outcome = AdmittedMaterialStates.AdmitVector(
-                Components((0, 2f), (1, 3f)),
+                Components((0, 1f), (1, 1f)),
                 new Vector4(1f, 1f, 0f, 0f),
                 out var admitted);
 
             Assert.That(outcome, Is.EqualTo(AdmittedPropertyOutcome.Singleton));
-            Assert.That(admitted, Is.EqualTo(new Vector4(2f, 3f, 0f, 0f)));
+            Assert.That(admitted, Is.EqualTo(new Vector4(1f, 1f, 0f, 0f)));
+        }
+
+        [Test]
+        public void AnAnimatedVectorComponentDifferingFromTheDefaultRefuses()
+        {
+            // An animated scale of 2 against a default scale of 1 is exactly the
+            // case that would break AlphaSemanticsResolver.IsSupportedMapping if
+            // it were silently admitted.
+            Assert.That(AdmittedMaterialStates.AdmitVector(
+                Components((0, 2f)),
+                new Vector4(1f, 1f, 0f, 0f),
+                out _),
+                Is.EqualTo(AdmittedPropertyOutcome.SourcesDisagree));
         }
 
         [Test]
@@ -1697,7 +1726,7 @@ A colour or vector is animated component-wise. The admitted value is reconstruct
         {
             var map = new Dictionary<int, IReadOnlyList<CapturedFloatBinding>>
             {
-                [0] = new[] { Binding(false, 1f) },
+                [0] = new[] { Binding(false, 0f) },
             };
 
             Assert.That(AdmittedMaterialStates.AdmitVector(
@@ -1712,7 +1741,7 @@ Expected: FAIL — `AdmitColor` and `AdmitVector` not defined.
 
 - [ ] **Step 3: Implement reconstruction**
 
-Start from the serialized default. For each present component index 0–3, call `AdmitScalar` with that component's bindings and that component of the default as the serialized value. Any component returning `NotFiniteExact` returns `NotFiniteExact` for the property; any returning `SourcesDisagree` returns `SourcesDisagree`; otherwise write the admitted component value and return `Singleton`. Component indices outside 0–3 are a defect: throw `ArgumentOutOfRangeException`.
+Start from the serialized default. For each present component index 0–3, call `AdmitScalar` with that component's bindings and **that component of the default** as the serialized value. `AdmitScalar` already enforces that the animated values and the default form a singleton, so a differing animated value returns `SourcesDisagree` without any extra logic here — do not add an override path. Any component returning `NotFiniteExact` returns `NotFiniteExact` for the property; any returning `SourcesDisagree` returns `SourcesDisagree`; otherwise write the admitted component value, which necessarily equals the default component, and return `Singleton`. Component indices outside 0–3 are a defect: throw `ArgumentOutOfRangeException`.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1723,7 +1752,7 @@ Expected: PASS.
 ```bash
 git add Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs \
         Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs
-git commit -m "feat: reconstruct admitted colour and vector properties"
+git commit -m "feat: admit colour and vector properties under the singleton rule"
 ```
 
 ---
@@ -2134,6 +2163,8 @@ git commit -m "feat: bound the admitted state product before materialization"
 
 The single new pure operation the spec allows. **Substitution must never invent a property that the captured material does not have.**
 
+Substitution is a **primitive**, not an authorization path: it will write whatever value it is given, and its unit tests exercise it with arbitrary values. Whether a value may be substituted at all is decided upstream by admission (Tasks 12, 13, 19), which under the V1 rule admits only a value equal to that admitted material's captured default. Nothing here may be read as permitting an animated value to override a differing default.
+
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityMaterialEvidenceCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityMaterialEvidenceCaptureTests.cs`
@@ -2303,6 +2334,8 @@ per renderer slot
 
 The defaults must come from **each admitted material individually**. A renderer-wide default would be wrong the moment two admitted materials disagree, and that error is in the false-positive direction.
 
+Admission is per admitted material, so the same animated binding may be admitted against one admitted material and refused against another. That is correct: the singleton set is `{animated values} ∪ {that material's captured default}`.
+
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/CapturedAnimationEvidence.cs`
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
@@ -2364,9 +2397,10 @@ The defaults must come from **each admitted material individually**. A renderer-
         public void EachAdmittedMaterialUsesItsOwnSerializedDefaults()
         {
             // Two admitted materials whose serialized _AlphaForceOpaque values
-            // DIFFER, with an animated binding on a DIFFERENT property. If the
-            // algorithm used one renderer-wide default, both would resolve the
-            // same way and this test would fail.
+            // DIFFER, and NO animated property at all. If the algorithm used one
+            // renderer-wide default, both would resolve the same way. No animated
+            // binding is needed to prove this, and adding an unrelated one would
+            // risk it disagreeing with one material's default and refusing.
             var fixture = SlotFixture.WithMaterials(
                 AttestedMaterialWithForcedOpaque(true),
                 AttestedMaterialWithForcedOpaque(false));
@@ -2374,10 +2408,7 @@ The defaults must come from **each admitted material individually**. A renderer-
             var result = AdmittedMaterialStates.ResolveSlot(
                 new CapturedMaterialSlotEvidence(0, new[] { 0, 1 }),
                 fixture.AdmittedMaterials,
-                new[]
-                {
-                    (UnrelatedSingletonBinding(), UnrelatedScalarReference()),
-                },
+                System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                 fixture.AlphaFields);
 
             Assert.That(result.IsResolved, Is.True);
@@ -2389,10 +2420,37 @@ The defaults must come from **each admitted material individually**. A renderer-
         }
 
         [Test]
-        public void AnimatedPropertyIsSubstitutedIntoEachAdmittedMaterial()
+        public void ReAssertedAnimatedValueResolvesWithoutChangingTheAdmittedState()
         {
-            // The animated singleton must override the serialized default in every
-            // admitted material that has the property.
+            // The animated singleton EQUALS this material's captured default, so
+            // it is admitted. This exercises the full admission, substitution, and
+            // resolution path while leaving the admitted state exactly the default.
+            var fixture = SlotFixture.WithMaterials(
+                AttestedMaterialWithForcedOpaque(true));
+            var withoutAnimation = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                fixture.AdmittedMaterials,
+                System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                fixture.AlphaFields);
+
+            var withReAssertion = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                fixture.AdmittedMaterials,
+                new[] { (ForceOpaqueBinding(1f), ForceOpaqueReference()) },
+                fixture.AlphaFields);
+
+            Assert.That(withReAssertion.IsResolved, Is.True);
+            Assert.That(withReAssertion.Resolutions.Single().Classify(AnyTriangle()),
+                Is.EqualTo(withoutAnimation.Resolutions.Single()
+                    .Classify(AnyTriangle())),
+                "re-asserting the captured default must not change the outcome");
+        }
+
+        [Test]
+        public void AnimatedValueDifferingFromTheAdmittedMaterialDefaultRefuses()
+        {
+            // The animated value contradicts this material's captured default.
+            // V1 does not admit a transition to a different value.
             var fixture = SlotFixture.WithMaterials(
                 AttestedMaterialWithForcedOpaque(false));
 
@@ -2402,10 +2460,9 @@ The defaults must come from **each admitted material individually**. A renderer-
                 new[] { (ForceOpaqueBinding(1f), ForceOpaqueReference()) },
                 fixture.AlphaFields);
 
-            Assert.That(result.IsResolved, Is.True);
-            Assert.That(result.Resolutions.Single().Classify(AnyTriangle()),
-                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
-                "the animated value must have been substituted into the evidence");
+            Assert.That(result.IsResolved, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(
+                RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton));
         }
 
         [Test]
@@ -2438,9 +2495,9 @@ For each admitted material index in the slot:
 1. take that material's own `CapturedMaterialEvidence`;
 2. group the slot's proof-relevant bindings by `AnimatedPropertyRef.PropertyName` and `Kind`;
 3. read the serialized default for that property **from that material's own captured evidence**;
-4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `TextureScaleOffsetComponent` uses the vector path against the derived `_ST` property;
+4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `TextureScaleOffsetComponent` uses the vector path against the derived `_ST` property. Admission requires the animated values **and that material's own default** to be one exact value; an animated value never overrides a differing default;
 5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; on `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`;
-6. derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18;
+6. derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one; the substitution path is retained so the admitted state is constructed uniformly and so a future widening of admission has one place to change;
 7. resolve semantics for the substituted evidence and call `AlphaSemanticsResolver.Resolve`.
 
 Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already.
