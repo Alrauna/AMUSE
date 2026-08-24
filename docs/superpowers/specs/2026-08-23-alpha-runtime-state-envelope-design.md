@@ -405,6 +405,28 @@ the renderer draws. The semantics are renderer-wide, not slot-0-only and not
 unresolved. This is the observation from which the mapping rule for bare material
 bindings is selected, and it must not be selected from binding syntax.
 
+Task 5 additionally observed the same boundary for a property that the admitted
+material does not declare. On Unity 2022.3.22f1,
+`AnimatingAnAbsentMaterialPropertyIsObserved` samples a bare
+`material._Cutoff` float curve with value `0.25` and its independent
+`m_LocalScale.x` control reaches `3.5`, so the sample is known to have run. The
+one-slot renderer uses `Unlit/Color`, for which `Material.HasProperty("_Cutoff")`
+is false. Before sampling, during sampling, and after `StopAnimationMode`, the
+material remains the fixture's material and `_Cutoff` remains absent (there is no
+material value to read). During sampling only, `renderer.HasPropertyBlock()` is
+true and the renderer-wide block is non-empty with `_Cutoff == 0.25`; the sole
+per-index block remains empty and has no `_Cutoff`. All of those property-block
+and control values restore afterward.
+
+This observes a renderer-wide property-block write, but does **not** establish
+whether a shader that does not declare `_Cutoff` ignores that write in rendering.
+Task 18 therefore takes the fail-closed branch:
+`RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial`. It must
+refuse an admitted material state when a bare animated property is absent rather
+than preserve absence and ignore the substituted value. This is a conservative
+refusal, not a claim that the sampled property-block value changes rendered
+pixels.
+
 One rule is recorded here for implementation and is **not** settled by
 observation, because no observation can settle it: `GetAnimatableBindings`
 establishes what Unity *generates* in this fixture, not what every clip in the
