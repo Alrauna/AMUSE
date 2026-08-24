@@ -180,6 +180,35 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
+        [TestCase("m_Materials.Array.data[0]", 0)]
+        [TestCase("m_Materials.Array.data[3]", 3)]
+        public void MaterialSlotBindingsAreParsed(string property, int expected)
+        {
+            Assert.That(
+                LiveAnimationObservation.TryParseMaterialSlotBinding(
+                    property, out var slot),
+                Is.True);
+            Assert.That(slot, Is.EqualTo(expected));
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("m_Materials.Array.size")]
+        [TestCase("m_Mesh")]
+        [TestCase("material._Cutoff")]
+        [TestCase("m_Materials.Array.data[]")]
+        [TestCase("m_Materials.Array.data[-1]")]
+        [TestCase("m_Materials.Array.data[1]trailing")]
+        [TestCase("prefixm_Materials.Array.data[1]")]
+        [TestCase("m_Materials.Array.data[2147483648]")]
+        public void NonSlotBindingsAreNotParsedAsSlots(string property)
+        {
+            Assert.That(
+                LiveAnimationObservation.TryParseMaterialSlotBinding(
+                    property, out _),
+                Is.False);
+        }
+
         private static bool ObserveFiniteExact(AnimationCurve curve)
         {
             var clip = new AnimationClip { name = "finite exact probe" };
