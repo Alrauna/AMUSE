@@ -329,6 +329,28 @@ Obligations 2, 3, and 4 bound the completeness of the relevance filter. Until th
 
 Obligation 6 is the only one that can invalidate the architecture rather than merely bound it, and it is therefore settled first, before any other implementation work.
 
+Obligation 1 verified 2026-08-24 for the exact immediate
+capture-pass -> animator-services activation/commit/deactivation ->
+extension-free barrier-pass lifecycle. The non-empty generic-platform fixture in
+`Packages/com.alrauna.amuse/Tests/Editor/Host/AnimatorBindingsLifetimeGateTests.cs`
+(`RepeatedInnateEnumerationIsSemanticallyIdempotentInImmediatePostDeactivationLifecycle`)
+retains the real `IPlatformAnimatorBindings`, then invokes it twice after the
+context has deactivated. Two child `Animator` keys with distinct committed
+controller identities produced the same complete ordered `(key identity,
+controller identity, false)` sequence on both calls. Every child Animator
+assignment was identical before the first and after the second call, including a
+third Animator whose assignment remained null. This runtime fixture has no
+VRChat descriptor; descriptor-specific authorization comes from the pinned
+source proof in `docs/task-6-vrchat-sdk-3.10.4-source-audit.md`, covering Unity
+2022.3.22f1, NDMF 1.14.4, and official VRChat SDK Base/Avatars 3.10.4. That audit
+establishes that descriptor-editor re-entry remains reachable, but every
+source-visible semantic mutation has already reached its fixed point after the
+first activation and commit: later writes are lifecycle-scoped idempotent
+reassertions or nonsemantic editor/cache effects. This authorizes the retained
+call only in that immediate lifecycle. It does not establish literal side-effect
+freedom, universal harmlessness, or safety after an intervening actor mutates the
+descriptor.
+
 Obligation 6 verified 2026-08-23 by `Packages/com.alrauna.amuse/Tests/Editor/Host/AnimatorBindingsLifetimeGateTests.cs` (`CapturedBindingsRemainUsableAfterContextDeactivation`): the captured `IPlatformAnimatorBindings` remains usable after `AnimatorServicesContext` deactivates and commits.
 
 Obligation 8 is the one case where the unverified assumption is deliberately conservative rather than merely unknown, and it is recorded here so that it is revisited as an opportunity rather than mistaken for a settled limit. Within-curve behavior was observed 2026-08-24 by `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`: `AnimationCurve.Linear(0f, 0f, 1f, 1f)` evaluates to `0.5f` at `0.5f`; keys `(0f, 0f, outTangent=+Infinity)` and `(1f, 1f, inTangent=+Infinity)` evaluate to `0f` at `0.5f`; and equal-endpoint keys `(0f, 1f, outTangent=2f)` and `(1f, 1f, inTangent=-2f)` evaluate to `1.5f` at `0.5f`, rather than `1f`. The latter records Hermite overshoot, so keyframe endpoints are not a finite-exact admission rule. Cross-source blending of generic material-property float curves still requires a Play Mode observation and remains open; the conservative singleton rule stands.
