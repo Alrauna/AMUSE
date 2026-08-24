@@ -251,6 +251,65 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AnimationCurve.Constant(0f, 1f, 3.5f));
         }
 
+        private readonly struct MaterialPropertyObservation
+        {
+            public MaterialPropertyObservation(
+                SkinnedMeshRenderer renderer,
+                Material material,
+                Transform control,
+                string property)
+            {
+                var materials = renderer.sharedMaterials;
+                MaterialIdentityHeld = materials.Length == 1 && materials[0] == material;
+                MaterialHasProperty = material.HasProperty(property);
+                MaterialValue = MaterialHasProperty ? material.GetFloat(property) : null;
+                RendererHasPropertyBlock = renderer.HasPropertyBlock();
+
+                var rendererWide = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(rendererWide);
+                RendererWideEmpty = rendererWide.isEmpty;
+                RendererWideHasProperty = rendererWide.HasFloat(property);
+                RendererWideValue = RendererWideHasProperty
+                    ? rendererWide.GetFloat(property)
+                    : null;
+
+                var indexZero = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(indexZero, 0);
+                IndexZeroEmpty = indexZero.isEmpty;
+                IndexZeroHasProperty = indexZero.HasFloat(property);
+                IndexZeroValue = IndexZeroHasProperty ? indexZero.GetFloat(property) : null;
+                Control = control.localScale.x;
+            }
+
+            public bool MaterialIdentityHeld { get; }
+            public bool MaterialHasProperty { get; }
+            public float? MaterialValue { get; }
+            public bool RendererHasPropertyBlock { get; }
+            public bool RendererWideEmpty { get; }
+            public bool RendererWideHasProperty { get; }
+            public float? RendererWideValue { get; }
+            public bool IndexZeroEmpty { get; }
+            public bool IndexZeroHasProperty { get; }
+            public float? IndexZeroValue { get; }
+            public float Control { get; }
+
+            public void WriteTo(string phase)
+            {
+                TestContext.WriteLine(
+                    phase + ": material identity=" + MaterialIdentityHeld +
+                    " has _Cutoff=" + MaterialHasProperty +
+                    " value=" + MaterialValue +
+                    "; renderer-wide HasPropertyBlock=" + RendererHasPropertyBlock +
+                    " isEmpty=" + RendererWideEmpty +
+                    " has _Cutoff=" + RendererWideHasProperty +
+                    " value=" + RendererWideValue +
+                    "; block[0] isEmpty=" + IndexZeroEmpty +
+                    " has _Cutoff=" + IndexZeroHasProperty +
+                    " value=" + IndexZeroValue +
+                    "; control m_LocalScale.x=" + Control);
+            }
+        }
+
         [Test]
         public void StructuralBindingCategoriesAreDiscovered()
         {
@@ -721,6 +780,147 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Object.DestroyImmediate(a);
                 Object.DestroyImmediate(b);
                 Object.DestroyImmediate(mesh);
+            }
+        }
+
+        [Test]
+        public void AnimatingAnAbsentMaterialPropertyIsObserved()
+        {
+            GameObject root = null;
+            GameObject child = null;
+            Mesh mesh = null;
+            Material material = null;
+            AnimationClip clip = null;
+            try
+            {
+                root = new GameObject("absent property root");
+                child = new GameObject("Body");
+                child.transform.SetParent(root.transform);
+                root.AddComponent<Animator>();
+
+                mesh = new Mesh();
+                mesh.vertices = new[] { Vector3.zero, Vector3.right, Vector3.up };
+                mesh.SetIndices(new[] { 0, 1, 2 }, MeshTopology.Triangles, 0);
+                var renderer = child.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+
+                var shader = Shader.Find("Unlit/Color");
+                Assert.That(shader, Is.Not.Null, "fixture precondition: Unlit/Color must exist");
+                material = new Material(shader);
+                renderer.sharedMaterials = new[] { material };
+
+                clip = new AnimationClip { name = "absent property" };
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        "Body", typeof(SkinnedMeshRenderer), "material._Cutoff"),
+                    AnimationCurve.Constant(0f, 1f, 0.25f));
+                AddControlCurve(clip);
+
+                Assert.That(material.HasProperty("_Cutoff"), Is.False,
+                    "fixture precondition: _Cutoff must be absent from Unlit/Color");
+
+                var before = new MaterialPropertyObservation(
+                    renderer, material, child.transform, "_Cutoff");
+                MaterialPropertyObservation sampled;
+                AnimationMode.StartAnimationMode();
+                try
+                {
+                    AnimationMode.BeginSampling();
+                    try
+                    {
+                        AnimationMode.SampleAnimationClip(root, clip, 0f);
+                        sampled = new MaterialPropertyObservation(
+                            renderer, material, child.transform, "_Cutoff");
+                    }
+                    finally
+                    {
+                        AnimationMode.EndSampling();
+                    }
+                }
+                finally
+                {
+                    AnimationMode.StopAnimationMode();
+                }
+
+                var restored = new MaterialPropertyObservation(
+                    renderer, material, child.transform, "_Cutoff");
+                before.WriteTo("before sample");
+                sampled.WriteTo("during sample");
+                restored.WriteTo("after restore");
+
+                // The control is load-bearing: without it, any no-change result
+                // would be indistinguishable from sampling never having run.
+                Assert.That(sampled.Control, Is.EqualTo(3.5f).Within(1e-5f),
+                    "the control curve did not take its animated value; sampling " +
+                    "did not run and every absent-property observation is void");
+
+                // Observed on Unity 2022.3.22f1: AnimationMode does not add
+                // _Cutoff to the Unlit/Color material, but does put the curve
+                // value into renderer-wide property-block state. This test
+                // observes state only; it makes no claim about rendered pixels.
+                Assert.That(before.MaterialIdentityHeld, Is.True);
+                Assert.That(before.MaterialHasProperty, Is.False);
+                Assert.That(before.MaterialValue, Is.Null);
+                Assert.That(before.RendererHasPropertyBlock, Is.False);
+                Assert.That(before.RendererWideEmpty, Is.True);
+                Assert.That(before.RendererWideHasProperty, Is.False);
+                Assert.That(before.RendererWideValue, Is.Null);
+                Assert.That(before.IndexZeroEmpty, Is.True);
+                Assert.That(before.IndexZeroHasProperty, Is.False);
+                Assert.That(before.IndexZeroValue, Is.Null);
+                Assert.That(before.Control, Is.EqualTo(1f).Within(1e-5f));
+
+                Assert.That(sampled.MaterialIdentityHeld, Is.True);
+                Assert.That(sampled.MaterialHasProperty, Is.False);
+                Assert.That(sampled.MaterialValue, Is.Null);
+                Assert.That(sampled.RendererHasPropertyBlock, Is.True);
+                Assert.That(sampled.RendererWideEmpty, Is.False);
+                Assert.That(sampled.RendererWideHasProperty, Is.True);
+                Assert.That(sampled.RendererWideValue, Is.EqualTo(0.25f).Within(1e-5f));
+                Assert.That(sampled.IndexZeroEmpty, Is.True);
+                Assert.That(sampled.IndexZeroHasProperty, Is.False);
+                Assert.That(sampled.IndexZeroValue, Is.Null);
+
+                // AnimationMode's temporary state must fully restore.
+                Assert.That(restored.MaterialIdentityHeld, Is.True);
+                Assert.That(restored.MaterialHasProperty, Is.False);
+                Assert.That(restored.MaterialValue, Is.Null);
+                Assert.That(restored.RendererHasPropertyBlock, Is.False);
+                Assert.That(restored.RendererWideEmpty, Is.True);
+                Assert.That(restored.RendererWideHasProperty, Is.False);
+                Assert.That(restored.RendererWideValue, Is.Null);
+                Assert.That(restored.IndexZeroEmpty, Is.True);
+                Assert.That(restored.IndexZeroHasProperty, Is.False);
+                Assert.That(restored.IndexZeroValue, Is.Null);
+                Assert.That(restored.Control, Is.EqualTo(1f).Within(1e-5f));
+            }
+            finally
+            {
+                if (clip != null)
+                {
+                    Object.DestroyImmediate(clip);
+                }
+
+                if (material != null)
+                {
+                    Object.DestroyImmediate(material);
+                }
+
+                if (mesh != null)
+                {
+                    Object.DestroyImmediate(mesh);
+                }
+
+                if (child != null)
+                {
+                    Object.DestroyImmediate(child);
+                }
+
+                if (root != null)
+                {
+                    Object.DestroyImmediate(root);
+                }
             }
         }
 
