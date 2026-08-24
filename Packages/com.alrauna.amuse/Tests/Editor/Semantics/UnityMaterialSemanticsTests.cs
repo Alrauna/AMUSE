@@ -143,6 +143,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void ClosedCaptureRevalidatesSourceAttestation()
+        {
+            var material = NewMaterial(
+                "unattested-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var success = UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                new[] { material },
+                new[] { CapturedAlphaMaterialFamily.Poiyomi },
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                out var captured);
+
+            Assert.That(success, Is.False);
+            Assert.That(captured, Is.Null);
+        }
+
+        [Test]
         public void AnalyzeAlphaMaterialUnsupportedFamilyIsAllUnknown()
         {
             _material = new Material(Shader.Find("Unlit/Color"));

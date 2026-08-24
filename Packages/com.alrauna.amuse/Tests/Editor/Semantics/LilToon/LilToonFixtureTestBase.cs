@@ -71,12 +71,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         protected Material NewFixtureMaterial()
         {
+            return Track(CreateVerifiedMaterial());
+        }
+
+        internal static Material CreateVerifiedMaterial()
+        {
             var shader = Shader.Find(FixtureShaderName);
             Assert.That(
                 shader,
                 Is.Not.Null,
                 $"Test fixture shader '{FixtureShaderName}' must import.");
-            return Track(new Material(shader));
+            return new Material(shader);
         }
 
         /// <summary>
