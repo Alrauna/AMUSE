@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Tests.Editor.Build;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -24,6 +25,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             internal bool IsSpecialMotionUsable;
             internal bool GetInnateControllersUsable;
             internal int InnateControllerCount;
+            internal string FirstEnumeration;
+            internal string SecondEnumeration;
+            internal string AnimatorAssignmentsBefore;
+            internal string AnimatorAssignmentsAfter;
+            internal bool EnumerationStable;
+            internal bool ObservableStateUnchanged;
             internal Exception Failure;
         }
 
@@ -85,9 +92,25 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         probe.Captured.IsSpecialMotion(motion) == false;
                     UnityEngine.Object.DestroyImmediate(motion);
 
-                    var innate = new List<(object, RuntimeAnimatorController, bool)>(
+                    probe.AnimatorAssignmentsBefore =
+                        DescribeAnimatorAssignments(context.AvatarRootObject);
+                    var first = new List<(object, RuntimeAnimatorController, bool)>(
                         probe.Captured.GetInnateControllers(context.AvatarRootObject));
-                    probe.InnateControllerCount = innate.Count;
+                    var second = new List<(object, RuntimeAnimatorController, bool)>(
+                        probe.Captured.GetInnateControllers(context.AvatarRootObject));
+                    probe.AnimatorAssignmentsAfter =
+                        DescribeAnimatorAssignments(context.AvatarRootObject);
+
+                    probe.FirstEnumeration = DescribeEnumeration(first);
+                    probe.SecondEnumeration = DescribeEnumeration(second);
+                    probe.InnateControllerCount = first.Count;
+                    probe.EnumerationStable = string.Equals(
+                        probe.FirstEnumeration, probe.SecondEnumeration,
+                        StringComparison.Ordinal);
+                    probe.ObservableStateUnchanged = string.Equals(
+                        probe.AnimatorAssignmentsBefore,
+                        probe.AnimatorAssignmentsAfter,
+                        StringComparison.Ordinal);
                     probe.GetInnateControllersUsable = true;
                 }
                 catch (Exception exception)
@@ -95,6 +118,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     probe.Failure = exception;
                 }
             }
+        }
+
+        private static string DescribeEnumeration(
+            IEnumerable<(object, RuntimeAnimatorController, bool)> innate)
+        {
+            return string.Join("|", innate.Select(entry =>
+                DescribeKey(entry.Item1) + "=>" +
+                (entry.Item2 == null
+                    ? "null"
+                    : entry.Item2.GetInstanceID().ToString()) +
+                ":" + entry.Item3));
+        }
+
+        private static string DescribeKey(object key)
+        {
+            if (key == null) return "null";
+            if (key is UnityEngine.Object unityObject)
+                return unityObject.GetInstanceID().ToString();
+            if (key is Enum enumValue)
+                return enumValue.GetType().FullName + "=" +
+                       Convert.ToInt64(enumValue);
+
+            throw new InvalidOperationException(
+                "The characterization has no stable representation for innate key type " +
+                key?.GetType().FullName);
+        }
+
+        private static string DescribeAnimatorAssignments(GameObject root)
+        {
+            return string.Join("|", root.GetComponentsInChildren<Animator>(true)
+                .Select(animator => animator.GetInstanceID() + "=>" +
+                    (animator.runtimeAnimatorController == null
+                        ? "null"
+                        : animator.runtimeAnimatorController.GetInstanceID().ToString())));
         }
 
         [Test]
@@ -131,6 +188,101 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void RepeatedInnateEnumerationIsSemanticallyIdempotentInImmediatePostDeactivationLifecycle()
+        {
+            using var armed = AmusePlatformFinishPluginTests.SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            GameObject root = null;
+            AnimatorController firstController = null;
+            AnimatorController secondController = null;
+
+            try
+            {
+                root = new GameObject("AMUSE innate enumeration safety");
+                firstController = new AnimatorController { name = "first innate controller" };
+                secondController = new AnimatorController { name = "second innate controller" };
+                firstController.AddLayer("first layer");
+                secondController.AddLayer("second layer");
+
+                var firstChild = new GameObject("first assigned animator");
+                firstChild.transform.SetParent(root.transform, false);
+                var firstAnimator = firstChild.AddComponent<Animator>();
+                firstAnimator.runtimeAnimatorController = firstController;
+
+                var secondChild = new GameObject("second assigned animator");
+                secondChild.transform.SetParent(root.transform, false);
+                var secondAnimator = secondChild.AddComponent<Animator>();
+                secondAnimator.runtimeAnimatorController = secondController;
+
+                var nullChild = new GameObject("unassigned animator");
+                nullChild.transform.SetParent(root.transform, false);
+                var nullAnimator = nullChild.AddComponent<Animator>();
+
+                Assert.That(firstController, Is.Not.SameAs(secondController),
+                    "fixture controller identities must be distinct");
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmusePlatformFinishPluginTests.TestVrchatPlatform.Instance);
+                var probe = context.GetState<GateProbe>();
+
+                Assert.That(probe.Failure, Is.Null);
+                Assert.That(probe.ContextWasInactiveAtObserve, Is.True,
+                    "the semantic-idempotence observation did not run after commit");
+                Assert.That(firstAnimator.runtimeAnimatorController, Is.Not.Null);
+                Assert.That(secondAnimator.runtimeAnimatorController, Is.Not.Null);
+                Assert.That(firstAnimator.runtimeAnimatorController,
+                    Is.Not.SameAs(secondAnimator.runtimeAnimatorController),
+                    "committed controller identities must remain distinct");
+
+                var expectedEnumeration =
+                    firstAnimator.GetInstanceID() + "=>" +
+                    firstAnimator.runtimeAnimatorController.GetInstanceID() + ":False|" +
+                    secondAnimator.GetInstanceID() + "=>" +
+                    secondAnimator.runtimeAnimatorController.GetInstanceID() + ":False";
+                var expectedAssignments =
+                    firstAnimator.GetInstanceID() + "=>" +
+                    firstAnimator.runtimeAnimatorController.GetInstanceID() + "|" +
+                    secondAnimator.GetInstanceID() + "=>" +
+                    secondAnimator.runtimeAnimatorController.GetInstanceID() + "|" +
+                    nullAnimator.GetInstanceID() + "=>null";
+
+                Assert.That(probe.InnateControllerCount, Is.EqualTo(2),
+                    "the generic fixture must exercise two innate controller tuples");
+                Assert.That(probe.FirstEnumeration, Is.EqualTo(expectedEnumeration),
+                    "the first ordered enumeration did not contain the complete expected " +
+                    "key/controller/bool identities");
+                Assert.That(probe.SecondEnumeration, Is.EqualTo(expectedEnumeration),
+                    "the second ordered enumeration did not contain the complete expected " +
+                    "key/controller/bool identities");
+                Assert.That(probe.AnimatorAssignmentsBefore, Is.EqualTo(expectedAssignments),
+                    "the pre-enumeration assignment snapshot did not include every Animator");
+                Assert.That(probe.AnimatorAssignmentsAfter, Is.EqualTo(expectedAssignments),
+                    "the post-enumeration assignment snapshot did not include every Animator");
+                Assert.That(probe.EnumerationStable, Is.True,
+                    "GetInnateControllers changed ordered tuple identities between " +
+                    "immediate post-deactivation calls");
+                Assert.That(probe.ObservableStateUnchanged, Is.True,
+                    "GetInnateControllers changed Animator assignments between " +
+                    "immediate post-deactivation calls");
+
+                TestContext.WriteLine("First enumeration: " + probe.FirstEnumeration);
+                TestContext.WriteLine("Second enumeration: " + probe.SecondEnumeration);
+                TestContext.WriteLine(
+                    "Animator assignments before: " + probe.AnimatorAssignmentsBefore);
+                TestContext.WriteLine(
+                    "Animator assignments after: " + probe.AnimatorAssignmentsAfter);
+            }
+            finally
+            {
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+                if (firstController != null)
+                    UnityEngine.Object.DestroyImmediate(firstController);
+                if (secondController != null)
+                    UnityEngine.Object.DestroyImmediate(secondController);
             }
         }
     }
