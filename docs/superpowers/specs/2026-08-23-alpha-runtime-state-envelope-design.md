@@ -222,6 +222,21 @@ The rule is therefore:
 
 The allowlist starts empty and grows only with evidence. Populating and justifying it is an implementation-time verification obligation, not an assumption this design may make in advance. This is fail-closed: an unjustified type costs coverage, never correctness.
 
+### Animation events
+
+An `AnimationEvent` is not a curve binding. It invokes a method by name on the animated hierarchy, which is **runtime-code behavior outside the admitted curve/value model entirely** — no part of the admitted-state construction observes it.
+
+Two host facts are established and pinned:
+
+- NDMF **drops** animation events when it clones a clip that carries them. The `VirtualClip` constructor builds a fresh `AnimationClip` and copies only curves, because Unity offers no way to delete events. Ordinary cloned clips therefore reach the committed graph without events.
+- **Special/marker motions are the exception.** They are committed by identity and never cloned, so any events they carry survive verbatim.
+
+Whether such an event can execute, and with what effect, in the supported VRChat avatar runtime **cannot presently be bounded**: the VRChat SDK is absent from the public development project and no public API available here characterizes it. An event's target method is resolved by name against the hierarchy and its effect is unbounded, so no layer-, clip-, or renderer-scoped containment is sound — the same reasoning that makes an unallowlisted behaviour avatar-scoped.
+
+The rule is therefore: **any reachable committed clip containing an animation event yields avatar-scoped `AnimationEventPresent`.**
+
+This is a **conservative refusal, not a claim that the event definitely executes.** It costs coverage and can never cost correctness. If the executability and effect of avatar animation events are later characterized against the pinned platform, this refusal narrows or disappears; until then, an uncharacterized runtime writer refuses.
+
 ### Structural invalidation
 
 A renderer is refused outright when an object-reference curve can replace its mesh, or when the material slot count can change. AMUSE does not attempt animated-mesh identity reconciliation, and no generic reconciliation system is designed here.
@@ -270,6 +285,7 @@ The design distinguishes two categories, and the distinction is structural rathe
 - animated mesh replacement or slot-count change;
 - admitted-state product above the cap;
 - a `StateMachineBehaviour` whose type is not on the allowlist, refused at avatar scope;
+- `AnimationEventPresent`: a reachable committed clip carrying an animation event, refused at avatar scope;
 - material-swap dependency closure that cannot be established, because a slot's admitted material set cannot be fully enumerated or an admitted material's family cannot be attested;
 - unsupported `RuntimeAnimatorController` form, including `AnimatorOverrideController` and any subtype AMUSE does not walk;
 - synced-layer motion overrides.
@@ -320,7 +336,7 @@ Obligation 8 is the one case where the unverified assumption is deliberately con
 Testing follows the repository's existing separation between analysis and mutation, and this branch's work is entirely on the analysis side.
 
 - **Capture and analysis are tested independently.** Admitted-state construction is exercised over immutable inputs without a live controller graph, so a failure is attributable to capture, to admitted-state construction, or to proof composition.
-- **Synthetic fixtures are executable specifications.** Tiny fixtures that isolate one rule are preferred over production avatars: one constant curve, one interpolating curve, one property re-asserted to the same value by two clips, one property written to differing values by two clips, one two-material swap, one additive layer, one unnormalized Direct Blend Tree, one mesh-replacement curve, one over-cap product.
+- **Synthetic fixtures are executable specifications.** Tiny fixtures that isolate one rule are preferred over production avatars: one constant curve, one interpolating curve, one property re-asserted to the same value by two clips, one property written to differing values by two clips, one two-material swap, one additive layer, one unnormalized Direct Blend Tree, one mesh-replacement curve, one over-cap product, one clip carrying a single animation event and an otherwise identical clip carrying none.
 - **Conservative refusal is tested as a first-class outcome**, not as an absence of results. Every named refusal has a test that demonstrates the refusal and its reason.
 - **The intersection property is tested directly**: a renderer whose admitted states disagree on some faces must yield exactly the faces on which they agree.
 - **Determinism**: the same immutable input yields the same admitted set, the same deduplicated resolutions, and the same plan.
