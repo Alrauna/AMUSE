@@ -232,7 +232,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             public bool SawProducerAndAmuse { get; set; }
         }
 
-        private sealed class SyntheticPluginScope : System.IDisposable
+        internal sealed class SyntheticPluginScope : System.IDisposable
         {
             private readonly bool previous;
 
@@ -255,7 +255,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private sealed class TestVrchatPlatform : INDMFPlatformProvider
+        internal sealed class TestVrchatPlatform : INDMFPlatformProvider
         {
             internal static readonly TestVrchatPlatform Instance = new TestVrchatPlatform();
 
