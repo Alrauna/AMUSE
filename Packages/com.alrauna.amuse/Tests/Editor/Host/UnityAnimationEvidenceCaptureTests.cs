@@ -238,6 +238,170 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void ScaleOffsetRequestMakesTheDerivedStPropertyRelevant()
+        {
+            var relevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+
+            Assert.That(
+                relevance.VectorProperties,
+                Does.Not.Contain("_MainTex_ST"),
+                "fixture must prove texture-evidence derivation, not vector relevance");
+            Assert.That(
+                relevance.TextureProperties.Any(texture =>
+                    texture.PropertyName == "_MainTex" &&
+                    (texture.Evidence & TextureEvidenceKinds.ScaleOffset) != 0),
+                Is.True,
+                "the real frontend must request _MainTex ScaleOffset evidence");
+            Assert.That(
+                UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(
+                    relevance),
+                Contains.Item("_MainTex_ST"));
+
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._MainTex_ST.x"),
+                    "Body",
+                    relevance,
+                    out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
+            Assert.That(reference.PropertyName, Is.EqualTo("_MainTex_ST"));
+            Assert.That(reference.ComponentIndex, Is.Zero);
+        }
+
+        [Test]
+        public void ScaleOffsetIsNotDerivedWhenTheEvidenceKindIsNotRequested()
+        {
+            var relevance = new MaterialEvidenceRequest(
+                false,
+                false,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex", TextureEvidenceKinds.SourceIdentity),
+                });
+
+            Assert.That(
+                UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(
+                    relevance),
+                Is.Empty);
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._MainTex_ST.x"),
+                    "Body",
+                    relevance,
+                    out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        [Test]
+        public void ScalarBindingResolvesRendererWideWithoutASlot()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._Cutoff"),
+                    "Body",
+                    Relevance(),
+                    out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(reference.Kind, Is.EqualTo(AnimatedPropertyKind.Scalar));
+            Assert.That(reference.PropertyName, Is.EqualTo("_Cutoff"));
+            Assert.That(reference.ComponentIndex, Is.EqualTo(-1));
+        }
+
+        [TestCase("material._Color.r", 0)]
+        [TestCase("material._Color.a", 3)]
+        public void ColorComponentResolvesToItsParent(
+            string property,
+            int component)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), "Body", Relevance(), out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.ColorComponent));
+            Assert.That(reference.PropertyName, Is.EqualTo("_Color"));
+            Assert.That(reference.ComponentIndex, Is.EqualTo(component));
+        }
+
+        [TestCase("material._MainTexPan.x", 0)]
+        [TestCase("material._MainTexPan.w", 3)]
+        public void VectorComponentResolvesToItsParent(
+            string property,
+            int component)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), "Body", Relevance(), out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.VectorComponent));
+            Assert.That(reference.PropertyName, Is.EqualTo("_MainTexPan"));
+            Assert.That(reference.ComponentIndex, Is.EqualTo(component));
+        }
+
+        [TestCase("material[2]._Cutoff")]
+        [TestCase("material[-1]._Cutoff")]
+        [TestCase("material[slot]._Color.a")]
+        [TestCase("material[1]._Color.a")]
+        [TestCase("material[0]._MainTexPan.w")]
+        public void UnexpectedPotentiallyRelevantMaterialSyntaxFailsClosed(
+            string property)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), "Body", Relevance(), out _),
+                Is.EqualTo(
+                    ProofRelevantBindingResolution.UnrecognizedMaterialBinding));
+        }
+
+        [TestCase("material._Unrelated")]
+        [TestCase("material._Unrelated.a")]
+        [TestCase("material[2]._Unrelated")]
+        [TestCase("material[slot]._Unrelated")]
+        [TestCase("notmaterial[2]._Unrelated.a")]
+        public void UnrequestedPropertiesRemainIrrelevant(string property)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), "Body", Relevance(), out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        [Test]
+        public void PresencePropertiesAreNotAnimatedScalarInputs()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._PresenceOnly"),
+                    "Body",
+                    Relevance(),
+                    out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        [TestCase("body", "material._Cutoff")]
+        [TestCase("Body", "material._cutoff")]
+        public void RendererPathAndPropertyComparisonsAreOrdinal(
+            string rendererPath,
+            string property)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), rendererPath, Relevance(), out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        [Test]
         public void ClosureUnionsEveryAdmittedFamilyNotOnlyTheInitialOne()
         {
             var initial = NewPoiyomiMaterial();
@@ -622,6 +786,28 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 Object.DestroyImmediate(clip);
             }
+        }
+
+        private static MaterialEvidenceRequest Relevance()
+        {
+            return new MaterialEvidenceRequest(
+                false,
+                false,
+                new[] { "_PresenceOnly" },
+                new[] { "_Cutoff" },
+                new[] { "_Color" },
+                new[] { "_MainTexPan" },
+                Array.Empty<TexturePropertyEvidenceRequest>());
+        }
+
+        private static CapturedFloatBinding Bound(string property)
+        {
+            return new CapturedFloatBinding(
+                "Body",
+                typeof(SkinnedMeshRenderer).FullName,
+                property,
+                true,
+                new[] { 1f });
         }
 
         private Material NewPoiyomiMaterial()
