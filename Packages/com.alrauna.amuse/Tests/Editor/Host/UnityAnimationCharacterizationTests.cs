@@ -724,6 +724,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
+        [Test]
+        public void InterpolatingCurveProducesIntermediateValues()
+        {
+            var curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+            var midpoint = curve.Evaluate(0.5f);
+
+            TestContext.WriteLine("linear (0, 0) -> (1, 1) midpoint = " + midpoint);
+            Assert.That(midpoint, Is.GreaterThan(0f).And.LessThan(1f));
+        }
+
+        [Test]
+        public void PositiveInfinityTangentCurveMidpointIsAKeyframeValue()
+        {
+            var curve = new AnimationCurve(
+                new Keyframe(0f, 0f) { outTangent = float.PositiveInfinity },
+                new Keyframe(1f, 1f) { inTangent = float.PositiveInfinity });
+            var midpoint = curve.Evaluate(0.5f);
+
+            TestContext.WriteLine("positive-infinity tangent (0, 0) -> (1, 1) midpoint = " + midpoint);
+            Assert.That(midpoint, Is.EqualTo(0f).Or.EqualTo(1f));
+        }
+
+        [Test]
+        public void EqualEndpointCurveWithNonzeroTangentsOvershoots()
+        {
+            var curve = new AnimationCurve(
+                new Keyframe(0f, 1f) { outTangent = 2f },
+                new Keyframe(1f, 1f) { inTangent = -2f });
+            var midpoint = curve.Evaluate(0.5f);
+
+            TestContext.WriteLine("equal-endpoint nonzero-tangent (0, 1, 2) -> (1, 1, -2) midpoint = " + midpoint);
+            Assert.That(midpoint, Is.EqualTo(1.5f));
+        }
+
         // Step 4c, recorded for Task 11 to implement. GetAnimatableBindings
         // establishes what Unity GENERATES in this fixture. It does not
         // establish that every clip in the ecosystem contains only those forms:
