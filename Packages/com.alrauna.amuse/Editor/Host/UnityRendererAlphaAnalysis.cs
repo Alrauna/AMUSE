@@ -17,6 +17,7 @@ namespace Alrauna.Amuse.Editor.Host
         None,
         UnsupportedRendererType,
         MaterialPropertyOverridesPresent,
+        UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
         UnprovenMaterialSlotMapping,
         UnsupportedTopology,
