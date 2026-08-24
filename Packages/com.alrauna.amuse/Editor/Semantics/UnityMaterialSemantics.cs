@@ -134,6 +134,72 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            return BuildCapturedAlphaMaterials(
+                materials, families, shaders, evidence);
+        }
+
+        internal static bool TryAttestAlphaMaterial(
+            Material material,
+            out CapturedAlphaMaterialFamily family,
+            out MaterialEvidenceRequest request)
+        {
+            family = IdentifyFamily(material);
+            request = RequestForFamily(family);
+            if (request == null) return false;
+
+            var captured = CaptureAlphaMaterials(new[] { material });
+            return IsAttestedAlphaMaterial(captured[0]);
+        }
+
+        internal static bool TryCaptureClosedAlphaMaterials(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            out IReadOnlyList<CapturedAlphaMaterial> captured)
+        {
+            if (materials == null) throw new ArgumentNullException(nameof(materials));
+            if (families == null) throw new ArgumentNullException(nameof(families));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (materials.Count != families.Count)
+            {
+                throw new ArgumentException(
+                    "Material and family counts must match.", nameof(families));
+            }
+
+            var shaders = new Shader[materials.Count];
+            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            for (var index = 0; index < materials.Count; index++)
+            {
+                shaders[index] = materials[index] == null
+                    ? null
+                    : materials[index].shader;
+                inputs[index] = new MaterialEvidenceCaptureInput(
+                    materials[index], request);
+            }
+
+            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var result = BuildCapturedAlphaMaterials(
+                materials, families, shaders, evidence);
+            foreach (var material in result)
+            {
+                if (!IsAttestedAlphaMaterial(material))
+                {
+                    captured = null;
+                    return false;
+                }
+            }
+
+            captured = result;
+            return true;
+        }
+
+        private static IReadOnlyList<CapturedAlphaMaterial>
+            BuildCapturedAlphaMaterials(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                IReadOnlyList<Shader> shaders,
+                IReadOnlyList<CapturedMaterialEvidence> evidence)
+        {
             var results = new CapturedAlphaMaterial[materials.Count];
             for (var index = 0; index < results.Length; index++)
             {
@@ -155,6 +221,60 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return new ReadOnlyCollection<CapturedAlphaMaterial>(results);
+        }
+
+        private static CapturedAlphaMaterialFamily IdentifyFamily(
+            Material material)
+        {
+            if (material == null || material.shader == null)
+                return CapturedAlphaMaterialFamily.Unsupported;
+
+            var shaderName = material.shader.name;
+            if (string.Equals(
+                    shaderName,
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                    StringComparison.Ordinal))
+            {
+                return CapturedAlphaMaterialFamily.Poiyomi;
+            }
+
+            return string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.SupportedShaderName,
+                    StringComparison.Ordinal)
+                ? CapturedAlphaMaterialFamily.LilToon
+                : CapturedAlphaMaterialFamily.Unsupported;
+        }
+
+        private static MaterialEvidenceRequest RequestForFamily(
+            CapturedAlphaMaterialFamily family)
+        {
+            switch (family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToon:
+                    return LilToonMaterialSemantics.AlphaEvidenceRequest;
+                default:
+                    return null;
+            }
+        }
+
+        private static bool IsAttestedAlphaMaterial(
+            CapturedAlphaMaterial material)
+        {
+            switch (material.Family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                        material.PoiyomiEvidence, out _);
+                case CapturedAlphaMaterialFamily.LilToon:
+                    return material.LilToonEvidence != null &&
+                        LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                            material.LilToonEvidence, out _);
+                default:
+                    return false;
+            }
         }
 
         internal static MaterialSemantics AnalyzeAlphaMaterial(
