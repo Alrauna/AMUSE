@@ -353,6 +353,27 @@ descriptor.
 
 Obligation 6 verified 2026-08-23 by `Packages/com.alrauna.amuse/Tests/Editor/Host/AnimatorBindingsLifetimeGateTests.cs` (`CapturedBindingsRemainUsableAfterContextDeactivation`): the captured `IPlatformAnimatorBindings` remains usable after `AnimatorServicesContext` deactivates and commits.
 
+Obligation 5 verified 2026-08-24 on Unity 2022.3.22f1 by
+`Packages/com.alrauna.amuse/Tests/Editor/Host/CommittedControllerGraphTests.cs`.
+A plain `AnimatorController` is structurally enumerated across every layer,
+nested state machine, state, `BlendTree`, and nested child `Motion`; duplicate
+clip references are emitted once per layer, and both state and state-machine
+behaviours are retained as live transient references. Controller name, layer
+index, and the real blending mode are preserved. An `AnimatorOverrideController`
+is refused as `UnsupportedAnimatorControllerForm`, and any synced layer is
+refused as `UnsupportedSyncedLayerOverrides`; both refusals return an empty
+graph. The public `BlendTree` API exposes no Direct-tree normalization accessor
+in this pinned editor, so the committed boolean is read from serialized
+`m_NormalizedBlendValues`; failure to read that exact boolean propagates as an
+implementation defect rather than assuming normalization. Surviving
+`IVirtualizeAnimatorController` sources contribute nothing when null, enumerate
+normally when they hold an `AnimatorController`, and otherwise take the same
+unsupported-form refusal. Surviving `IVirtualizeMotion` sources contribute
+nothing when null; any non-null motion is refused as
+`UnresolvedVirtualizedMotionContext` with an empty graph because the public NDMF
+1.14.4 interface does not establish its runtime layer and blending context.
+Neither virtualization interface's `GetMotionBasePath` is invoked or mutated.
+
 Obligation 8 is the one case where the unverified assumption is deliberately conservative rather than merely unknown, and it is recorded here so that it is revisited as an opportunity rather than mistaken for a settled limit. Within-curve behavior was observed 2026-08-24 by `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`: `AnimationCurve.Linear(0f, 0f, 1f, 1f)` evaluates to `0.5f` at `0.5f`; keys `(0f, 0f, outTangent=+Infinity)` and `(1f, 1f, inTangent=+Infinity)` evaluate to `0f` at `0.5f`; and equal-endpoint keys `(0f, 1f, outTangent=2f)` and `(1f, 1f, inTangent=-2f)` evaluate to `1.5f` at `0.5f`, rather than `1f`. The latter records Hermite overshoot, so keyframe endpoints are not a finite-exact admission rule. Cross-source blending of generic material-property float curves still requires a Play Mode observation and remains open; the conservative singleton rule stands.
 
 Obligation 2 partially observed 2026-08-23 by `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs` (`UnityGeneratesTheMaterialBindingsWeParse`), on Unity 2022.3.22f1 with a `SkinnedMeshRenderer` carrying two Standard-shader materials. `AnimationUtility.GetAnimatableBindings` exists, returns bindings, and surfaces material bindings, so discovery from Unity itself is available. The property-naming part of the obligation is settled: a scalar property generates a single unsuffixed form (`material.<PropertyName>`, e.g. `material._Cutoff`); a colour property generates four component-suffixed forms (`material.<PropertyName>.<r|g|b|a>`, e.g. `material._Color.r`); and a Vector4-valued property (ST tiling/offset, `_HDR`, `_TexelSize`) generates four component-suffixed forms (`material.<PropertyName>.<x|y|z|w>`, e.g. `material._MainTex_ST.x`).
