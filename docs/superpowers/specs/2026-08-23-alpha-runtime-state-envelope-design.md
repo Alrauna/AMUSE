@@ -329,6 +329,8 @@ Obligations 2, 3, and 4 bound the completeness of the relevance filter. Until th
 
 Obligation 6 is the only one that can invalidate the architecture rather than merely bound it, and it is therefore settled first, before any other implementation work.
 
+Obligation 6 verified 2026-08-23 by `Packages/com.alrauna.amuse/Tests/Editor/Host/AnimatorBindingsLifetimeGateTests.cs` (`CapturedBindingsRemainUsableAfterContextDeactivation`): the captured `IPlatformAnimatorBindings` remains usable after `AnimatorServicesContext` deactivates and commits.
+
 Obligation 8 is the one case where the unverified assumption is deliberately conservative rather than merely unknown, and it is recorded here so that it is revisited as an opportunity rather than mistaken for a settled limit.
 
 ## Testing strategy
