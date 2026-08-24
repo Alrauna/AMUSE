@@ -337,6 +337,85 @@ Obligation 2 partially observed 2026-08-23 by `Packages/com.alrauna.amuse/Tests/
 
 The slot-targeting part of the obligation is **not settled and is recorded as unobserved**. `GetAnimatableBindings` generated no `material[1].`-indexed prefix, no separate binding set attributable to the second slot, and — pinned by the committed comparison test `TheGeneratedMaterialBindingSetDoesNotVaryWithSlotCount` in the same file — the identical 132-entry `material.*` set for a renderer carrying only one material. The generated `propertyName` therefore carries no information that lets a caller positively determine which material slot a `material.*` binding targets; slot 0 and slot 1 are indistinguishable from the binding name alone in this observed environment. This triggers the brief's conservative branch for the slot-targeting sub-question only: implementation must not default an unresolvable `material` binding to slot 0, and must instead route it to a new conservative refusal (`RendererAnalysisRefusal.UnresolvedAnimatedMaterialSlot`), per the plan's Task 11.
 
+The slot-targeting paragraph above records a fact about *syntax*, and its
+prescription is **superseded 2026-08-23 by the Task 3 sampling observation
+below**, which settles the application *semantics* the syntax could not.
+
+Obligation 3 **settled 2026-08-23**, negative, by
+`Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
+(`NoTextureReferenceObjectCurvesAreGeneratedForMaterials`,
+`StructuralBindingCategoriesAreDiscovered`), on Unity 2022.3.22f1 with a
+`SkinnedMeshRenderer` carrying two Standard-shader materials.
+`AnimationUtility.GetAnimatableBindings` generates **no** object-reference curve
+whose property name begins with `material`: the complete `isPPtrCurve` collection
+for this renderer contains only
+`m_Materials.Array.data[0]` and `m_Materials.Array.data[1]`, both typed
+`SkinnedMeshRenderer`. Animating a material's texture reference is therefore not
+an offered dimension in this environment, and texture assignment does **not**
+become an admitted-state dimension.
+
+The generated structural categories are settled alongside it.
+`m_Materials.Array.data[n]` is an **object-reference** category
+(`isPPtrCurve == true`), one binding per existing slot, and no `m_Mesh` binding is
+generated for a `SkinnedMeshRenderer`. `m_Materials.Array.size` is **not
+generated** by discovery. A controlled sampling characterization deliberately
+authored it as a float curve targeting a slot count of one on a two-slot renderer;
+the independent `m_LocalScale.x` control reached `3.5`, but the sampled and
+restored slot counts both remained two
+(`AuthoredMaterialArraySizeFloatCurveDoesNotChangeSlotCountWhenSampled`). Because
+the authored float curve produced no observed array-size effect, the curve
+category that can carry a working `m_Materials.Array.size` animation remains
+**unobserved**.
+
+Material-slot object-curve targeting is **observed, positive**, by
+`MaterialSlotObjectCurveActuallySwapsTheSlot`: with the mandatory
+`m_LocalScale.x` control confirmed at its animated value, an
+`m_Materials.Array.data[0]` object curve replaced **exactly slot 0**, left slot 1
+holding its original material, and did not change the slot count. The
+conservative "undetermined slot" branch is therefore **not** taken for
+object-reference curves. One harness precondition is recorded with it and is a
+property of EditMode sampling rather than of runtime: with no `Animator` on the
+sampled root, `AnimationMode` applies float curves but silently applies no
+object-reference curve at all (`MaterialSlotObjectCurveSamplingRequiresAnAnimatorOnTheSampledRoot`).
+
+Obligation 4 **settled 2026-08-23** by
+`BareMaterialBindingAppliesViaARendererWideMaterialPropertyBlock`, and it also
+settles the slot-application semantics of a bare `material.<Property>` binding on
+a multi-slot renderer. Sampling a `material._Cutoff` curve valued `0.42` on a
+two-slot renderer whose materials carry distinct serialized `_Cutoff` values
+(`0.10` in slot 0, `0.90` in slot 1), with the control confirmed:
+
+- neither material object was mutated — `sharedMaterials[0]` still read `0.10`
+  and `sharedMaterials[1]` still read `0.90`, and both slots still held the
+  fixture's own material instances;
+- `renderer.HasPropertyBlock()` became `true`;
+- the renderer-wide `renderer.GetPropertyBlock(block)` was non-empty and carried
+  `_Cutoff == 0.42`;
+- the per-material-index overloads `renderer.GetPropertyBlock(block, 0)` and
+  `renderer.GetPropertyBlock(block, 1)` were both **empty**, carried no `_Cutoff`,
+  and returned `0` from `GetFloat("_Cutoff")`;
+- nothing persisted after `StopAnimationMode()`: both materials kept their
+  serialized values and `HasPropertyBlock()` returned to `false`.
+
+Animated material properties are therefore applied as **renderer-wide
+`MaterialPropertyBlock` state**, not by mutating material objects and not through
+any per-material-index block. A renderer-wide block is not slot-scoped, so a bare
+`material.<Property>` binding overrides that property for **every** material slot
+the renderer draws. The semantics are renderer-wide, not slot-0-only and not
+unresolved. This is the observation from which the mapping rule for bare material
+bindings is selected, and it must not be selected from binding syntax.
+
+One rule is recorded here for implementation and is **not** settled by
+observation, because no observation can settle it: `GetAnimatableBindings`
+establishes what Unity *generates* in this fixture, not what every clip in the
+ecosystem contains. Clips are authored, generated, and rewritten by many tools,
+and AMUSE reads whatever the committed graph holds. During capture, a renderer
+material-property binding whose syntax AMUSE does not recognize, and which could
+name a proof-relevant material property, MUST produce a **named conservative
+refusal**. It must never be silently classified as irrelevant: silently ignoring
+an unparsed binding that in fact drives a proof input is a false positive, which
+this project treats as a correctness bug rather than a tradeoff.
+
 ## Testing strategy
 
 Testing follows the repository's existing separation between analysis and mutation, and this branch's work is entirely on the analysis side.

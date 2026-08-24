@@ -378,6 +378,16 @@ git commit -m "test: discover the material bindings Unity generates"
 
 ## Task 3: Observe structural and object binding categories and their effect
 
+> **Amended 2026-08-23, after Task 2, by user direction.** Task 2 established that
+> a generated material binding name does **not** encode slot identity, but it did
+> **not** establish the runtime application semantics of a bare
+> `material.<property>` binding on a multi-slot renderer. Task 11 must not be
+> amended to blanket-refuse multi-slot material-property animation on the strength
+> of a syntactic absence alone. Task 3 is therefore extended with Step 4b, which
+> settles those semantics by real sampling, and Step 4c, which adds a fail-closed
+> rule for unrecognized material-binding syntax. Step 5 now selects Task 11's
+> mapping rule strictly from what Step 4b observes.
+
 Verification obligation 3, plus the category question Task 16 depends on. Discovery again comes from Unity, and where the plan **relies on an effect**, the effect is sampled rather than assumed.
 
 Sampling uses `AnimationMode.StartAnimationMode()` / `BeginSampling()` / `SampleAnimationClip(GameObject, AnimationClip, float)` / `EndSampling()` / `StopAnimationMode()`, all public `UnityEditor` APIs. **Verify they exist and that sampling actually applies material state before relying on them.** All sampling happens on a throwaway `GameObject` built in the test; no project asset is touched.
@@ -495,11 +505,102 @@ If `MaterialSlotObjectCurveActuallySwapsTheSlot` cannot be made to pass because 
 
 Search the generated bindings for a PPtr binding whose property name begins with `material` and names a texture property. Assert exactly what was found — present or absent.
 
+- [ ] **Step 4b: Observe the application semantics of a bare material binding on a multi-slot renderer**
+
+This settles what Task 2 could not: a generated name carries no slot index, but that
+is a fact about *syntax*. It says nothing about which slot (or slots) the runtime
+actually applies the binding to. Do not infer the answer from syntax, and do not
+infer it from `Material.GetFloat` alone — the animation system may apply renderer
+state without mutating the material asset at all.
+
+Build a deterministic two-slot renderer whose two materials are **distinguishable**:
+give slot 0 and slot 1 different serialized `_Cutoff` values (for example `0.10f` and
+`0.90f`) so that "slot 0 changed", "both changed", and "neither changed" are three
+visibly different observations. Animate the bare form:
+
+```text
+EditorCurveBinding.FloatCurve("Body", typeof(SkinnedMeshRenderer), "material._Cutoff")
+```
+
+to a third distinctive value (for example `0.42f`), and sample it with
+`AnimationMode.StartAnimationMode()` / `BeginSampling()` /
+`SampleAnimationClip(root, clip, 0f)` / `EndSampling()`.
+
+**A control is mandatory.** Without one, a "neither slot changed" result is vacuous —
+indistinguishable from sampling never having run. Put a second, independently
+observable curve in the same clip (for example `m_LocalScale.x` on the `Body`
+transform) and assert it took its animated value. If the control fails, the sampling
+observation is void: record the semantics as unobserved rather than reporting a
+negative result.
+
+Observe **inside** the sampling scope, before `StopAnimationMode()` restores state,
+and record all of the following verbatim:
+
+- `renderer.sharedMaterials[0].GetFloat("_Cutoff")` and `sharedMaterials[1]`;
+- `renderer.HasPropertyBlock()`;
+- renderer-wide `renderer.GetPropertyBlock(block)` — whether `_Cutoff` is present and its value;
+- per-index `renderer.GetPropertyBlock(block, 0)` and `renderer.GetPropertyBlock(block, 1)` — the public per-material-index overload — whether `_Cutoff` is present and its value in each;
+- whether any observed mutation persists after `StopAnimationMode()`.
+
+Do not use `renderer.materials`; it instantiates copies and would corrupt the
+observation.
+
+The observation must distinguish at least these four outcomes, and the test must
+assert whichever one actually occurred:
+
+1. slot 0 only is affected;
+2. every material slot is affected;
+3. the change is carried by renderer-wide or per-material-index `MaterialPropertyBlock`
+   state rather than by mutation of the material objects;
+4. no observable effect, or behavior that does not distinguish the above.
+
+Record the outcome exactly. Do not reshape the fixture until it produces a
+convenient answer.
+
+- [ ] **Step 4c: Add the fail-closed rule for unrecognized material-binding syntax**
+
+`GetAnimatableBindings` establishes what Unity *generates* in this fixture. It does
+not establish that every clip in the ecosystem contains only those forms — clips are
+authored, generated, and rewritten by many tools, and AMUSE reads whatever the
+committed graph actually holds.
+
+Record the rule here so Task 11 implements it: during capture, a renderer
+material-property binding whose syntax AMUSE does not recognize, and which could name
+a proof-relevant material property, MUST produce a named conservative refusal. It must
+never be silently classified as irrelevant. Silently ignoring an unparsed binding that
+in fact drives a proof input is a false-positive, which this project treats as a
+correctness bug rather than a tradeoff.
+
 - [ ] **Step 5: Update the spec's obligation 3**
 
 If texture-reference object curves **exist**, stop and raise it with the user before Task 10: texture assignment would become an admitted-state dimension the spec's admitted-state construction does not cover, which is a design change, not a plan change.
 
 **Conservative branch.** If the slot-swap effect could not be observed, Task 10 must treat every `m_Materials.Array.data[n]` object curve as affecting an **undetermined** slot, which conservatively admits its keyframe materials into **every** slot of that renderer. That over-approximates, which is the safe direction, and it is recorded as a coverage cost rather than an assumption.
+
+Update the spec with **only** what Step 4b actually established, and no more.
+
+**Selecting Task 11's mapping rule.** Task 11 is then amended strictly from the Step 4b
+observation, by this table — never by syntax alone:
+
+```text
+proven slot 0 semantics
+    -> bare material binding maps to slot 0
+
+proven renderer-wide / all-slot semantics
+    -> binding applies conservatively to every affected/admitted slot
+
+proven deterministic per-slot rule
+    -> encode that exact rule
+
+unresolved / ambiguous semantics
+    -> single-slot renderer may trivially map to slot 0;
+       multi-slot renderer returns
+       RendererAnalysisRefusal.UnresolvedAnimatedMaterialSlot
+```
+
+**Do not default to slot 0 merely because the syntax lacks an index.** A single-slot
+renderer is unambiguous regardless of the outcome, so the refusal is reserved for the
+multi-slot case under genuinely unresolved semantics.
 
 - [ ] **Step 6: Commit**
 
@@ -1305,6 +1406,17 @@ git commit -m "feat: close material dependencies and freeze animation evidence"
 
 ## Task 11: Proof-relevant binding discovery, including texture-derived inputs
 
+> **Amended 2026-08-24 from the reviewed Task 3 observation.** A bare
+> `material.<Property>` binding is applied through renderer-wide
+> `MaterialPropertyBlock` state, not through a material-slot-specific binding or
+> per-index block. Every resolved bare material-property binding therefore applies
+> to **every admitted material slot on that renderer**. `AnimatedPropertyRef` does
+> not carry a slot index, and the per-slot consumer associates each resolved
+> renderer-wide binding with every slot. Unexpected material-binding syntax that
+> could name a proof-relevant property is not irrelevant: it returns
+> `UnrecognizedMaterialBinding` and maps to the named conservative refusal
+> `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding`.
+
 Relevance must cover four sources, not three:
 
 ```
@@ -1316,21 +1428,23 @@ texture-evidence-derived animated inputs, especially ScaleOffset
 
 The fourth is load-bearing and easy to miss. `_MainTex_ST` is **not** in any frontend's `VectorProperties` — Poiyomi's vector request is `_MainTexPan`. The `_ST` dependency exists only because `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`, and `AlphaSemanticsResolver.IsSupportedMapping` proves opacity only when scale is exactly `(1,1)` and offset exactly `(0,0)`. An animated `_MainTex_ST.x` therefore changes a proof input while appearing in no vector request. Relevance must derive it.
 
-`_Color.a` and `_MainTex_ST.x` must resolve to their parent properties, never fall through scalar-only handling.
+`_Color.a` and `_MainTex_ST.x` must resolve to their parent properties, never fall through scalar-only handling. A resolved binding is renderer-wide and is associated with every admitted material slot before per-slot admission.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAnimationEvidenceCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs`
 
 **Interfaces:**
-- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10; the generated forms recorded in Task 2.
+- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10; the generated forms recorded in Task 2; the renderer-wide application semantics recorded in Task 3.
 - Produces:
   - `internal enum AnimatedPropertyKind { Scalar, ColorComponent, VectorComponent, TextureScaleOffsetComponent }`
-  - `internal readonly struct AnimatedPropertyRef { internal int SlotIndex { get; } internal string PropertyName { get; } internal AnimatedPropertyKind Kind { get; } internal int ComponentIndex { get; } }`
+  - `internal enum ProofRelevantBindingResolution { Irrelevant, RendererWide, UnrecognizedMaterialBinding }`
+  - `internal readonly struct AnimatedPropertyRef { internal string PropertyName { get; } internal AnimatedPropertyKind Kind { get; } internal int ComponentIndex { get; } }`
   - `internal static IReadOnlyCollection<string> UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(MaterialEvidenceRequest relevance)`
-  - `internal static bool UnityAnimationEvidenceCapture.TryResolveProofRelevant(CapturedFloatBinding binding, string rendererPath, MaterialEvidenceRequest relevance, out AnimatedPropertyRef reference)`
+  - `internal static ProofRelevantBindingResolution UnityAnimationEvidenceCapture.ResolveProofRelevant(CapturedFloatBinding binding, string rendererPath, MaterialEvidenceRequest relevance, out AnimatedPropertyRef reference)`
+  - `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding`
 
-`ComponentIndex` is 0–3 in the suffix order Task 2 recorded, and `-1` for scalars. For `TextureScaleOffsetComponent`, `PropertyName` is the derived `<texture>_ST` name.
+`ComponentIndex` is 0–3 in the suffix order Task 2 recorded, and `-1` for scalars. For `TextureScaleOffsetComponent`, `PropertyName` is the derived `<texture>_ST` name. `RendererWide` means the caller associates the binding/reference pair with every admitted material slot; no slot identity is inferred from the binding syntax.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1358,9 +1472,10 @@ The decisive test builds relevance from the **real frontend request** and never 
                     relevance),
                 Contains.Item("_MainTex_ST"));
 
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
                 Bound("material._MainTex_ST.x"), "Body", relevance,
-                out var reference), Is.True,
+                out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide),
                 "an animated texture scale/offset component must be proof-relevant");
             Assert.That(reference.Kind,
                 Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
@@ -1387,13 +1502,13 @@ The decisive test builds relevance from the **real frontend request** and never 
             Assert.That(
                 UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties(
                     relevance), Is.Empty);
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
                 Bound("material._MainTex_ST.x"), "Body", relevance, out _),
-                Is.False);
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
         }
 ```
 
-Plus the scalar, colour, vector, slot, and path cases:
+Plus the scalar, colour, vector, renderer-wide syntax, and path cases:
 
 ```csharp
         private static MaterialEvidenceRequest Relevance()
@@ -1418,12 +1533,11 @@ Plus the scalar, colour, vector, slot, and path cases:
         [Test]
         public void ScalarBindingResolvesAsScalar()
         {
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
                 Bound("material._Cutoff"), "Body", Relevance(), out var reference),
-                Is.True);
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
             Assert.That(reference.Kind, Is.EqualTo(AnimatedPropertyKind.Scalar));
             Assert.That(reference.PropertyName, Is.EqualTo("_Cutoff"));
-            Assert.That(reference.SlotIndex, Is.Zero);
             Assert.That(reference.ComponentIndex, Is.EqualTo(-1));
         }
 
@@ -1431,8 +1545,9 @@ Plus the scalar, colour, vector, slot, and path cases:
         [TestCase("material._Color.a", 3)]
         public void ColourComponentResolvesToItsParent(string property, int component)
         {
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound(property), "Body", Relevance(), out var reference), Is.True);
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound(property), "Body", Relevance(), out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
             Assert.That(reference.Kind,
                 Is.EqualTo(AnimatedPropertyKind.ColorComponent));
             Assert.That(reference.PropertyName, Is.EqualTo("_Color"));
@@ -1443,8 +1558,9 @@ Plus the scalar, colour, vector, slot, and path cases:
         [TestCase("material._MainTexPan.w", 3)]
         public void VectorComponentResolvesToItsParent(string property, int component)
         {
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound(property), "Body", Relevance(), out var reference), Is.True);
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound(property), "Body", Relevance(), out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
             Assert.That(reference.Kind,
                 Is.EqualTo(AnimatedPropertyKind.VectorComponent));
             Assert.That(reference.PropertyName, Is.EqualTo("_MainTexPan"));
@@ -1452,30 +1568,34 @@ Plus the scalar, colour, vector, slot, and path cases:
         }
 
         [Test]
-        public void SlotIndexIsTakenFromTheGeneratedBindingForm()
+        public void UnexpectedPotentiallyRelevantMaterialSyntaxRefuses()
         {
-            // Uses the slot form Task 2 recorded. If Task 2 took its conservative
-            // branch, replace this with the UnresolvedAnimatedMaterialSlot case.
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound("material[2]._Cutoff"), "Body", Relevance(), out var reference),
-                Is.True);
-            Assert.That(reference.SlotIndex, Is.EqualTo(2));
+            // Task 2 generated no indexed form, and Task 3 requires unexpected
+            // syntax that could name a proof input to fail closed rather than
+            // silently become irrelevant.
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound("material[2]._Cutoff"), "Body", Relevance(), out _),
+                Is.EqualTo(
+                    ProofRelevantBindingResolution.UnrecognizedMaterialBinding));
         }
 
         [Test]
         public void UnrequestedPropertiesAreNotRelevant()
         {
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound("material._Unrelated"), "Body", Relevance(), out _), Is.False);
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound("material._Unrelated.a"), "Body", Relevance(), out _), Is.False);
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound("material._Unrelated"), "Body", Relevance(), out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound("material._Unrelated.a"), "Body", Relevance(), out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
         }
 
         [Test]
         public void BindingsOnOtherRendererPathsAreNotRelevant()
         {
-            Assert.That(UnityAnimationEvidenceCapture.TryResolveProofRelevant(
-                Bound("material._Cutoff"), "Other", Relevance(), out _), Is.False);
+            Assert.That(UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                Bound("material._Cutoff"), "Other", Relevance(), out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
         }
 ```
 
@@ -1487,15 +1607,17 @@ Expected: FAIL — the type and methods are not defined.
 
 `DeriveTextureScaleOffsetProperties` returns `<PropertyName> + "_ST"` for every `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`, and nothing for the others.
 
-`TryResolveProofRelevant` matches `Path` against the renderer's avatar-relative path with `StringComparison.Ordinal`, parses the `material` prefix in exactly the form Task 2 recorded (extracting the slot index, or refusing under Task 2's conservative branch), then classifies the remaining name in this order:
+`ResolveProofRelevant` first matches `Path` against the renderer's avatar-relative path with `StringComparison.Ordinal`; a different path is `Irrelevant`. On the renderer's own path, it accepts only the exact bare `material.` prefix Task 2 generated and then classifies the remaining name in this order:
 
 1. a recorded component suffix whose stem is a derived `_ST` name → `TextureScaleOffsetComponent`;
 2. a recorded component suffix whose stem is in `ColorProperties` → `ColorComponent`;
 3. a recorded component suffix whose stem is in `VectorProperties` → `VectorComponent`;
 4. the whole name in `ScalarProperties` → `Scalar`;
-5. otherwise false.
+5. otherwise `Irrelevant`.
 
-A component suffix whose stem is not requested returns false and must never degrade into a scalar match.
+A recognized proof-relevant name returns `RendererWide`; before per-slot admission the caller associates that binding/reference pair with **every** admitted material slot. A component suffix whose stem is not requested returns `Irrelevant` and must never degrade into a scalar match.
+
+If the binding is on the renderer's path and its syntax is not one of the exact generated forms, but parsing can identify a scalar, colour, vector, or derived texture-scale/offset property in the closed relevance request, return `UnrecognizedMaterialBinding`. The capture caller maps that outcome to `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding` and refuses the renderer. It must not silently discard the binding as irrelevant. This includes indexed forms such as `material[2]._Cutoff`, which were not generated by the characterized Unity environment.
 
 - [ ] **Step 4: Run and verify it passes**
 
