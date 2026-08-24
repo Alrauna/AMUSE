@@ -72,6 +72,9 @@ namespace Alrauna.Amuse.Editor.Host
         private static readonly CommittedControllerGraphResult UnresolvedMotion =
             Refused(AvatarAnimationRefusal.UnresolvedVirtualizedMotionContext);
 
+        private static readonly CommittedControllerGraphResult UnrecognizedBehaviour =
+            Refused(AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour);
+
         internal static CommittedControllerGraphResult Enumerate(
             GameObject avatarRoot,
             IPlatformAnimatorBindings bindings)
@@ -107,7 +110,16 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     var layer = layers[layerIndex];
                     if (layer.syncedLayerIndex >= 0) return UnsupportedSyncedLayer;
-                    result.Add(EnumerateLayer(controller.name, layerIndex, layer));
+                    var committedLayer =
+                        EnumerateLayer(controller.name, layerIndex, layer);
+                    foreach (var behaviour in committedLayer.Behaviours)
+                    {
+                        var identity = BehaviourIdentity.Of(behaviour.GetType());
+                        if (!BehaviourIdentity.IsAllowed(identity))
+                            return UnrecognizedBehaviour;
+                    }
+
+                    result.Add(committedLayer);
                 }
             }
 

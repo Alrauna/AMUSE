@@ -98,7 +98,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void NestedGraphEnumeratesClipsOnceAndCollectsBothBehaviourScopes()
+        public void NestedBehaviourFreeGraphEnumeratesClipsOnce()
         {
             var root = new GameObject("nested graph");
             var controller = new AnimatorController();
@@ -113,8 +113,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 machine.AddState("duplicate").motion = sharedClip;
                 var nestedMachine = machine.AddStateMachine("nested machine");
                 var nestedState = nestedMachine.AddState("nested state");
-                var stateBehaviour = AttachBehaviour(nestedState);
-                var machineBehaviour = AttachBehaviour(nestedMachine);
                 innerTree.AddChild(sharedClip);
                 innerTree.AddChild(nestedClip);
                 outerTree.AddChild(innerTree);
@@ -128,12 +126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     Is.EquivalentTo(new[] { sharedClip, nestedClip }));
                 Assert.That(result.Layers.Single().Clips.Count, Is.EqualTo(2),
                     "the same clip reference must be emitted only once per layer");
-                Assert.That(stateBehaviour, Is.Not.Null,
-                    "fixture state behaviour must be attached");
-                Assert.That(machineBehaviour, Is.Not.Null,
-                    "fixture state-machine behaviour must be attached");
-                Assert.That(result.Layers.Single().Behaviours,
-                    Is.EquivalentTo(new[] { stateBehaviour, machineBehaviour }));
+                Assert.That(result.Layers.Single().Behaviours, Is.Empty);
             }
             finally
             {
@@ -142,6 +135,87 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Object.DestroyImmediate(innerTree);
                 Object.DestroyImmediate(sharedClip);
                 Object.DestroyImmediate(nestedClip);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void StateBehaviourReturnsAvatarRefusalAndNoPartialGraph()
+        {
+            var root = new GameObject("state behaviour");
+            var controller = new AnimatorController();
+            try
+            {
+                controller.AddLayer("clean");
+                controller.layers[0].stateMachine.AddState("clean state");
+                controller.AddLayer("behaviour");
+                var state = controller.layers[1].stateMachine.AddState("S0");
+                Assert.That(AttachBehaviour(state), Is.Not.Null,
+                    "fixture state behaviour must be attached");
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void StateMachineBehaviourReturnsAvatarRefusalAndNoPartialGraph()
+        {
+            var root = new GameObject("state machine behaviour");
+            var controller = new AnimatorController();
+            try
+            {
+                controller.AddLayer("L0");
+                var machine = controller.layers[0].stateMachine;
+                Assert.That(AttachBehaviour(machine), Is.Not.Null,
+                    "fixture state-machine behaviour must be attached");
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void BehaviourOnNestedStateMachineCannotBypassAuthorization()
+        {
+            var root = new GameObject("nested state machine behaviour");
+            var controller = new AnimatorController();
+            try
+            {
+                controller.AddLayer("L0");
+                var nested = controller.layers[0].stateMachine
+                    .AddStateMachine("nested");
+                Assert.That(AttachBehaviour(nested), Is.Not.Null,
+                    "fixture nested state-machine behaviour must be attached");
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
                 DestroyController(controller);
             }
         }
