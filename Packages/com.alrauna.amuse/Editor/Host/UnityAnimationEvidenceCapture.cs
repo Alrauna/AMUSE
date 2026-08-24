@@ -8,6 +8,38 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Host
 {
+    internal enum AnimatedPropertyKind
+    {
+        Scalar,
+        ColorComponent,
+        VectorComponent,
+        TextureScaleOffsetComponent,
+    }
+
+    internal enum ProofRelevantBindingResolution
+    {
+        Irrelevant,
+        RendererWide,
+        UnrecognizedMaterialBinding,
+    }
+
+    internal readonly struct AnimatedPropertyRef
+    {
+        internal AnimatedPropertyRef(
+            string propertyName,
+            AnimatedPropertyKind kind,
+            int componentIndex)
+        {
+            PropertyName = propertyName;
+            Kind = kind;
+            ComponentIndex = componentIndex;
+        }
+
+        internal string PropertyName { get; }
+        internal AnimatedPropertyKind Kind { get; }
+        internal int ComponentIndex { get; }
+    }
+
     internal delegate bool AlphaMaterialAttestor(
         Material material,
         out CapturedAlphaMaterialFamily family,
@@ -21,6 +53,8 @@ namespace Alrauna.Amuse.Editor.Host
 
     internal static class UnityAnimationEvidenceCapture
     {
+        private const string MaterialPrefix = "material.";
+
         private static readonly MaterialEvidenceRequest EmptyRequest =
             new MaterialEvidenceRequest(
                 false,
@@ -265,6 +299,232 @@ namespace Alrauna.Amuse.Editor.Host
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
                 hasAdditiveLayer);
+        }
+
+        internal static IReadOnlyCollection<string>
+            DeriveTextureScaleOffsetProperties(MaterialEvidenceRequest relevance)
+        {
+            if (relevance == null)
+                throw new ArgumentNullException(nameof(relevance));
+
+            var properties = new List<string>();
+            foreach (var texture in relevance.TextureProperties)
+            {
+                if ((texture.Evidence & TextureEvidenceKinds.ScaleOffset) != 0)
+                {
+                    properties.Add(texture.PropertyName + "_ST");
+                }
+            }
+
+            return properties.AsReadOnly();
+        }
+
+        internal static ProofRelevantBindingResolution ResolveProofRelevant(
+            CapturedFloatBinding binding,
+            string rendererPath,
+            MaterialEvidenceRequest relevance,
+            out AnimatedPropertyRef reference)
+        {
+            if (binding == null) throw new ArgumentNullException(nameof(binding));
+            if (relevance == null)
+                throw new ArgumentNullException(nameof(relevance));
+
+            reference = default;
+            if (!string.Equals(
+                    binding.Path, rendererPath, StringComparison.Ordinal))
+            {
+                return ProofRelevantBindingResolution.Irrelevant;
+            }
+
+            var scaleOffsetProperties =
+                DeriveTextureScaleOffsetProperties(relevance);
+            if (TryStripPrefix(
+                    binding.PropertyName, MaterialPrefix, out var property))
+            {
+                if (TryResolveGeneratedProperty(
+                        property,
+                        relevance,
+                        scaleOffsetProperties,
+                        out reference))
+                {
+                    return ProofRelevantBindingResolution.RendererWide;
+                }
+
+                return CouldAddressRelevantProperty(
+                        property, relevance, scaleOffsetProperties)
+                    ? ProofRelevantBindingResolution.UnrecognizedMaterialBinding
+                    : ProofRelevantBindingResolution.Irrelevant;
+            }
+
+            if (TryStripIndexedMaterialPrefix(
+                    binding.PropertyName, out property) &&
+                (TryResolveGeneratedProperty(
+                     property,
+                     relevance,
+                     scaleOffsetProperties,
+                     out reference) ||
+                 CouldAddressRelevantProperty(
+                     property, relevance, scaleOffsetProperties)))
+            {
+                reference = default;
+                return ProofRelevantBindingResolution.UnrecognizedMaterialBinding;
+            }
+
+            return ProofRelevantBindingResolution.Irrelevant;
+        }
+
+        private static bool TryResolveGeneratedProperty(
+            string property,
+            MaterialEvidenceRequest relevance,
+            IReadOnlyCollection<string> scaleOffsetProperties,
+            out AnimatedPropertyRef reference)
+        {
+            reference = default;
+            if (TrySplitComponent(property, "xyzw", out var stem, out var index) &&
+                ContainsOrdinal(scaleOffsetProperties, stem))
+            {
+                reference = new AnimatedPropertyRef(
+                    stem,
+                    AnimatedPropertyKind.TextureScaleOffsetComponent,
+                    index);
+                return true;
+            }
+
+            if (TrySplitComponent(property, "rgba", out stem, out index) &&
+                ContainsOrdinal(relevance.ColorProperties, stem))
+            {
+                reference = new AnimatedPropertyRef(
+                    stem, AnimatedPropertyKind.ColorComponent, index);
+                return true;
+            }
+
+            if (TrySplitComponent(property, "xyzw", out stem, out index) &&
+                ContainsOrdinal(relevance.VectorProperties, stem))
+            {
+                reference = new AnimatedPropertyRef(
+                    stem, AnimatedPropertyKind.VectorComponent, index);
+                return true;
+            }
+
+            if (HasCharacterizedComponentSuffix(property) ||
+                !ContainsOrdinal(relevance.ScalarProperties, property))
+            {
+                return false;
+            }
+
+            reference = new AnimatedPropertyRef(
+                property, AnimatedPropertyKind.Scalar, -1);
+            return true;
+        }
+
+        private static bool CouldAddressRelevantProperty(
+            string property,
+            MaterialEvidenceRequest relevance,
+            IReadOnlyCollection<string> scaleOffsetProperties)
+        {
+            return CouldAddressAny(property, relevance.ScalarProperties) ||
+                   CouldAddressAny(property, relevance.ColorProperties) ||
+                   CouldAddressAny(property, relevance.VectorProperties) ||
+                   CouldAddressAny(property, scaleOffsetProperties);
+        }
+
+        private static bool CouldAddressAny(
+            string text,
+            IEnumerable<string> relevantProperties)
+        {
+            if (text == null) return false;
+            foreach (var property in relevantProperties)
+            {
+                if (string.Equals(text, property, StringComparison.Ordinal))
+                    return true;
+                if (text.Length > property.Length &&
+                    text.StartsWith(property, StringComparison.Ordinal) &&
+                    (text[property.Length] == '.' ||
+                     text[property.Length] == '['))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TrySplitComponent(
+            string property,
+            string suffixes,
+            out string stem,
+            out int componentIndex)
+        {
+            stem = null;
+            componentIndex = -1;
+            if (property == null || property.Length < 3 ||
+                property[property.Length - 2] != '.')
+            {
+                return false;
+            }
+
+            componentIndex = suffixes.IndexOf(property[property.Length - 1]);
+            if (componentIndex < 0) return false;
+            stem = property.Substring(0, property.Length - 2);
+            return true;
+        }
+
+        private static bool HasCharacterizedComponentSuffix(string property)
+        {
+            return TrySplitComponent(property, "rgba", out _, out _) ||
+                   TrySplitComponent(property, "xyzw", out _, out _);
+        }
+
+        private static bool ContainsOrdinal(
+            IEnumerable<string> properties,
+            string property)
+        {
+            foreach (var candidate in properties)
+            {
+                if (string.Equals(candidate, property, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryStripPrefix(
+            string text,
+            string prefix,
+            out string remainder)
+        {
+            remainder = null;
+            if (text == null ||
+                !text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            remainder = text.Substring(prefix.Length);
+            return true;
+        }
+
+        private static bool TryStripIndexedMaterialPrefix(
+            string text,
+            out string property)
+        {
+            const string prefix = "material[";
+            property = null;
+            if (text == null ||
+                !text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var closingBracket = text.IndexOf(']', prefix.Length);
+            if (closingBracket < 0 || closingBracket + 1 >= text.Length ||
+                text[closingBracket + 1] != '.')
+            {
+                return false;
+            }
+
+            property = text.Substring(closingBracket + 2);
+            return true;
         }
 
         private sealed class ReferenceComparer<T> : IEqualityComparer<T>
