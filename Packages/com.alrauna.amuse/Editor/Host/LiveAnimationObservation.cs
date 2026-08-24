@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using UnityEditor;
 using UnityEngine;
 
@@ -79,6 +80,8 @@ namespace Alrauna.Amuse.Editor.Host
 
     internal static class LiveAnimationObservation
     {
+        private const string MaterialSlotPrefix = "m_Materials.Array.data[";
+
         internal static LiveClipObservation ObserveClip(
             AnimationClip clip,
             bool isSpecialMotion)
@@ -124,6 +127,27 @@ namespace Alrauna.Amuse.Editor.Host
 
             return new LiveClipObservation(
                 clip.name, isSpecialMotion, floats, objects);
+        }
+
+        internal static bool TryParseMaterialSlotBinding(
+            string propertyName,
+            out int slotIndex)
+        {
+            slotIndex = default;
+            if (propertyName == null ||
+                !propertyName.StartsWith(
+                    MaterialSlotPrefix, StringComparison.Ordinal) ||
+                !propertyName.EndsWith("]", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var indexLength = propertyName.Length - MaterialSlotPrefix.Length - 1;
+            return indexLength > 0 && int.TryParse(
+                propertyName.Substring(MaterialSlotPrefix.Length, indexLength),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out slotIndex);
         }
 
         private static bool IsFiniteExact(IReadOnlyList<Keyframe> keys)
