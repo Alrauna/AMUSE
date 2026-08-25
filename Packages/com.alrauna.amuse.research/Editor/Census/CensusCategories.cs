@@ -40,6 +40,7 @@ namespace Alrauna.Amuse.Research.Census
         MalformedMeshData,
         AnimatedMeshReplacement,
         AnimatedMaterialSlotCount,
+        AdmittedStateBudgetExceeded,
     }
 
     /// <summary>
