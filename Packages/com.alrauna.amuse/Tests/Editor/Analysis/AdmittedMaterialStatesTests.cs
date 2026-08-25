@@ -288,5 +288,146 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     nonFiniteFirst, serialized, out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
         }
+
+        [Test]
+        public void SmallProductsAreBudgeted()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 2, 3, 4 }, out var size), Is.True);
+            Assert.That(size, Is.EqualTo(24));
+        }
+
+        /// <summary>
+        /// The cap is inclusive: the design refuses a product <em>above</em>
+        /// the cap, so a product exactly equal to it is still budgeted. The
+        /// number is asserted here, and only here, because this fixture owns
+        /// the implementation parameter.
+        /// </summary>
+        [Test]
+        public void AProductExactlyAtTheCapIsBudgeted()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 64, 64 }, out var size), Is.True);
+            Assert.That(size, Is.EqualTo(4096));
+        }
+
+        [Test]
+        public void AProductOneAboveTheCapIsRefused()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 4097 }, out _), Is.False);
+        }
+
+        [Test]
+        public void AnOversizedProductExitsBeforeTheRemainingFactors()
+        {
+            var counts = new int[64];
+            for (var index = 0; index < counts.Length; index++)
+            {
+                counts[index] = 4;
+            }
+
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(counts, out _),
+                Is.False);
+        }
+
+        /// <summary>
+        /// The first case exits on the leading factor and so proves only that
+        /// a huge count is refused. The second is the one that pins the
+        /// accumulator width: the running product must already be above one
+        /// when the huge factor arrives, or the multiplication that can wrap
+        /// never executes. Under a 32-bit accumulator <c>2 * int.MaxValue</c>
+        /// wraps to <c>-2</c>, which is not above the cap, and an unbounded
+        /// product would be accepted.
+        /// </summary>
+        [Test]
+        public void BudgetingDoesNotOverflowOnHugeCounts()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { int.MaxValue, int.MaxValue }, out _), Is.False);
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 2, int.MaxValue }, out _), Is.False);
+        }
+
+        [Test]
+        public void AZeroCountYieldsAnEmptyProduct()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 3, 0 }, out var size), Is.True);
+            Assert.That(size, Is.Zero);
+        }
+
+        /// <summary>
+        /// Load-bearing. A single left-to-right pass that returns false as soon
+        /// as the running product exceeds the cap reports an oversized product
+        /// for <c>[int.MaxValue, 0]</c> while accepting <c>[0, int.MaxValue]</c>
+        /// — the same multiset, two answers. The empty product is a property of
+        /// the factors, not of their order.
+        /// </summary>
+        [Test]
+        public void AZeroCountEmptiesTheProductWhereverItOccurs()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { int.MaxValue, 0 }, out var zeroLast), Is.True);
+            Assert.That(zeroLast, Is.Zero);
+
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 0, int.MaxValue }, out var zeroFirst), Is.True);
+            Assert.That(zeroFirst, Is.Zero);
+        }
+
+        /// <summary>
+        /// A renderer with no material slots has one state — the empty tuple —
+        /// not zero. This is the multiplicative identity an accumulator seeded
+        /// at one naturally represents, and no repository rule assigns zero
+        /// slots a different meaning.
+        /// </summary>
+        [Test]
+        public void AnEmptyListIsTheMultiplicativeIdentity()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                Array.Empty<int>(), out var size), Is.True);
+            Assert.That(size, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Singleton admitted properties contribute a factor of one, so this is
+        /// the shape the singleton rule actually produces.
+        /// </summary>
+        [Test]
+        public void FactorsOfOneLeaveTheProductAtOne()
+        {
+            Assert.That(AdmittedMaterialStates.TryBudgetProduct(
+                new[] { 1, 1, 1 }, out var size), Is.True);
+            Assert.That(size, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// A negative admitted-state count is not a supported-domain outcome:
+        /// no slot can admit fewer than zero materials, so it is an internal
+        /// invariant violation. The trailing cases prove a zero elsewhere in
+        /// the list cannot short-circuit past the invalid evidence — in either
+        /// order, since an implementation that returns the empty product as
+        /// soon as it sees a zero still validates whatever preceded it.
+        /// </summary>
+        [Test]
+        public void ANegativeCountIsAProgrammingDefect()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                AdmittedMaterialStates.TryBudgetProduct(new[] { -1 }, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                AdmittedMaterialStates.TryBudgetProduct(
+                    new[] { -1, 0 }, out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                AdmittedMaterialStates.TryBudgetProduct(
+                    new[] { 0, -1 }, out _));
+        }
+
+        [Test]
+        public void ANullCountListIsAProgrammingDefect()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                AdmittedMaterialStates.TryBudgetProduct(null, out _));
+        }
     }
 }
