@@ -71,6 +71,41 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyList<CapturedObjectBinding> ObjectBindings { get; }
     }
 
+    /// <summary>
+    /// One renderer material slot and the admitted materials it may hold. The
+    /// indices address <see cref="CapturedAnimationEvidence.AdmittedMaterials"/>
+    /// directly and are never slot indices.
+    /// <para>
+    /// This exists for <em>every</em> slot, animated or not. An unanimated slot
+    /// carries exactly one index — its current assignment — so the current
+    /// material is resolved rather than dropped.
+    /// </para>
+    /// </summary>
+    internal sealed class CapturedMaterialSlotEvidence
+    {
+        internal CapturedMaterialSlotEvidence(
+            int slotIndex,
+            IReadOnlyList<int> admittedMaterialIndices)
+        {
+            if (slotIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(slotIndex), slotIndex,
+                    "Material slot indices cannot be negative.");
+            }
+
+            if (admittedMaterialIndices == null)
+                throw new ArgumentNullException(nameof(admittedMaterialIndices));
+
+            SlotIndex = slotIndex;
+            AdmittedMaterialIndices = new ReadOnlyCollection<int>(
+                new List<int>(admittedMaterialIndices));
+        }
+
+        internal int SlotIndex { get; }
+        internal IReadOnlyList<int> AdmittedMaterialIndices { get; }
+    }
+
     internal sealed class CapturedAnimationEvidence
     {
         internal CapturedAnimationEvidence(
