@@ -558,6 +558,117 @@ namespace Alrauna.Amuse.Editor.Host
             return outcomes;
         }
 
+        /// <summary>
+        /// The proof intersection across every distinct admitted material
+        /// state, one input array per state, all classifying the same ordered
+        /// triangle set. A triangle is <c>ProvenOpaque</c> only when every
+        /// state proves it opaque and <c>MustRemainTransparent</c> only when
+        /// every state agrees on that; any disagreement — including agreement
+        /// on a definite outcome spoiled by a single Unknown — is Unknown.
+        /// This is consensus, not a severity ranking: no outcome outranks
+        /// another, and nothing survives that one admitted state contradicts.
+        /// <para>
+        /// An empty outer list is a programming defect, not an unsupported
+        /// input, and throws. Universal quantification over no states is
+        /// vacuously true, so returning here would prove every triangle opaque
+        /// under no evidence at all — the false-positive direction. Task 20's
+        /// <c>DistinctResolutions</c> deliberately preserves an empty set so
+        /// that this layer, and only this layer, rejects it.
+        /// </para>
+        /// <para>
+        /// Nonempty states classifying zero triangles is a different thing
+        /// entirely and is not a defect: an empty submesh is accepted upstream,
+        /// and intersecting over an empty triangle domain yields no outcomes.
+        /// </para>
+        /// <para>
+        /// Arrays of differing length mean the states did not classify the same
+        /// triangles, so nothing can be intersected index-wise. Truncating,
+        /// padding, or filling the gap with Unknown would each answer a
+        /// question about triangles no caller established, so it throws.
+        /// </para>
+        /// <para>
+        /// Duplicate inputs are harmless — intersection is idempotent, so
+        /// under-deduplication upstream costs a pass and never a proof — and
+        /// this method deliberately contains no equivalence heuristic of its
+        /// own. The result is always freshly allocated; a single state is
+        /// intersection with nothing, so its outcomes pass through by value
+        /// without the caller receiving an alias of its input.
+        /// </para>
+        /// </summary>
+        internal static TriangleAlphaOutcome[] IntersectOutcomes(
+            IReadOnlyList<TriangleAlphaOutcome[]> perResolutionOutcomes)
+        {
+            if (perResolutionOutcomes == null)
+            {
+                throw new ArgumentNullException(nameof(perResolutionOutcomes));
+            }
+
+            if (perResolutionOutcomes.Count == 0)
+            {
+                throw new ArgumentException(
+                    "Intersecting no admitted states would prove every " +
+                    "triangle opaque by vacuous truth.",
+                    nameof(perResolutionOutcomes));
+            }
+
+            // A missing array and a differing length are distinct defects and
+            // are reported as such: a state that classified zero triangles is
+            // legal, so "no outcomes" must never be how a null array reads.
+            const string missing = "An admitted state supplied no outcome array.";
+            var first = perResolutionOutcomes[0];
+            if (first == null)
+            {
+                throw new ArgumentException(
+                    missing, nameof(perResolutionOutcomes));
+            }
+
+            var triangleCount = first.Length;
+            for (var state = 1; state < perResolutionOutcomes.Count; state++)
+            {
+                var outcomes = perResolutionOutcomes[state];
+                if (outcomes == null)
+                {
+                    throw new ArgumentException(
+                        missing, nameof(perResolutionOutcomes));
+                }
+
+                if (outcomes.Length != triangleCount)
+                {
+                    throw new ArgumentException(
+                        "Every admitted state must classify the same ordered " +
+                        "triangle set.",
+                        nameof(perResolutionOutcomes));
+                }
+            }
+
+            var intersected = new TriangleAlphaOutcome[triangleCount];
+            for (var triangle = 0; triangle < triangleCount; triangle++)
+            {
+                // Accumulating the two definite outcomes separately, rather
+                // than carrying the first state's answer forward as a
+                // candidate, keeps an unexpected enum value out of the proof:
+                // it agrees with neither quantifier and falls through to
+                // Unknown instead of being preserved as consensus.
+                var allOpaque = true;
+                var allTransparent = true;
+                for (var state = 0; state < perResolutionOutcomes.Count; state++)
+                {
+                    var outcome = perResolutionOutcomes[state][triangle];
+                    allOpaque &= outcome == TriangleAlphaOutcome.ProvenOpaque;
+                    allTransparent &=
+                        outcome == TriangleAlphaOutcome.MustRemainTransparent;
+                }
+
+                intersected[triangle] = allOpaque
+                    ? TriangleAlphaOutcome.ProvenOpaque
+                    : allTransparent
+                        ? TriangleAlphaOutcome.MustRemainTransparent
+                        : TriangleAlphaOutcome.Unknown;
+            }
+
+            return intersected;
+        }
+
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);

@@ -716,5 +716,270 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     Is.EqualTo(first.Plan.Submeshes[index].Disposition));
             }
         }
+
+        /// <summary>
+        /// Every outcome, in declaration order, addressed by index so that
+        /// parameterized tests can name them without exposing the internal
+        /// enum on a public signature.
+        /// </summary>
+        private static readonly TriangleAlphaOutcome[] Outcomes =
+        {
+            TriangleAlphaOutcome.ProvenOpaque,
+            TriangleAlphaOutcome.MustRemainTransparent,
+            TriangleAlphaOutcome.Unknown,
+        };
+
+        [Test]
+        public void OnlyTrianglesOpaqueInEveryStateStayOpaque()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.ProvenOpaque,
+                },
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.MustRemainTransparent,
+                },
+            });
+
+            Assert.That(intersected[0], Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(intersected[1],
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void UnknownInAnyStateRemovesOpacity()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+                new[] { TriangleAlphaOutcome.Unknown },
+            });
+
+            Assert.That(intersected[0],
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AnEmptyResolutionSetIsADefectNotAnOpaqueResult()
+        {
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(
+                System.Array.Empty<TriangleAlphaOutcome[]>()),
+                Throws.TypeOf<System.ArgumentException>());
+        }
+
+        [Test]
+        public void MismatchedOutcomeLengthsAreADefect()
+        {
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.ProvenOpaque,
+                },
+            }), Throws.TypeOf<System.ArgumentException>());
+        }
+
+        [Test]
+        public void MismatchedOutcomeLengthsAreADefectWhenTheLongerArrayIsFirst()
+        {
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.ProvenOpaque,
+                },
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+            }), Throws.TypeOf<System.ArgumentException>());
+        }
+
+        [Test]
+        public void ANullResolutionSetIsADefect()
+        {
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(null),
+                Throws.TypeOf<System.ArgumentNullException>());
+        }
+
+        [Test]
+        public void ANullOutcomeArrayIsADefect()
+        {
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+                null,
+            }), Throws.TypeOf<System.ArgumentException>());
+
+            Assert.That(() => UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                null,
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+            }), Throws.TypeOf<System.ArgumentException>());
+        }
+
+        /// <summary>
+        /// Zero triangles under a nonempty state set is an ordinary empty
+        /// domain — an empty submesh is accepted upstream — and must not be
+        /// confused with the zero-state defect above.
+        /// </summary>
+        [Test]
+        public void AnEmptyTriangleSetAcrossNonemptyResolutionsProducesNoOutcomes()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                System.Array.Empty<TriangleAlphaOutcome>(),
+                System.Array.Empty<TriangleAlphaOutcome>(),
+            });
+
+            Assert.That(intersected, Is.Empty);
+        }
+
+        [Test]
+        public void AllOpaqueStatesStayOpaque()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+                new[] { TriangleAlphaOutcome.ProvenOpaque },
+            });
+
+            Assert.That(intersected[0],
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AllTransparentStatesStayTransparent()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.MustRemainTransparent },
+                new[] { TriangleAlphaOutcome.MustRemainTransparent },
+                new[] { TriangleAlphaOutcome.MustRemainTransparent },
+            });
+
+            Assert.That(intersected[0],
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void AllUnknownStatesStayUnknown()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { TriangleAlphaOutcome.Unknown },
+                new[] { TriangleAlphaOutcome.Unknown },
+            });
+
+            Assert.That(intersected[0], Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// Three states agreeing per triangle prove that agreement survives
+        /// across more than one array, not merely that a single array is
+        /// returned unchanged.
+        /// </summary>
+        [Test]
+        public void UnanimousStatesAgreeTrianglewise()
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.MustRemainTransparent,
+                },
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.MustRemainTransparent,
+                },
+                new[]
+                {
+                    TriangleAlphaOutcome.ProvenOpaque,
+                    TriangleAlphaOutcome.MustRemainTransparent,
+                },
+            });
+
+            Assert.That(intersected, Is.EqualTo(new[]
+            {
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.MustRemainTransparent,
+            }));
+        }
+
+        /// <summary>
+        /// The complete disagreement matrix over the two definite outcomes and
+        /// Unknown. Every mixed pair collapses; no outcome outranks another.
+        /// </summary>
+        // Indices into Outcomes: the outcome enum is internal, so a public
+        // NUnit test method cannot take it as a parameter.
+        [TestCase(0, 1)]
+        [TestCase(1, 0)]
+        [TestCase(0, 2)]
+        [TestCase(2, 0)]
+        [TestCase(1, 2)]
+        [TestCase(2, 1)]
+        public void AnyDisagreementCollapsesToUnknown(int left, int right)
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { Outcomes[left] },
+                new[] { Outcomes[right] },
+            });
+
+            Assert.That(intersected[0], Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// Consensus is a property of the multiset of states, so every ordering
+        /// of the same three disagreeing states must answer identically. This
+        /// is what a first-state-wins or last-state-wins implementation fails.
+        /// </summary>
+        [TestCase(0, 1, 2)]
+        [TestCase(0, 2, 1)]
+        [TestCase(1, 0, 2)]
+        [TestCase(1, 2, 0)]
+        [TestCase(2, 0, 1)]
+        [TestCase(2, 1, 0)]
+        public void ConsensusDoesNotDependOnStateOrder(int a, int b, int c)
+        {
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(new[]
+            {
+                new[] { Outcomes[a] },
+                new[] { Outcomes[b] },
+                new[] { Outcomes[c] },
+            });
+
+            Assert.That(intersected[0], Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// One state is intersection with nothing, so all three outcomes pass
+        /// through unchanged — and by value: the caller must never receive a
+        /// mutable alias of the array it supplied.
+        /// </summary>
+        [Test]
+        public void ASingleResolutionPassesItsOutcomesThrough()
+        {
+            var only = new[]
+            {
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.MustRemainTransparent,
+                TriangleAlphaOutcome.Unknown,
+            };
+
+            var intersected = UnityRendererAlphaAnalysis.IntersectOutcomes(
+                new[] { only });
+
+            Assert.That(intersected, Is.EqualTo(only));
+            Assert.That(intersected, Is.Not.SameAs(only));
+        }
     }
 }
