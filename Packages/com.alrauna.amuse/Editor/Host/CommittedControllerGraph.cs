@@ -16,6 +16,7 @@ namespace Alrauna.Amuse.Editor.Host
         UnsupportedSyncedLayerOverrides,
         UnresolvedVirtualizedMotionContext,
         UnrecognizedStateMachineBehaviour,
+        AnimationEventPresent,
     }
 
     internal sealed class CommittedLayer
@@ -75,6 +76,9 @@ namespace Alrauna.Amuse.Editor.Host
         private static readonly CommittedControllerGraphResult UnrecognizedBehaviour =
             Refused(AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour);
 
+        private static readonly CommittedControllerGraphResult AnimationEventRefusal =
+            Refused(AvatarAnimationRefusal.AnimationEventPresent);
+
         internal static CommittedControllerGraphResult Enumerate(
             GameObject avatarRoot,
             IPlatformAnimatorBindings bindings)
@@ -117,6 +121,33 @@ namespace Alrauna.Amuse.Editor.Host
                         var identity = BehaviourIdentity.Of(behaviour.GetType());
                         if (!BehaviourIdentity.IsAllowed(identity))
                             return UnrecognizedBehaviour;
+                    }
+
+                    // An AnimationEvent is not a float or object curve, so it lies
+                    // outside the admitted animation value model: it invokes a method
+                    // by name against the animated hierarchy, and its effect cannot be
+                    // bounded to one layer, clip, renderer, material, or property.
+                    //
+                    // V1 has no transition, parameter, or state-machine reachability
+                    // solver, so every clip this structural enumeration reaches is
+                    // treated as potentially reachable. Refusing here does NOT claim
+                    // the event definitely executes in VRChat; it records only that
+                    // AMUSE cannot presently bound whether or how it can execute.
+                    //
+                    // Two pinned host facts explain why events are uncommon yet still
+                    // possible in the committed graph: NDMF's ordinary clip cloning
+                    // drops events because VirtualClip builds a fresh AnimationClip and
+                    // copies curves rather than events, while special/marker motions
+                    // can be committed by identity instead of cloned. Host special-
+                    // motion state is diagnostic and never authorizes an event.
+                    //
+                    // Which named cause an avatar carrying several independent unsafe
+                    // conditions reports is defined by this enumeration order alone
+                    // and is not contractual; only the refusal itself is. Each cause
+                    // stays separately named, and every one exposes empty Layers.
+                    foreach (var clip in committedLayer.Clips)
+                    {
+                        if (clip.events.Length > 0) return AnimationEventRefusal;
                     }
 
                     result.Add(committedLayer);
