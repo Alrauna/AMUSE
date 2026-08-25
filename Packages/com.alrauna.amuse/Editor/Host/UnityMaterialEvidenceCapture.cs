@@ -343,6 +343,12 @@ namespace Alrauna.Amuse.Editor.Host
             ShaderName = shaderName;
             HasActiveColorSpace = hasActiveColorSpace;
             ActiveColorSpace = activeColorSpace;
+            // The entry arrays are adopted, not copied, and are never written
+            // in place after this point. Every capture fills them before
+            // construction, and each With* derivation clones the one category
+            // it replaces, so derived evidence can share the rest safely. An
+            // in-place write added later would silently corrupt every object
+            // sharing the array.
             _presence = presence;
             _scalars = scalars;
             _colors = colors;
@@ -353,7 +359,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal bool HasProperty(string name)
         {
-            ValidateGetterName(name);
+            ValidatePropertyName(name);
             foreach (var entry in _presence)
             {
                 if (string.Equals(entry.Name, name, StringComparison.Ordinal))
@@ -367,7 +373,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal bool TryGetScalar(string name, out float value)
         {
-            ValidateGetterName(name);
+            ValidatePropertyName(name);
             foreach (var entry in _scalars)
             {
                 if (string.Equals(entry.Name, name, StringComparison.Ordinal))
@@ -383,7 +389,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal bool TryGetColor(string name, out Color value)
         {
-            ValidateGetterName(name);
+            ValidatePropertyName(name);
             foreach (var entry in _colors)
             {
                 if (string.Equals(entry.Name, name, StringComparison.Ordinal))
@@ -399,7 +405,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal bool TryGetVector(string name, out Vector4 value)
         {
-            ValidateGetterName(name);
+            ValidatePropertyName(name);
             foreach (var entry in _vectors)
             {
                 if (string.Equals(entry.Name, name, StringComparison.Ordinal))
@@ -417,7 +423,7 @@ namespace Alrauna.Amuse.Editor.Host
             string name,
             out CapturedTextureAssignment value)
         {
-            ValidateGetterName(name);
+            ValidatePropertyName(name);
             foreach (var entry in _textureAssignments)
             {
                 if (string.Equals(entry.Name, name, StringComparison.Ordinal))
@@ -431,7 +437,143 @@ namespace Alrauna.Amuse.Editor.Host
             throw Unrequested(name);
         }
 
-        private static void ValidateGetterName(string name)
+        /// <summary>
+        /// Derives new evidence with one requested scalar's captured value
+        /// replaced. The source is never mutated: only the scalar array is
+        /// copied, and every other category is shared under the array-adoption
+        /// rule recorded on the constructor.
+        /// <para>
+        /// This is a <em>primitive</em>, not an authorization path. It writes
+        /// whatever value it is given and applies no admission policy: no
+        /// finiteness test, no agreement test, and no comparison against the
+        /// admitted material's serialized default. Those decisions belong to
+        /// admission, upstream of every call.
+        /// </para>
+        /// <para>
+        /// Presence is a captured fact, so <c>HasValue</c> is preserved exactly.
+        /// A requested property the material does not have stays absent, and
+        /// the supplied value is discarded rather than stored beside the absent
+        /// flag: capture already guarantees that an entry without a value holds
+        /// <c>default</c>, and a derivation must not become the one place where
+        /// an unauthorized value hides behind <c>HasValue == false</c>. That
+        /// preserved absence is <em>not</em> permission to ignore an animated
+        /// binding for it: per the design's fail-closed branch, admitted-state
+        /// resolution must return
+        /// <c>RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial</c>
+        /// for a proof-relevant animated property absent from the admitted
+        /// material, before any substitution here is treated as authorized.
+        /// </para>
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// The name was not requested as a scalar. Substituting an unrequested
+        /// property would invent an evidence dimension, which is a programming
+        /// defect rather than a domain outcome; a name requested only under
+        /// another typed category is equally unrequested here.
+        /// </exception>
+        internal CapturedMaterialEvidence WithScalar(string name, float value)
+        {
+            ValidatePropertyName(name);
+            for (var index = 0; index < _scalars.Length; index++)
+            {
+                var entry = _scalars[index];
+                if (!string.Equals(entry.Name, name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var scalars = (ScalarEntry[])_scalars.Clone();
+                scalars[index] = new ScalarEntry(
+                    entry.Name,
+                    entry.HasValue,
+                    entry.HasValue ? value : entry.Value);
+                return Derive(scalars, _colors, _vectors);
+            }
+
+            throw Unrequested(name);
+        }
+
+        /// <summary>
+        /// The colour counterpart of <see cref="WithScalar"/>; the same
+        /// primitive, presence, and authorization rules apply verbatim.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// The name was not requested as a colour.
+        /// </exception>
+        internal CapturedMaterialEvidence WithColor(string name, Color value)
+        {
+            ValidatePropertyName(name);
+            for (var index = 0; index < _colors.Length; index++)
+            {
+                var entry = _colors[index];
+                if (!string.Equals(entry.Name, name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var colors = (ColorEntry[])_colors.Clone();
+                colors[index] = new ColorEntry(
+                    entry.Name,
+                    entry.HasValue,
+                    entry.HasValue ? value : entry.Value);
+                return Derive(_scalars, colors, _vectors);
+            }
+
+            throw Unrequested(name);
+        }
+
+        /// <summary>
+        /// The vector counterpart of <see cref="WithScalar"/>; the same
+        /// primitive, presence, and authorization rules apply verbatim.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// The name was not requested as a vector.
+        /// </exception>
+        internal CapturedMaterialEvidence WithVector(string name, Vector4 value)
+        {
+            ValidatePropertyName(name);
+            for (var index = 0; index < _vectors.Length; index++)
+            {
+                var entry = _vectors[index];
+                if (!string.Equals(entry.Name, name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var vectors = (VectorEntry[])_vectors.Clone();
+                vectors[index] = new VectorEntry(
+                    entry.Name,
+                    entry.HasValue,
+                    entry.HasValue ? value : entry.Value);
+                return Derive(_scalars, _colors, vectors);
+            }
+
+            throw Unrequested(name);
+        }
+
+        /// <summary>
+        /// Rebuilds the whole evidence object around three typed categories, so
+        /// no derivation can silently drop the shader name, colour space,
+        /// presence, texture assignments, or shared texture evidence.
+        /// </summary>
+        private CapturedMaterialEvidence Derive(
+            ScalarEntry[] scalars,
+            ColorEntry[] colors,
+            VectorEntry[] vectors)
+        {
+            return new CapturedMaterialEvidence(
+                HasShaderName,
+                ShaderName,
+                HasActiveColorSpace,
+                ActiveColorSpace,
+                _presence,
+                scalars,
+                colors,
+                vectors,
+                _textureAssignments,
+                Textures);
+        }
+
+        private static void ValidatePropertyName(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
             {

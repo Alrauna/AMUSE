@@ -25,6 +25,22 @@ namespace Alrauna.Amuse.Editor.Host
         AnimatedMeshReplacement,
         AnimatedMaterialSlotCount,
         AdmittedStateBudgetExceeded,
+
+        /// <summary>
+        /// A proof-relevant animated material property is absent from an
+        /// admitted material. Task 5 observed that a bare
+        /// <c>material.&lt;Property&gt;</c> curve for a property the material
+        /// does not declare is still sampled into a non-empty renderer-wide
+        /// <c>MaterialPropertyBlock</c>, but that observation cannot establish
+        /// whether a shader that does not declare the property ignores the
+        /// write when rendering. The design therefore takes the fail-closed
+        /// branch and refuses rather than preserving absence and ignoring the
+        /// animated value. Substitution preserving <c>HasValue == false</c> is
+        /// a property of the evidence primitive, never authorization to ignore
+        /// the binding: this refusal must be returned before any substitution
+        /// for that admitted material is treated as authorized.
+        /// </summary>
+        AnimatedPropertyAbsentFromAdmittedMaterial,
     }
 
     /// <summary>
