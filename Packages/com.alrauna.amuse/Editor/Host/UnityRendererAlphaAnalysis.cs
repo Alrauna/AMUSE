@@ -41,6 +41,25 @@ namespace Alrauna.Amuse.Editor.Host
         /// for that admitted material is treated as authorized.
         /// </summary>
         AnimatedPropertyAbsentFromAdmittedMaterial,
+
+        /// <summary>
+        /// A proof-relevant animated property is driven by a curve whose exact
+        /// value set cannot be enumerated. Finite-exactness is a precondition
+        /// of admission rather than a tie-breaker among agreeing values: a
+        /// curve whose sampled endpoints happen to equal the serialized default
+        /// still passes through unproven intermediate values.
+        /// </summary>
+        UnsupportedAnimationCurveForm,
+
+        /// <summary>
+        /// The sources contributing to one proof-relevant animated property do
+        /// not agree on a single exact value, so its admitted set is not a
+        /// singleton. Under V1 the admitted set is
+        /// the animated values together with that material's own captured default,
+        /// so an animated value differing from the default is exactly this
+        /// refusal: animation never overrides a differing default.
+        /// </summary>
+        AnimatedMaterialPropertyNotSingleton,
     }
 
     /// <summary>

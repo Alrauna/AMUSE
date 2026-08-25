@@ -51,6 +51,11 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial:
                     return Census.RendererRefusal
                         .AnimatedPropertyAbsentFromAdmittedMaterial;
+                case RendererAnalysisRefusal.UnsupportedAnimationCurveForm:
+                    return Census.RendererRefusal.UnsupportedAnimationCurveForm;
+                case RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton:
+                    return Census.RendererRefusal
+                        .AnimatedMaterialPropertyNotSingleton;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),
