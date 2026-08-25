@@ -3063,6 +3063,18 @@ git commit -m "feat: separate domain refusal from implementation defect"
 - Consumes: every prior task.
 - Produces: the wired two-pass configuration.
 
+**Renderer-wide obligations this task owns and MUST discharge.** Tasks 16–19 deliberately produce narrow primitives: `StructuralRefusalFor` is a renderer-level precondition, `TryBudgetProduct` is renderer-wide arithmetic, and `ResolveSlot` resolves exactly one slot and is given neither the renderer's structural facts nor the captured graph flags. Task 24 is the only place where all of them meet, so it is the only place their producers can live. None of the following may be pushed further down into a per-slot primitive, and none may be silently dropped:
+
+1. **Structural checks run before state analysis.** `UnityRendererAlphaAnalysis.StructuralRefusalFor` (Task 16) is consumed on this renderer's captured float and object bindings *before* any admitted-state construction, budgeting, resolution, or geometry work. A structural refusal ends the renderer.
+2. **Budget before materialization.** The per-slot admitted-material counts across **all** slots are collected and passed to `AdmittedMaterialStates.TryBudgetProduct` (Task 17) *before* any state product, materialization, or geometry work. Task 17 shipped this primitive with no producer; this is its producer.
+3. **A failed budget emits `RendererAnalysisRefusal.AdmittedStateBudgetExceeded`.** `TryBudgetProduct(...) == false` refuses the renderer under that exact member; the returned `productSize` carries no meaning on that branch and must not be reported.
+4. **The additive-layer and unnormalized-Direct facts are not silently ignored.** Task 10 preserves `CapturedAnimationEvidence.HasAdditiveLayer` and `CapturedAnimationEvidence.HasUnnormalizedDirectBlendTree` into the immutable evidence, and nothing between Task 10 and here reads them. The design's failure list requires a named refusal for "additive-layer or unnormalized Direct Blend Tree contribution to a proof-relevant property", so leaving them unread would be an unclosed design requirement, not an optimization.
+5. **Named conservative refusal when both conditions hold.** When this renderer has proof-relevant animated *material-property* bindings and the captured graph carries an unsupported additive-layer or unnormalized-Direct-Blend-Tree contribution, the renderer takes an explicit named conservative refusal. The singleton rule contains ordinary blending precisely because a blend among equal values is that value; an additive layer and an unnormalized Direct tree are exactly the two forms that break that premise, so a proof-relevant animated property under either is unproven.
+6. **Refusal members and census mapping are added with the producer, not before.** The concrete `RendererAnalysisRefusal` member name(s) and their declaration position are decided when this producer is implemented — not anticipated earlier as vocabulary without a producer. Adding them requires the matching `Census.RendererRefusal` members and `CensusVocabulary.ToCensus` arms in the same change, and the existing census exhaustiveness test (`EveryAmuseRefusalMaps` / `RendererRefusalMirrorsAmuse`) is retained, never relaxed.
+7. **Synthetic tests for both forms are mandatory.** The design names "one additive layer" and "one unnormalized Direct Blend Tree" among its executable-specification fixtures. This task adds a synthetic test for each, proving the named refusal rather than an incidental one.
+8. **`ResolveSlot` receives the capture's own closed request.** Task 19's `relevance` parameter MUST be `CapturedAnimationEvidence.RelevanceRequest` — the same closed request the slot's bindings were resolved against. It is the only source that inverts a derived `<texture>_ST` name back to its owning texture request, and any other request would either fail that inversion or resolve the name against the wrong schema.
+9. **Conservative scoping must not under-refuse.** `HasAdditiveLayer` and `HasUnnormalizedDirectBlendTree` are renderer/avatar-global captured facts, carrying no per-binding provenance. Refusing every proof-relevant animated material property on such a graph is therefore the correct conservative scope even though some of those properties are provably untouched by the additive or Direct contribution: a broader refusal is an accepted false negative. Inventing per-binding provenance that capture does not carry, in order to narrow the refusal, is not acceptable — narrowing requires new observed evidence and its own task.
+
 - [ ] **Step 1: Write the failing end-to-end test**
 
 ```csharp
@@ -3168,11 +3180,12 @@ git commit -m "feat: prove alpha opacity across admitted runtime states"
 | Vector property admission | `AdmitVector`, `AnimatedPropertyKind.VectorComponent`, `WithVector` | 11, 13, 18 |
 | Material swaps | `CapturedObjectBinding.AdmittedMaterialIndices` | 9, 10 |
 | Texture/object-reference animation | Task 3 decides existence; if present, escalated to the user as a design change before Task 10 | 3 |
-| Structural invalidation | `RendererAnalysisRefusal.AnimatedMeshReplacement`, `.AnimatedMaterialSlotCount` | 3, 16 |
+| Structural invalidation | `RendererAnalysisRefusal.AnimatedMeshReplacement`, `.AnimatedMaterialSlotCount` via `StructuralRefusalFor`; consumed before state analysis by the renderer integration | 3, 16, 24 |
 | Live-object → immutable transition | `LiveAnimationObservation` (live, transient) → `Capture` → `CapturedAnimationEvidence` (immutable), enforced by `AssertHasNoUnityObjectFields` | 8, 10, 22 |
 | Dependency closure ordering | `CapturedAnimationEvidence.IsClosed`, `.RelevanceRequest` | 10 |
 | Finite-exact proof | `IsFiniteExact`, proven by `EqualEndpointsWithNonZeroTangentsAreNotFiniteExact` | 8 |
-| Budget | `TryBudgetProduct`, `.AdmittedStateBudgetExceeded` | 17 |
+| Budget | `TryBudgetProduct` (primitive), `.AdmittedStateBudgetExceeded`; producer — all-slot counts budgeted before materialization — wired in the renderer integration | 17, 24 |
+| Additive-layer / unnormalized-Direct contribution to a proof-relevant property | `CapturedAnimationEvidence.HasAdditiveLayer`, `.HasUnnormalizedDirectBlendTree` (captured facts); named conservative refusal(s) and their census mapping added with the renderer-integration producer, with synthetic tests for both forms | 10, 24 |
 | Failure semantics | `AmusePlatformFinishState.AvatarRefusal`, no `catch` around renderer analysis | 23 |
 | Observation boundary | `Sequence.WithRequiredExtension` capture pass, extension-free barrier | 1, 24 |
 | Special motions never gate | `CapturedClipEvidence.IsSpecialMotion` is diagnostic-only | 10 |

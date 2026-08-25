@@ -40,6 +40,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "AnimatedMaterialSlotCount",
                     "AdmittedStateBudgetExceeded",
                     "AnimatedPropertyAbsentFromAdmittedMaterial",
+                    "UnsupportedAnimationCurveForm",
+                    "AnimatedMaterialPropertyNotSingleton",
                 },
                 Enum.GetNames(typeof(RendererRefusal)));
         }
