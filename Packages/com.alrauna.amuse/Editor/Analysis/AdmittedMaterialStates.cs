@@ -151,6 +151,105 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
+        /// Drops resolutions that are provably interchangeable, preserving the
+        /// order of first occurrence.
+        /// <para>
+        /// Deduplication here is <em>performance-only</em>, and its correctness
+        /// theorem is one-way. Leaving two interchangeable resolutions separate
+        /// costs a redundant classification pass and can never change a proof.
+        /// Merging two that could classify any triangle differently hands the
+        /// later intersection too few states, which is a false-positive-
+        /// direction defect. Every uncertain pair therefore stays separate.
+        /// </para>
+        /// <para>
+        /// Exactly two merges are permitted, both on exact stored values:
+        /// two refusals naming the same <see cref="AlphaResolutionFailure"/>,
+        /// and two uniform resolutions carrying the same
+        /// <see cref="TriangleAlphaOutcome"/>. Nothing merges across those two
+        /// cases.
+        /// </para>
+        /// <para>
+        /// <strong>Classified resolutions never merge — not even with
+        /// themselves.</strong> Two of them are interchangeable only if their
+        /// alpha fields are semantically equivalent, and reference-distinct
+        /// <see cref="AlphaTextureData"/> cannot be proven equivalent cheaply.
+        /// Recognizing the same instance twice would be sound in isolation but
+        /// is deliberately not done either, because it invites the field-,
+        /// fingerprint-, and reference-equality variants that are not. Keeping
+        /// an obvious duplicate costs one extra pass and keeps the rule
+        /// categorical, which is the safe direction.
+        /// </para>
+        /// <para>
+        /// Equivalence is never inferred by classifying a sample of triangles.
+        /// No finite sample proves two resolutions agree on every triangle, and
+        /// a sample that happened to agree would merge a varying resolution
+        /// into a constant one.
+        /// </para>
+        /// <para>
+        /// An empty input yields an empty result. A renderer slot with no
+        /// resolutions is a programming defect rather than vacuous proof of
+        /// opacity, but it is the intersection step that must say so;
+        /// manufacturing a resolution here — opaque, unknown, or refused —
+        /// would disarm that guard before it ever ran.
+        /// </para>
+        /// </summary>
+        internal static IReadOnlyList<AlphaResolution> DistinctResolutions(
+            IReadOnlyList<AlphaResolution> resolutions)
+        {
+            if (resolutions == null)
+                throw new ArgumentNullException(nameof(resolutions));
+
+            // A plain stable scan over a list already bounded upstream by the
+            // admitted-state budget. It is quadratic in the worst case and that
+            // is deliberate: it makes the exact equivalence obvious and needs no
+            // key, hash, or comparer that could quietly widen it.
+            var distinct = new List<AlphaResolution>(resolutions.Count);
+            foreach (var resolution in resolutions)
+            {
+                var alreadyRepresented = false;
+                foreach (var kept in distinct)
+                {
+                    if (AreExactlyInterchangeable(kept, resolution))
+                    {
+                        alreadyRepresented = true;
+                        break;
+                    }
+                }
+
+                // The first occurrence stays the representative; a later
+                // duplicate never replaces or reorders it.
+                if (!alreadyRepresented)
+                    distinct.Add(resolution);
+            }
+
+            // Read-only for the same reason SlotResolutionResult.Resolved is:
+            // a proof set a caller could downcast and mutate is not a proof.
+            return Array.AsReadOnly(distinct.ToArray());
+        }
+
+        /// <summary>
+        /// The whole V1 equivalence relation, on exact stored values only.
+        /// Anything this does not recognize stays distinct.
+        /// </summary>
+        private static bool AreExactlyInterchangeable(
+            AlphaResolution left, AlphaResolution right)
+        {
+            if (!left.IsResolved || !right.IsResolved)
+            {
+                // Both refused and naming the same failure, or not comparable
+                // at all. A refusal never merges with a resolved value.
+                return !left.IsResolved && !right.IsResolved &&
+                       left.Failure == right.Failure;
+            }
+
+            // Both resolved. Only the uniform case is decidable: a classified
+            // resolution answers false here and so merges with nothing.
+            return left.TryGetUniformOutcome(out var leftOutcome) &&
+                   right.TryGetUniformOutcome(out var rightOutcome) &&
+                   leftOutcome == rightOutcome;
+        }
+
+        /// <summary>
         /// Resolves one renderer material slot: every material the slot may
         /// hold, each against its <em>own</em> captured serialized defaults.
         /// <para>
