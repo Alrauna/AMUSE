@@ -11,10 +11,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
     /// absorption of a new production value. Failing here is the intended way
     /// to force that decision into review.
     /// <para>
-    /// The matching parity check against AMUSE's own enums belongs to the
-    /// collector increment, where the friend grant makes them visible at
-    /// compile time. Until then drift is undetected, which is acceptable only
-    /// because nothing consumes these records yet.
+    /// The matching parity check against AMUSE's own enums lives in the
+    /// collector's <c>CensusVocabularyTests</c>, where the friend grant makes
+    /// them visible at compile time: <c>RendererRefusalMirrorsAmuse</c> pins
+    /// the member sets equal, and
+    /// <c>EveryAmuseRefusalMapsToTheSameCensusName</c> drives every AMUSE
+    /// refusal through the mapping. Both halves are live; a snapshot edited
+    /// here without its production counterpart fails there.
     /// </para>
     /// </summary>
     public sealed class CensusCategorySnapshotTests
@@ -28,10 +31,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "None",
                     "UnsupportedRendererType",
                     "MaterialPropertyOverridesPresent",
+                    "UnrecognizedAnimatedMaterialBinding",
                     "MissingMesh",
                     "UnprovenMaterialSlotMapping",
                     "UnsupportedTopology",
                     "MalformedMeshData",
+                    "AnimatedMeshReplacement",
+                    "AnimatedMaterialSlotCount",
                 },
                 Enum.GetNames(typeof(RendererRefusal)));
         }
