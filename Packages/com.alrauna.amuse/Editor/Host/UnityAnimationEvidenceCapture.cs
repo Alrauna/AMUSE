@@ -55,6 +55,13 @@ namespace Alrauna.Amuse.Editor.Host
     {
         private const string MaterialPrefix = "material.";
 
+        /// <summary>
+        /// Unity's generated name for a texture property's packed scale and
+        /// offset. Shared so the derivation below and its inverse in
+        /// admitted-state resolution cannot drift apart.
+        /// </summary>
+        internal const string TextureScaleOffsetSuffix = "_ST";
+
         private static readonly MaterialEvidenceRequest EmptyRequest =
             new MaterialEvidenceRequest(
                 false,
@@ -312,7 +319,8 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 if ((texture.Evidence & TextureEvidenceKinds.ScaleOffset) != 0)
                 {
-                    properties.Add(texture.PropertyName + "_ST");
+                    properties.Add(
+                        texture.PropertyName + TextureScaleOffsetSuffix);
                 }
             }
 

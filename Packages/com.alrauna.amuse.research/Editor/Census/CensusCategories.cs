@@ -42,6 +42,8 @@ namespace Alrauna.Amuse.Research.Census
         AnimatedMaterialSlotCount,
         AdmittedStateBudgetExceeded,
         AnimatedPropertyAbsentFromAdmittedMaterial,
+        UnsupportedAnimationCurveForm,
+        AnimatedMaterialPropertyNotSingleton,
     }
 
     /// <summary>
