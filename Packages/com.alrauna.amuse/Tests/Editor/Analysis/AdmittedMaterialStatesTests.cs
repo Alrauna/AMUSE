@@ -1150,5 +1150,240 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 OutcomeOf(result.Resolutions.Single()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
+
+        // ---- DistinctResolutions -------------------------------------------
+        //
+        // Deduplication is performance-only and its correctness theorem is
+        // one-way: leaving two equivalent resolutions separate costs extra work,
+        // while merging two that could classify any triangle differently shrinks
+        // the later intersection set without proof. These tests pin the merge
+        // rule as exact rather than merely small.
+
+        private static AlphaResolution ClassifiedResolution(byte texel)
+        {
+            return AlphaResolution.Classified(
+                new AlphaTextureData(1, 1, new[] { texel }),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+        }
+
+        [Test]
+        public void IdenticalUniformResolutionsCollapse()
+        {
+            var first = AlphaResolution.Uniform(
+                TriangleAlphaOutcome.ProvenOpaque);
+            var second = AlphaResolution.Uniform(
+                TriangleAlphaOutcome.ProvenOpaque);
+
+            var distinct = AdmittedMaterialStates.DistinctResolutions(
+                new[] { first, second });
+
+            Assert.That(distinct.Count, Is.EqualTo(1));
+            // The first occurrence is the representative; a later duplicate
+            // never replaces it.
+            Assert.That(distinct[0], Is.SameAs(first));
+        }
+
+        [Test]
+        public void DifferentUniformOutcomesDoNotCollapse()
+        {
+            var distinct = AdmittedMaterialStates.DistinctResolutions(new[]
+            {
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent),
+            });
+
+            Assert.That(distinct.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void IdenticalRefusalsCollapse()
+        {
+            var first = AlphaResolution.Refused(
+                AlphaResolutionFailure.SemanticsUnknown);
+            var second = AlphaResolution.Refused(
+                AlphaResolutionFailure.SemanticsUnknown);
+
+            var distinct = AdmittedMaterialStates.DistinctResolutions(
+                new[] { first, second });
+
+            Assert.That(distinct.Count, Is.EqualTo(1));
+            Assert.That(distinct[0], Is.SameAs(first));
+        }
+
+        [Test]
+        public void DifferentRefusalsDoNotCollapse()
+        {
+            var distinct = AdmittedMaterialStates.DistinctResolutions(new[]
+            {
+                AlphaResolution.Refused(
+                    AlphaResolutionFailure.SemanticsUnknown),
+                AlphaResolution.Refused(
+                    AlphaResolutionFailure.MissingTextureEvidence),
+            });
+
+            Assert.That(distinct.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void UniformAndRefusedNeverMerge()
+        {
+            var distinct = AdmittedMaterialStates.DistinctResolutions(new[]
+            {
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                AlphaResolution.Refused(
+                    AlphaResolutionFailure.SemanticsUnknown),
+            });
+
+            Assert.That(distinct.Count, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Categorical: Task 20 does not deduplicate classified resolutions at
+        /// all. Reference-distinct <c>AlphaTextureData</c> cannot be proven
+        /// semantically equivalent cheaply, so even the same instance appearing
+        /// twice survives twice. The pairs below are deliberately the most
+        /// tempting ones — equal contents, equal sampling, and finally the
+        /// identical object — because a field-equality, fingerprint, or
+        /// <c>ReferenceEquals</c> implementation would merge exactly these.
+        /// </summary>
+        [Test]
+        public void ClassifiedResolutionsNeverMerge()
+        {
+            var equalContents = new[]
+            {
+                ClassifiedResolution(255),
+                ClassifiedResolution(255),
+            };
+
+            Assert.That(
+                AdmittedMaterialStates.DistinctResolutions(equalContents).Count,
+                Is.EqualTo(2));
+
+            var sameInstance = ClassifiedResolution(255);
+
+            Assert.That(
+                AdmittedMaterialStates.DistinctResolutions(
+                    new[] { sameInstance, sameInstance }).Count,
+                Is.EqualTo(2));
+        }
+
+        [Test]
+        public void MixedResolutionsKeepFirstOccurrenceOrder()
+        {
+            var opaque = AlphaResolution.Uniform(
+                TriangleAlphaOutcome.ProvenOpaque);
+            var refused = AlphaResolution.Refused(
+                AlphaResolutionFailure.SemanticsUnknown);
+            var classified = ClassifiedResolution(255);
+            var transparent = AlphaResolution.Uniform(
+                TriangleAlphaOutcome.MustRemainTransparent);
+            var classifiedAgain = ClassifiedResolution(255);
+
+            var distinct = AdmittedMaterialStates.DistinctResolutions(new[]
+            {
+                opaque,
+                refused,
+                classified,
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                transparent,
+                AlphaResolution.Refused(
+                    AlphaResolutionFailure.SemanticsUnknown),
+                classifiedAgain,
+            });
+
+            // Surviving representatives stay in input order, and every
+            // classified occurrence survives in place. Nothing is sorted by
+            // kind or by enum value.
+            Assert.That(
+                distinct,
+                Is.EqualTo(new[]
+                {
+                    opaque, refused, classified, transparent, classifiedAgain,
+                }));
+        }
+
+        /// <summary>
+        /// Task 20 preserves the shape; Task 21 rejects it as a programming
+        /// defect before universal intersection. Manufacturing a resolution
+        /// here — opaque, unknown, or refused — would disarm that guard, and an
+        /// invented <c>ProvenOpaque</c> would be vacuous proof of opacity.
+        /// </summary>
+        [Test]
+        public void EmptyInputRemainsEmptyForTheIntersectionGuard()
+        {
+            Assert.That(
+                AdmittedMaterialStates.DistinctResolutions(
+                    Array.Empty<AlphaResolution>()),
+                Is.Empty);
+        }
+
+        /// <summary>
+        /// A null list is a programming defect, not a domain outcome, and the
+        /// sibling pure helpers on this type (<c>TryBudgetProduct</c>,
+        /// <c>AdmitScalar</c>, <c>AdmitVector</c>) all reject it the same way.
+        /// A null <em>element</em> is likewise a defect, and this method adds no
+        /// guard for it: it is never skipped or absorbed, so it either surfaces
+        /// immediately when compared against an earlier entry or is carried into
+        /// the output for the intersection step to fault on. Detecting it is not
+        /// this method's job, and inventing a domain outcome for it would be
+        /// exactly the fail-open move the design forbids.
+        /// </summary>
+        [Test]
+        public void ANullResolutionListIsRejected()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => AdmittedMaterialStates.DistinctResolutions(null));
+        }
+
+        [Test]
+        public void ASingleResolutionIsPreserved()
+        {
+            foreach (var only in new[]
+                     {
+                         AlphaResolution.Uniform(
+                             TriangleAlphaOutcome.ProvenOpaque),
+                         AlphaResolution.Refused(
+                             AlphaResolutionFailure.SemanticsUnknown),
+                         ClassifiedResolution(255),
+                     })
+            {
+                var distinct = AdmittedMaterialStates.DistinctResolutions(
+                    new[] { only });
+
+                Assert.That(distinct.Count, Is.EqualTo(1));
+                Assert.That(distinct[0], Is.SameAs(only));
+            }
+        }
+
+        /// <summary>
+        /// A regression illustration only. It shows that deduplication removed
+        /// work without removing any reachable outcome; it does NOT establish
+        /// the equivalence relation, and in particular no finite sample of
+        /// triangles could ever prove two classified resolutions agree
+        /// everywhere.
+        /// </summary>
+        [Test]
+        public void DedupIsPerformanceOnlyAndPreservesTheOutcome()
+        {
+            var full = new[]
+            {
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent),
+            };
+
+            var distinct = AdmittedMaterialStates.DistinctResolutions(full);
+            var triangle = TriangleAlphaInput.MissingUv0(
+                Vector3.zero, Vector3.right, Vector3.up);
+
+            Assert.That(distinct.Count, Is.LessThan(full.Length));
+            Assert.That(
+                distinct.Select(r => r.Classify(triangle)).Distinct().Count(),
+                Is.EqualTo(
+                    full.Select(r => r.Classify(triangle)).Distinct().Count()));
+        }
     }
 }
