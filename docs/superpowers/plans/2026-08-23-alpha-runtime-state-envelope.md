@@ -2686,12 +2686,53 @@ git commit -m "feat: resolve admitted material states per renderer slot"
 Dedup is **performance-only**. Correctness is defined over all distinct semantic resolutions produced by Task 19; failing to deduplicate costs work and can never change the proof.
 
 **Files:**
+- Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs`
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
+- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
 
 **Interfaces:**
 - Consumes: the `AlphaResolution` list produced per slot by Task 19.
+- Produces: `internal bool AlphaResolution.TryGetUniformOutcome(out TriangleAlphaOutcome outcome)`
 - Produces: `internal static IReadOnlyList<AlphaResolution> AdmittedMaterialStates.DistinctResolutions(IReadOnlyList<AlphaResolution> resolutions)`
+
+**Plan correction (recorded during Task 20).** This task as originally written
+assumed `AlphaResolution` already exposed enough state to name its Uniform case.
+It does not. `AlphaResolution` is a sealed, non-partial class whose only
+consumer-visible surface is `IsResolved`, `Failure`, the three factories, and
+`Classify`; the two discriminants the Uniform merge rule needs — `_isUniform` and
+`_uniformOutcome` — are `private`, and `InternalsVisibleTo` does not reach
+`private`. The Refused merge rule was always implementable from `IsResolved` plus
+`Failure`; the Uniform merge rule was not implementable at all.
+
+Task 20 therefore adds exactly one minimal read-only accessor exposing state the
+type already stores:
+
+```csharp
+internal bool TryGetUniformOutcome(out TriangleAlphaOutcome outcome)
+```
+
+`true` with the exact stored outcome for Uniform; `false` for Refused and for
+Classified. A separate `IsUniform` is deliberately *not* added — `TryGet...`
+alone answers every question Task 20 asks, and Refused stays distinguishable
+through the pre-existing `IsResolved`/`Failure` surface. `_field`, `_sampling`,
+`AlphaTextureData`, a general resolution-kind discriminant, `Equals`,
+`GetHashCode`, `IEquatable`, fingerprints, hashes, and shared comparers remain
+unexposed and unimplemented.
+
+The alternative — inferring uniformity from `Classify` — is rejected as unsound,
+not merely inelegant: a Classified resolution can return `ProvenOpaque` for a
+sampled triangle, so sampling would merge Classified into Uniform. That is an
+over-deduplication, which shrinks the later intersection set without proof and is
+a false-positive-direction defect.
+
+The resulting V1 equivalence relation is exactly:
+
+- both `!IsResolved` → merge only when `Failure` values are equal;
+- else both `TryGetUniformOutcome` → merge only when the outcomes are equal;
+- otherwise → never merge.
+
+This is a scope correction to Task 20, not new architecture and not Task 21 work.
 
 - [ ] **Step 1: Write the failing test**
 
