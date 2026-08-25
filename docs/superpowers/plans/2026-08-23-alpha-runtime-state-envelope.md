@@ -2450,9 +2450,12 @@ per renderer slot
   -> gather that slot's proof-relevant animated bindings
   -> run scalar/color/vector singleton admission
   -> derive presence-preserving substituted CapturedMaterialEvidence
+     (scalar/colour/vector only; see the texture scale/offset rule below)
   -> AlphaSemanticsResolver.Resolve
   -> return all conservative AlphaResolutions for that slot
 ```
+
+**Texture scale/offset is texture-owned evidence, not vector evidence.** Three of the four `AnimatedPropertyKind` members line up one-to-one with a typed evidence category: `Scalar` with the scalar entries, `ColorComponent` with the colour entries, `VectorComponent` with the vector entries. `TextureScaleOffsetComponent` does not. Its `PropertyName` is a **derived** `<texture>_ST` name that exists only because `<texture>` was requested with `TextureEvidenceKinds.ScaleOffset`; it is deliberately **not** a member of `MaterialEvidenceRequest.VectorProperties`, and Task 18's `WithVector` is category-strict — it throws `ArgumentException` for any name that was not requested as a vector. Calling `WithVector("_MainTex_ST", …)` on the real frontend path would therefore throw, not substitute. Presence, the serialized default, and (in V1) the resolved evidence for this kind all come from `CapturedTextureAssignment`. Step 3 below states the rule; do not weaken Task 18's category boundary, do not add `_ST` names to `VectorProperties`, and do not fake an `_ST` vector entry during capture.
 
 The defaults must come from **each admitted material individually**. A renderer-wide default would be wrong the moment two admitted materials disagree, and that error is in the false-positive direction.
 
@@ -2464,7 +2467,7 @@ Admission is per admitted material, so the same animated binding may be admitted
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
 
 **Interfaces:**
-- Consumes: `AdmitScalar`/`AdmitColor`/`AdmitVector` (Tasks 12–13), `AnimatedPropertyRef` (Task 11), the substitution methods (Task 18), `AlphaSemanticsResolver.Resolve` (unchanged).
+- Consumes: `AdmitScalar`/`AdmitColor`/`AdmitVector` (Tasks 12–13), `AnimatedPropertyRef` (Task 11), `WithScalar`/`WithColor`/`WithVector` (Task 18, for the three categorised kinds only), `CapturedMaterialEvidence.TryGetTexture`/`CapturedTextureAssignment` (Task 10, for `TextureScaleOffsetComponent`), `DeriveTextureScaleOffsetProperties` and `MaterialEvidenceRequest.TextureProperties` (Tasks 10–11, to invert the derived `_ST` name), `AlphaSemanticsResolver.Resolve` (unchanged).
 - Produces:
   - `internal sealed class CapturedMaterialSlotEvidence { internal int SlotIndex { get; } internal IReadOnlyList<int> AdmittedMaterialIndices { get; } }`
   - `internal sealed class SlotResolutionResult { internal bool IsResolved { get; } internal RendererAnalysisRefusal Refusal { get; } internal IReadOnlyList<AlphaResolution> Resolutions { get; } }`
@@ -2606,6 +2609,18 @@ Admission is per admitted material, so the same animated binding may be admitted
 
 Write `SlotFixture`, `AttestedOpaqueMaterial`, `AttestedTransparentMaterial`, `AttestedMaterialWithForcedOpaque`, `AnyTriangle`, and the binding/reference helpers in the test file, building materials through the existing attested Poiyomi and lilToon fixture helpers so every resolution runs through a real frontend. A stock Unity shader resolves all-Unknown and would make these tests pass vacuously.
 
+**Required texture scale/offset tests.** The tests above exercise only the three categorised kinds. Step 1 MUST additionally cover the derived `_ST` path, because that is the path where the category boundary bites, and none of the tests above would fail an implementation that reached for `WithVector("_MainTex_ST", …)`. All four are mandatory:
+
+1. **Real derived scale/offset relevance.** Build relevance from the **real frontend request** — the same premise Task 11 established — where `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`. Assert as a fixture precondition that `relevance.VectorProperties` does **not** contain `"_MainTex_ST"`. Then resolve (or construct through `ResolveProofRelevant`) the proof-relevant binding for `material._MainTex_ST.x` and assert its `Kind` is `AnimatedPropertyKind.TextureScaleOffsetComponent`. A hand-authored `VectorProperties` entry containing `"_MainTex_ST"` is a workaround, not a fixture: it would make the whole group pass vacuously and is forbidden.
+
+2. **A re-asserted scale/offset component resolves.** Using an admitted material whose captured texture assignment has `HasScaleOffset == true`, animate one derived `_ST` component to exactly its captured default. `ResolveSlot` must succeed, and the semantic outcome must equal the outcome for the same material with no animation at all. Critically, the test must pass **without** `"_MainTex_ST"` appearing in `VectorProperties` — this is the test that fails an implementation still calling `WithVector` on the derived name.
+
+3. **A differing scale/offset component refuses.** Animate one derived `_ST` component to a value differing from that admitted material's captured default. Expect `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`, with no substitution and no alternate scale/offset state resolved. Cover **one scale component and one offset component** (for example `.y` and `.z`) so the `ComponentIndex` 0–3 → `Scale.x`/`Scale.y`/`Offset.x`/`Offset.y` mapping is proven rather than assumed; an implementation that swaps the scale and offset halves must fail here. The existing immutable representation and Task 11's `"xyzw"` convention make this deterministic, so no new host characterization work is needed.
+
+4. **Absent scale/offset evidence refuses.** For a proof-relevant `TextureScaleOffsetComponent` binding whose admitted material lacks the required captured `ScaleOffset` evidence (the texture assignment absent, or present with `HasScaleOffset == false`), expect `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial`. The test must prove Task 19 checks `CapturedTextureAssignment` presence directly; an implementation that calls `TryGetVector("_MainTex_ST", …)` and reinterprets its `ArgumentException` as this domain refusal must not pass.
+
+Task 18's cross-category tests stay as they are. Task 19 preserves, and must not rewrite, the premise that `WithVector("_MainTex_ST", …)` throwing is **correct** when `_MainTex_ST` was never requested as vector evidence.
+
 - [ ] **Step 2: Run to verify it fails**
 
 Expected: FAIL — `ResolveSlot` and `CapturedMaterialSlotEvidence` are not defined.
@@ -2617,10 +2632,37 @@ For each admitted material index in the slot:
 1. take that material's own `CapturedMaterialEvidence`;
 2. group the slot's proof-relevant bindings by `AnimatedPropertyRef.PropertyName` and `Kind`;
 3. read the serialized default for that property **from that material's own captured evidence**. **If that material's captured evidence has no value for the property, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and stop — do not admit, substitute, or resolve.** For a scalar, colour, or vector binding that means the captured entry's `HasValue` is false; for a `TextureScaleOffsetComponent` binding it means the texture assignment is absent or its `HasScaleOffset` is false, because presence for a texture's scale/offset is carried by `CapturedTextureAssignment`, not by a vector entry — and note that an `_ST` vector that was never requested throws `ArgumentException` from `TryGetVector` rather than returning false. Task 18 added this refusal as vocabulary with no producer, and Task 18's substitution primitive deliberately preserves `HasValue == false`; that preservation is a property of the primitive, never authorization to ignore the binding. Task 5 observed the bare curve is genuinely sampled into a renderer-wide `MaterialPropertyBlock` but could not establish whether an undeclared property affects rendering, so the design took the fail-closed branch. **A Step 1 test must pin this refusal**;
-4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `TextureScaleOffsetComponent` uses the vector path against the derived `_ST` property. Admission requires the animated values **and that material's own default** to be one exact value; an animated value never overrides a differing default;
+4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `Scalar` → `AdmitScalar`, `ColorComponent` → `AdmitColor`, `VectorComponent` → `AdmitVector`. `TextureScaleOffsetComponent` is handled by the separate rule below. Admission requires the animated values **and that material's own default** to be one exact value; an animated value never overrides a differing default;
 5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; on `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`;
-6. derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one; the substitution path is retained so the admitted state is constructed uniformly and so a future widening of admission has one place to change;
+6. for `Scalar`, `ColorComponent`, and `VectorComponent` only, derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one; the substitution path is retained so the admitted state is constructed uniformly and so a future widening of admission has one place to change. `TextureScaleOffsetComponent` never calls any `With*` method — see below;
 7. resolve semantics for the substituted evidence and call `AlphaSemanticsResolver.Resolve`.
+
+**The `TextureScaleOffsetComponent` rule.** For a binding whose `Kind` is `TextureScaleOffsetComponent`, replace points 3, 4, and 6 with:
+
+1. **Identify the owning texture property.** Do not write a generic suffix parser. `UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties` produced the derived name as `texture.PropertyName + "_ST"` for each `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`; invert that exact relationship by scanning `relevance.TextureProperties` for the single request satisfying `request.PropertyName + "_ST" == reference.PropertyName` with `ScaleOffset` requested. If no such request exists the binding was never proof-relevant and must not have reached this point.
+
+2. **Read presence and the serialized default from `CapturedTextureAssignment`, not from vector evidence.** Call `TryGetTexture(<texture>, out var assignment)` on that admitted material's own evidence. Presence requires **both** that `TryGetTexture` returned `true` **and** `assignment.HasScaleOffset == true`. If either is false, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` **before** any admission or semantic resolution. Never call `TryGetVector("<texture>_ST", …)`: that name was never requested as a vector, so it throws `ArgumentException` — a programming defect — rather than reporting absence, and an exception must never be reinterpreted as this domain refusal.
+
+3. **Reconstruct the logical four-component `_ST` value.** `CapturedTextureAssignment` stores `Vector2 Scale` and `Vector2 Offset`, captured from `Material.GetTextureScale`/`GetTextureOffset`. Task 11 assigns `ComponentIndex` from the `"xyzw"` suffix order, so the logical vector is Unity's `_ST` convention:
+
+   | `ComponentIndex` | suffix | captured source |
+   |---|---|---|
+   | 0 | `.x` | `assignment.Scale.x` |
+   | 1 | `.y` | `assignment.Scale.y` |
+   | 2 | `.z` | `assignment.Offset.x` |
+   | 3 | `.w` | `assignment.Offset.y` |
+
+   That is `new Vector4(Scale.x, Scale.y, Offset.x, Offset.y)`. This ordering is Unity's documented `_ST` packing rather than an in-tree characterization; the required test at (3) in Step 1 pins at least one scale component and one offset component so an implementation that transposes the halves fails.
+
+4. **Admit with `AdmitVector` over that logical value.** `AdmitVector` (Task 13) is a pure component-wise finite-exact singleton primitive keyed on `ComponentIndex` 0–3 — exactly the mathematical problem here — and it neither reads nor writes vector evidence. Reusing it does **not** mean `_ST` is stored as vector evidence.
+
+5. **Map refusals identically:** `NotFiniteExact` → `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; `SourcesDisagree` → `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`.
+
+6. **On success, contribute no substitution — carry the evidence forward unchanged.** Do **not** call `WithVector("<texture>_ST", …)`, and do not manufacture any new evidence entry. Under V1 admission, `Singleton` proves the animated components equal this admitted material's captured `Scale`/`Offset` default, so the captured texture assignment already *is* the one admitted value; this binding is fully discharged and adds nothing. "Unchanged" means unchanged **by this binding**: where the same slot also carries admitted scalar, colour, or vector bindings, their `With*` derivations still accumulate as in point 6 above, and the evidence object reaching `AlphaSemanticsResolver.Resolve` is that accumulated one. A `TextureScaleOffsetComponent` binding must never reset, discard, or re-derive the accumulated evidence — the slot with only `_ST` bindings simply resolves against the original capture. Passing that evidence to the resolver is exact, not an approximation — it is the same reasoning as proving `runtime value == captured value` and then keeping the captured value.
+
+**Why this is sound, and exactly what it depends on.** V1 authorization permits only **re-assertion of an already captured admitted value**; it does not admit a transition to a different texture scale or offset. Successful `ScaleOffset` admission therefore adds no new semantic state to `CapturedMaterialEvidence`, which is the sole reason keeping the original evidence is exact. This is load-bearing: the shortcut is valid **only** because V1 admission requires exact equality with the captured default.
+
+**Future widening.** If admission is ever widened to permit a texture scale/offset value *different* from the captured default, this shortcut becomes insufficient, because the resolver would then need evidence carrying a value that was never captured. At that point AMUSE needs a dedicated presence-preserving texture-evidence derivation — conceptually `WithTextureScaleOffset(...)` — designed for the texture category. **Do not implement such an API now.** When it is implemented, it MUST NOT be done by adding derived `_ST` names to `VectorProperties`, bypassing `WithVector`'s requestedness check, weakening Task 18's category boundary, or otherwise pretending texture `ScaleOffset` evidence is ordinary vector evidence.
 
 Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already; `AnimatedPropertyAbsentFromAdmittedMaterial` already exists from Task 18 and needs only its producer.
 
@@ -3116,7 +3158,8 @@ git commit -m "feat: prove alpha opacity across admitted runtime states"
 | Texture `ScaleOffset` evidence → animation relevance | `DeriveTextureScaleOffsetProperties`, `AnimatedPropertyKind.TextureScaleOffsetComponent` | 11 |
 | Slot → admitted material set | `LiveAnimationObservation.TryParseMaterialSlotBinding`, `CapturedMaterialSlotEvidence.AdmittedMaterialIndices` | 9, 10, 19 |
 | Admitted material → its own serialized defaults | `ResolveSlot` step 3, proven by `EachAdmittedMaterialUsesItsOwnSerializedDefaults` | 19 |
-| Animated property → substituted evidence | `WithScalar`/`WithColor`/`WithVector`, proven by `AnimatedPropertyIsSubstitutedIntoEachAdmittedMaterial` | 18, 19 |
+| Animated scalar/colour/vector property → substituted evidence | `WithScalar`/`WithColor`/`WithVector`, proven by `AnimatedPropertyIsSubstitutedIntoEachAdmittedMaterial` | 18, 19 |
+| Animated texture scale/offset → admitted state | `CapturedTextureAssignment.HasScaleOffset`/`Scale`/`Offset` + `AdmitVector`; no `With*` call, original evidence retained under V1 exact-equality admission | 10, 11, 13, 19 |
 | Substituted evidence → `AlphaResolution` | `SlotResolutionResult.Resolutions` via `AlphaSemanticsResolver.Resolve` | 19 |
 | Resolution set → triangle intersection | `DistinctResolutions` then `IntersectOutcomes` | 20, 21 |
 | AnimationEvents / runtime-code paths | `AvatarAnimationRefusal.AnimationEventPresent`; `BehaviourIdentity` for behaviours | 14, 15 |
