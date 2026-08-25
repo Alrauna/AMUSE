@@ -38,6 +38,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "MalformedMeshData",
                     "AnimatedMeshReplacement",
                     "AnimatedMaterialSlotCount",
+                    "AdmittedStateBudgetExceeded",
                 },
                 Enum.GetNames(typeof(RendererRefusal)));
         }
