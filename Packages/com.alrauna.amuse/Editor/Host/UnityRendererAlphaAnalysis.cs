@@ -24,6 +24,7 @@ namespace Alrauna.Amuse.Editor.Host
         MalformedMeshData,
         AnimatedMeshReplacement,
         AnimatedMaterialSlotCount,
+        AdmittedStateBudgetExceeded,
     }
 
     /// <summary>
