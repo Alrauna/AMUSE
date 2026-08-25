@@ -22,6 +22,8 @@ namespace Alrauna.Amuse.Editor.Host
         UnprovenMaterialSlotMapping,
         UnsupportedTopology,
         MalformedMeshData,
+        AnimatedMeshReplacement,
+        AnimatedMaterialSlotCount,
     }
 
     /// <summary>
@@ -533,6 +535,104 @@ namespace Alrauna.Amuse.Editor.Host
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        // The two renderer-local animation dimensions that invalidate the
+        // premises of every later proof rather than any one value in it: the
+        // mesh the proof is stated over, and the slot topology that maps
+        // submeshes to materials.
+        private const string AnimatedMeshProperty = "m_Mesh";
+        private const string AnimatedMaterialSlotCountProperty =
+            "m_Materials.Array.size";
+
+        /// <summary>
+        /// Whether renderer-local animation invalidates the structure the
+        /// proof rests on. Presence of the dimension is the whole test: the
+        /// replacement mesh is never inspected and animated slot counts are
+        /// never compared against the current one, because V1 has no
+        /// reconciliation theorem to apply to either.
+        /// <para>
+        /// Both captured categories are searched for both properties. Task 3
+        /// observed that Unity generates neither binding: no <c>m_Mesh</c> for
+        /// a <c>SkinnedMeshRenderer</c>, and no <c>m_Materials.Array.size</c>
+        /// at all — an authored float curve targeting the slot count changed
+        /// nothing when sampled, despite a working control. The category that
+        /// can carry a <em>working</em> structural animation is therefore
+        /// <em>unobserved</em>, in neither direction, for either property.
+        /// Searching both is a hedge against externally authored evidence, not
+        /// a claim about which category Unity emits.
+        /// </para>
+        /// <para>
+        /// Matching is exact. An <c>m_Materials.Array.data[n]</c> binding is an
+        /// ordinary material swap owned by the admitted-material machinery, and
+        /// a prefix match would refuse every avatar that swaps a material.
+        /// </para>
+        /// </summary>
+        internal static RendererAnalysisRefusal StructuralRefusalFor(
+            IReadOnlyList<CapturedFloatBinding> floats,
+            IReadOnlyList<CapturedObjectBinding> objects,
+            string rendererPath)
+        {
+            if (NamesStructuralProperty(
+                    floats, objects, rendererPath, AnimatedMeshProperty))
+            {
+                return RendererAnalysisRefusal.AnimatedMeshReplacement;
+            }
+
+            if (NamesStructuralProperty(
+                    floats,
+                    objects,
+                    rendererPath,
+                    AnimatedMaterialSlotCountProperty))
+            {
+                return RendererAnalysisRefusal.AnimatedMaterialSlotCount;
+            }
+
+            return RendererAnalysisRefusal.None;
+        }
+
+        // One property at a time, mesh first, so the reported reason follows
+        // the enum's declaration order rather than the order capture happened
+        // to record two structural bindings in.
+        private static bool NamesStructuralProperty(
+            IReadOnlyList<CapturedFloatBinding> floats,
+            IReadOnlyList<CapturedObjectBinding> objects,
+            string rendererPath,
+            string structural)
+        {
+            foreach (var binding in objects)
+            {
+                if (IsOnRenderer(binding.Path, rendererPath) &&
+                    IsProperty(binding.PropertyName, structural))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var binding in floats)
+            {
+                if (IsOnRenderer(binding.Path, rendererPath) &&
+                    IsProperty(binding.PropertyName, structural))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Ordinal path identity, matching the rest of this feature: a binding
+        // on another path says nothing about this renderer.
+        private static bool IsOnRenderer(string bindingPath, string rendererPath)
+        {
+            return string.Equals(
+                bindingPath, rendererPath, StringComparison.Ordinal);
+        }
+
+        private static bool IsProperty(string propertyName, string structural)
+        {
+            return string.Equals(
+                propertyName, structural, StringComparison.Ordinal);
         }
 
         private static bool IsSupportedRendererType(Renderer renderer)

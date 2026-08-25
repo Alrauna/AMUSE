@@ -502,6 +502,193 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result.Plan.TransparentTriangleCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Structural-invalidation fixtures. Only Path and PropertyName carry
+        /// meaning here: no existing renderer-analysis path consults a
+        /// binding's TypeName, and Task 16 introduces no component-type
+        /// theorem of its own.
+        /// </summary>
+        private static CapturedObjectBinding StructuralObject(
+            string property, string path = "Body")
+        {
+            return new CapturedObjectBinding(
+                path, nameof(SkinnedMeshRenderer), property,
+                System.Array.Empty<int>());
+        }
+
+        // IsFiniteExact and the values are arbitrary: a structural binding is
+        // refused for existing, never for what it carries.
+        private static CapturedFloatBinding StructuralFloat(
+            string property, string path = "Body")
+        {
+            return new CapturedFloatBinding(
+                path, nameof(SkinnedMeshRenderer), property, true,
+                new[] { 1f });
+        }
+
+        private static RendererAnalysisRefusal StructuralRefusal(
+            CapturedFloatBinding[] floats,
+            CapturedObjectBinding[] objects)
+        {
+            return UnityRendererAlphaAnalysis.StructuralRefusalFor(
+                floats, objects, "Body");
+        }
+
+        /// <summary>
+        /// An object curve on m_Mesh can replace the geometry the whole proof
+        /// is stated over. The refusal is syntactic: the replacement mesh is
+        /// never inspected, because V1 has no reconciliation theorem to apply
+        /// to it.
+        /// </summary>
+        [Test]
+        public void AnimatedMeshReplacementRefusesTheRenderer()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    System.Array.Empty<CapturedFloatBinding>(),
+                    new[] { StructuralObject("m_Mesh") }),
+                Is.EqualTo(RendererAnalysisRefusal.AnimatedMeshReplacement));
+        }
+
+        /// <summary>
+        /// The same hedge the slot count gets, for the same reason: Task 3
+        /// observed that Unity generates no <c>m_Mesh</c> binding at all for a
+        /// <see cref="SkinnedMeshRenderer"/>, so no in-repo evidence settles
+        /// which category could carry one. Float evidence naming the mesh must
+        /// therefore fail closed too.
+        /// </summary>
+        [Test]
+        public void MeshReplacementFloatEvidenceRefusesTheRenderer()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    new[] { StructuralFloat("m_Mesh") },
+                    System.Array.Empty<CapturedObjectBinding>()),
+                Is.EqualTo(RendererAnalysisRefusal.AnimatedMeshReplacement));
+        }
+
+        /// <summary>
+        /// Defensive coverage, not a characterization claim. Task 3 observed
+        /// that Unity does not generate m_Materials.Array.size at all, and that
+        /// an explicitly authored float curve targeting it had no sampled
+        /// effect despite a working control: the curve category that can carry
+        /// a working slot-count animation is UNOBSERVED. This test asserts only
+        /// that AMUSE fails closed if such float evidence ever reaches it.
+        /// </summary>
+        [Test]
+        public void SlotCountFloatEvidenceRefusesTheRenderer()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    new[] { StructuralFloat("m_Materials.Array.size") },
+                    System.Array.Empty<CapturedObjectBinding>()),
+                Is.EqualTo(RendererAnalysisRefusal.AnimatedMaterialSlotCount));
+        }
+
+        /// <summary>
+        /// The other half of the same unobserved-category hedge: object
+        /// evidence naming the slot count refuses just as float evidence does.
+        /// Neither test claims Unity emits or honours this binding.
+        /// </summary>
+        [Test]
+        public void SlotCountObjectEvidenceRefusesTheRenderer()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    System.Array.Empty<CapturedFloatBinding>(),
+                    new[] { StructuralObject("m_Materials.Array.size") }),
+                Is.EqualTo(RendererAnalysisRefusal.AnimatedMaterialSlotCount));
+        }
+
+        /// <summary>
+        /// An ordinary material swap is a state dimension the admitted-material
+        /// machinery already owns, not a structural invalidation. A prefix
+        /// match on "m_Materials.Array." would wrongly refuse every animated
+        /// avatar that swaps a material.
+        /// </summary>
+        [Test]
+        public void OrdinarySlotSwapsAreNotStructuralInvalidation()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    System.Array.Empty<CapturedFloatBinding>(),
+                    new[]
+                    {
+                        StructuralObject("m_Materials.Array.data[0]"),
+                        StructuralObject("m_Materials.Array.data[1]"),
+                    }),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
+        /// <summary>
+        /// Structural invalidation is renderer-local: a mesh or slot-count
+        /// binding on a different path says nothing about this renderer.
+        /// </summary>
+        [Test]
+        public void StructuralBindingsOnAnotherPathAreIgnored()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    new[] { StructuralFloat("m_Materials.Array.size", "Other") },
+                    new[]
+                    {
+                        StructuralObject("m_Mesh", "Other"),
+                        StructuralObject("m_Materials.Array.size", "Other"),
+
+                        // Ordinal here too: "body" is not "Body".
+                        StructuralObject("m_Mesh", "body"),
+                    }),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
+        /// <summary>
+        /// Exact property identity, not substring or prefix matching: a
+        /// longer name that merely starts with a structural one is a different
+        /// property and must not refuse.
+        /// </summary>
+        [Test]
+        public void NearMissPropertyNamesDoNotRefuse()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    new[] { StructuralFloat("m_Materials.Array.sizeExtra") },
+                    new[]
+                    {
+                        StructuralObject("m_MeshExtra"),
+                        StructuralObject("m_Materials.Array.sizeExtra"),
+                        StructuralObject("Extram_Mesh"),
+
+                        // Ordinal, not OrdinalIgnoreCase: a differently cased
+                        // name is a different property.
+                        StructuralObject("M_Mesh"),
+                        StructuralObject("m_materials.array.size"),
+                    }),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
+        [Test]
+        public void NoBindingsAtAllIsNotAStructuralRefusal()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    System.Array.Empty<CapturedFloatBinding>(),
+                    System.Array.Empty<CapturedObjectBinding>()),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
+        /// <summary>
+        /// Carrying animation evidence is not itself structural invalidation.
+        /// </summary>
+        [Test]
+        public void OrdinaryAnimationEvidenceIsNotAStructuralRefusal()
+        {
+            Assert.That(
+                StructuralRefusal(
+                    new[] { StructuralFloat("material._Cutoff") },
+                    new[] { StructuralObject("m_Materials.Array.data[0]") }),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
         [Test]
         public void AnalyzingTheSameRendererTwiceProducesTheSameResult()
         {
