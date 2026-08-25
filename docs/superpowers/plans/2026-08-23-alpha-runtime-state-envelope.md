@@ -35,8 +35,8 @@
 
 | File | Change | Responsibility |
 | --- | --- | --- |
-| `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs` | Create | Extension-declaring capture pass; retains `IPlatformAnimatorBindings` and any state Task 6 requires. |
-| `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` | Modify | `WithRequiredExtension` capture pass, then the extension-free barrier pass. |
+| `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs` | Create (Task 23A) | Extension-declaring capture pass; retains the host's exact `IPlatformAnimatorBindings`. |
+| `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` | Modify | The two-pass shell — `WithRequiredExtension` capture pass, then the extension-free barrier pass — lands in Task 23A; Tasks 23 and 24 then fill the barrier. |
 | `Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs` | Create | Enumerate committed controllers; avatar-scoped refusals. |
 | `Packages/com.alrauna.amuse/Editor/Host/LiveAnimationObservation.cs` | Create | **Transient** live host observation. Holds live references; never escapes host capture. |
 | `Packages/com.alrauna.amuse/Editor/Host/CapturedAnimationEvidence.cs` | Create | Immutable animation evidence value types. |
@@ -2985,6 +2985,110 @@ git commit -m "test: walk the whole captured graph in the Unity object guard"
 
 ---
 
+## Task 23A: Capture animator bindings before the extension-free barrier
+
+**Ordering correction, discovered during execution.** As originally written, Task 23
+required a *real* `AvatarAnimationRefusal` from
+`CommittedControllerGraph.Enumerate(avatarRoot, bindings)`, but the only acquisition
+point for `IPlatformAnimatorBindings` is
+`AnimatorServicesContext.ControllerContext.PlatformBindings`, whose backing field NDMF
+assigns solely in `OnActivate` and which otherwise throws
+`InvalidOperationException("Extension context not initialized")`. `INDMFPlatformProvider`
+exposes no bindings member, so no provider-side route bypasses the extension. The
+PlatformFinish barrier deliberately declares no extension (Task 1), so at barrier time
+no bindings exist. Task 23 therefore depended on the *first lifecycle primitive*
+originally written under Task 24, and the only alternatives — injecting a refusal,
+fabricating a `CommittedControllerGraphResult`, or adding a test-only refusal provider —
+would make Task 23's required test vacuous. That primitive is extracted here and landed
+first. **Everything else in Task 24 is unchanged and remains Task 24's.**
+
+**Files:**
+- Create: `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs`
+- Modify: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`
+- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs`
+
+**Interfaces:**
+- Consumes: the lifecycle characterized in Task 1 and the enumeration safety
+  characterized in Task 6.
+- Produces: `AmusePlatformFinishState.AnimatorBindings` — the host's exact retained
+  `IPlatformAnimatorBindings` — and the two-pass `Configure` shell.
+
+**Host capability, not proof evidence.** The retained reference is a *live, transient
+host capability*, deliberately held across NDMF extension deactivation so the barrier
+can later build immutable evidence from it. It is not `CapturedAnimationEvidence`, it is
+never proof evidence, and it is deliberately **not** subject to Task 22's
+no-live-Unity-object evidence theorem, which governs the captured-evidence graph only.
+The reference is stored exactly as the host supplied it: never cloned, wrapped,
+reconstructed, or re-resolved.
+
+- [ ] **Step 1: Write the failing tests**
+
+Four focused tests, before any production code:
+
+1. **The capture pass stores the host's exact bindings.** Non-null, and reference-equal
+   to what the *active* `AnimatorServicesContext` exposes. No `StubBindings`.
+2. **The barrier runs after deactivation.** Reusing Task 1's non-perturbing inactivity
+   probe: requesting `AnimatorServicesContext` in the barrier's phase position throws,
+   while the retained state reference is still present.
+3. **The retained bindings remain operational at the barrier.** Using only the narrowest
+   non-mutating read already approved by Tasks 1 and 6.
+4. **The restructure does not suppress the existing barrier.** The barrier pass still
+   executes through the real `Configure` path. Note the limit honestly: the public
+   project has no VRChat SDK, so `HostLifecycleCapability` refuses on the only platform
+   where the plugin runs, and `AnalyzedRendererCount` therefore cannot be driven above
+   zero through `Configure` here. Renderer-analysis counts stay pinned by the existing
+   injected-facts tests, which call the barrier directly.
+
+- [ ] **Step 2: Run to verify they fail**
+
+Expected: FAIL — no capture pass, no `AnimatorBindings` state member, single-pass
+`Configure`.
+
+- [ ] **Step 3: Implement the lifecycle only**
+
+`AmuseAnimatorBindingsCapture.Execute` does exactly one thing: read
+`context.Extension<AnimatorServicesContext>().ControllerContext.PlatformBindings` and
+store it on `AmusePlatformFinishState`. `Configure` becomes:
+
+```csharp
+        protected override void Configure()
+        {
+            var sequence = InPhase(BuildPhase.PlatformFinish);
+
+            sequence.WithRequiredExtension(
+                typeof(AnimatorServicesContext),
+                inner => inner.Run(
+                    BindingsCapturePassName, AmuseAnimatorBindingsCapture.Execute));
+
+            sequence.Run(BarrierPassName, AmusePlatformFinishPass.Execute);
+        }
+```
+
+**Explicitly out of scope here.** No `CommittedControllerGraph.Enumerate` call, no
+`LiveAnimationObservation`, no `UnityAnimationEvidenceCapture.Capture`, no
+`AvatarRefusal`, no renderer-refusal counters, no exception-propagation policy, and none
+of Task 24's runtime-state pipeline. Task 23A provides *capability*; Task 23 provides the
+refusal boundary; Task 24 provides the analysis. This split gives a clean test boundary:
+Task 23A proves "the real bindings are available at the barrier", Task 23 proves "a real
+unallowlisted behaviour produces an avatar refusal".
+
+- [ ] **Step 4: Run and verify they pass**
+
+Expected: PASS, with the pre-existing `AmusePlatformFinishPluginTests` unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs \
+        Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs.meta \
+        Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs \
+        Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs \
+        docs/superpowers/plans/2026-08-23-alpha-runtime-state-envelope.md
+git commit -m "feat: capture animator bindings before platform finish barrier"
+```
+
+---
+
 ## Task 23: Named refusal and failure boundary
 
 Deferred PlatformFinish finding I4.
@@ -2994,7 +3098,9 @@ Deferred PlatformFinish finding I4.
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs`
 
 **Interfaces:**
-- Consumes: `AvatarAnimationRefusal` from Task 7; `BehaviourIdentity` from Task 14.
+- Consumes: `AvatarAnimationRefusal` from Task 7; `BehaviourIdentity` from Task 14; the
+  retained `AmusePlatformFinishState.AnimatorBindings` from Task 23A, which is what lets
+  the barrier call `CommittedControllerGraph.Enumerate` at all.
 - Produces: `AmusePlatformFinishState.AvatarRefusal` and per-refusal renderer counters.
 
 - [ ] **Step 1: Write the failing test**
@@ -3095,14 +3201,20 @@ git commit -m "feat: separate domain refusal from implementation defect"
 
 ## Task 24: Integrate into the PlatformFinish analysis path
 
+**Prerequisite already landed.** The bindings-capture pass and the two-pass `Configure`
+shell that this task originally created were extracted into Task 23A, because Task 23
+could not reach a real avatar refusal without them. Task 24 no longer creates
+`AmuseAnimatorBindingsCapture.cs` or restructures `Configure`; it consumes the retained
+bindings. **Every other Task 24 obligation below is unchanged**, and extracting the
+prerequisite does not make Task 24 complete or partially complete in any other respect.
+
 **Files:**
-- Create: `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs`
 
 **Interfaces:**
-- Consumes: every prior task.
-- Produces: the wired two-pass configuration.
+- Consumes: every prior task, including Task 23A's retained bindings.
+- Produces: the wired runtime-state analysis inside the extension-free barrier.
 
 **Renderer-wide obligations this task owns and MUST discharge.** Tasks 16–19 deliberately produce narrow primitives: `StructuralRefusalFor` is a renderer-level precondition, `TryBudgetProduct` is renderer-wide arithmetic, and `ResolveSlot` resolves exactly one slot and is given neither the renderer's structural facts nor the captured graph flags. Task 24 is the only place where all of them meet, so it is the only place their producers can live. None of the following may be pushed further down into a per-slot primitive, and none may be silently dropped:
 
@@ -3161,27 +3273,17 @@ Write `AddAnimatedSwapToTransparentMaterial` as a private helper attaching an `A
 
 - [ ] **Step 2: Run to verify it fails**
 
-Expected: FAIL — the capture pass does not exist and the barrier ignores animation.
+Expected: FAIL — the barrier retains the bindings (Task 23A) but still ignores animation.
 
-- [ ] **Step 3: Implement the two passes**
+- [ ] **Step 3: Implement the barrier's analysis**
 
-In `AmusePlatformFinishPlugin.Configure`:
-
-```csharp
-        protected override void Configure()
-        {
-            var sequence = InPhase(BuildPhase.PlatformFinish);
-
-            sequence.WithRequiredExtension(
-                typeof(AnimatorServicesContext),
-                inner => inner.Run(
-                    BindingsCapturePassName, AmuseAnimatorBindingsCapture.Execute));
-
-            sequence.Run(BarrierPassName, AmusePlatformFinishPass.Execute);
-        }
-```
-
-`AmuseAnimatorBindingsCapture.Execute` stores `context.Extension<AnimatorServicesContext>().ControllerContext.PlatformBindings` — plus, under Task 6's conservative branch if it was taken, the innate `(key, controller)` pairs — into `AmusePlatformFinishState`. The barrier pass declares no animator extension and wires: enumerate the committed graph, observe transiently, close dependencies, construct admitted states, budget, resolve, deduplicate, classify, intersect.
+`Configure` already carries the two-pass shell from Task 23A, and
+`AmusePlatformFinishState` already retains the host bindings; neither is re-created
+here. If Task 6's conservative branch was taken and the innate `(key, controller)` pairs
+are also needed, extend the existing capture pass rather than adding a second one. The
+extension-free barrier pass wires: enumerate the committed graph, observe transiently,
+close dependencies, construct admitted states, budget, resolve, deduplicate, classify,
+intersect.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -3194,8 +3296,7 @@ Confirm no regression against the recorded baseline. The three NDMF Harmony `mpr
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs \
-        Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs \
+git add Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs \
         Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs
 git commit -m "feat: prove alpha opacity across admitted runtime states"
 ```
@@ -3227,8 +3328,8 @@ git commit -m "feat: prove alpha opacity across admitted runtime states"
 | Finite-exact proof | `IsFiniteExact`, proven by `EqualEndpointsWithNonZeroTangentsAreNotFiniteExact` | 8 |
 | Budget | `TryBudgetProduct` (primitive), `.AdmittedStateBudgetExceeded`; producer — all-slot counts budgeted before materialization — wired in the renderer integration | 17, 24 |
 | Additive-layer / unnormalized-Direct contribution to a proof-relevant property | `CapturedAnimationEvidence.HasAdditiveLayer`, `.HasUnnormalizedDirectBlendTree` (captured facts); named conservative refusal(s) and their census mapping added with the renderer-integration producer, with synthetic tests for both forms | 10, 24 |
-| Failure semantics | `AmusePlatformFinishState.AvatarRefusal`, no `catch` around renderer analysis | 23 |
-| Observation boundary | `Sequence.WithRequiredExtension` capture pass, extension-free barrier | 1, 24 |
+| Failure semantics | `AmusePlatformFinishState.AvatarRefusal`, no `catch` around renderer analysis; reachable only once Task 23A retains the bindings | 23A, 23 |
+| Observation boundary | `Sequence.WithRequiredExtension` capture pass, extension-free barrier, `AmusePlatformFinishState.AnimatorBindings` | 1, 23A |
 | Special motions never gate | `CapturedClipEvidence.IsSpecialMotion` is diagnostic-only | 10 |
 
 **Host-semantics closure.** No obligation is closed by a round trip. Obligation 2 is closed by `AnimationUtility.GetAnimatableBindings` (Task 2); obligation 3 and the slot-swap effect by generated-binding inspection plus `AnimationMode` sampling (Task 3); the absent-property rule by sampling a real clip (Task 5). Each has a named conservative branch if the observation is unavailable, and round-trip tests survive only when explicitly labelled storage tests that close nothing.
