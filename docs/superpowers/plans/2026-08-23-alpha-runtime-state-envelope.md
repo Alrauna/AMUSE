@@ -3101,81 +3101,136 @@ Deferred PlatformFinish finding I4.
 - Consumes: `AvatarAnimationRefusal` from Task 7; `BehaviourIdentity` from Task 14; the
   retained `AmusePlatformFinishState.AnimatorBindings` from Task 23A, which is what lets
   the barrier call `CommittedControllerGraph.Enumerate` at all.
-- Produces: `AmusePlatformFinishState.AvatarRefusal` and per-refusal renderer counters.
+- Produces: `AmusePlatformFinishState.AvatarRefusal`, per-refusal renderer counters, and
+  the PlatformFinish lifecycle invariant described immediately below.
 
-- [ ] **Step 1: Write the failing test**
+### Correction: how barrier placement is enforced
 
-The avatar-scoped test must construct a **real unallowlisted behaviour** and assert the specific refusal with zero renderer analysis.
+**Newly established public-project fact.** `com.vrchat.base` and `com.vrchat.avatars`
+are both absent from this repository's Unity project — `Packages/vpm-manifest.json`
+locks `nadena.dev.ndmf` alone, and the Editor reports only `com.alrauna.amuse`,
+`com.alrauna.amuse.research`, `com.vrchat.core.bootstrap`,
+`com.vrchat.core.vpm-resolver`, and `nadena.dev.ndmf` as registered packages.
+`HostLifecycleCapability.CaptureAndEvaluate` therefore returns
+`Refused(UnsupportedVrchatSdkBaseVersion)` on **every** real `Configure` execution here,
+and `AmusePlatformFinishPass.Execute` returns at `!lifecycle.MayUsePositiveMutation`
+*before* any avatar inspection or graph enumeration.
 
-```csharp
-        internal sealed class UnallowlistedProbeBehaviour : StateMachineBehaviour
-        {
-        }
+**Consequence.** Correct barrier placement and the mutation that moves the barrier
+inside `WithRequiredExtension(typeof(AnimatorServicesContext), ...)` are
+behaviourally indistinguishable through committed-graph output in this environment:
+under both, the barrier stands down at the lifecycle gate and enumerates nothing. The
+originally planned proof — killing that mutation with a committed-only controller
+fixture — is therefore impossible in the public project, and no amount of fixture work
+repairs it.
 
-        [Test]
-        public void UnallowlistedBehaviourRefusesTheWholeAvatarWithoutAnalysis()
-        {
-            using var armed = SyntheticPluginScope.Arm();
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE unallowlisted behaviour fixture");
-            var controller = new AnimatorController();
-            try
-            {
-                controller.AddLayer("L0");
-                var state = controller.layers[0].stateMachine.AddState("S0");
-                state.AddStateMachineBehaviour<UnallowlistedProbeBehaviour>();
-                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+**Replacement enforcement mechanism.** The semantic theorem is unchanged: *the barrier
+may reason about controllers only after `AnimatorServicesContext` has deactivated and
+NDMF has committed them.* Only the executable enforcement changes. The barrier now
+**explicitly asserts that `AnimatorServicesContext` is already inactive**, before
+lifecycle evaluation and before any avatar-facing work. Moving the barrier inside the
+extension scope then throws an implementation-defect exception on a real
+`ProcessAvatar` build, with no VRChat SDK required to reach it.
 
-                // A renderer that would otherwise analyze successfully, so a zero
-                // analyzed count proves the refusal stopped analysis rather than
-                // there being nothing to analyze.
-                AddAnalyzableRenderer(root);
+This check reads `BuildContext` extension state only. It does not inspect the avatar,
+does not call `GetInnateControllers`, does not mutate controllers, and therefore does
+not weaken the unsupported-host stand-down boundary — which is exactly why it may
+precede the lifecycle gate while `CommittedControllerGraph.Enumerate` may not.
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
-                var state2 = context.GetState<AmusePlatformFinishState>();
+**Explicitly not done:** graph enumeration is *not* moved before
+`HostLifecycleCapability`; the lifecycle gate is not weakened; the VRChat SDK is not
+installed.
 
-                Assert.That(state2.HasExecuted, Is.True);
-                Assert.That(state2.AvatarRefusal, Is.EqualTo(
-                    AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
-                Assert.That(state2.AnalyzedRendererCount, Is.Zero,
-                    "an avatar-scoped refusal must analyze no renderer");
-                Assert.That(state2.OpaqueCandidateTriangleCount, Is.Zero);
-            }
-            finally
-            {
-                Object.DestroyImmediate(root);
-                Object.DestroyImmediate(controller);
-            }
-        }
+**Recorded but not built.** A committed-only synthetic producer fixture was designed and
+source-validated against stable public NDMF APIs, and remains available as future
+integration infrastructure: `PluginResolver` keeps an extension active across
+consecutive compatible passes (`SolverPass.IsExtensionCompatible`), so a producer plugin
+declaring `WithRequiredExtension(AnimatorServicesContext)` in PlatformFinish and ordered
+between the bindings-lifetime gate and `com.alrauna.amuse` shares one scope with AMUSE's
+capture pass; setting `VirtualStateMachine.Behaviours` there survives commit because
+`IPlatformAnimatorBindings.CommitStateBehaviour` defaults to `true`, while
+`GenericPlatformAnimatorBindings.GetInnateControllers` still reads the behaviour-free
+source controller until `CommitControllers` runs. It is **not** built for Task 23: the
+lifecycle invariant kills the mutation directly, and the fixture would add substantial
+complexity for no additional Task 23 theorem.
 
-        [Test]
-        public void AnalyzableAvatarWithoutBehavioursIsNotRefused()
-        {
-            using var armed = SyntheticPluginScope.Arm();
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE clean avatar fixture");
-            try
-            {
-                AddAnalyzableRenderer(root);
+### Correction: bindings in the injected-facts fixtures
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
-                var state = context.GetState<AmusePlatformFinishState>();
+Because graph enumeration now follows the lifecycle gate, a fixture that supplies exact
+*supported* lifecycle facts also asserts the premise that Task 23A's capture already
+ran. Those fixtures must therefore seed `AmusePlatformFinishState.AnimatorBindings` with
+NDMF's real `GenericPlatformAnimatorBindings.Instance` — which is not a test double but
+the exact binding implementation Task 23A empirically obtains in this SDK-free project —
+before invoking the barrier. Production continues to use only the captured
+`state.AnimatorBindings`; **no** production fallback to that singleton is added. A
+positive lifecycle permission with null bindings is an integration defect and throws.
 
-                Assert.That(state.AvatarRefusal,
-                    Is.EqualTo(AvatarAnimationRefusal.None));
-                Assert.That(state.AnalyzedRendererCount, Is.GreaterThan(0),
-                    "control case: this avatar must actually analyze");
-            }
-            finally
-            {
-                Object.DestroyImmediate(root);
-            }
-        }
-```
+- [ ] **Step 1: Write the failing tests**
 
-Write `AddAnalyzableRenderer` as a private helper building a triangle mesh with an attested material through the existing fixture helpers. Add a third test that arms a renderer whose analysis throws a deliberately constructed defect and asserts the exception escapes `ProcessAvatar` rather than being swallowed into a refusal counter.
+**Lifecycle invariant first.** A real `ProcessAvatar` build on the VRChat test platform
+must *not* throw the barrier/deactivation diagnostic merely because
+`HostLifecycleCapability` later refuses for the missing SDK; and the barrier invoked
+while `AnimatorServicesContext` is active must throw it. The second is what the
+barrier-inside-`WithRequiredExtension` mutation must trip.
+
+**Avatar refusal.** The avatar-scoped test constructs a **real unallowlisted
+behaviour** and asserts the specific refusal with zero renderer analysis. It supplies
+exact supported lifecycle facts through the established injected-facts seam, seeds
+`AnimatorBindings` with the real `GenericPlatformAnimatorBindings.Instance`, and drives
+the real `CommittedControllerGraph.Enumerate` over an already-committed synthetic
+controller whose state carries `Assets/AMUSETask7StateMachineBehaviourProbe`, attached
+through Unity's real `AddStateMachineBehaviour(Type)`. Expected:
+`AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour`, with
+`AnalyzedRendererCount`, `SemanticallyRefusedRendererCount`,
+`OpaqueCandidateTriangleCount`, and every per-reason counter at zero — proven against an
+avatar that *does* carry an otherwise analyzable renderer, so a zero count means the
+refusal stopped analysis rather than there being nothing to analyze.
+
+Report this honestly: it proves real graph enumeration and refusal handling **under a
+supplied exact supported lifecycle premise**. It does not, and cannot, prove that the
+public project contains the VRChat SDK.
+
+**Clean control.** The same setup with a behaviour-free real `AnimatorController` must
+yield `AvatarRefusal == AvatarAnimationRefusal.None` and let ordinary renderer
+processing continue. The unallowlisted-behaviour test already proves enumeration is not
+skipped, so no artificial "enumeration happened" flag is added.
+
+**Renderer accounting.** Exact per-`RendererAnalysisRefusal` counting: `None` is never a
+bucket, an exact reason increments only its own bucket, distinct reasons stay distinct,
+`SemanticallyRefusedRendererCount` stays consistent with the per-reason totals, a
+refused renderer contributes no opaque candidates, and later renderers are still
+processed.
+
+**Defect propagation.** Renderer-analysis exceptions escape unchanged; so do the two new
+lifecycle defects. None of the three becomes a refusal, a counter, or `Unknown`.
+
+**Scope of the defect-propagation proof, and a Task 24 obligation.** Renderer analysis
+is deliberately fail-closed: every avatar-reachable malformed input — unsupported
+renderer type, missing mesh, slot-count mismatch, unsupported topology, malformed mesh
+data, a null material slot, a destroyed shader, a destroyed texture — is converted into
+a conservative named `RendererAnalysisRefusal` rather than raised. The only programming
+defects the analysis contract raises, `Capture(destroyed renderer)` and `Analyze(null)`,
+require inputs the production renderer loop cannot supply.
+
+A blanket `catch` inserted around `Capture`/`Analyze` is therefore **unreachable dead
+code today**, and no behavioural test can distinguish it. That mutation is classified as
+**unobservable/equivalent under the current reachable renderer-loop domain; structural
+review confirms no catch exists in production**. It is *not* an unresolved correctness
+failure, and it does **not** justify adding a production exception-injection seam — a
+test-only requirement must not weaken production architecture.
+
+The failure theorem is established instead by the combination of: the explicit
+active-`AnimatorServicesContext` invariant and the barrier-placement mutation it kills;
+the positive-lifecycle/null-bindings implementation-defect test; the direct
+`UnityRendererAlphaAnalysis` defect-contract test; public-entrypoint precondition defect
+propagation; structural review proving no renderer-loop catch exists; and the exact
+avatar- and renderer-scoped refusal tests.
+
+> **Task 24 revalidation obligation.** When Task 24 expands the renderer loop with
+> runtime-state orchestration, re-check defect propagation and catch-freedom. If the
+> expanded pipeline naturally exposes a deterministic invariant-defect path through the
+> existing test architecture, add a behavioural regression and repeat the blanket-catch
+> mutation then. Do **not** create a seam solely to satisfy that mutation either.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -3183,7 +3238,18 @@ Expected: FAIL — `AvatarRefusal` not defined.
 
 - [ ] **Step 3: Implement the boundary**
 
+Assert `AnimatorServicesContext` inactivity first, using the same public
+`BuildContext.Extension<T>()` behaviour Tasks 1 and 23A already characterized and
+pinned. The probe's `catch` is narrow — it absorbs only the exact known
+inactive-extension signal and rethrows anything else — and it wraps the probe alone.
+
 Add `AvatarRefusal` to `AmusePlatformFinishState`. In the barrier pass, when the avatar-scoped refusal is not `None`, record it and analyze no renderer. Per renderer, record the named `RendererAnalysisRefusal` and continue. Add **no** `try`/`catch` around renderer analysis: an unexpected exception must propagate so NDMF records a build-blocking internal failure before anything is mutated.
+
+Three failures are implementation or integration defects rather than domain refusals,
+and each throws `InvalidOperationException` with an AMUSE-owned diagnostic: the barrier
+running while the animator extension is still active; positive lifecycle permission with
+no retained bindings; and any exception raised by renderer analysis itself, which is
+simply never caught.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -3193,7 +3259,8 @@ Expected: PASS.
 
 ```bash
 git add Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs \
-        Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs
+        Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs \
+        docs/superpowers/plans/2026-08-23-alpha-runtime-state-envelope.md
 git commit -m "feat: separate domain refusal from implementation defect"
 ```
 
