@@ -31,6 +31,9 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.MaterialPropertyOverridesPresent:
                     return Census.RendererRefusal
                         .MaterialPropertyOverridesPresent;
+                case RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding:
+                    return Census.RendererRefusal
+                        .UnrecognizedAnimatedMaterialBinding;
                 case RendererAnalysisRefusal.MissingMesh:
                     return Census.RendererRefusal.MissingMesh;
                 case RendererAnalysisRefusal.UnprovenMaterialSlotMapping:
@@ -39,6 +42,10 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.RendererRefusal.UnsupportedTopology;
                 case RendererAnalysisRefusal.MalformedMeshData:
                     return Census.RendererRefusal.MalformedMeshData;
+                case RendererAnalysisRefusal.AnimatedMeshReplacement:
+                    return Census.RendererRefusal.AnimatedMeshReplacement;
+                case RendererAnalysisRefusal.AnimatedMaterialSlotCount:
+                    return Census.RendererRefusal.AnimatedMaterialSlotCount;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),
