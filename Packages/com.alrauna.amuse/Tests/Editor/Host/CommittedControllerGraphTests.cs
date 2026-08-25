@@ -220,6 +220,173 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
+        [Test]
+        public void EventBearingClipReturnsAvatarRefusalAndNoPartialGraph()
+        {
+            var root = new GameObject("event bearing clip");
+            var controller = new AnimatorController();
+            var cleanClip = new AnimationClip { name = "clean" };
+            var eventClip = new AnimationClip { name = "event bearing" };
+            try
+            {
+                controller.AddLayer("clean");
+                controller.layers[0].stateMachine.AddState("clean state").motion =
+                    cleanClip;
+                controller.AddLayer("events");
+                controller.layers[1].stateMachine.AddState("event state").motion =
+                    eventClip;
+                AttachEvents(eventClip, 1);
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent));
+                Assert.That(result.Layers, Is.Empty,
+                    "an avatar-scoped refusal must not expose the accumulated prefix");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(cleanClip);
+                Object.DestroyImmediate(eventClip);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void MultipleEventsRefuseIdenticallyToOne()
+        {
+            var root = new GameObject("multiple events");
+            var controller = new AnimatorController();
+            var eventClip = new AnimationClip { name = "many events" };
+            try
+            {
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = eventClip;
+                AttachEvents(eventClip, 3);
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(eventClip);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void EventOnNestedBlendTreeClipCannotBypassDetection()
+        {
+            var root = new GameObject("nested event clip");
+            var controller = new AnimatorController();
+            var plainClip = new AnimationClip { name = "plain" };
+            var eventClip = new AnimationClip { name = "nested event bearing" };
+            var outerTree = new BlendTree { blendType = BlendTreeType.Simple1D };
+            var innerTree = new BlendTree { blendType = BlendTreeType.Simple1D };
+            try
+            {
+                controller.AddLayer("L0");
+                var machine = controller.layers[0].stateMachine;
+                machine.AddState("plain state").motion = plainClip;
+                var nestedMachine = machine.AddStateMachine("nested machine");
+                innerTree.AddChild(eventClip);
+                outerTree.AddChild(innerTree);
+                nestedMachine.AddState("nested state").motion = outerTree;
+                AttachEvents(eventClip, 1);
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent));
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(outerTree);
+                Object.DestroyImmediate(innerTree);
+                Object.DestroyImmediate(plainClip);
+                Object.DestroyImmediate(eventClip);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void SpecialMotionStateDoesNotAuthorizeEvents()
+        {
+            var root = new GameObject("special motion event clip");
+            var controller = new AnimatorController();
+            var eventClip = new AnimationClip { name = "special event bearing" };
+            try
+            {
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = eventClip;
+                AttachEvents(eventClip, 1);
+                var bindings = new StubBindings(controller, specialMotions: true);
+                Assert.That(
+                    ((IPlatformAnimatorBindings)bindings).IsSpecialMotion(eventClip),
+                    Is.True,
+                    "the fixture host must actually report the clip as special");
+
+                var result = CommittedControllerGraph.Enumerate(root, bindings);
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent),
+                    "host special/marker motion state is diagnostic, not authorization");
+                Assert.That(result.Layers, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(eventClip);
+                DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void EventFreeNestedGraphRemainsAccepted()
+        {
+            var root = new GameObject("event free graph");
+            var controller = new AnimatorController();
+            var plainClip = new AnimationClip { name = "plain" };
+            var nestedClip = new AnimationClip { name = "nested" };
+            var tree = new BlendTree { blendType = BlendTreeType.Simple1D };
+            try
+            {
+                controller.AddLayer("L0");
+                var machine = controller.layers[0].stateMachine;
+                machine.AddState("plain state").motion = plainClip;
+                tree.AddChild(nestedClip);
+                machine.AddStateMachine("nested machine")
+                    .AddState("nested state").motion = tree;
+                Assert.That(plainClip.events, Is.Empty);
+                Assert.That(nestedClip.events, Is.Empty);
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(result.Layers.Single().Clips,
+                    Is.EquivalentTo(new[] { plainClip, nestedClip }));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(tree);
+                Object.DestroyImmediate(plainClip);
+                Object.DestroyImmediate(nestedClip);
+                DestroyController(controller);
+            }
+        }
+
         [TestCase(true, false)]
         [TestCase(false, true)]
         public void DirectBlendTreeNormalizationIsReadFromCommittedSerialization(
@@ -402,6 +569,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Object.DestroyImmediate(machine);
         }
 
+        private static void AttachEvents(AnimationClip clip, int count)
+        {
+            var events = new AnimationEvent[count];
+            for (var index = 0; index < count; index++)
+                events[index] = new AnimationEvent { functionName = "Probe" + index };
+            AnimationUtility.SetAnimationEvents(clip, events);
+            Assert.That(clip.events.Length, Is.EqualTo(count),
+                "fixture clip must actually carry the animation events");
+        }
+
         private static StateMachineBehaviour AttachBehaviour(Object owner)
         {
             var type = System.Type.GetType(
@@ -418,13 +595,21 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             private readonly RuntimeAnimatorController controller;
             private readonly bool overridden;
+            private readonly bool specialMotions;
 
             internal StubBindings(
                 RuntimeAnimatorController controller = null,
-                bool overridden = false)
+                bool overridden = false,
+                bool specialMotions = false)
             {
                 this.controller = controller;
                 this.overridden = overridden;
+                this.specialMotions = specialMotions;
+            }
+
+            public bool IsSpecialMotion(Motion m)
+            {
+                return specialMotions;
             }
 
             public IEnumerable<(object, RuntimeAnimatorController, bool)>
