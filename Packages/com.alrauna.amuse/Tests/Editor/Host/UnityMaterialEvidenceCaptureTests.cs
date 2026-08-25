@@ -346,6 +346,300 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             AssertNoLiveObjectsOrDelegates(captured);
         }
 
+        // ------------------------------------------------------------------
+        // Task 18: presence-preserving immutable evidence substitution.
+        //
+        // WithScalar/WithColor/WithVector are PRIMITIVES, not an authorization
+        // path. They write whatever value an authorized caller supplies into a
+        // present entry, which is why these tests hand them arbitrary values
+        // that admission (Tasks 12-13) would reject; an absent entry keeps its
+        // captured default and the supplied value is discarded. Whether a value may be substituted at all is
+        // decided upstream; the primitive only derives evidence.
+        // ------------------------------------------------------------------
+
+        [Test]
+        public void ScalarSubstitutionDerivesANewValueWithoutMutatingTheSource()
+        {
+            var captured = Substitutable();
+            Assert.That(captured.TryGetScalar("_Cutoff", out var before), Is.True);
+
+            var substituted = captured.WithScalar("_Cutoff", 0.25f);
+
+            Assert.That(substituted, Is.Not.SameAs(captured));
+            Assert.That(substituted.TryGetScalar("_Cutoff", out var after), Is.True);
+            Assert.That(after, Is.EqualTo(0.25f));
+            Assert.That(captured.TryGetScalar("_Cutoff", out var unchanged), Is.True);
+            Assert.That(unchanged, Is.EqualTo(before),
+                "substitution mutated the source evidence");
+        }
+
+        [Test]
+        public void ColorSubstitutionDerivesANewValueWithoutMutatingTheSource()
+        {
+            var captured = Substitutable();
+            Assert.That(captured.TryGetColor("_Color", out var before), Is.True);
+
+            var value = new Color(0.1f, 0.2f, 0.3f, 0.5f);
+            var substituted = captured.WithColor("_Color", value);
+
+            Assert.That(substituted, Is.Not.SameAs(captured));
+            Assert.That(substituted.TryGetColor("_Color", out var after), Is.True);
+            Assert.That(after, Is.EqualTo(value));
+            Assert.That(captured.TryGetColor("_Color", out var unchanged), Is.True);
+            Assert.That(unchanged, Is.EqualTo(before),
+                "substitution mutated the source evidence");
+        }
+
+        [Test]
+        public void VectorSubstitutionDerivesANewValueWithoutMutatingTheSource()
+        {
+            var captured = Substitutable();
+            Assert.That(captured.TryGetVector("_MainTexPan", out var before), Is.True);
+
+            var value = new Vector4(2f, -3f, 0.5f, 7f);
+            var substituted = captured.WithVector("_MainTexPan", value);
+
+            Assert.That(substituted, Is.Not.SameAs(captured));
+            Assert.That(substituted.TryGetVector("_MainTexPan", out var after), Is.True);
+            Assert.That(after, Is.EqualTo(value));
+            Assert.That(captured.TryGetVector("_MainTexPan", out var unchanged), Is.True);
+            Assert.That(unchanged, Is.EqualTo(before),
+                "substitution mutated the source evidence");
+        }
+
+        [Test]
+        public void SubstitutingAnUnrequestedScalarThrows()
+        {
+            var captured = Substitutable();
+
+            Assert.Throws<ArgumentException>(
+                () => captured.WithScalar("_NotRequested", 1f));
+        }
+
+        [Test]
+        public void SubstitutingAnUnrequestedColorThrows()
+        {
+            var captured = Substitutable();
+
+            Assert.Throws<ArgumentException>(
+                () => captured.WithColor("_NotRequested", Color.red));
+        }
+
+        [Test]
+        public void SubstitutingAnUnrequestedVectorThrows()
+        {
+            var captured = Substitutable();
+
+            Assert.Throws<ArgumentException>(
+                () => captured.WithVector("_NotRequested", Vector4.one));
+        }
+
+        /// <summary>
+        /// Requestedness is per category. A name requested as a vector is not a
+        /// requested scalar, and substituting it as one would invent an evidence
+        /// dimension rather than replace a captured fact.
+        /// </summary>
+        [Test]
+        public void SubstitutingAcrossCategoriesIsADefectAndChangesNothing()
+        {
+            var captured = Substitutable();
+
+            Assert.Throws<ArgumentException>(
+                () => captured.WithScalar("_MainTexPan", 1f));
+            Assert.Throws<ArgumentException>(
+                () => captured.WithColor("_Cutoff", Color.red));
+            Assert.Throws<ArgumentException>(
+                () => captured.WithVector("_Color", Vector4.one));
+
+            Assert.That(captured.TryGetVector("_MainTexPan", out var pan), Is.True);
+            Assert.That(pan, Is.EqualTo(Vector4.zero));
+            Assert.That(captured.TryGetScalar("_Cutoff", out var cutoff), Is.True);
+            Assert.That(cutoff, Is.EqualTo(0.5f));
+            Assert.That(captured.TryGetColor("_Color", out var color), Is.True);
+            Assert.That(color, Is.EqualTo(Color.white));
+        }
+
+        /// <summary>
+        /// THIS DOES NOT AUTHORIZE IGNORING AN ANIMATED ABSENT PROPERTY. It
+        /// proves only that the substitution primitive preserves the captured
+        /// fact that the material does not have the property; it never flips
+        /// <c>HasValue</c> from false to true.
+        /// <para>
+        /// Task 5 observed that a bare <c>material._Cutoff</c> curve on a
+        /// renderer whose material is <c>Unlit/Color</c> is genuinely sampled
+        /// into a non-empty renderer-wide <c>MaterialPropertyBlock</c>, while
+        /// the material itself still does not have <c>_Cutoff</c>. That does not
+        /// establish whether the undeclared write reaches rendered pixels, so
+        /// the design took the fail-closed branch: Task 19 MUST return
+        /// <c>RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial</c>
+        /// for a proof-relevant animated property that is absent from the
+        /// admitted material, BEFORE any substitution is treated as authorized.
+        /// Preserved absence here is not permission to ignore that binding.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ScalarSubstitutionDoesNotInventPresenceOnAMaterialWithoutTheProperty()
+        {
+            var captured = Capture(
+                NewMaterial("Unlit/Color"),
+                Request(scalars: new[] { "_Cutoff" }));
+            Assert.That(captured.TryGetScalar("_Cutoff", out _), Is.False,
+                "fixture precondition: the property must be absent");
+
+            var substituted = captured.WithScalar("_Cutoff", 0.25f);
+
+            Assert.That(substituted, Is.Not.SameAs(captured));
+            Assert.That(substituted.TryGetScalar("_Cutoff", out var ignored), Is.False,
+                "substitution invented a property the material does not have");
+            Assert.That(ignored, Is.EqualTo(0f),
+                "an absent entry retained the unauthorized substituted value");
+            AssertNoLiveObjectsOrDelegates(substituted);
+        }
+
+        /// <summary>
+        /// The same presence theorem for the other two categories. See
+        /// <see cref="ScalarSubstitutionDoesNotInventPresenceOnAMaterialWithoutTheProperty"/>
+        /// for why preserved absence is not authorization.
+        /// </summary>
+        [Test]
+        public void ColorAndVectorSubstitutionDoNotInventPresence()
+        {
+            var captured = Capture(
+                NewMaterial("Unlit/Color"),
+                Request(
+                    colors: new[] { "_EmissionColor" },
+                    vectors: new[] { "_MainTexPan" }));
+            Assert.That(captured.TryGetColor("_EmissionColor", out _), Is.False,
+                "fixture precondition: the colour property must be absent");
+            Assert.That(captured.TryGetVector("_MainTexPan", out _), Is.False,
+                "fixture precondition: the vector property must be absent");
+
+            var color = captured.WithColor("_EmissionColor", Color.red);
+            Assert.That(color, Is.Not.SameAs(captured));
+            Assert.That(color.TryGetColor("_EmissionColor", out var ignoredColor),
+                Is.False,
+                "substitution invented a colour the material does not have");
+            Assert.That(ignoredColor, Is.EqualTo(default(Color)),
+                "an absent entry retained the unauthorized substituted value");
+
+            var vector = captured.WithVector("_MainTexPan", Vector4.one);
+            Assert.That(vector, Is.Not.SameAs(captured));
+            Assert.That(vector.TryGetVector("_MainTexPan", out var ignoredVector),
+                Is.False,
+                "substitution invented a vector the material does not have");
+            Assert.That(ignoredVector, Is.EqualTo(default(Vector4)),
+                "an absent entry retained the unauthorized substituted value");
+        }
+
+        [Test]
+        public void SubstitutionPreservesEveryUnrelatedCapturedFact()
+        {
+            var captured = Substitutable();
+
+            var substituted = captured.WithScalar("_Cutoff", 0.25f);
+
+            Assert.That(substituted.HasShaderName, Is.EqualTo(captured.HasShaderName));
+            Assert.That(substituted.ShaderName, Is.EqualTo(captured.ShaderName));
+            Assert.That(
+                substituted.HasActiveColorSpace,
+                Is.EqualTo(captured.HasActiveColorSpace));
+            Assert.That(
+                substituted.ActiveColorSpace,
+                Is.EqualTo(captured.ActiveColorSpace));
+            Assert.That(substituted.HasProperty("_MainTex"), Is.True);
+            Assert.That(substituted.TryGetScalar("_AlphaMod", out var sibling), Is.True);
+            Assert.That(sibling, Is.EqualTo(0f));
+            Assert.That(substituted.TryGetColor("_Color", out var color), Is.True);
+            Assert.That(color, Is.EqualTo(Color.white));
+            Assert.That(substituted.TryGetVector("_MainTexPan", out var pan), Is.True);
+            Assert.That(pan, Is.EqualTo(Vector4.zero));
+            Assert.That(substituted.TryGetTexture("_MainTex", out var texture), Is.True);
+            Assert.That(captured.TryGetTexture("_MainTex", out var source), Is.True);
+            Assert.That(texture.IsAssigned, Is.EqualTo(source.IsAssigned));
+            Assert.That(texture.HasScaleOffset, Is.EqualTo(source.HasScaleOffset));
+            Assert.That(texture.RequestedEvidence, Is.EqualTo(source.RequestedEvidence));
+            Assert.That(texture.Scale, Is.EqualTo(source.Scale));
+            Assert.That(texture.Offset, Is.EqualTo(source.Offset));
+            Assert.That(texture.Texture, Is.SameAs(source.Texture));
+            Assert.That(substituted.Textures, Is.SameAs(captured.Textures));
+        }
+
+        [Test]
+        public void ChainedSubstitutionsAccumulateWithoutLosingEarlierOnes()
+        {
+            var captured = Substitutable();
+
+            var first = captured.WithScalar("_Cutoff", 0.25f);
+            var second = first.WithScalar("_AlphaMod", 0.75f);
+            var third = second.WithColor("_Color", Color.black);
+
+            Assert.That(third.TryGetScalar("_Cutoff", out var cutoff), Is.True);
+            Assert.That(cutoff, Is.EqualTo(0.25f));
+            Assert.That(third.TryGetScalar("_AlphaMod", out var mod), Is.True);
+            Assert.That(mod, Is.EqualTo(0.75f));
+            Assert.That(third.TryGetColor("_Color", out var color), Is.True);
+            Assert.That(color, Is.EqualTo(Color.black));
+
+            Assert.That(first.TryGetScalar("_AlphaMod", out var firstMod), Is.True);
+            Assert.That(firstMod, Is.EqualTo(0f),
+                "the first derivation was mutated by a later one");
+            Assert.That(captured.TryGetScalar("_Cutoff", out var original), Is.True);
+            Assert.That(original, Is.EqualTo(0.5f));
+        }
+
+        [Test]
+        public void SubstitutingAnEqualValueStillDerivesANewEvidenceObject()
+        {
+            var captured = Substitutable();
+            Assert.That(captured.TryGetScalar("_Cutoff", out var value), Is.True);
+
+            var substituted = captured.WithScalar("_Cutoff", value);
+
+            Assert.That(substituted, Is.Not.SameAs(captured));
+            Assert.That(substituted.TryGetScalar("_Cutoff", out var after), Is.True);
+            Assert.That(after, Is.EqualTo(value));
+        }
+
+        /// <summary>
+        /// The primitive carries no admission policy. Finiteness, agreement
+        /// between animated sources, and equality with the admitted material's
+        /// serialized default are all decided upstream, so a non-finite value is
+        /// written verbatim here rather than rejected.
+        /// </summary>
+        [Test]
+        public void SubstitutionAppliesNoAdmissionPolicyToTheValue()
+        {
+            var captured = Substitutable();
+
+            var substituted = captured.WithScalar("_Cutoff", float.NaN);
+
+            Assert.That(substituted.TryGetScalar("_Cutoff", out var after), Is.True);
+            Assert.That(float.IsNaN(after), Is.True);
+        }
+
+        /// <summary>
+        /// One schema-complete capture with every evidence category populated,
+        /// so a substitution in one category can be shown not to disturb the
+        /// others.
+        /// </summary>
+        private CapturedMaterialEvidence Substitutable()
+        {
+            return Capture(
+                NewMaterial(PoiyomiFixtureShader),
+                Request(
+                    shaderName: true,
+                    activeColorSpace: true,
+                    presence: new[] { "_MainTex" },
+                    scalars: new[] { "_Cutoff", "_AlphaMod" },
+                    colors: new[] { "_Color" },
+                    vectors: new[] { "_MainTexPan" },
+                    textures: new[]
+                    {
+                        new TexturePropertyEvidenceRequest(
+                            "_MainTex", TextureEvidenceKinds.ScaleOffset),
+                    }));
+        }
+
         private Material NewMaterial(string shaderName)
         {
             var shader = Shader.Find(shaderName);

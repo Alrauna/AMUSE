@@ -2616,13 +2616,13 @@ For each admitted material index in the slot:
 
 1. take that material's own `CapturedMaterialEvidence`;
 2. group the slot's proof-relevant bindings by `AnimatedPropertyRef.PropertyName` and `Kind`;
-3. read the serialized default for that property **from that material's own captured evidence**;
+3. read the serialized default for that property **from that material's own captured evidence**. **If that material's captured evidence has no value for the property, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and stop — do not admit, substitute, or resolve.** For a scalar, colour, or vector binding that means the captured entry's `HasValue` is false; for a `TextureScaleOffsetComponent` binding it means the texture assignment is absent or its `HasScaleOffset` is false, because presence for a texture's scale/offset is carried by `CapturedTextureAssignment`, not by a vector entry — and note that an `_ST` vector that was never requested throws `ArgumentException` from `TryGetVector` rather than returning false. Task 18 added this refusal as vocabulary with no producer, and Task 18's substitution primitive deliberately preserves `HasValue == false`; that preservation is a property of the primitive, never authorization to ignore the binding. Task 5 observed the bare curve is genuinely sampled into a renderer-wide `MaterialPropertyBlock` but could not establish whether an undeclared property affects rendering, so the design took the fail-closed branch. **A Step 1 test must pin this refusal**;
 4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `TextureScaleOffsetComponent` uses the vector path against the derived `_ST` property. Admission requires the animated values **and that material's own default** to be one exact value; an animated value never overrides a differing default;
 5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; on `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`;
 6. derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one; the substitution path is retained so the admitted state is constructed uniformly and so a future widening of admission has one place to change;
 7. resolve semantics for the substituted evidence and call `AlphaSemanticsResolver.Resolve`.
 
-Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already.
+Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already; `AnimatedPropertyAbsentFromAdmittedMaterial` already exists from Task 18 and needs only its producer.
 
 - [ ] **Step 4: Run and verify it passes**
 

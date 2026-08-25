@@ -48,6 +48,9 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.RendererRefusal.AnimatedMaterialSlotCount;
                 case RendererAnalysisRefusal.AdmittedStateBudgetExceeded:
                     return Census.RendererRefusal.AdmittedStateBudgetExceeded;
+                case RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial:
+                    return Census.RendererRefusal
+                        .AnimatedPropertyAbsentFromAdmittedMaterial;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),
