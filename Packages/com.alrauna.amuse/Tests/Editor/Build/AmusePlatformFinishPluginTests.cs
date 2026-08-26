@@ -644,6 +644,313 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// F-1. An object-reference curve on this renderer whose property name
+        /// could address a proof-relevant material property is unsupported
+        /// syntax and must refuse. The approved design's fail-closed rule is
+        /// deliberately broader than what Unity's own binding generator emits:
+        /// clips are authored and rewritten by many tools, and AMUSE reads
+        /// whatever the committed graph holds.
+        /// <para>
+        /// This asserts nothing about whether Unity applies such a curve at
+        /// runtime. That is exactly the point: it is unproven, so the binding
+        /// must not be silently classified irrelevant while a texture the proof
+        /// depends on could be reassigned underneath it.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void RuntimeStateIntegration_ObjectCurveNamingProofRelevantTextureRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE object-curve material property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Texture2D swapped = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                swapped = new Texture2D(1, 1);
+                controller = AddAnimatedObjectReference(
+                    root, "material._MainTex", swapped, out clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                // Preconditions. Without these the refusal below could hold for
+                // a reason unrelated to the rule under test.
+                Assert.That(evidence.IsClosed, Is.True,
+                    "closure failed, so the refusal would not be attributable " +
+                    "to proof-relevance recognition");
+                Assert.That(evidence.Clips, Has.Count.EqualTo(1));
+                var objects = evidence.Clips[0].ObjectBindings;
+                Assert.That(objects, Has.Count.EqualTo(1),
+                    "the authored curve was not captured as an object binding");
+                Assert.That(objects[0].PropertyName,
+                    Is.EqualTo("material._MainTex"));
+                Assert.That(objects[0].Path, Is.Empty,
+                    "the binding must target the analyzed renderer's own path");
+                Assert.That(
+                    LiveAnimationObservation.TryParseMaterialSlotBinding(
+                        objects[0].PropertyName, out _),
+                    Is.False,
+                    "the fixture must not be a material-slot swap binding");
+                Assert.That(
+                    RequestedTextureProperties(evidence.RelevanceRequest),
+                    Contains.Item("_MainTex"),
+                    "_MainTex is not proof-relevant in the closed request, so " +
+                    "this fixture proves nothing about relevant syntax");
+
+                Assert.That(
+                    result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .UnrecognizedAnimatedMaterialBinding),
+                    "an object-reference curve naming a proof-relevant texture " +
+                    "property was silently treated as irrelevant");
+                Assert.That(result.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (swapped != null) Object.DestroyImmediate(swapped);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// F-1 negative control. Being an object-reference binding is not by
+        /// itself a refusal; only one whose property name could address a
+        /// proof-relevant material property is. Without this control the fix
+        /// could degenerate into refusing every renderer carrying any object
+        /// curve, which would be a large silent coverage loss rather than a
+        /// proof.
+        /// </summary>
+        [Test]
+        public void RuntimeStateIntegration_UnrelatedObjectCurveRemainsAnalyzable()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE unrelated object curve");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedObjectReference(
+                    root, "m_ProbeAnchor", root.transform, out clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].ObjectBindings,
+                    Has.Count.EqualTo(1),
+                    "the control curve was not captured, so it controls nothing");
+                Assert.That(
+                    evidence.Clips[0].ObjectBindings[0].PropertyName,
+                    Is.EqualTo("m_ProbeAnchor"));
+
+                Assert.That(
+                    result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None),
+                    "an object binding that cannot name a proof-relevant " +
+                    "material property was refused anyway");
+                Assert.That(
+                    result.OpaqueCandidateTriangleCount, Is.GreaterThan(0),
+                    "the control proved no opacity, so it cannot show the " +
+                    "refusal above was caused by the property name");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// F-2. Indexed material-property syntax exposes a genuinely
+        /// proof-relevant property but cannot be mapped to a slot, so the
+        /// pipeline must refuse. Task 11 pins the classifier's answer; this pins
+        /// the production barrier actually consuming it, which nothing did.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_IndexedMaterialPropertySyntaxRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE indexed material property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedFloatProperty(
+                    root, "material[0]._AlphaForceOpaque", 1f, out clip);
+
+                // Preconditions, read before the build commits the graph.
+                var evidence = CaptureVerifiedRuntimeStateEvidence(
+                    root, fixture.Renderer);
+                Assert.That(evidence.IsClosed, Is.True);
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Count.EqualTo(1));
+                var binding = evidence.Clips[0].FloatBindings[0];
+                Assert.That(binding.PropertyName,
+                    Is.EqualTo("material[0]._AlphaForceOpaque"));
+                Assert.That(
+                    evidence.RelevanceRequest.ScalarProperties,
+                    Contains.Item("_AlphaForceOpaque"),
+                    "the fixture property is not proof-relevant, so the " +
+                    "refusal would prove nothing about relevant syntax");
+                Assert.That(
+                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                        binding,
+                        string.Empty,
+                        evidence.RelevanceRequest,
+                        out _),
+                    Is.EqualTo(ProofRelevantBindingResolution
+                        .UnrecognizedMaterialBinding),
+                    "the fixture no longer produces the classifier result this " +
+                    "test exists to carry into the pipeline");
+
+                var amuse = ExecuteVerifiedPlatformFinish(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .UnrecognizedAnimatedMaterialBinding),
+                    Is.EqualTo(1),
+                    "the production barrier did not refuse unmappable " +
+                    "material-property syntax");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// F-3, mirrored direction. Admitted resolutions are ordered
+        /// current-first, so a renderer whose current material is transparent and
+        /// whose animated swap is opaque presents the opaque state <em>last</em>.
+        /// An implementation consulting only the final resolution would prove
+        /// opacity here; the theorem requires consensus across every admitted
+        /// state, so this must contribute nothing.
+        /// </summary>
+        [Test]
+        public void VerifiedFixture_AnimatedSwapToOpaqueMaterialStillProvesNothing()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE transparent current opaque swap");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material opaque = null;
+
+            try
+            {
+                fixture = AddVerifiedTransparentRenderer(root);
+                opaque = VerifiedOpaqueMaterial();
+                controller = AddAnimatedMaterialAssignment(
+                    root, opaque, out clip);
+
+                var evidence = CaptureVerifiedRuntimeStateEvidence(
+                    root, fixture.Renderer);
+                Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2),
+                    "the fixture collapsed to one admitted state, so it cannot " +
+                    "constrain multi-state composition");
+
+                var amuse = ExecuteVerifiedPlatformFinish(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a face opaque only in the last admitted state was counted");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (opaque != null) Object.DestroyImmediate(opaque);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// F-3 control. Two genuinely distinct admitted materials that each prove
+        /// opaque must still prove opaque, so the two zero results above are
+        /// caused by disagreement rather than by multiplicity refusing outright.
+        /// The swap target is deliberately a separate instance: reusing the
+        /// current material collapses to one admitted state under reference
+        /// dedup, which is exactly the weak control this replaces.
+        /// </summary>
+        [Test]
+        public void VerifiedFixture_TwoDistinctOpaqueAdmittedStatesStillProveOpacity()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE two distinct opaque states");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material opaque = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                opaque = VerifiedOpaqueMaterial();
+                Assert.That(opaque, Is.Not.SameAs(fixture.Material),
+                    "the swap target must be a distinct admitted material");
+                controller = AddAnimatedMaterialAssignment(
+                    root, opaque, out clip);
+
+                var evidence = CaptureVerifiedRuntimeStateEvidence(
+                    root, fixture.Renderer);
+                Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2),
+                    "the control collapsed to one admitted state and no longer " +
+                    "shows that multiplicity itself preserves opacity");
+
+                var amuse = ExecuteVerifiedPlatformFinish(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.GreaterThan(0),
+                    "two admitted states that both prove opaque proved nothing");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (opaque != null) Object.DestroyImmediate(opaque);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
         [Test]
         public void RuntimeStateProductionEntry_RefusalCountsOnceAndContinuesLaterRenderer()
         {
@@ -1798,6 +2105,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
+        private static AnimatorController AddAnimatedFloatProperty(
+            GameObject root,
+            string propertyName,
+            float value,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE float property" };
+            AnimationUtility.SetEditorCurve(
+                clip,
+                EditorCurveBinding.FloatCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    propertyName),
+                AnimationCurve.Constant(0f, 1f, value));
+
+            var controller = new AnimatorController { name = "AMUSE float graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static AnalyzableRendererFixture AddVerifiedTransparentRenderer(
+            GameObject root)
+        {
+            var fixture = AddAnalyzableRenderer(root);
+            Object.DestroyImmediate(fixture.Material);
+            fixture.Material = VerifiedTransparentMaterial();
+            fixture.Renderer.sharedMaterials = new[] { fixture.Material };
+            return fixture;
+        }
+
         private static Material VerifiedOpaqueMaterial()
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
@@ -1927,6 +2266,48 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             controller.layers[0].stateMachine.AddState("S0").motion = clip;
             root.AddComponent<Animator>().runtimeAnimatorController = controller;
             return controller;
+        }
+
+        /// <summary>
+        /// Authors one object-reference curve on the root renderer under an
+        /// arbitrary property name, so a fixture can present the committed graph
+        /// with binding syntax Unity's own generator does not emit.
+        /// </summary>
+        private static AnimatorController AddAnimatedObjectReference(
+            GameObject root,
+            string propertyName,
+            Object value,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE object reference" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    propertyName),
+                new[]
+                {
+                    new ObjectReferenceKeyframe { time = 0f, value = value },
+                });
+
+            var controller = new AnimatorController { name = "AMUSE object graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static List<string> RequestedTextureProperties(
+            MaterialEvidenceRequest request)
+        {
+            var names = new List<string>();
+            foreach (var texture in request.TextureProperties)
+            {
+                names.Add(texture.PropertyName);
+            }
+
+            return names;
         }
 
         private static (RendererAnalysisRefusal Refusal,
