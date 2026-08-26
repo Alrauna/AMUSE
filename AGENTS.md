@@ -1,190 +1,136 @@
 # AMUSE Agent Policy
 
-This file governs agentic work in this repository. Direct user instructions take precedence. Treat `MUST`, `NEVER`, and `REQUIRE` as hard requirements; treat `SHOULD` and `PREFER` as defaults that may be changed when the task gives a concrete reason.
+This file supplements the global agent policy with AMUSE-specific requirements.
 
-## Project and repository boundaries
+## Repository boundaries
 
-AMUSE — Alrauna's Material Understanding & Simplification Engine (`com.alrauna.amuse`) is an MIT-licensed material optimization system. Unity/NDMF is its current host integration. AMUSE analyzes material, texture, rendering, and state semantics to plan and apply simplifications only when the active optimization policy has sufficient evidence that they preserve the required behavior.
+AMUSE (`com.alrauna.amuse`) is a proof-first material optimization system currently integrated through Unity/NDMF.
 
-This Git repository serves two roles:
+The repository is both public source and a minimal Unity package-development/test project.
 
-- It is the public source repository.
-- It is a minimal Unity package-development and test project.
+- Product package: `Packages/com.alrauna.amuse/`
+- Public research tooling: `Packages/com.alrauna.amuse.research/` — never released with the product/VPM listing.
+- Root Unity project: synthetic fixtures, development, tests, validation, and CI.
 
-Where policy or a task needs the repository root, derive it at run time from `git rev-parse --show-toplevel`; this document calls that value `<repo-root>`. Prefer repository-relative paths, written with forward slashes, in code, documentation, tests, and task instructions. NEVER hard-code an absolute checkout path, drive letter, or user home directory into policy, tooling, or a task rule: the same repository is developed from Windows, macOS, and Linux checkouts, and no platform is canonical. When an absolute path is genuinely required, build and compare it through the platform's own path API instead of concatenating separators by hand.
+Keep reusable source here even when only private fixtures exercise it. The boundary is **public code vs. private data**, not production vs. research code.
 
-The distributable package lives under `Packages/com.alrauna.amuse/`. Keep product code, package metadata, and package tests inside that package unless Unity project-level integration requires otherwise. Reusable first-party research and development tooling lives under `Packages/com.alrauna.amuse.research/`. It is public source but is never released as part of the AMUSE package or VPM listing. Code belongs in this repository even when it is intended to operate only on private fixtures; the boundary is public source versus private data, not production code versus research code. The root Unity project exists for reproducible development, synthetic fixtures, automated tests, package validation, and CI.
+Public fixtures MUST be minimal, deterministic, redistributable, and legally publishable. NEVER commit private avatars, purchased/unredistributable assets or shaders, credentials, or Census Lab content.
 
-Public fixtures MUST be purpose-built, redistributable, deterministic, minimal, and legally safe to publish. NEVER add private avatars, purchased assets, unredistributable shaders, credentials, or other private Census Lab content to this repository.
+The current Editor-only alpha-analysis and mesh-separation implementation is a snapshot, not a permanent architecture definition. Durable direction belongs in `docs/architecture/vision.md`.
 
-The current production implementation is Editor-only and contains exact alpha analysis plus immutable mesh-separation planning. These are foundational AMUSE subsystems, not the complete product. Reinspect the repository rather than treating this snapshot as a permanent architecture claim.
+## AMUSE-Census-Lab
 
-## Private research environment: AMUSE-Census-Lab
+AMUSE-Census-Lab is the private real-avatar integration/census environment. It references this working tree's packages locally and is never a second source-code home or source of public fixtures.
 
-AMUSE-Census-Lab is a separate private Unity project, and the only private environment this policy recognizes. It serves two roles: real-avatar integration testbed, and host for census measurement runs. It holds real VRChat avatars under recorded consent, vendor shader packages, and other real-world dependencies; it references this working tree's packages as local Unity packages, never as copies; and it is reachable through the CoplayDev-connected Unity MCP. Treat the Lab as an external execution and data environment, NEVER as a second source-code home, optimizer source, or source of publishable fixtures. It is disposable and may be deleted and recreated freely; deleting it must not destroy publicly releasable AMUSE tooling or source.
+Private avatars, consent/identity data, vendor packages, and raw/intermediate census data remain there. Only privacy-reviewed aggregate output may leave. Reusable AMUSE/research code remains in this repository.
 
-Agents MUST NOT:
+NEVER:
 
-- copy Lab assets, private data, or derived private content into this repository;
-- assume any Lab asset, shader, package, path, avatar, or measurement is publishable;
-- persistently alter Lab scenes, prefabs, materials, assets, project settings, or package state merely to make a test pass;
-- “fix” an optimizer failure by changing the avatar under test;
-- commit or publish private content from the Lab.
+- copy or publish private Lab content;
+- assume Lab content is redistributable;
+- alter an avatar to make AMUSE pass;
+- persistently mutate Lab assets/settings merely to satisfy a test.
 
-Private avatars, consent records, vendor packages, identity mappings, and raw or intermediate Tier 1 and Tier 2 census data remain in the Lab. Only privacy-reviewed aggregate output may leave it. Executable AMUSE and reusable research tooling remain in this repository even when the Lab is their only execution environment.
+Prefer read-only Lab use. Persistent Lab changes require explicit task scope and must be necessary, minimal, and reversible. Permission to mutate the Lab never overrides AMUSE's nondestructive-optimization rules.
 
-Persistent Lab changes require explicit task scope. Prefer read-only inspection. Before any write, destructive, or broad Unity MCP operation, confirm from the task's explicit scope that the connected instance is the intended Lab and not the public development project, state why the mutation is necessary, keep it minimal and reversible, and avoid saved fixture changes when equivalent validation is possible without them.
+The Lab may live anywhere. Never identify it by a hard-coded path or directory convention.
 
-The Lab may live anywhere on disk and MUST NOT be identified by a hard-coded path, a drive letter, or a sibling-directory convention. Identify the public development project positively, by the rule in *Unity MCP use*, and treat every other reachable Unity project as unacceptable for public-project test or evidence work unless a task explicitly says otherwise. Never inspect or modify the Lab merely to work out which project is the public one.
+## Correctness model
 
-## Start-of-task discipline
+AMUSE transforms only behavior proven safe under the active optimization policy:
 
-Before editing:
+- proven safe → transform;
+- uncertain/unsupported → preserve and diagnose.
 
-1. Read this file and the direct task.
-2. Inspect `git status`, the current branch, relevant diffs, and recent history. Existing changes belong to the user unless proven otherwise; NEVER overwrite, discard, restage, or fold unrelated work into the task.
-3. Inspect the files, call sites, tests, package metadata, and workflows relevant to the requested change. Repository handoffs and prior summaries are context, not authority; verify claims against current state. Historical specs and plans under `docs/superpowers/` record the environment of the milestone that produced them; their absolute paths, drive letters, shells, and machine details are history, not current policy.
-4. Inspect the currently installed skill documentation when a skill applies. Do not assume a skill name, trigger, or workflow from memory.
-5. Identify the narrowest validation that can prove the requested result.
+More uncertainty MUST NEVER produce more aggressive optimization.
 
-Do not expand scope silently. If a newly discovered concern is unrelated, report it and leave it for a separate task or branch.
+For the current alpha subsystem:
 
-## Branch and Git discipline
+- `ProvenOpaque` may become opaque;
+- `MustRemainTransparent` and `Unknown` remain transparent.
 
-`main` is the known-good integrated state. For non-trivial work, start from an up-to-date `main` and create a focused topic branch. Use understandable prefixes such as `feat/`, `fix/`, `test/`, `chore/`, `docs/`, or `refactor/`. Keep one coherent concern per branch; do not start unrelated work on an existing topic branch.
+False negatives are acceptable when proof is insufficient. False positives are correctness bugs.
 
-If the checkout already contains changes, determine their ownership and relation to the task before switching branches, creating a worktree, staging, or editing. Stop for direction when safe isolation is not possible. Do not directly push implementation work to `main`, rewrite shared/published history for cosmetic reasons, or commit/push unless the task authorizes it.
+Do not assume arbitrary shader, material, animation, UV, texture, or other dynamic state is safe.
 
-Before completion, inspect the working-tree and staged diffs separately, verify that only intended files changed, and run the required validation. When coherent branch work is complete, recommend review before unrelated work; use a fresh task/branch and update a handoff when that materially helps continuity.
+Never modify original avatar source assets during optimization; generated/build-time transformations must remain nondestructive.
 
-## Development approach
+## Architecture and dependencies
 
-Prefer narrow vertical increments. Do not attempt the entire optimizer unless explicitly tasked. Current alpha analysis and separation planning are one subsystem within AMUSE; later work requires explicit scope or a demonstrated dependency from the current phase.
+Most optimizer intelligence SHOULD remain Editor-only and operate on normalized, immutable, deterministic inputs where practical.
 
-Keep the durable product and architecture direction in `docs/architecture/vision.md`, not in this policy. Document future boundaries without creating speculative directories, interfaces, registries, schemas, dependency injection, or orchestration frameworks before implemented behavior needs them.
+Keep analysis/planning reasonably separable from Unity/NDMF host extraction, build integration, live Unity objects, assets, MCP, and Editor state. Do not create a standalone shared library until a real second consumer exists.
 
-## Superpowers and Ponytail
+Before adding dependencies, specifically check Unity, NDMF, the VRChat SDK, C#, and existing project dependencies.
 
-Superpowers governs process and engineering discipline. Use the installed Superpowers skills when their documented triggers apply. In the current installation this includes, among others, brainstorming before creative behavior or architecture work; writing plans for multi-step implementation; test-driven development for features and bug fixes; systematic debugging before speculative fixes; verification before completion claims; review workflows; and branch/worktree workflows where appropriate. Follow the installed skill rather than duplicating its full procedure here. If a required capability is unavailable, use the skill's documented fallback where possible and report the limitation. A direct task constraint, such as a one-file edit, overrides a skill's default artifact location or extra-file convention.
+## Unity integrity
 
-Ponytail governs implementation simplicity and scope restraint. For coding, code design, dependency choice, refactoring, and code review, use the installed `ponytail:ponytail` skill when its trigger applies. Inspect its installed documentation and follow the version present in the environment rather than relying on remembered invocation syntax or defaults. Its ladder is: question speculative need, reuse repository code, prefer the standard library or native platform, reuse installed dependencies, and only then add the minimum code required. The separate audit, review, debt, gain, and help skills are one-shot tools with their own installed triggers; do not substitute them for the core coding workflow.
+Treat every Unity asset and `.meta` file as one logical unit. Avoid GUID churn; treat GUID changes as compatibility/reference changes and use Unity-aware moves where references matter.
 
-Ponytail NEVER justifies skipping required tests, weakening safety or correctness, deleting useful diagnostics, ignoring compatibility boundaries, or replacing observed validation with an assumption. Resolve tension in this order:
+NEVER commit generated/local Unity state such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, or generated IDE files.
 
-1. correctness and behavior preservation;
-2. project safety invariants;
-3. explicit task requirements;
-4. required Superpowers workflow;
-5. Ponytail minimalism.
+`Packages/manifest.json`, `Packages/packages-lock.json`, and `Packages/vpm-manifest.json` should change only for intentional package/dependency configuration.
 
-Use Superpowers to determine how work is performed safely; use Ponytail to challenge how much code needs to exist.
+Unity may add host-specific toolchain/sysroot dependencies based on the local Editor installation. These MUST NOT be committed unless AMUSE has a documented in-repository requirement for that build capability.
 
-## Safety and behavior preservation
+If `manifest.json`/`packages-lock.json` contain only confirmed host-generated churn, inspect the full diff first, then restore them:
 
-AMUSE is proof-first. Under the active optimization policy:
-
-- proven behavior-preserving: transform;
-- uncertain or unsupported: preserve and explain why.
-
-Additional uncertainty MUST NEVER make optimization more aggressive. For the current alpha subsystem, only `ProvenOpaque` may become an opaque candidate; `MustRemainTransparent` and `Unknown` remain on the transparent path. False negatives are acceptable when proof is insufficient. False positives—content transformed without sufficient proof—are correctness bugs.
-
-Do not assume arbitrary shaders, material swaps, animations, UV animation, texture behavior, or other dynamic state is safe. Do not trade avatar behavior for optimization coverage. Prefer actionable diagnostics for skipped optimization over unsafe guessing.
-
-Never modify original avatar source assets as part of optimization. Build-time/generated transformations must use the intended nondestructive pipeline.
-
-## Source and dependency boundaries
-
-Keep runtime footprint minimal. Separate, when actually needed:
-
-- serialized or runtime-facing components;
-- Editor-only analysis and build logic;
-- tests.
-
-Most optimizer intelligence SHOULD be Editor-only. Reusable analysis and planning SHOULD consume normalized immutable inputs, remain deterministic, and avoid unnecessary coupling to NDMF, the VRChat SDK, live Unity objects, assets, MCP, or Editor state. Unity/NDMF owns the current host extraction, build integration, and host-specific transformation boundaries. Keep analysis and planning separable from those boundaries where practical, but do not extract a standalone shared library until another real consumer justifies it.
-
-Before adding a dependency, check Unity, NDMF, the VRChat SDK, the C# standard library, and existing project dependencies. A new dependency requires a concrete need and justification. Do not copy code wholesale from reference projects merely because their license permits it; understand any reused logic and preserve required attribution for copied or substantially derived work.
-
-## Unity asset integrity
-
-Treat each Unity asset and its `.meta` file as one logical unit. Agents MUST NOT casually delete, regenerate, replace, or separate `.meta` files from their assets. GUID churn is potentially destructive: treat it as a compatibility and reference change, not ordinary cleanup. Prefer Unity-aware moves and renames where references matter. Before accepting Unity asset changes, inspect for unexpected GUID changes and broken references where practical.
-
-NEVER commit generated or local Unity state such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, generated IDE solution/project files, or other ignored build/editor artifacts.
-
-`Packages/manifest.json`, `Packages/packages-lock.json`, and `Packages/vpm-manifest.json` SHOULD change only when dependency or package configuration actually changes. Inspect incidental Unity Package Manager churn rather than blindly staging or accepting it.
-
-### Unity-generated package churn
-
-Opening the project mutates `Packages/manifest.json` and `Packages/packages-lock.json` on any machine whose Unity install carries extra build-target modules. Unity adds the dependency that matches *that editor install*, so the entry describes the developer's machine, not the project. Before staging any Unity Package Manager change, establish which of the two it is; treat "Unity wrote it" as evidence of neither intent nor need.
-
-Host-specific toolchain packages announce themselves in their own names: `com.unity.toolchain.<host>-<hostarch>-<target>-<targetarch>` pins a host OS and CPU, and `com.unity.sysroot*` entries arrive only as its transitive dependencies. Agents MUST NOT commit these — nor any other package that encodes a host platform — unless the repository has a documented, in-tree requirement for that build capability. Portable-looking JSON is not the test: these entries carry hundred-megabyte payloads that every contributor on a different host resolves, downloads, and can never execute. AMUSE builds no player for any platform, and CI never opens Unity, so no such requirement exists today. If one ever does, document it alongside the dependency in the same commit.
-
-When the diff to those two files contains nothing but such generated entries, restore them and continue:
-
-```
+```bash
 git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json
 ```
 
-Inspect the full diff first, and NEVER run that restore when anything else changed in either file — an intentional dependency edit and machine churn can land in the same file, and the restore discards both. Report the occurrence rather than silently absorbing it. NEVER carry these changes forward across feature branches, fold them into unrelated work, or stage them to make a tree look clean.
+NEVER use that restore when intentional changes share either file. Do not carry, stage, or fold machine-generated package churn into unrelated branches.
 
-The Census Lab's local package references to the working-tree packages are intentional. Normal development and testing MUST NOT replace them with copied, exported, or duplicated package contents. Assets, materials, and meshes generated during NDMF or build-time optimization are disposable build outputs unless the task explicitly defines them as source fixtures; do not persist them back into avatar or package source accidentally.
+Census Lab local-package references are intentional. Do not replace them with copied package contents.
 
-## Testing policy
+NDMF/generated optimization assets are disposable outputs unless explicitly designated source fixtures; never persist them into source avatars accidentally.
 
-Testing is part of implementation. New deterministic behavior normally requires focused tests. A reproducible bug fix normally requires a regression test that fails before the fix and passes afterward. NEVER weaken, delete, skip, or rewrite a valid test merely because the implementation cannot pass it.
+## AMUSE testing
 
-Unit tests SHOULD cover deterministic logic such as geometry classification, UV handling, alpha sampling, texture filter/wrap semantics, normalized material semantics, material-state set operations, animation-binding analysis, optimization planning, transformation planning, and profitability calculations. Keep tests fast, minimal, isolated where possible, deterministic, and understandable from failures.
+Apply the global testing policy.
 
-Where practical, test analysis and optimization planning independently from mutation. The same deterministic input SHOULD first produce a deterministic optimization plan before mesh, material, animation, or NDMF transformation is exercised. This separation should make failures attributable to classification or state-analysis defects, optimization-plan defects, or transformation and execution defects. It is a testing boundary, not a prescribed class hierarchy or implementation architecture.
+Prefer focused deterministic tests for geometry/UV/alpha/texture semantics, normalized material/state analysis, animation analysis, optimization/transformation planning, and profitability logic.
 
-Synthetic reference fixtures are executable specifications. Prefer tiny fixtures that isolate one semantic rule over production avatars, and use machine-readable expected results where useful. Unsupported or ambiguous inputs must demonstrate conservative refusal rather than guessed optimization.
+Where practical, test deterministic analysis and optimization plans before mutation/integration so failures remain attributable.
 
-Smoke tests complement unit tests; they do not replace them. As applicable, verify that Unity imports without relevant compile errors, the package resolves, assemblies load, NDMF integration initializes, representative processing completes, generated output is structurally valid, source assets remain unchanged, and no unexpected Console errors appear.
+Synthetic fixtures are executable specifications. Prefer tiny public fixtures isolating one semantic rule. Unsupported/ambiguous cases must demonstrate conservative refusal.
 
-Use the Census Lab for real-world integration and compatibility, not as the only test oracle. When it reveals a reproducible bug:
+Applicable smoke validation includes package/assembly loading, Unity compilation, NDMF initialization, representative processing, structurally valid output, unchanged source assets, and absence of unexpected Console errors.
 
-1. understand the failure in the Census Lab;
-2. reduce it to a minimal public synthetic or redistributable fixture when practical;
-3. add the public regression test;
-4. implement the fix;
-5. retest both the minimal case and the private avatar.
+Use Census Lab as real-world integration evidence, never as the only oracle. For reproducible Lab failures, when practical:
 
-Never claim a test passed unless it was actually run and its result observed.
+1. understand the private failure;
+2. reduce it to a minimal public fixture;
+3. add a regression test;
+4. fix it;
+5. retest both cases.
 
-## Unity MCP use
+## Unity MCP
 
-Unity MCP is for integration and observability, not the primary correctness oracle. Discover the current instances, project information, editor state, resources, and enabled tool groups before acting; tool availability can change. Prefer summary-first, paged, read-only queries.
+Unity MCP is for integration and observability, not the primary correctness oracle. Discover reachable instances/editor state/tool availability before acting and prefer read-only, summary-first queries.
 
-CoplayDev Unity MCP is a development-project dependency only. The root Unity project may depend on it solely for agent observability, test execution, and Unity Editor automation. It MUST NOT be added to `Packages/com.alrauna.amuse/package.json`, the package's `vpmDependencies`, or product runtime or Editor code as a functional dependency. The distributable package must remain independently usable without CoplayDev installed; do not copy MCP APIs, binaries, generated files, or configuration into the product package.
+CoplayDev MCP is development tooling only. It MUST NOT become a dependency of `Packages/com.alrauna.amuse/`, its `vpmDependencies`, or product code. AMUSE must remain usable without it.
 
-The public development project exists for deterministic repository tests and package development; the private Census Lab exists for real-avatar integration testing and census measurement runs. The public development project is the Unity project rooted at `<repo-root>`, and its Unity data path is `<repo-root>/Assets`. Before any write or broad operation, and before any test run whose result will be reported, agents MUST use read-only discovery to enumerate the reachable instances and select the one whose `Application.dataPath` equals `<repo-root>/Assets` once both sides are normalized: resolve relative and symbolic segments, unify separators to `/`, and drop any trailing separator. Compare the normalized values exactly. Because filesystems differ in case sensitivity across and within platforms, two paths that match only by letter case are unconfirmed identity: stop and report rather than guessing. Never compare against a hard-coded absolute path, and never assume a reachable Unity Editor is the correct instance.
+The public development Unity project is rooted at `<repo-root>` with `Application.dataPath == <repo-root>/Assets`.
 
-Appropriate uses include confirming the connected project and package, inspecting hierarchy/components/materials/renderers, reading Console output, discovering or running Unity tests, exercising NDMF builds, entering Play Mode when required, inspecting generated avatar state, and reproducing failures that cannot reasonably be tested outside the Editor.
+Before any MCP write/broad operation or any MCP test result that will be reported:
 
-Do not use MCP to silently change fixtures, to replace deterministic repository tests, or to operate on a project whose identity is uncertain. Enabling a tool group or invoking a tool does not authorize persistent Lab mutations.
+1. enumerate reachable instances read-only;
+2. normalize both candidate paths by resolving relative/symbolic segments, using `/`, and removing trailing separators;
+3. require an exact path match.
 
-## CI and release safety
+A case-only match is not confirmed identity; stop rather than guess. Never use a hard-coded absolute path or assume the reachable Editor is correct.
 
-CI MUST reproduce important validation without the Census Lab. Progressively add the cheapest deterministic gates that cover project/package compilation, fast unit/EditMode tests, reference-fixture tests, NDMF/package integration, package validation, and release construction as those layers become real.
+MCP may inspect project/avatar state, Console output, run Unity tests/builds, exercise NDMF, and reproduce integration failures. It MUST NOT silently mutate fixtures or replace deterministic repository tests.
 
-Ordinary correctness CI MUST NOT depend on private avatars, commercial assets, the developer's Unity MCP session, or secrets that are unrelated to the test. When a feature introduces a validation layer that should remain an ongoing gate, update CI in the same branch.
+## CI and completion
 
-Inspect existing release and listing automation before changing it. Do not modify release workflows casually or treat a release as the first validation. Publishing, tagging, deleting releases, changing repository settings, or otherwise performing deployment-like operations requires explicit authorization separate from local/PR validation.
+AMUSE correctness CI MUST remain reproducible without Census Lab, private avatars, commercial assets, an interactive MCP session, or unrelated secrets.
 
-## Completion standard
+Add deterministic gates as appropriate for compilation, EditMode/unit tests, public fixtures, NDMF/package integration, package validation, and release construction.
 
-Before saying work is complete:
+In addition to the global completion report, state:
 
-1. review the task requirements line by line;
-2. inspect unstaged and staged diffs and confirm only intended files changed;
-3. run the complete relevant validation and observe its exit/result;
-4. check for contradictions, unsafe assumptions, and scope drift.
-
-Report:
-
-- what changed;
-- what tests or validation ran and their observed results;
-- what validation was skipped and why;
-- remaining risks or unsupported cases;
-- whether the private Census Lab was used and whether it was modified.
-
-Do not equate code written, one successful compile, or an agent/subagent report with completion. Evidence precedes completion claims.
+- whether Census Lab was used;
+- whether it was modified;
+- relevant unsupported or conservatively refused cases.
