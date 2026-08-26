@@ -46,6 +46,14 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.RendererRefusal.AnimatedMeshReplacement;
                 case RendererAnalysisRefusal.AnimatedMaterialSlotCount:
                     return Census.RendererRefusal.AnimatedMaterialSlotCount;
+                case RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty:
+                    return Census.RendererRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty;
+                case RendererAnalysisRefusal
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty:
+                    return Census.RendererRefusal
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty;
                 case RendererAnalysisRefusal.AdmittedStateBudgetExceeded:
                     return Census.RendererRefusal.AdmittedStateBudgetExceeded;
                 case RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial:
