@@ -420,6 +420,23 @@ namespace Alrauna.Amuse.Editor.Build
                     relevantBindings.Add((binding, reference));
             }
 
+            // An object-reference curve can name a proof-relevant material
+            // property just as a float curve can, and the same fail-closed rule
+            // applies: recognized structural and material-slot forms are handled
+            // above and below, anything else that could address a requested
+            // property is unsupported syntax rather than irrelevant.
+            foreach (var binding in objects)
+            {
+                if (UnityAnimationEvidenceCapture
+                        .IsUnrecognizedObjectMaterialBinding(
+                            binding, rendererPath, evidence.RelevanceRequest))
+                {
+                    return Refused(
+                        RendererAnalysisRefusal
+                            .UnrecognizedAnimatedMaterialBinding);
+                }
+            }
+
             if (relevantBindings.Count > 0 && evidence.HasAdditiveLayer)
             {
                 return Refused(
