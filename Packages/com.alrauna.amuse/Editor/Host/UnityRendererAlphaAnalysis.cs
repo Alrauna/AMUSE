@@ -226,6 +226,7 @@ namespace Alrauna.Amuse.Editor.Host
             var extraction = Capture(
                 renderer,
                 semanticsProvider,
+                null,
                 out var capturedSemantics);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(
@@ -239,12 +240,31 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
         {
-            return Capture(renderer, null, out _);
+            return Capture(renderer, null, null, out _);
+        }
+
+        /// <summary>
+        /// Captures only renderer and mesh geometry while carrying forward the
+        /// already-closed immutable material slots. This path deliberately never
+        /// reads <see cref="Renderer.sharedMaterials"/> or recaptures material
+        /// semantics.
+        /// </summary>
+        internal static UnityRendererAlphaExtraction CaptureGeometry(
+            Renderer renderer,
+            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots)
+        {
+            if (capturedMaterialSlots == null)
+            {
+                throw new ArgumentNullException(nameof(capturedMaterialSlots));
+            }
+
+            return Capture(renderer, null, capturedMaterialSlots, out _);
         }
 
         private static UnityRendererAlphaExtraction Capture(
             Renderer renderer,
             BaseMaterialSemanticsProvider legacySemanticsProvider,
+            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots,
             out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
                 legacySemantics)
         {
@@ -285,8 +305,17 @@ namespace Alrauna.Amuse.Editor.Host
                     RendererAnalysisRefusal.MissingMesh);
             }
 
-            var materials = renderer.sharedMaterials;
-            if (materials == null || materials.Length != mesh.subMeshCount)
+            Material[] materials = null;
+            var materialSlotCount = capturedMaterialSlots == null
+                ? -1
+                : capturedMaterialSlots.Count;
+            if (capturedMaterialSlots == null)
+            {
+                materials = renderer.sharedMaterials;
+                materialSlotCount = materials == null ? -1 : materials.Length;
+            }
+
+            if (materialSlotCount != mesh.subMeshCount)
             {
                 return UnityRendererAlphaExtraction.Refused(
                     RendererAnalysisRefusal.UnprovenMaterialSlotMapping);
@@ -352,13 +381,22 @@ namespace Alrauna.Amuse.Editor.Host
                     submesh, submesh, indices);
             }
 
-            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(materials);
-            var capturedSlots = new CapturedAlphaMaterial[captured.Count];
-            for (var index = 0; index < captured.Count; index++)
+            var capturedSlots = new CapturedAlphaMaterial[materialSlotCount];
+            if (capturedMaterialSlots == null)
             {
-                capturedSlots[index] = materials[index] == null
-                    ? null
-                    : captured[index];
+                var captured =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(materials);
+                for (var index = 0; index < captured.Count; index++)
+                {
+                    capturedSlots[index] = materials[index] == null
+                        ? null
+                        : captured[index];
+                }
+            }
+            else
+            {
+                for (var index = 0; index < capturedSlots.Length; index++)
+                    capturedSlots[index] = capturedMaterialSlots[index];
             }
 
             if (legacySemanticsProvider != null)
@@ -393,7 +431,7 @@ namespace Alrauna.Amuse.Editor.Host
                 submeshes,
                 capturedSlots);
             var target = new UnityRendererMutationTarget(
-                renderer, mesh, materials.Length);
+                renderer, mesh, materialSlotCount);
             return UnityRendererAlphaExtraction.Accepted(snapshot, target);
         }
 

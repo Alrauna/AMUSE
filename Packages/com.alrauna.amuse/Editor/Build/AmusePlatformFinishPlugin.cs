@@ -112,7 +112,10 @@ namespace Alrauna.Amuse.Editor.Build
             Execute(
                 context,
                 state,
-                HostLifecycleCapability.CaptureAndEvaluate(context));
+                HostLifecycleCapability.CaptureAndEvaluate(context),
+                null,
+                null,
+                null);
         }
 
         internal static void Execute(
@@ -127,7 +130,40 @@ namespace Alrauna.Amuse.Editor.Build
             Execute(
                 context,
                 PendingState(context),
-                HostLifecycleCapability.Evaluate(facts));
+                HostLifecycleCapability.Evaluate(facts),
+                null,
+                null,
+                null);
+        }
+
+        /// <summary>
+        /// Exercises the exact lifecycle, retained-bindings, committed-graph,
+        /// renderer-loop, and accounting entry while substituting only the
+        /// existing public-fixture seams for unavailable vendor source
+        /// attestation and verified frontend interpretation.
+        /// </summary>
+        internal static void Execute(
+            BuildContext context,
+            HostLifecycleFacts facts,
+            AlphaMaterialAttestor attestor,
+            ClosedAlphaMaterialCapturer capturer,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics)
+        {
+            if (facts == null) throw new ArgumentNullException(nameof(facts));
+            if (attestor == null) throw new ArgumentNullException(nameof(attestor));
+            if (capturer == null) throw new ArgumentNullException(nameof(capturer));
+            if (resolveSemantics == null)
+            {
+                throw new ArgumentNullException(nameof(resolveSemantics));
+            }
+
+            Execute(
+                context,
+                PendingState(context),
+                HostLifecycleCapability.Evaluate(facts),
+                attestor,
+                capturer,
+                resolveSemantics);
         }
 
         /// <summary>
@@ -200,7 +236,10 @@ namespace Alrauna.Amuse.Editor.Build
         private static void Execute(
             BuildContext context,
             AmusePlatformFinishState state,
-            HostLifecycleCapability lifecycle)
+            HostLifecycleCapability lifecycle,
+            AlphaMaterialAttestor attestor,
+            ClosedAlphaMaterialCapturer capturer,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -241,13 +280,23 @@ namespace Alrauna.Amuse.Editor.Build
                 int opaqueCandidateTriangleCount;
                 if (hasCommittedClip)
                 {
-                    var evidence = UnityAnimationEvidenceCapture.Capture(
-                        renderer.sharedMaterials,
-                        graph,
-                        state.AnimatorBindings);
+                    var evidence = attestor == null
+                        ? UnityAnimationEvidenceCapture.Capture(
+                            renderer.sharedMaterials,
+                            graph,
+                            state.AnimatorBindings)
+                        : UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                            renderer.sharedMaterials,
+                            graph,
+                            state.AnimatorBindings,
+                            attestor,
+                            capturer);
                     (refusal, opaqueCandidateTriangleCount) =
                         AnalyzeRuntimeStates(
-                            context.AvatarRootObject, renderer, evidence);
+                            context.AvatarRootObject,
+                            renderer,
+                            evidence,
+                            resolveSemantics);
                 }
                 else
                 {
@@ -418,7 +467,16 @@ namespace Alrauna.Amuse.Editor.Build
                         resolved.Resolutions);
             }
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var currentMaterials =
+                new CapturedAlphaMaterial[evidence.CurrentMaterialIndices.Count];
+            for (var slot = 0; slot < currentMaterials.Length; slot++)
+            {
+                currentMaterials[slot] = evidence.AdmittedMaterials[
+                    evidence.CurrentMaterialIndices[slot]];
+            }
+
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, currentMaterials);
             if (extraction.Refusal != RendererAnalysisRefusal.None)
                 return (extraction.Refusal, 0);
 
