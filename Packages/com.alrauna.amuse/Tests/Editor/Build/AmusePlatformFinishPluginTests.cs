@@ -594,44 +594,40 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 swappedController = AddAnimatedMaterialAssignment(
                     swapped, transparent, out swappedClip);
 
-                var controlResult = AnalyzeVerifiedRuntimeStates(
-                    control, controlFixture.Renderer, out var controlEvidence);
-                var swappedResult = AnalyzeVerifiedRuntimeStates(
-                    swapped, swappedFixture.Renderer, out var swappedEvidence);
+                var controlState = ExecuteVerifiedPlatformFinish(control);
+                var swappedState = ExecuteVerifiedPlatformFinish(swapped);
 
-                Assert.That(controlEvidence.IsClosed, Is.True);
-                Assert.That(controlEvidence.Clips, Has.Count.EqualTo(1));
-                Assert.That(controlEvidence.Clips[0].ObjectBindings,
-                    Has.Count.EqualTo(1));
-                CollectionAssert.AreEqual(
-                    new[] { 0 },
-                    controlEvidence.Clips[0].ObjectBindings[0]
-                        .AdmittedMaterialIndices,
-                    "the benign control did not travel through real slot admission");
-                Assert.That(controlResult.Refusal,
-                    Is.EqualTo(RendererAnalysisRefusal.None));
-                Assert.That(controlResult.OpaqueCandidateTriangleCount,
+                Assert.That(controlState.AnimatorBindings,
+                    Is.SameAs(GenericPlatformAnimatorBindings.Instance));
+                Assert.That(controlState.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(controlState.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(controlState.OpaqueCandidateTriangleCount,
                     Is.GreaterThan(0),
                     "the same orchestration route proved no opaque control");
 
-                Assert.That(swappedEvidence.IsClosed, Is.True);
-                Assert.That(swappedEvidence.AdmittedMaterials,
-                    Has.Count.EqualTo(2));
-                CollectionAssert.AreEqual(
-                    new[] { 1 },
-                    swappedEvidence.Clips[0].ObjectBindings[0]
-                        .AdmittedMaterialIndices,
-                    "the transparent swap was not captured as a real admitted index");
-                Assert.That(swappedResult.Refusal,
-                    Is.EqualTo(RendererAnalysisRefusal.None));
-                Assert.That(swappedResult.OpaqueCandidateTriangleCount, Is.Zero,
+                Assert.That(swappedState.AnimatorBindings,
+                    Is.SameAs(GenericPlatformAnimatorBindings.Instance));
+                Assert.That(swappedState.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(swappedState.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(swappedState.OpaqueCandidateTriangleCount, Is.Zero,
                     "a face opaque only in the current state must not be counted");
+
+                Assert.That(
+                    AnimationUtility.GetObjectReferenceCurveBindings(controlClip),
+                    Has.Length.EqualTo(1));
+                Assert.That(
+                    AnimationUtility.GetObjectReferenceCurveBindings(swappedClip)[0]
+                        .propertyName,
+                    Is.EqualTo("m_Materials.Array.data[0]"),
+                    "the production-entry theorem lost the real material binding");
             }
             finally
             {
                 DisposeAnalyzableRenderer(controlFixture);
                 DisposeAnalyzableRenderer(swappedFixture);
                 if (transparent != null) Object.DestroyImmediate(transparent);
+                DestroyCommittedClone(control, controlController);
+                DestroyCommittedClone(swapped, swappedController);
                 Object.DestroyImmediate(control);
                 Object.DestroyImmediate(swapped);
                 if (controlClip != null) Object.DestroyImmediate(controlClip);
@@ -640,6 +636,82 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     DestroyControllerGraph(controlController);
                 if (swappedController != null)
                     DestroyControllerGraph(swappedController);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateProductionEntry_RefusalCountsOnceAndContinuesLaterRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE runtime-state accounting");
+            var refusedObject = new GameObject("refused");
+            refusedObject.transform.SetParent(root.transform);
+            var laterObject = new GameObject("later");
+            laterObject.transform.SetParent(root.transform);
+            var refused = default(AnalyzableRendererFixture);
+            var later = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                refused = AddVerifiedOpaqueRenderer(refusedObject);
+                later = AddVerifiedOpaqueRenderer(laterObject);
+                clip = new AnimationClip { name = "AMUSE one refused renderer" };
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        "refused",
+                        typeof(SkinnedMeshRenderer),
+                        "material._AlphaForceOpaque"),
+                    AnimationCurve.Constant(0f, 1f, 0f));
+                controller = new AnimatorController { name = "AMUSE accounting graph" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+                var order = root.GetComponentsInChildren<Renderer>(true);
+                Assert.That(order, Has.Length.EqualTo(2));
+                Assert.That(order[0], Is.SameAs(refused.Renderer),
+                    "fixture precondition: the refusing renderer must run first");
+                Assert.That(order[1], Is.SameAs(later.Renderer),
+                    "fixture precondition: the successful renderer must run later");
+
+                var amuse = ExecuteVerifiedPlatformFinish(root);
+
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton),
+                    Is.EqualTo(1));
+                foreach (RendererAnalysisRefusal reason in
+                         System.Enum.GetValues(typeof(RendererAnalysisRefusal)))
+                {
+                    if (reason == RendererAnalysisRefusal.None ||
+                        reason == RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(amuse.RendererRefusalCount(reason), Is.Zero,
+                        "unexpected refusal bucket " + reason);
+                }
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "the Task-24 refusal stopped the later renderer");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the refused renderer contributed opacity or the later " +
+                    "renderer failed to contribute its one opaque triangle");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(refused);
+                DisposeAnalyzableRenderer(later);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
             }
         }
 
@@ -1129,6 +1201,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void RuntimeStateIntegration_ClosedEvidenceDoesNotRecaptureLiveMaterials()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE immutable material evidence");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                var evidence = CaptureVerifiedRuntimeStateEvidence(
+                    root, fixture.Renderer);
+
+                Assert.That(evidence.IsClosed, Is.True);
+                Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(1));
+
+                // Once capture has closed, the live material array is outside the
+                // runtime-state proof boundary. Clearing it makes any later
+                // renderer.sharedMaterials read observable without changing the
+                // captured slot facts or the geometry under proof.
+                fixture.Renderer.sharedMaterials = System.Array.Empty<Material>();
+
+                var result = AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                    root,
+                    fixture.Renderer,
+                    evidence,
+                    VerifiedAlphaOnly);
+
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None),
+                    "closed evidence was replaced by a second live material snapshot");
+                Assert.That(result.OpaqueCandidateTriangleCount, Is.GreaterThan(0));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void PositiveLifecycleWithoutRetainedBindingsIsAnImplementationDefect()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
@@ -1412,6 +1530,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 GenericPlatformAnimatorBindings.Instance;
         }
 
+        private static AmusePlatformFinishState ExecuteVerifiedPlatformFinish(
+            GameObject root)
+        {
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TestGenericPlatform.Instance);
+            SeedRetainedHostBindings(context);
+            AmusePlatformFinishPass.Execute(
+                context,
+                SupportedFacts(),
+                TryAttestVerifiedFixture,
+                CaptureVerifiedFixtureMaterials,
+                VerifiedAlphaOnly);
+            return context.GetState<AmusePlatformFinishState>();
+        }
+
         private static StateMachineBehaviour AttachProbeBehaviour(
             AnimatorState state)
         {
@@ -1613,21 +1746,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Renderer renderer,
                 out CapturedAnimationEvidence evidence)
         {
+            evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
+
+            return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                root, renderer, evidence, VerifiedAlphaOnly);
+        }
+
+        private static CapturedAnimationEvidence
+            CaptureVerifiedRuntimeStateEvidence(
+                GameObject root,
+                Renderer renderer)
+        {
             var graph = CommittedControllerGraph.Enumerate(
                 root, GenericPlatformAnimatorBindings.Instance);
             Assert.That(graph.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
             Assert.That(graph.Layers, Has.Count.EqualTo(1));
             Assert.That(graph.Layers[0].Clips, Has.Count.EqualTo(1));
 
-            evidence = UnityAnimationEvidenceCapture.CaptureGraphForTests(
+            return UnityAnimationEvidenceCapture.CaptureGraphForTests(
                 renderer.sharedMaterials,
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
                 TryAttestVerifiedFixture,
                 CaptureVerifiedFixtureMaterials);
-
-            return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
-                root, renderer, evidence, VerifiedAlphaOnly);
         }
 
         private static bool TryAttestVerifiedFixture(
