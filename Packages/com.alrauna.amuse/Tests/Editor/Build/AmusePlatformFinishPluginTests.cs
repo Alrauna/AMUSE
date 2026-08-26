@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -75,13 +76,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(context.GetState<ProducerProbe>().Produced, Is.True);
                 SeedRetainedHostBindings(context);
 
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.Lifecycle.MayUsePositiveMutation, Is.True);
                 Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
-                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1));
             }
             finally
             {
@@ -170,28 +176,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(captured, Is.Not.Null,
                     "the capture pass did not retain the host's animator bindings");
 
-                // The Task 1 lifetime gate independently reads
-                // AnimatorServicesContext.ControllerContext.PlatformBindings from
-                // its own extension-declaring pass in this same build. Comparing
-                // against that observation proves AMUSE stored the host's own
-                // object rather than a stub or a reconstructed stand-in.
+                // The SDK-free public project resolves this host platform to
+                // NDMF's exact GenericPlatformAnimatorBindings singleton. This
+                // assertion pins the retained value; the sibling active-context
+                // mutation test pins that AMUSE acquired it through
+                // AnimatorServicesContext rather than constructing a stand-in.
                 //
                 // LIMITATION, stated so this is not read as more than it proves:
                 // NDMF picks VRChatPlatformAnimatorBindings only for a root
                 // carrying a VRCAvatarDescriptor under NDMF_VRCSDK3_AVATARS, and
                 // the public project has no VRChat SDK, so every reachable branch
                 // yields the GenericPlatformAnimatorBindings singleton. Reference
-                // identity is therefore necessary but not sufficient here: it
-                // cannot distinguish reading the context from hard-coding that
-                // singleton. CaptureRequiresTheActiveAnimatorServicesContext pins
-                // the acquisition route that this assertion cannot.
-                var hostObserved = context
-                    .GetState<Host.AnimatorBindingsLifetimeGateTests.GateProbe>()
-                    .Captured;
-
-                Assert.That(hostObserved, Is.Not.Null,
-                    "the independent host observation did not run");
-                Assert.That(captured, Is.SameAs(hostObserved),
+                // identity therefore cannot alone distinguish a context read from
+                // hard-coding; CaptureRequiresTheActiveAnimatorServicesContext
+                // remains the acquisition-route proof.
+                Assert.That(captured,
+                    Is.SameAs(GenericPlatformAnimatorBindings.Instance),
                     "AMUSE did not retain the exact host binding reference");
             }
             finally
@@ -490,13 +490,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 controller.AddLayer("L0");
                 controller.layers[0].stateMachine.AddState("S0");
                 root.AddComponent<Animator>().runtimeAnimatorController = controller;
-                fixture = AddAnalyzableRenderer(root);
+                fixture = AddVerifiedOpaqueRenderer(root);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
 
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal,
@@ -547,7 +552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(1));
                 Assert.That(amuse.RendererRefusalCount(
                         RendererAnalysisRefusal
-                            .UnrecognizedAnimatedMaterialBinding),
+                            .MaterialDependencyClosureFailed),
                     Is.EqualTo(1),
                     "the production barrier did not consume the closed-evidence " +
                     "result from the real graph capture route");
@@ -715,6 +720,66 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void AllUnknownCurrentMaterialRefusesExactlyWithOrWithoutUnrelatedClip(
+            bool addUnrelatedClip)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE all-Unknown envelope");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                if (addUnrelatedClip)
+                {
+                    clip = new AnimationClip { name = "unrelated transform" };
+                    AnimationUtility.SetEditorCurve(
+                        clip,
+                        EditorCurveBinding.FloatCurve(
+                            "missing",
+                            typeof(Transform),
+                            "m_LocalPosition.x"),
+                        AnimationCurve.Constant(0f, 1f, 2f));
+                    controller = new AnimatorController { name = "unrelated graph" };
+                    controller.AddLayer("L0");
+                    controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                    root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                }
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    _ => UnityMaterialSemantics.AllUnknown());
+                var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
         [Test]
         public void RuntimeStateIntegration_AnimatedMeshReplacementWinsBeforeAdmission()
         {
@@ -849,15 +914,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 controller = AddOverBudgetMaterialAssignments(
                     root, mesh.subMeshCount, materials, out clip);
 
-                var result = AnalyzeVerifiedRuntimeStates(
-                    root, renderer, out var evidence);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                var evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
+                var amuse = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(evidence.IsClosed, Is.True);
                 Assert.That(evidence.Clips[0].ObjectBindings,
                     Has.Count.EqualTo(mesh.subMeshCount));
-                Assert.That(result.Refusal,
-                    Is.EqualTo(RendererAnalysisRefusal.AdmittedStateBudgetExceeded),
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.AdmittedStateBudgetExceeded),
+                    Is.EqualTo(1),
                     "geometry ran before the admitted-state budget");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1));
             }
             finally
             {
@@ -1219,6 +1296,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Assert.That(evidence.IsClosed, Is.True);
                 Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(1));
+                var path = AnimationUtility.CalculateTransformPath(
+                    fixture.Renderer.transform, root.transform);
+                var snapshot = CaptureRuntimeStateGeometry(
+                    fixture.Renderer, evidence);
 
                 // Once capture has closed, the live material array is outside the
                 // runtime-state proof boundary. Clearing it makes any later
@@ -1227,9 +1308,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixture.Renderer.sharedMaterials = System.Array.Empty<Material>();
 
                 var result = AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
-                    root,
-                    fixture.Renderer,
+                    path,
                     evidence,
+                    snapshot,
                     VerifiedAlphaOnly);
 
                 Assert.That(result.Refusal,
@@ -1241,6 +1322,99 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 DisposeAnalyzableRenderer(fixture);
                 Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStatePureEntryAcceptsOnlyImmutableProofInputs()
+        {
+            var method = typeof(AmusePlatformFinishPass).GetMethod(
+                "AnalyzeRuntimeStatesForTests",
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                new[]
+                {
+                    typeof(string),
+                    typeof(CapturedAnimationEvidence),
+                    typeof(UnityRendererAlphaSnapshot),
+                    typeof(CapturedAlphaMaterialSemanticsResolver),
+                },
+                null);
+
+            Assert.That(method, Is.Not.Null,
+                "the pure runtime-state entry still accepts a live host object");
+            foreach (var parameter in method.GetParameters())
+            {
+                Assert.That(
+                    typeof(UnityEngine.Object).IsAssignableFrom(
+                        parameter.ParameterType),
+                    Is.False,
+                    parameter.Name + " accepts a live Unity object");
+            }
+
+            Assert.That(
+                method.ReturnType.GetGenericArguments(),
+                Has.None.AssignableTo<UnityEngine.Object>());
+        }
+
+        [Test]
+        public void ClosedPathAndGeometryIgnoreLaterRendererRenameAndMeshReplacement()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE immutable runtime-state host");
+            var child = new GameObject("Body");
+            child.transform.SetParent(root.transform, false);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Mesh replacement = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(child);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip, "Body");
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    fixture.Renderer.transform, root.transform);
+                var evidence = CaptureVerifiedRuntimeStateEvidence(
+                    root, fixture.Renderer);
+                var current = new[]
+                {
+                    evidence.AdmittedMaterials[
+                        evidence.CurrentMaterialIndices[0]],
+                };
+                var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                    fixture.Renderer, current);
+                Assert.That(extraction.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+
+                child.name = "RenamedAfterClosure";
+                child.transform.SetParent(null, false);
+                replacement = new Mesh();
+                replacement.vertices = new[] { Vector3.zero, Vector3.right };
+                replacement.SetIndices(
+                    new[] { 0, 1 }, MeshTopology.Lines, 0);
+                fixture.Renderer.sharedMesh = replacement;
+
+                var result = AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                    rendererPath,
+                    evidence,
+                    extraction.Snapshot,
+                    VerifiedAlphaOnly);
+
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(result.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                if (replacement != null) Object.DestroyImmediate(replacement);
+                Object.DestroyImmediate(root);
+                if (child != null) Object.DestroyImmediate(child);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
             }
@@ -1369,13 +1543,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                fixture = AddAnalyzableRenderer(analyzable);
+                fixture = AddVerifiedOpaqueRenderer(analyzable);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
 
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.EqualTo(2));
@@ -1399,13 +1578,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                fixture = AddAnalyzableRenderer(root);
+                fixture = AddVerifiedOpaqueRenderer(root);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
 
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
@@ -1480,12 +1664,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // Capture(destroyed renderer) and Analyze(null) — are unreachable
                 // from the loop, which is why the sibling test pins the analysis
                 // contract directly instead.
-                fixture = AddAnalyzableRenderer(root);
+                fixture = AddVerifiedOpaqueRenderer(root);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    TryAttestVerifiedFixture,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
@@ -1714,13 +1903,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static AnimatorController AddAnimatedMaterialAssignment(
             GameObject root,
             Material material,
-            out AnimationClip clip)
+            out AnimationClip clip,
+            string path = "")
         {
             clip = new AnimationClip { name = "AMUSE material assignment" };
             AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    string.Empty,
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        path,
                     typeof(SkinnedMeshRenderer),
                     "m_Materials.Array.data[0]"),
                 new[]
@@ -1747,9 +1937,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 out CapturedAnimationEvidence evidence)
         {
             evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
-
+            var path = AnimationUtility.CalculateTransformPath(
+                renderer.transform, root.transform);
+            var snapshot = CaptureRuntimeStateGeometry(renderer, evidence);
             return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
-                root, renderer, evidence, VerifiedAlphaOnly);
+                path, evidence, snapshot, VerifiedAlphaOnly);
+        }
+
+        private static UnityRendererAlphaSnapshot CaptureRuntimeStateGeometry(
+            Renderer renderer,
+            CapturedAnimationEvidence evidence)
+        {
+            var current = new CapturedAlphaMaterial[
+                evidence.CurrentMaterialIndices.Count];
+            for (var slot = 0; slot < current.Length; slot++)
+            {
+                current[slot] = evidence.AdmittedMaterials[
+                    evidence.CurrentMaterialIndices[slot]];
+            }
+
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, current);
+            Assert.That(extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            return extraction.Snapshot;
         }
 
         private static CapturedAnimationEvidence
@@ -1927,7 +2138,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Vector3.up,
                 };
                 mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-                var material = new Material(Shader.Find("Unlit/Color"));
+                var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+                material.SetFloat("_AlphaForceOpaque", 1f);
                 renderer.sharedMesh = mesh;
                 renderer.sharedMaterials = new[] { material };
 

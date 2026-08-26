@@ -269,47 +269,45 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
-            var hasCommittedClip = false;
-            foreach (var layer in graph.Layers)
-                hasCommittedClip |= layer.Clips.Count > 0;
-
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
             {
-                RendererAnalysisRefusal refusal;
-                int opaqueCandidateTriangleCount;
-                if (hasCommittedClip)
+                var refusal = UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
+                    renderer);
+                if (refusal != RendererAnalysisRefusal.None)
                 {
-                    var evidence = attestor == null
-                        ? UnityAnimationEvidenceCapture.Capture(
-                            renderer.sharedMaterials,
-                            graph,
-                            state.AnimatorBindings)
-                        : UnityAnimationEvidenceCapture.CaptureGraphForTests(
-                            renderer.sharedMaterials,
-                            graph,
-                            state.AnimatorBindings,
-                            attestor,
-                            capturer);
-                    (refusal, opaqueCandidateTriangleCount) =
-                        AnalyzeRuntimeStates(
-                            context.AvatarRootObject,
-                            renderer,
-                            evidence,
-                            resolveSemantics);
+                    state.RecordRendererRefusal(refusal);
+                    continue;
                 }
-                else
+
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform, context.AvatarRootObject.transform);
+                var evidence = attestor == null
+                    ? UnityAnimationEvidenceCapture.Capture(
+                        renderer.sharedMaterials,
+                        graph,
+                        state.AnimatorBindings)
+                    : UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                        renderer.sharedMaterials,
+                        graph,
+                        state.AnimatorBindings,
+                        attestor,
+                        capturer);
+                var resolved = ResolveRuntimeStates(
+                    rendererPath, evidence, resolveSemantics);
+                refusal = resolved.Refusal;
+                var opaqueCandidateTriangleCount = 0;
+                if (refusal == RendererAnalysisRefusal.None)
                 {
-                    var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
-                    var analysis = extraction.Refusal ==
-                                   RendererAnalysisRefusal.None
-                        ? UnityRendererAlphaAnalysis.Analyze(extraction.Snapshot)
-                        : RendererAlphaAnalysis.Refused(extraction.Refusal);
-                    refusal = analysis.Refusal;
-                    opaqueCandidateTriangleCount =
-                        analysis.Refusal == RendererAnalysisRefusal.None
-                            ? analysis.Plan.OpaqueTriangleCount
-                            : 0;
+                    var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                        renderer, resolved.CurrentMaterials);
+                    refusal = extraction.Refusal;
+                    if (refusal == RendererAnalysisRefusal.None)
+                    {
+                        opaqueCandidateTriangleCount = ClassifyRuntimeStates(
+                            extraction.Snapshot,
+                            resolved.ResolutionsBySlot);
+                    }
                 }
 
                 if (refusal != RendererAnalysisRefusal.None)
@@ -339,38 +337,52 @@ namespace Alrauna.Amuse.Editor.Build
         internal static (RendererAnalysisRefusal Refusal,
                          int OpaqueCandidateTriangleCount)
             AnalyzeRuntimeStatesForTests(
-                GameObject avatarRoot,
-                Renderer renderer,
+                string rendererPath,
                 CapturedAnimationEvidence evidence,
+                UnityRendererAlphaSnapshot snapshot,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics)
         {
-            return AnalyzeRuntimeStates(
-                avatarRoot, renderer, evidence, resolveSemantics);
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var resolved = ResolveRuntimeStates(
+                rendererPath, evidence, resolveSemantics);
+            return resolved.Refusal == RendererAnalysisRefusal.None
+                ? (RendererAnalysisRefusal.None,
+                    ClassifyRuntimeStates(
+                        snapshot, resolved.ResolutionsBySlot))
+                : (resolved.Refusal, 0);
         }
 
-        private static (RendererAnalysisRefusal Refusal,
-                        int OpaqueCandidateTriangleCount)
-            AnalyzeRuntimeStates(
-                GameObject avatarRoot,
-                Renderer renderer,
+        private sealed class ResolvedRuntimeStates
+        {
+            internal ResolvedRuntimeStates(
+                RendererAnalysisRefusal refusal,
+                IReadOnlyList<CapturedAlphaMaterial> currentMaterials,
+                IReadOnlyList<AlphaResolution>[] resolutionsBySlot)
+            {
+                Refusal = refusal;
+                CurrentMaterials = currentMaterials;
+                ResolutionsBySlot = resolutionsBySlot;
+            }
+
+            internal RendererAnalysisRefusal Refusal { get; }
+            internal IReadOnlyList<CapturedAlphaMaterial> CurrentMaterials { get; }
+            internal IReadOnlyList<AlphaResolution>[] ResolutionsBySlot { get; }
+        }
+
+        private static ResolvedRuntimeStates ResolveRuntimeStates(
+                string rendererPath,
                 CapturedAnimationEvidence evidence,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
         {
-            if (avatarRoot == null)
-                throw new ArgumentNullException(nameof(avatarRoot));
-            if (renderer == null)
-                throw new ArgumentNullException(nameof(renderer));
+            if (rendererPath == null)
+                throw new ArgumentNullException(nameof(rendererPath));
             if (evidence == null)
                 throw new ArgumentNullException(nameof(evidence));
             if (!evidence.IsClosed)
             {
-                return (
-                    RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding,
-                    0);
+                return Refused(
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed);
             }
-
-            var rendererPath = AnimationUtility.CalculateTransformPath(
-                renderer.transform, avatarRoot.transform);
 
             var floats = new List<CapturedFloatBinding>();
             var objects = new List<CapturedObjectBinding>();
@@ -383,7 +395,7 @@ namespace Alrauna.Amuse.Editor.Build
             var structural = UnityRendererAlphaAnalysis.StructuralRefusalFor(
                 floats, objects, rendererPath);
             if (structural != RendererAnalysisRefusal.None)
-                return (structural, 0);
+                return Refused(structural);
 
             var relevantBindings = new List<(
                 CapturedFloatBinding Binding,
@@ -399,10 +411,9 @@ namespace Alrauna.Amuse.Editor.Build
                 if (resolution ==
                     ProofRelevantBindingResolution.UnrecognizedMaterialBinding)
                 {
-                    return (
+                    return Refused(
                         RendererAnalysisRefusal
-                            .UnrecognizedAnimatedMaterialBinding,
-                        0);
+                            .UnrecognizedAnimatedMaterialBinding);
                 }
 
                 if (resolution == ProofRelevantBindingResolution.RendererWide)
@@ -411,19 +422,17 @@ namespace Alrauna.Amuse.Editor.Build
 
             if (relevantBindings.Count > 0 && evidence.HasAdditiveLayer)
             {
-                return (
+                return Refused(
                     RendererAnalysisRefusal
-                        .AdditiveLayerWithProofRelevantMaterialProperty,
-                    0);
+                        .AdditiveLayerWithProofRelevantMaterialProperty);
             }
 
             if (relevantBindings.Count > 0 &&
                 evidence.HasUnnormalizedDirectBlendTree)
             {
-                return (
+                return Refused(
                     RendererAnalysisRefusal
-                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
-                    0);
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty);
             }
 
             var slots = MaterialSlotsFor(evidence, rendererPath);
@@ -433,12 +442,12 @@ namespace Alrauna.Amuse.Editor.Build
             if (!AdmittedMaterialStates.TryBudgetProduct(
                     admittedCounts, out _))
             {
-                return (
-                    RendererAnalysisRefusal.AdmittedStateBudgetExceeded,
-                    0);
+                return Refused(
+                    RendererAnalysisRefusal.AdmittedStateBudgetExceeded);
             }
 
-            var fields = GatherAlphaFields(evidence.AdmittedMaterials);
+            var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                evidence.AdmittedMaterials);
             bool AlphaFields(
                 TextureSourceId source,
                 TextureChannel channel,
@@ -460,7 +469,7 @@ namespace Alrauna.Amuse.Editor.Build
                     AlphaFields,
                     resolveSemantics);
                 if (!resolved.IsResolved)
-                    return (resolved.Refusal, 0);
+                    return Refused(resolved.Refusal);
 
                 resolutionsBySlot[slotIndex] =
                     AdmittedMaterialStates.DistinctResolutions(
@@ -475,12 +484,25 @@ namespace Alrauna.Amuse.Editor.Build
                     evidence.CurrentMaterialIndices[slot]];
             }
 
-            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
-                renderer, currentMaterials);
-            if (extraction.Refusal != RendererAnalysisRefusal.None)
-                return (extraction.Refusal, 0);
+            return new ResolvedRuntimeStates(
+                RendererAnalysisRefusal.None,
+                currentMaterials,
+                resolutionsBySlot);
+        }
 
-            var snapshot = extraction.Snapshot;
+        private static ResolvedRuntimeStates Refused(
+            RendererAnalysisRefusal refusal)
+        {
+            return new ResolvedRuntimeStates(
+                refusal,
+                Array.Empty<CapturedAlphaMaterial>(),
+                Array.Empty<IReadOnlyList<AlphaResolution>>());
+        }
+
+        private static int ClassifyRuntimeStates(
+            UnityRendererAlphaSnapshot snapshot,
+            IReadOnlyList<AlphaResolution>[] resolutionsBySlot)
+        {
             var submeshes = new List<SubmeshSeparationInput>(
                 snapshot.Submeshes.Count);
             foreach (var submesh in snapshot.Submeshes)
@@ -504,7 +526,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             var plan = MeshSeparationPlanner.Create(
                 new MeshSeparationInput(snapshot.VertexCount, submeshes));
-            return (RendererAnalysisRefusal.None, plan.OpaqueTriangleCount);
+            return plan.OpaqueTriangleCount;
         }
 
         private static IReadOnlyList<CapturedMaterialSlotEvidence>
@@ -551,24 +573,5 @@ namespace Alrauna.Amuse.Editor.Build
             return slots;
         }
 
-        private static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
-            GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
-        {
-            var fields = new Dictionary<TextureSourceId, AlphaTextureData>();
-            foreach (var material in materials)
-            {
-                foreach (var texture in material.Evidence.Textures)
-                {
-                    if (texture.HasSourceIdentity &&
-                        texture.HasAlphaChannel &&
-                        !fields.ContainsKey(texture.SourceIdentity))
-                    {
-                        fields.Add(texture.SourceIdentity, texture.AlphaChannel);
-                    }
-                }
-            }
-
-            return fields;
-        }
     }
 }

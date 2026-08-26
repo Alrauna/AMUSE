@@ -17,6 +17,7 @@ namespace Alrauna.Amuse.Editor.Host
         None,
         UnsupportedRendererType,
         MaterialPropertyOverridesPresent,
+        MaterialDependencyClosureFailed,
         UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
         UnprovenMaterialSlotMapping,
@@ -78,6 +79,12 @@ namespace Alrauna.Amuse.Editor.Host
         /// refusal: animation never overrides a differing default.
         /// </summary>
         AnimatedMaterialPropertyNotSingleton,
+
+        /// <summary>
+        /// At least one admitted material resolved to the all-Unknown alpha
+        /// equation, so the slot has no attested alpha semantics to classify.
+        /// </summary>
+        AdmittedMaterialSemanticsUnknown,
     }
 
     /// <summary>
@@ -261,6 +268,26 @@ namespace Alrauna.Amuse.Editor.Host
             return Capture(renderer, null, capturedMaterialSlots, out _);
         }
 
+        /// <summary>
+        /// Performs the host facts whose named renderer refusal must take
+        /// precedence over animation-evidence closure. Geometry is deliberately
+        /// excluded: runtime-state admission and its budget must run before any
+        /// topology, vertex, UV, or index inspection.
+        /// </summary>
+        internal static RendererAnalysisRefusal HostStructuralRefusalFor(
+            Renderer renderer)
+        {
+            var refusal = HostStructuralRefusalFor(renderer, out var mesh);
+            if (refusal != RendererAnalysisRefusal.None)
+            {
+                return refusal;
+            }
+
+            var materials = renderer.sharedMaterials;
+            return MaterialSlotMappingRefusalFor(
+                mesh, materials == null ? -1 : materials.Length);
+        }
+
         private static UnityRendererAlphaExtraction Capture(
             Renderer renderer,
             BaseMaterialSemanticsProvider legacySemanticsProvider,
@@ -282,28 +309,9 @@ namespace Alrauna.Amuse.Editor.Host
                     nameof(renderer));
             }
 
-            if (!IsSupportedRendererType(renderer))
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.UnsupportedRendererType);
-            }
-
-            // Presence only. Reading the block's contents would be
-            // effective-state analysis, which this milestone does not do; a
-            // block that overrides nothing alpha-relevant is refused anyway,
-            // which is a false negative and therefore the safe direction.
-            if (renderer.HasPropertyBlock())
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MaterialPropertyOverridesPresent);
-            }
-
-            var mesh = SharedMeshOf(renderer);
-            if (mesh == null)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MissingMesh);
-            }
+            var structural = HostStructuralRefusalFor(renderer, out var mesh);
+            if (structural != RendererAnalysisRefusal.None)
+                return UnityRendererAlphaExtraction.Refused(structural);
 
             Material[] materials = null;
             var materialSlotCount = capturedMaterialSlots == null
@@ -315,11 +323,9 @@ namespace Alrauna.Amuse.Editor.Host
                 materialSlotCount = materials == null ? -1 : materials.Length;
             }
 
-            if (materialSlotCount != mesh.subMeshCount)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.UnprovenMaterialSlotMapping);
-            }
+            structural = MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
+            if (structural != RendererAnalysisRefusal.None)
+                return UnityRendererAlphaExtraction.Refused(structural);
 
             for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
             {
@@ -435,6 +441,49 @@ namespace Alrauna.Amuse.Editor.Host
             return UnityRendererAlphaExtraction.Accepted(snapshot, target);
         }
 
+        private static RendererAnalysisRefusal HostStructuralRefusalFor(
+            Renderer renderer,
+            out Mesh mesh)
+        {
+            if (ReferenceEquals(renderer, null))
+            {
+                throw new ArgumentNullException(nameof(renderer));
+            }
+
+            // Unity's overloaded equality reports a destroyed object as null.
+            if (renderer == null)
+            {
+                throw new ArgumentException(
+                    "The renderer has been destroyed and cannot be analyzed.",
+                    nameof(renderer));
+            }
+
+            mesh = null;
+            if (!IsSupportedRendererType(renderer))
+                return RendererAnalysisRefusal.UnsupportedRendererType;
+
+            // Presence only. Reading the block's contents would be
+            // effective-state analysis, which this milestone does not do; a
+            // block that overrides nothing alpha-relevant is refused anyway,
+            // which is a false negative and therefore the safe direction.
+            if (renderer.HasPropertyBlock())
+                return RendererAnalysisRefusal.MaterialPropertyOverridesPresent;
+
+            mesh = SharedMeshOf(renderer);
+            return mesh == null
+                ? RendererAnalysisRefusal.MissingMesh
+                : RendererAnalysisRefusal.None;
+        }
+
+        private static RendererAnalysisRefusal MaterialSlotMappingRefusalFor(
+            Mesh mesh,
+            int materialSlotCount)
+        {
+            return materialSlotCount != mesh.subMeshCount
+                ? RendererAnalysisRefusal.UnprovenMaterialSlotMapping
+                : RendererAnalysisRefusal.None;
+        }
+
         internal static RendererAlphaAnalysis Analyze(
             UnityRendererAlphaSnapshot snapshot,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
@@ -521,7 +570,7 @@ namespace Alrauna.Amuse.Editor.Host
             return resolution;
         }
 
-        private static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
+        internal static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
             GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
         {
             var fields = new Dictionary<TextureSourceId, AlphaTextureData>();

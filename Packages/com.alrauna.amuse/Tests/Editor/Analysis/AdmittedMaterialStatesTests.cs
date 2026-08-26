@@ -849,6 +849,30 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
+        public void ALaterAllUnknownAdmittedMaterialRefusesWithoutPartialResolutions()
+        {
+            var admitted = Admitted(
+                MaterialWithForcedOpaque(true),
+                MaterialWithForcedOpaque(true));
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, new[] { 0, 1 }),
+                admitted,
+                System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                Relevance,
+                NoAlphaFields,
+                material => ReferenceEquals(material, admitted[0])
+                    ? VerifiedAlphaOnly(material)
+                    : UnityMaterialSemantics.AllUnknown());
+
+            Assert.That(result.IsResolved, Is.False);
+            Assert.That(result.Refusal,
+                Is.EqualTo(
+                    RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown));
+            Assert.That(result.Resolutions, Is.Empty);
+        }
+
+        [Test]
         public void ReAssertedColourComponentResolves()
         {
             var admitted = Admitted(TransparentMaterial());

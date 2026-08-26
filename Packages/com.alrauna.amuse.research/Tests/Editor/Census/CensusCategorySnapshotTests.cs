@@ -31,6 +31,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "None",
                     "UnsupportedRendererType",
                     "MaterialPropertyOverridesPresent",
+                    "MaterialDependencyClosureFailed",
                     "UnrecognizedAnimatedMaterialBinding",
                     "MissingMesh",
                     "UnprovenMaterialSlotMapping",
@@ -44,6 +45,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "AnimatedPropertyAbsentFromAdmittedMaterial",
                     "UnsupportedAnimationCurveForm",
                     "AnimatedMaterialPropertyNotSingleton",
+                    "AdmittedMaterialSemanticsUnknown",
                 },
                 Enum.GetNames(typeof(RendererRefusal)));
         }
