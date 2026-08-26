@@ -24,6 +24,24 @@ namespace Alrauna.Amuse.Editor.Host
         MalformedMeshData,
         AnimatedMeshReplacement,
         AnimatedMaterialSlotCount,
+
+        /// <summary>
+        /// This renderer has a proof-relevant animated material property while
+        /// the committed graph contains an additive layer. Captured graph facts
+        /// carry no per-binding provenance, so V1 cannot prove that the additive
+        /// contribution leaves this renderer's singleton property value intact.
+        /// </summary>
+        AdditiveLayerWithProofRelevantMaterialProperty,
+
+        /// <summary>
+        /// This renderer has a proof-relevant animated material property while
+        /// the committed graph contains a Direct Blend Tree whose values are not
+        /// normalized. Captured graph facts carry no per-binding provenance, so
+        /// V1 cannot prove that the unbounded weighted sum leaves this renderer's
+        /// singleton property value intact.
+        /// </summary>
+        UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
+
         AdmittedStateBudgetExceeded,
 
         /// <summary>
@@ -510,7 +528,7 @@ namespace Alrauna.Amuse.Editor.Host
         /// negative on malformed data, which is the acceptable direction.
         /// </para>
         /// </summary>
-        private static TriangleAlphaOutcome[] Classify(
+        internal static TriangleAlphaOutcome[] Classify(
             IReadOnlyList<int> indices,
             IReadOnlyList<Vector3> positions,
             IReadOnlyList<Vector2> uv,

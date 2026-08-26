@@ -1,10 +1,16 @@
+using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using nadena.dev.ndmf.fluent;
 using nadena.dev.ndmf.platform;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
 
@@ -510,6 +516,619 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AnimatedRendererWithUnclosedEvidenceRefusesWithoutPartialCurrentStateAnalysis()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE unclosed animation evidence fixture");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material swap = null;
+
+            try
+            {
+                fixture = AddAnalyzableRenderer(root);
+                swap = VerifiedOpaqueMaterial();
+                controller = AddAnimatedMaterialAssignment(root, swap, out clip);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                    "a failed animation-evidence closure was salvaged as " +
+                    "current-state-only analysis");
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .UnrecognizedAnimatedMaterialBinding),
+                    Is.EqualTo(1),
+                    "the production barrier did not consume the closed-evidence " +
+                    "result from the real graph capture route");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (swap != null) Object.DestroyImmediate(swap);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void VerifiedFixture_AnimatedSwapToTransparentMaterialRemovesOpacity()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var control = new GameObject("AMUSE admitted opaque reassertion");
+            var swapped = new GameObject("AMUSE admitted transparent swap");
+            var controlFixture = default(AnalyzableRendererFixture);
+            var swappedFixture = default(AnalyzableRendererFixture);
+            AnimatorController controlController = null;
+            AnimatorController swappedController = null;
+            AnimationClip controlClip = null;
+            AnimationClip swappedClip = null;
+            Material transparent = null;
+
+            try
+            {
+                // The public project cannot publish vendor shader source assets.
+                // This uses the already-accepted schema-complete Poiyomi fixture
+                // and substitutes only source attestation/verified interpretation;
+                // graph enumeration, clip observation, closure, slot admission,
+                // resolution, classification, and intersection remain real.
+                controlFixture = AddVerifiedOpaqueRenderer(control);
+                controlController = AddAnimatedMaterialAssignment(
+                    control, controlFixture.Material, out controlClip);
+
+                swappedFixture = AddVerifiedOpaqueRenderer(swapped);
+                transparent = VerifiedTransparentMaterial();
+                swappedController = AddAnimatedMaterialAssignment(
+                    swapped, transparent, out swappedClip);
+
+                var controlResult = AnalyzeVerifiedRuntimeStates(
+                    control, controlFixture.Renderer, out var controlEvidence);
+                var swappedResult = AnalyzeVerifiedRuntimeStates(
+                    swapped, swappedFixture.Renderer, out var swappedEvidence);
+
+                Assert.That(controlEvidence.IsClosed, Is.True);
+                Assert.That(controlEvidence.Clips, Has.Count.EqualTo(1));
+                Assert.That(controlEvidence.Clips[0].ObjectBindings,
+                    Has.Count.EqualTo(1));
+                CollectionAssert.AreEqual(
+                    new[] { 0 },
+                    controlEvidence.Clips[0].ObjectBindings[0]
+                        .AdmittedMaterialIndices,
+                    "the benign control did not travel through real slot admission");
+                Assert.That(controlResult.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(controlResult.OpaqueCandidateTriangleCount,
+                    Is.GreaterThan(0),
+                    "the same orchestration route proved no opaque control");
+
+                Assert.That(swappedEvidence.IsClosed, Is.True);
+                Assert.That(swappedEvidence.AdmittedMaterials,
+                    Has.Count.EqualTo(2));
+                CollectionAssert.AreEqual(
+                    new[] { 1 },
+                    swappedEvidence.Clips[0].ObjectBindings[0]
+                        .AdmittedMaterialIndices,
+                    "the transparent swap was not captured as a real admitted index");
+                Assert.That(swappedResult.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(swappedResult.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a face opaque only in the current state must not be counted");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(controlFixture);
+                DisposeAnalyzableRenderer(swappedFixture);
+                if (transparent != null) Object.DestroyImmediate(transparent);
+                Object.DestroyImmediate(control);
+                Object.DestroyImmediate(swapped);
+                if (controlClip != null) Object.DestroyImmediate(controlClip);
+                if (swappedClip != null) Object.DestroyImmediate(swappedClip);
+                if (controlController != null)
+                    DestroyControllerGraph(controlController);
+                if (swappedController != null)
+                    DestroyControllerGraph(swappedController);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AnimatedMeshReplacementWinsBeforeAdmission()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE structural mesh replacement");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddDifferingAnimatedProperty(clip);
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        string.Empty,
+                        typeof(SkinnedMeshRenderer),
+                        "m_Mesh"),
+                    new[]
+                    {
+                        new ObjectReferenceKeyframe
+                        {
+                            time = 0f,
+                            value = fixture.Mesh,
+                        },
+                    });
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].ObjectBindings,
+                    Has.Some.Property("PropertyName").EqualTo("m_Mesh"),
+                    "fixture precondition: the structural binding was not captured");
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._AlphaForceOpaque"),
+                    "fixture precondition: the downstream disagreement is absent");
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.AnimatedMeshReplacement),
+                    "structural refusal did not win before property admission");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AnimatedMaterialSlotCountRefusesExactly()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE structural slot count");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        string.Empty,
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.size"),
+                    AnimationCurve.Constant(0f, 1f, 1f));
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("m_Materials.Array.size"),
+                    "fixture precondition: the slot-count binding was not captured");
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.AnimatedMaterialSlotCount));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_OverBudgetWinsBeforeGeometry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE admitted-state budget");
+            var materials = new List<Material>();
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Mesh mesh = null;
+
+            try
+            {
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                    },
+                    subMeshCount = 8,
+                };
+                for (var slot = 0; slot < mesh.subMeshCount; slot++)
+                {
+                    // Deliberately unsupported geometry. Correct ordering returns
+                    // the budget refusal before this is inspected.
+                    mesh.SetIndices(new[] { 0, 1 }, MeshTopology.Lines, slot);
+                }
+
+                renderer.sharedMesh = mesh;
+                var current = VerifiedOpaqueMaterial();
+                materials.Add(current);
+                var currentSlots = new Material[mesh.subMeshCount];
+                for (var slot = 0; slot < currentSlots.Length; slot++)
+                    currentSlots[slot] = current;
+                renderer.sharedMaterials = currentSlots;
+
+                controller = AddOverBudgetMaterialAssignments(
+                    root, mesh.subMeshCount, materials, out clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, renderer, out var evidence);
+
+                Assert.That(evidence.IsClosed, Is.True);
+                Assert.That(evidence.Clips[0].ObjectBindings,
+                    Has.Count.EqualTo(mesh.subMeshCount));
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.AdmittedStateBudgetExceeded),
+                    "geometry ran before the admitted-state budget");
+            }
+            finally
+            {
+                foreach (var material in materials)
+                {
+                    if (material != null) Object.DestroyImmediate(material);
+                }
+
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AdditiveLayerWithRelevantPropertyRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE additive material property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.HasAdditiveLayer, Is.True,
+                    "fixture precondition: graph capture missed the additive layer");
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._AlphaForceOpaque"),
+                    "fixture precondition: no relevant material property was captured");
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_UnnormalizedDirectWithRelevantPropertyRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE direct material property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            BlendTree tree = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                tree = ReplaceFirstStateWithUnnormalizedDirectTree(
+                    controller, clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.HasUnnormalizedDirectBlendTree, Is.True,
+                    "fixture precondition: graph capture missed the Direct tree");
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._AlphaForceOpaque"),
+                    "fixture precondition: no relevant material property was captured");
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (tree != null) Object.DestroyImmediate(tree);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AdditiveFlagAloneDoesNotRefuseRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE additive flag only");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.HasAdditiveLayer, Is.True,
+                    "fixture precondition: graph capture missed the additive layer");
+                Assert.That(evidence.Clips[0].FloatBindings, Is.Empty,
+                    "fixture precondition: the control unexpectedly has a material " +
+                    "property binding");
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None),
+                    "a graph-global flag refused a renderer without a proof-relevant " +
+                    "animated material property");
+                Assert.That(result.OpaqueCandidateTriangleCount, Is.GreaterThan(0));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AgreeingPropertyRemainsOpaque()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE agreeing property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._AlphaForceOpaque"));
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(result.OpaqueCandidateTriangleCount, Is.GreaterThan(0),
+                    "an exact singleton reassertion invalidated proven opacity");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_DifferingPropertyRefusesExactly()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE differing property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddDifferingAnimatedProperty(clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out _);
+
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .AnimatedMaterialPropertyNotSingleton));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_NonFiniteExactCurveRefusesExactly()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE non-finite-exact property");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        string.Empty,
+                        typeof(SkinnedMeshRenderer),
+                        "material._AlphaForceOpaque"),
+                    new AnimationCurve(
+                        new Keyframe(0f, 1f) { outTangent = 5f },
+                        new Keyframe(1f, 1f) { inTangent = -5f }));
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("IsFiniteExact").False,
+                    "fixture precondition: the curve was not captured as unsupported");
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal.UnsupportedAnimationCurveForm));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AbsentPropertyInSwapRefusesExactly()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE absent property in swap");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material withoutProperty = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                withoutProperty = new Material(Shader.Find("Unlit/Color"));
+                controller = AddAnimatedMaterialAssignment(
+                    root, withoutProperty, out clip);
+                AddAgreeingAnimatedProperty(clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .AnimatedPropertyAbsentFromAdmittedMaterial));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                if (withoutProperty != null)
+                    Object.DestroyImmediate(withoutProperty);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_TextureScaleUsesCapturedClosedRequest()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE closed texture request");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AnimationUtility.SetEditorCurve(
+                    clip,
+                    EditorCurveBinding.FloatCurve(
+                        string.Empty,
+                        typeof(SkinnedMeshRenderer),
+                        "material._MainTex_ST.x"),
+                    AnimationCurve.Constant(0f, 1f, 1f));
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(
+                    UnityAnimationEvidenceCapture
+                        .DeriveTextureScaleOffsetProperties(
+                            evidence.RelevanceRequest),
+                    Contains.Item("_MainTex_ST"),
+                    "fixture precondition: only the closed request can own _MainTex_ST");
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Count.EqualTo(1),
+                    "fixture precondition: the real _ST curve was not captured");
+                Assert.That(
+                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                        evidence.Clips[0].FloatBindings[0],
+                        string.Empty,
+                        evidence.RelevanceRequest,
+                        out var reference),
+                    Is.EqualTo(ProofRelevantBindingResolution.RendererWide),
+                    "fixture precondition: the closed request did not resolve " +
+                    "the captured _ST owner");
+                Assert.That(reference.Kind,
+                    Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(result.OpaqueCandidateTriangleCount, Is.GreaterThan(0));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void PositiveLifecycleWithoutRetainedBindingsIsAnImplementationDefect()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
@@ -809,6 +1428,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private struct AnalyzableRendererFixture
         {
+            internal SkinnedMeshRenderer Renderer;
             internal Mesh Mesh;
             internal Material Material;
         }
@@ -830,9 +1450,233 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             renderer.sharedMaterials = new[] { material };
             return new AnalyzableRendererFixture
             {
+                Renderer = renderer,
                 Mesh = mesh,
                 Material = material,
             };
+        }
+
+        private static AnalyzableRendererFixture AddVerifiedOpaqueRenderer(
+            GameObject root)
+        {
+            var fixture = AddAnalyzableRenderer(root);
+            Object.DestroyImmediate(fixture.Material);
+            fixture.Material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            fixture.Material.SetFloat("_AlphaForceOpaque", 1f);
+            fixture.Renderer.sharedMaterials = new[] { fixture.Material };
+            return fixture;
+        }
+
+        private static Material VerifiedTransparentMaterial()
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            return material;
+        }
+
+        private static Material VerifiedOpaqueMaterial()
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            return material;
+        }
+
+        private static void AddDifferingAnimatedProperty(AnimationClip clip)
+        {
+            AnimationUtility.SetEditorCurve(
+                clip,
+                EditorCurveBinding.FloatCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    "material._AlphaForceOpaque"),
+                AnimationCurve.Constant(0f, 1f, 0f));
+        }
+
+        private static void AddAgreeingAnimatedProperty(AnimationClip clip)
+        {
+            AnimationUtility.SetEditorCurve(
+                clip,
+                EditorCurveBinding.FloatCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    "material._AlphaForceOpaque"),
+                AnimationCurve.Constant(0f, 1f, 1f));
+        }
+
+        private static void SetFirstLayerBlendingMode(
+            AnimatorController controller,
+            AnimatorLayerBlendingMode blendingMode)
+        {
+            var layers = controller.layers;
+            layers[0].blendingMode = blendingMode;
+            controller.layers = layers;
+        }
+
+        private static BlendTree ReplaceFirstStateWithUnnormalizedDirectTree(
+            AnimatorController controller,
+            AnimationClip clip)
+        {
+            var tree = new BlendTree
+            {
+                name = "AMUSE unnormalized Direct",
+                blendType = BlendTreeType.Direct,
+            };
+            tree.AddChild(clip);
+
+            var serialized = new SerializedObject(tree);
+            serialized.Update();
+            var normalized = serialized.FindProperty("m_NormalizedBlendValues");
+            Assert.That(normalized, Is.Not.Null,
+                "fixture precondition: Unity did not expose Direct normalization");
+            normalized.boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            controller.layers[0].stateMachine.states[0].state.motion = tree;
+            return tree;
+        }
+
+        private static AnimatorController AddOverBudgetMaterialAssignments(
+            GameObject root,
+            int slotCount,
+            ICollection<Material> ownedMaterials,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE over-budget assignments" };
+            for (var slot = 0; slot < slotCount; slot++)
+            {
+                var first = VerifiedOpaqueMaterial();
+                var second = VerifiedOpaqueMaterial();
+                ownedMaterials.Add(first);
+                ownedMaterials.Add(second);
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        string.Empty,
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[" + slot + "]"),
+                    new[]
+                    {
+                        new ObjectReferenceKeyframe
+                        {
+                            time = 0f,
+                            value = first,
+                        },
+                        new ObjectReferenceKeyframe
+                        {
+                            time = 1f,
+                            value = second,
+                        },
+                    });
+            }
+
+            var controller = new AnimatorController { name = "AMUSE budget graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static AnimatorController AddAnimatedMaterialAssignment(
+            GameObject root,
+            Material material,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE material assignment" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = material,
+                    },
+                });
+
+            var controller = new AnimatorController { name = "AMUSE material graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static (RendererAnalysisRefusal Refusal,
+                        int OpaqueCandidateTriangleCount)
+            AnalyzeVerifiedRuntimeStates(
+                GameObject root,
+                Renderer renderer,
+                out CapturedAnimationEvidence evidence)
+        {
+            var graph = CommittedControllerGraph.Enumerate(
+                root, GenericPlatformAnimatorBindings.Instance);
+            Assert.That(graph.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(graph.Layers, Has.Count.EqualTo(1));
+            Assert.That(graph.Layers[0].Clips, Has.Count.EqualTo(1));
+
+            evidence = UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                renderer.sharedMaterials,
+                graph,
+                GenericPlatformAnimatorBindings.Instance,
+                TryAttestVerifiedFixture,
+                CaptureVerifiedFixtureMaterials);
+
+            return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                root, renderer, evidence, VerifiedAlphaOnly);
+        }
+
+        private static bool TryAttestVerifiedFixture(
+            Material material,
+            out CapturedAlphaMaterialFamily family,
+            out MaterialEvidenceRequest request)
+        {
+            family = CapturedAlphaMaterialFamily.Poiyomi;
+            request = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+            return material != null;
+        }
+
+        private static bool CaptureVerifiedFixtureMaterials(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            out IReadOnlyList<CapturedAlphaMaterial> captured)
+        {
+            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            for (var index = 0; index < materials.Count; index++)
+            {
+                inputs[index] = new MaterialEvidenceCaptureInput(
+                    materials[index], request);
+            }
+
+            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var result = new CapturedAlphaMaterial[materials.Count];
+            for (var index = 0; index < result.Length; index++)
+            {
+                result[index] = new CapturedAlphaMaterial(
+                    families[index],
+                    evidence[index],
+                    default(PoiyomiSourceEvidence),
+                    null);
+            }
+
+            captured = result;
+            return true;
+        }
+
+        private static MaterialSemantics VerifiedAlphaOnly(
+            CapturedAlphaMaterial material)
+        {
+            return new MaterialSemantics(
+                SemanticOutput<ColorSemanticValue>.Unknown(),
+                PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                    material.Evidence),
+                SemanticOutput<ColorSemanticValue>.Unknown(),
+                SemanticOutput<NormalSemanticValue>.Unknown());
         }
 
         private static void DisposeAnalyzableRenderer(
