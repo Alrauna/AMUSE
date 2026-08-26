@@ -40,6 +40,8 @@ namespace Alrauna.Amuse.Research.Census
         MalformedMeshData,
         AnimatedMeshReplacement,
         AnimatedMaterialSlotCount,
+        AdditiveLayerWithProofRelevantMaterialProperty,
+        UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
         AdmittedStateBudgetExceeded,
         AnimatedPropertyAbsentFromAdmittedMaterial,
         UnsupportedAnimationCurveForm,
