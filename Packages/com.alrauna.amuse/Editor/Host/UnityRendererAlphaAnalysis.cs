@@ -10,7 +10,9 @@ namespace Alrauna.Amuse.Editor.Host
     /// The closed set of facts that make a whole renderer unanalyzable. Each
     /// member is a renderer- or mesh-scoped condition; everything a single
     /// material or triangle can fail at is scoped narrower and never reaches
-    /// this enum. Declaration order is the order the checks run in.
+    /// this enum. Declaration order is mirrored by the research census
+    /// vocabulary. Runtime refusal precedence is defined by the analysis
+    /// pipeline, not this enum.
     /// </summary>
     internal enum RendererAnalysisRefusal
     {
