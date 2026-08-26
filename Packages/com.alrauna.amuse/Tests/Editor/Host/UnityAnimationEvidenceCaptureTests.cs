@@ -445,6 +445,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 EmptyGraph());
 
             Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.InvalidSwapValue));
             Assert.That(RequestedNames(evidence.RelevanceRequest), Is.Empty);
             Assert.That(evidence.Clips, Is.Empty);
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
@@ -510,6 +512,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     EmptyGraph());
 
                 Assert.That(evidence.IsClosed, Is.False);
+                Assert.That(evidence.ClosureFailure,
+                    Is.EqualTo(
+                        MaterialDependencyClosureFailure.InvalidSwapValue));
                 Assert.That(evidence.Clips, Is.Empty);
                 Assert.That(evidence.AdmittedMaterials, Is.Empty);
             }
@@ -529,6 +534,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 EmptyGraph());
 
             Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
             Assert.That(evidence.Clips, Is.Empty);
         }
 
@@ -687,6 +694,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 graph);
 
             Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(
+                    MaterialDependencyClosureFailure.MissingCurrentMaterial));
             Assert.That(evidence.HasAdditiveLayer, Is.True);
             Assert.That(evidence.HasUnnormalizedDirectBlendTree, Is.True);
             Assert.That(evidence.Clips, Is.Empty);
@@ -755,6 +765,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new StubBindings());
 
             Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
             Assert.That(evidence.Clips, Is.Empty);
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
         }

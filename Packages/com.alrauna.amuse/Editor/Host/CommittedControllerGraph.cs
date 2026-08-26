@@ -19,6 +19,9 @@ namespace Alrauna.Amuse.Editor.Host
         AnimationEventPresent,
     }
 
+    // TRANSIENT HOST OBSERVATION ONLY: these layers retain live Unity clips and
+    // behaviours solely long enough for eager capture. They must never enter the
+    // immutable proof-evidence graph or pure reasoning APIs.
     internal sealed class CommittedLayer
     {
         internal CommittedLayer(
@@ -47,6 +50,9 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool HasUnnormalizedDirectBlendTree { get; }
     }
 
+    // TRANSIENT HOST OBSERVATION ONLY: successful results contain CommittedLayer
+    // instances and therefore live Unity objects. Consume them during host
+    // capture; never retain them as proof evidence.
     internal sealed class CommittedControllerGraphResult
     {
         internal CommittedControllerGraphResult(

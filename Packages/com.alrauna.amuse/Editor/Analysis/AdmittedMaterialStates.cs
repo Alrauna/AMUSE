@@ -325,8 +325,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.LilToonEvidence);
                 var semantics = resolveSemantics(admitted)
                     ?? UnityMaterialSemantics.AllUnknown();
-                resolutions.Add(
-                    AlphaSemanticsResolver.Resolve(semantics.Alpha, alphaFields));
+                var resolution =
+                    AlphaSemanticsResolver.Resolve(semantics.Alpha, alphaFields);
+                if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
+                {
+                    return SlotResolutionResult.Refused(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown);
+                }
+
+                resolutions.Add(resolution);
             }
 
             return SlotResolutionResult.Resolved(resolutions);
