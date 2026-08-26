@@ -390,6 +390,79 @@ namespace Alrauna.Amuse.Editor.Host
             return ProofRelevantBindingResolution.Irrelevant;
         }
 
+        /// <summary>
+        /// Whether an object-reference binding on this renderer carries material
+        /// property syntax that could address a proof-relevant property, and is
+        /// therefore unsupported rather than irrelevant.
+        /// <para>
+        /// Unity's own generator emits no such curve, but that characterizes what
+        /// Unity <em>generates</em>, not what the committed graph <em>holds</em>:
+        /// clips are authored and rewritten by many tools. Silently ignoring an
+        /// unparsed binding that in fact drives a proof input is a false positive,
+        /// so this recognizes the syntax conservatively and refuses. It asserts
+        /// nothing about whether such a curve is runtime-effective, and it admits
+        /// no texture-reference state — the binding is closed, not interpreted.
+        /// </para>
+        /// </summary>
+        internal static bool IsUnrecognizedObjectMaterialBinding(
+            CapturedObjectBinding binding,
+            string rendererPath,
+            MaterialEvidenceRequest relevance)
+        {
+            if (binding == null) throw new ArgumentNullException(nameof(binding));
+            if (relevance == null)
+                throw new ArgumentNullException(nameof(relevance));
+
+            if (!string.Equals(
+                    binding.Path, rendererPath, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // The one object-reference material form AMUSE does recognize. It is
+            // admitted as a material swap by MaterialSlotsFor, never refused here.
+            if (LiveAnimationObservation.TryParseMaterialSlotBinding(
+                    binding.PropertyName, out _))
+            {
+                return false;
+            }
+
+            if (!TryStripPrefix(
+                    binding.PropertyName, MaterialPrefix, out var property) &&
+                !TryStripIndexedMaterialPrefix(
+                    binding.PropertyName, out property))
+            {
+                return false;
+            }
+
+            return CouldAddressRelevantProperty(
+                       property,
+                       relevance,
+                       DeriveTextureScaleOffsetProperties(relevance)) ||
+                   CouldAddressAny(property, RequestedTextureNames(relevance));
+        }
+
+        /// <summary>
+        /// The closed request's texture property names. An object-reference curve
+        /// assigns a reference, so these are exactly the proof inputs it can name.
+        /// The float path deliberately omits them: a float binding cannot assign a
+        /// texture, only its derived scale/offset components, which
+        /// <see cref="DeriveTextureScaleOffsetProperties"/> already covers. Both
+        /// paths share <c>CouldAddressAny</c> so their syntax recognition cannot
+        /// drift apart.
+        /// </summary>
+        private static IReadOnlyCollection<string> RequestedTextureNames(
+            MaterialEvidenceRequest relevance)
+        {
+            var properties = new List<string>(relevance.TextureProperties.Count);
+            foreach (var texture in relevance.TextureProperties)
+            {
+                properties.Add(texture.PropertyName);
+            }
+
+            return properties;
+        }
+
         private static bool TryResolveGeneratedProperty(
             string property,
             MaterialEvidenceRequest relevance,
