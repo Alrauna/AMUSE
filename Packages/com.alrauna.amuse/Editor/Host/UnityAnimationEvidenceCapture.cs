@@ -168,10 +168,11 @@ namespace Alrauna.Amuse.Editor.Host
                     layer.HasUnnormalizedDirectBlendTree;
             }
 
-            CapturedAnimationEvidence Failed()
+            CapturedAnimationEvidence Failed(
+                MaterialDependencyClosureFailure failure)
             {
                 return new CapturedAnimationEvidence(
-                    false,
+                    failure,
                     EmptyRequest,
                     Array.Empty<CapturedClipEvidence>(),
                     Array.Empty<CapturedAlphaMaterial>(),
@@ -198,7 +199,8 @@ namespace Alrauna.Amuse.Editor.Host
             for (var slot = 0; slot < currentSlots.Count; slot++)
             {
                 if (!TryAdmit(currentSlots[slot], out currentMaterialIndices[slot]))
-                    return Failed();
+                    return Failed(
+                        MaterialDependencyClosureFailure.MissingCurrentMaterial);
             }
 
             foreach (var observation in observations)
@@ -216,13 +218,18 @@ namespace Alrauna.Amuse.Editor.Host
                         continue;
                     }
 
-                    if (slot >= currentSlots.Count) return Failed();
+                    if (slot >= currentSlots.Count)
+                    {
+                        return Failed(
+                            MaterialDependencyClosureFailure.SlotOutOfRange);
+                    }
                     foreach (var value in binding.Values)
                     {
                         if (!(value is Material material) ||
                             !TryAdmit(material, out _))
                         {
-                            return Failed();
+                            return Failed(
+                                MaterialDependencyClosureFailure.InvalidSwapValue);
                         }
                     }
                 }
@@ -235,7 +242,8 @@ namespace Alrauna.Amuse.Editor.Host
                 if (!attestor(admitted[index], out families[index], out requests[index]) ||
                     requests[index] == null)
                 {
-                    return Failed();
+                    return Failed(
+                        MaterialDependencyClosureFailure.UnattestedMaterial);
                 }
             }
 
@@ -246,7 +254,8 @@ namespace Alrauna.Amuse.Editor.Host
                     closedRequest,
                     out var capturedMaterials))
             {
-                return Failed();
+                return Failed(
+                    MaterialDependencyClosureFailure.CaptureFailed);
             }
             if (capturedMaterials == null ||
                 capturedMaterials.Count != admitted.Count)
@@ -299,7 +308,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return new CapturedAnimationEvidence(
-                true,
+                MaterialDependencyClosureFailure.None,
                 closedRequest,
                 clips,
                 new List<CapturedAlphaMaterial>(capturedMaterials),

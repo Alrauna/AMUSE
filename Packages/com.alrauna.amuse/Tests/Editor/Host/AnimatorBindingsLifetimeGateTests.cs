@@ -4,6 +4,7 @@ using System.Linq;
 using Alrauna.Amuse.Tests.Editor.Build;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
+using nadena.dev.ndmf.platform;
 using NUnit.Framework;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -15,6 +16,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 {
     public sealed class AnimatorBindingsLifetimeGateTests
     {
+        internal const string BindingsLifetimeGatePlatformName =
+            "com.alrauna.amuse.tests.bindings-lifetime";
+
         internal sealed class GateProbe
         {
             internal IPlatformAnimatorBindings Captured;
@@ -34,6 +38,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             internal Exception Failure;
         }
 
+        [RunsOnPlatforms(BindingsLifetimeGatePlatformName)]
         internal sealed class BindingsLifetimeGatePlugin : Plugin<BindingsLifetimeGatePlugin>
         {
             public override string QualifiedName =>
@@ -155,6 +160,26 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void LifetimePluginIsConfinedToItsDedicatedPlatform()
+        {
+            var attribute = System.Reflection.CustomAttributeData
+                .GetCustomAttributes(typeof(BindingsLifetimeGatePlugin))
+                .Single(value =>
+                    value.AttributeType == typeof(RunsOnPlatforms));
+            var platforms = attribute.ConstructorArguments
+                .SelectMany(argument => argument.Value is
+                    IReadOnlyCollection<System.Reflection.CustomAttributeTypedArgument>
+                        values
+                        ? values
+                        : new[] { argument })
+                .Select(argument => argument.Value as string)
+                .ToArray();
+
+            CollectionAssert.AreEqual(
+                new[] { BindingsLifetimeGatePlatformName }, platforms);
+        }
+
+        [Test]
         public void CapturedBindingsRemainUsableAfterContextDeactivation()
         {
             using var armed = AmusePlatformFinishPluginTests.SyntheticPluginScope.Arm();
@@ -164,7 +189,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, AmusePlatformFinishPluginTests.TestVrchatPlatform.Instance);
+                    root, BindingsLifetimePlatform.Instance);
                 var probe = context.GetState<GateProbe>();
 
                 Assert.That(probe.CaptureRan, Is.True, "capture pass did not run");
@@ -226,7 +251,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     "fixture controller identities must be distinct");
 
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, AmusePlatformFinishPluginTests.TestVrchatPlatform.Instance);
+                    root, BindingsLifetimePlatform.Instance);
                 var probe = context.GetState<GateProbe>();
 
                 Assert.That(probe.Failure, Is.Null);
@@ -284,6 +309,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 if (secondController != null)
                     UnityEngine.Object.DestroyImmediate(secondController);
             }
+        }
+
+        private sealed class BindingsLifetimePlatform : INDMFPlatformProvider
+        {
+            internal static readonly BindingsLifetimePlatform Instance =
+                new BindingsLifetimePlatform();
+
+            public string QualifiedName => BindingsLifetimeGatePlatformName;
+            public string DisplayName => "AMUSE bindings lifetime gate";
         }
     }
 }

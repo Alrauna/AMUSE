@@ -5,6 +5,16 @@ using Alrauna.Amuse.Editor.Semantics;
 
 namespace Alrauna.Amuse.Editor.Host
 {
+    internal enum MaterialDependencyClosureFailure
+    {
+        None,
+        MissingCurrentMaterial,
+        SlotOutOfRange,
+        InvalidSwapValue,
+        UnattestedMaterial,
+        CaptureFailed,
+    }
+
     internal sealed class CapturedFloatBinding
     {
         internal CapturedFloatBinding(
@@ -109,7 +119,7 @@ namespace Alrauna.Amuse.Editor.Host
     internal sealed class CapturedAnimationEvidence
     {
         internal CapturedAnimationEvidence(
-            bool isClosed,
+            MaterialDependencyClosureFailure closureFailure,
             MaterialEvidenceRequest relevanceRequest,
             IList<CapturedClipEvidence> clips,
             IList<CapturedAlphaMaterial> admittedMaterials,
@@ -117,7 +127,7 @@ namespace Alrauna.Amuse.Editor.Host
             bool hasUnnormalizedDirectBlendTree,
             bool hasAdditiveLayer)
         {
-            IsClosed = isClosed;
+            ClosureFailure = closureFailure;
             RelevanceRequest = relevanceRequest
                 ?? throw new ArgumentNullException(nameof(relevanceRequest));
             Clips = new ReadOnlyCollection<CapturedClipEvidence>(
@@ -130,7 +140,9 @@ namespace Alrauna.Amuse.Editor.Host
             HasAdditiveLayer = hasAdditiveLayer;
         }
 
-        internal bool IsClosed { get; }
+        internal bool IsClosed =>
+            ClosureFailure == MaterialDependencyClosureFailure.None;
+        internal MaterialDependencyClosureFailure ClosureFailure { get; }
         internal MaterialEvidenceRequest RelevanceRequest { get; }
         internal IReadOnlyList<CapturedClipEvidence> Clips { get; }
         internal IReadOnlyList<CapturedAlphaMaterial> AdmittedMaterials { get; }

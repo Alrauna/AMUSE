@@ -33,6 +33,7 @@ namespace Alrauna.Amuse.Research.Census
         None,
         UnsupportedRendererType,
         MaterialPropertyOverridesPresent,
+        MaterialDependencyClosureFailed,
         UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
         UnprovenMaterialSlotMapping,
@@ -46,6 +47,7 @@ namespace Alrauna.Amuse.Research.Census
         AnimatedPropertyAbsentFromAdmittedMaterial,
         UnsupportedAnimationCurveForm,
         AnimatedMaterialPropertyNotSingleton,
+        AdmittedMaterialSemanticsUnknown,
     }
 
     /// <summary>
