@@ -31,6 +31,9 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.MaterialPropertyOverridesPresent:
                     return Census.RendererRefusal
                         .MaterialPropertyOverridesPresent;
+                case RendererAnalysisRefusal.MaterialDependencyClosureFailed:
+                    return Census.RendererRefusal
+                        .MaterialDependencyClosureFailed;
                 case RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding:
                     return Census.RendererRefusal
                         .UnrecognizedAnimatedMaterialBinding;
@@ -64,6 +67,9 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton:
                     return Census.RendererRefusal
                         .AnimatedMaterialPropertyNotSingleton;
+                case RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown:
+                    return Census.RendererRefusal
+                        .AdmittedMaterialSemanticsUnknown;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),
