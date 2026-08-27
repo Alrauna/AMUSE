@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -106,6 +107,57 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(assignment.IsAssigned, Is.False);
             Assert.That(assignment.HasScaleOffset, Is.True);
             Assert.That(assignment.Texture, Is.Null);
+        }
+
+        [Test]
+        public void AlphaMaskIsRequestedForAssignmentOnly()
+        {
+            // The Replace-mode interpretation needs only "is a mask bound"; it
+            // never samples the mask. Requesting any further texture fact would
+            // be unused evidence and would widen animation relevance.
+            var poiyomi = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+
+            var mask = poiyomi.TextureProperties.FirstOrDefault(
+                texture => texture.PropertyName == "_AlphaMask");
+            Assert.That(
+                mask.PropertyName,
+                Is.EqualTo("_AlphaMask"),
+                "the Poiyomi alpha request must include _AlphaMask");
+            Assert.That(
+                mask.Evidence, Is.EqualTo(TextureEvidenceKinds.None));
+        }
+
+        [Test]
+        public void AlphaMaskAssignmentIsCapturedWithoutUnusedTextureFacts()
+        {
+            var texture = ImportAsymmetric(TempFolder + "/mask.png");
+            var assignedMaterial = NewMaterial(PoiyomiFixtureShader);
+            assignedMaterial.SetTexture("_AlphaMask", texture);
+            var unassignedMaterial = NewMaterial(PoiyomiFixtureShader);
+            unassignedMaterial.SetTexture("_AlphaMask", null);
+            var request = Request(
+                textures: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_AlphaMask", TextureEvidenceKinds.None),
+                });
+
+            var assigned = Capture(assignedMaterial, request);
+            var unassigned = Capture(unassignedMaterial, request);
+
+            Assert.That(
+                assigned.TryGetTexture("_AlphaMask", out var bound), Is.True);
+            Assert.That(bound.IsAssigned, Is.True);
+            Assert.That(
+                bound.RequestedEvidence,
+                Is.EqualTo(TextureEvidenceKinds.None));
+            Assert.That(bound.HasScaleOffset, Is.False);
+            Assert.That(bound.Texture.HasSourceIdentity, Is.False);
+            Assert.That(bound.Texture.HasSampling, Is.False);
+
+            Assert.That(
+                unassigned.TryGetTexture("_AlphaMask", out var empty), Is.True);
+            Assert.That(empty.IsAssigned, Is.False);
         }
 
         [Test]

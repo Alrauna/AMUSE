@@ -35,6 +35,9 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _AlphaMod ("Alpha Mod", Float) = 0
         _MainAlphaMaskMode ("Alpha Mask Mode", Float) = 2
         _AlphaMask ("Alpha Mask", 2D) = "white" {}
+        _AlphaMaskBlendStrength ("Alpha Mask Blend Strength", Float) = 1
+        _AlphaMaskValue ("Alpha Mask Blend Offset", Float) = 0
+        _AlphaMaskInvert ("Alpha Mask Invert", Float) = 0
         _AlphaToCoverage ("A2C", Float) = 0
         _AlphaSharpenedA2C ("Sharpened A2C", Float) = 0
         _AlphaDithering ("Alpha Dithering", Float) = 0
