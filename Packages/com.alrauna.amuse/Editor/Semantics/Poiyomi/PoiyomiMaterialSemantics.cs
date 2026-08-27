@@ -1398,7 +1398,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 shader, evidence, AlphaRequiredSchemaProperties);
         }
 
-        private static PoiyomiSourceEvidence GatherSourceEvidence(
+        /// <summary>
+        /// Assembly-internal so a second frontend-owned schema can reuse it:
+        /// <see cref="PoiyomiOpaqueConversion.GatherConversionSourceEvidence"/>
+        /// passes the conversion schema exactly as
+        /// <see cref="GatherAlphaSourceEvidence"/> passes the alpha schema.
+        /// Body, signature and every existing caller are unchanged.
+        /// </summary>
+        internal static PoiyomiSourceEvidence GatherSourceEvidence(
             Shader shader,
             CapturedMaterialEvidence evidence,
             IReadOnlyCollection<string> requiredSchemaProperties)
