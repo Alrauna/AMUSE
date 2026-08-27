@@ -139,7 +139,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConstant(Interpret(material), 0.25f);
         }
 
+        [Test]
+        public void ReplaceNoMask_IgnoresUnprovableBaseAlphaInputs()
+        {
+            // Replace discards the base alpha term, so nothing that feeds it is
+            // interpreted: a non-binary _MainIgnoreTexAlpha, a non-finite
+            // _Color.a, and a _MainTex whose sampling state is unsupported would
+            // each refuse on the mask-off path, yet none of them can reach the
+            // Replace result. Pins that the shortcut reads only mask inputs.
+            var material = ReplaceMaterial();
+            material.SetFloat("_MainIgnoreTexAlpha", 0.5f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, float.NaN));
+            material.SetTexture("_MainTex", ImportTexture("replace_unused"));
+            material.SetFloat("_MainTexUV", 5f);
+            material.SetFloat("_MainPixelMode", 1f);
+
+            AssertConstant(Interpret(material), 1f);
+        }
+
         // --- Replace refusals ----------------------------------------------
+
+        [Test]
+        public void ReplaceDoesNotBypassAlphaFeatureGates()
+        {
+            // The existing alpha writers are proven off before the mask is
+            // interpreted. _AlphaMod adds to the alpha term downstream of the
+            // mask, so a Replace constant must not short-circuit past it.
+            var material = ReplaceMaterial();
+            material.SetFloat("_AlphaMod", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_AlphaMod");
+        }
 
         [Test]
         public void ReplaceWithAssignedMask_IsUnsupportedFeature()
