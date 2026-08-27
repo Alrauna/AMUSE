@@ -42,6 +42,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_Cutoff",
             "_SrcBlend",
             "_DstBlend",
+
+            // The remaining render state the fixture declares. The
+            // opaque-conversion capability reads most of these, and none of
+            // them may reach any semantic output: unknown or gate-failing
+            // conversion state must refuse conversion only, never widen or
+            // narrow ordinary alpha analysis.
+            "_BlendOp",
+            "_BlendOpAlpha",
+            "_SrcBlendAlpha",
+            "_DstBlendAlpha",
+            "_AddBlendOp",
+            "_AddSrcBlend",
+            "_AddDstBlend",
+            "_AddBlendOpAlpha",
+            "_AddSrcBlendAlpha",
+            "_AddDstBlendAlpha",
+            "_ZWrite",
+            "_ZTest",
+            "_EnableOutlines",
+            "_OutlineBlendOp",
+            "_OutlineSrcBlend",
+            "_OutlineDstBlend",
+            "_OutlineBlendOpAlpha",
+            "_OutlineSrcBlendAlpha",
+            "_OutlineDstBlendAlpha",
         };
 
         private static PoiyomiSemanticResult Interpret(Material material)
