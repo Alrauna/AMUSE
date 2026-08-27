@@ -238,6 +238,33 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void AlphaMaskScalarRequestsAreProofRelevant(
+            [Values(
+                "_MainAlphaMaskMode",
+                "_AlphaMaskBlendStrength",
+                "_AlphaMaskValue",
+                "_AlphaMaskInvert",
+                "_PoiParallax")] string property)
+        {
+            // The mask interpretation reads these, so animating any of them must
+            // reach the existing admitted-state machinery rather than being
+            // classified Irrelevant. Relevance comes from the request alone; no
+            // new animation code is involved.
+            var relevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+
+            Assert.That(
+                relevance.ScalarProperties, Contains.Item(property));
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material." + property),
+                    "Body",
+                    relevance,
+                    out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(reference.PropertyName, Is.EqualTo(property));
+        }
+
+        [Test]
         public void ScaleOffsetRequestMakesTheDerivedStPropertyRelevant()
         {
             var relevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
