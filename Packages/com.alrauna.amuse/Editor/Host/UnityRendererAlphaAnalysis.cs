@@ -10,17 +10,83 @@ namespace Alrauna.Amuse.Editor.Host
     /// The closed set of facts that make a whole renderer unanalyzable. Each
     /// member is a renderer- or mesh-scoped condition; everything a single
     /// material or triangle can fail at is scoped narrower and never reaches
-    /// this enum. Declaration order is the order the checks run in.
+    /// this enum. Declaration order is mirrored by the research census
+    /// vocabulary. Runtime refusal precedence is defined by the analysis
+    /// pipeline, not this enum.
     /// </summary>
     internal enum RendererAnalysisRefusal
     {
         None,
         UnsupportedRendererType,
         MaterialPropertyOverridesPresent,
+        MaterialDependencyClosureFailed,
+        UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
         UnprovenMaterialSlotMapping,
         UnsupportedTopology,
         MalformedMeshData,
+        AnimatedMeshReplacement,
+        AnimatedMaterialSlotCount,
+
+        /// <summary>
+        /// This renderer has a proof-relevant animated material property while
+        /// the committed graph contains an additive layer. Captured graph facts
+        /// carry no per-binding provenance, so V1 cannot prove that the additive
+        /// contribution leaves this renderer's singleton property value intact.
+        /// </summary>
+        AdditiveLayerWithProofRelevantMaterialProperty,
+
+        /// <summary>
+        /// This renderer has a proof-relevant animated material property while
+        /// the committed graph contains a Direct Blend Tree whose values are not
+        /// normalized. Captured graph facts carry no per-binding provenance, so
+        /// V1 cannot prove that the unbounded weighted sum leaves this renderer's
+        /// singleton property value intact.
+        /// </summary>
+        UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
+
+        AdmittedStateBudgetExceeded,
+
+        /// <summary>
+        /// A proof-relevant animated material property is absent from an
+        /// admitted material. Task 5 observed that a bare
+        /// <c>material.&lt;Property&gt;</c> curve for a property the material
+        /// does not declare is still sampled into a non-empty renderer-wide
+        /// <c>MaterialPropertyBlock</c>, but that observation cannot establish
+        /// whether a shader that does not declare the property ignores the
+        /// write when rendering. The design therefore takes the fail-closed
+        /// branch and refuses rather than preserving absence and ignoring the
+        /// animated value. Substitution preserving <c>HasValue == false</c> is
+        /// a property of the evidence primitive, never authorization to ignore
+        /// the binding: this refusal must be returned before any substitution
+        /// for that admitted material is treated as authorized.
+        /// </summary>
+        AnimatedPropertyAbsentFromAdmittedMaterial,
+
+        /// <summary>
+        /// A proof-relevant animated property is driven by a curve whose exact
+        /// value set cannot be enumerated. Finite-exactness is a precondition
+        /// of admission rather than a tie-breaker among agreeing values: a
+        /// curve whose sampled endpoints happen to equal the serialized default
+        /// still passes through unproven intermediate values.
+        /// </summary>
+        UnsupportedAnimationCurveForm,
+
+        /// <summary>
+        /// The sources contributing to one proof-relevant animated property do
+        /// not agree on a single exact value, so its admitted set is not a
+        /// singleton. Under V1 the admitted set is
+        /// the animated values together with that material's own captured default,
+        /// so an animated value differing from the default is exactly this
+        /// refusal: animation never overrides a differing default.
+        /// </summary>
+        AnimatedMaterialPropertyNotSingleton,
+
+        /// <summary>
+        /// At least one admitted material resolved to the all-Unknown alpha
+        /// equation, so the slot has no attested alpha semantics to classify.
+        /// </summary>
+        AdmittedMaterialSemanticsUnknown,
     }
 
     /// <summary>
@@ -169,6 +235,7 @@ namespace Alrauna.Amuse.Editor.Host
             var extraction = Capture(
                 renderer,
                 semanticsProvider,
+                null,
                 out var capturedSemantics);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(
@@ -182,12 +249,51 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
         {
-            return Capture(renderer, null, out _);
+            return Capture(renderer, null, null, out _);
+        }
+
+        /// <summary>
+        /// Captures only renderer and mesh geometry while carrying forward the
+        /// already-closed immutable material slots. This path deliberately never
+        /// reads <see cref="Renderer.sharedMaterials"/> or recaptures material
+        /// semantics.
+        /// </summary>
+        internal static UnityRendererAlphaExtraction CaptureGeometry(
+            Renderer renderer,
+            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots)
+        {
+            if (capturedMaterialSlots == null)
+            {
+                throw new ArgumentNullException(nameof(capturedMaterialSlots));
+            }
+
+            return Capture(renderer, null, capturedMaterialSlots, out _);
+        }
+
+        /// <summary>
+        /// Performs the host facts whose named renderer refusal must take
+        /// precedence over animation-evidence closure. Geometry is deliberately
+        /// excluded: runtime-state admission and its budget must run before any
+        /// topology, vertex, UV, or index inspection.
+        /// </summary>
+        internal static RendererAnalysisRefusal HostStructuralRefusalFor(
+            Renderer renderer)
+        {
+            var refusal = HostStructuralRefusalFor(renderer, out var mesh);
+            if (refusal != RendererAnalysisRefusal.None)
+            {
+                return refusal;
+            }
+
+            var materials = renderer.sharedMaterials;
+            return MaterialSlotMappingRefusalFor(
+                mesh, materials == null ? -1 : materials.Length);
         }
 
         private static UnityRendererAlphaExtraction Capture(
             Renderer renderer,
             BaseMaterialSemanticsProvider legacySemanticsProvider,
+            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots,
             out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
                 legacySemantics)
         {
@@ -205,35 +311,23 @@ namespace Alrauna.Amuse.Editor.Host
                     nameof(renderer));
             }
 
-            if (!IsSupportedRendererType(renderer))
+            var structural = HostStructuralRefusalFor(renderer, out var mesh);
+            if (structural != RendererAnalysisRefusal.None)
+                return UnityRendererAlphaExtraction.Refused(structural);
+
+            Material[] materials = null;
+            var materialSlotCount = capturedMaterialSlots == null
+                ? -1
+                : capturedMaterialSlots.Count;
+            if (capturedMaterialSlots == null)
             {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.UnsupportedRendererType);
+                materials = renderer.sharedMaterials;
+                materialSlotCount = materials == null ? -1 : materials.Length;
             }
 
-            // Presence only. Reading the block's contents would be
-            // effective-state analysis, which this milestone does not do; a
-            // block that overrides nothing alpha-relevant is refused anyway,
-            // which is a false negative and therefore the safe direction.
-            if (renderer.HasPropertyBlock())
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MaterialPropertyOverridesPresent);
-            }
-
-            var mesh = SharedMeshOf(renderer);
-            if (mesh == null)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MissingMesh);
-            }
-
-            var materials = renderer.sharedMaterials;
-            if (materials == null || materials.Length != mesh.subMeshCount)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.UnprovenMaterialSlotMapping);
-            }
+            structural = MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
+            if (structural != RendererAnalysisRefusal.None)
+                return UnityRendererAlphaExtraction.Refused(structural);
 
             for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
             {
@@ -295,13 +389,22 @@ namespace Alrauna.Amuse.Editor.Host
                     submesh, submesh, indices);
             }
 
-            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(materials);
-            var capturedSlots = new CapturedAlphaMaterial[captured.Count];
-            for (var index = 0; index < captured.Count; index++)
+            var capturedSlots = new CapturedAlphaMaterial[materialSlotCount];
+            if (capturedMaterialSlots == null)
             {
-                capturedSlots[index] = materials[index] == null
-                    ? null
-                    : captured[index];
+                var captured =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(materials);
+                for (var index = 0; index < captured.Count; index++)
+                {
+                    capturedSlots[index] = materials[index] == null
+                        ? null
+                        : captured[index];
+                }
+            }
+            else
+            {
+                for (var index = 0; index < capturedSlots.Length; index++)
+                    capturedSlots[index] = capturedMaterialSlots[index];
             }
 
             if (legacySemanticsProvider != null)
@@ -336,8 +439,51 @@ namespace Alrauna.Amuse.Editor.Host
                 submeshes,
                 capturedSlots);
             var target = new UnityRendererMutationTarget(
-                renderer, mesh, materials.Length);
+                renderer, mesh, materialSlotCount);
             return UnityRendererAlphaExtraction.Accepted(snapshot, target);
+        }
+
+        private static RendererAnalysisRefusal HostStructuralRefusalFor(
+            Renderer renderer,
+            out Mesh mesh)
+        {
+            if (ReferenceEquals(renderer, null))
+            {
+                throw new ArgumentNullException(nameof(renderer));
+            }
+
+            // Unity's overloaded equality reports a destroyed object as null.
+            if (renderer == null)
+            {
+                throw new ArgumentException(
+                    "The renderer has been destroyed and cannot be analyzed.",
+                    nameof(renderer));
+            }
+
+            mesh = null;
+            if (!IsSupportedRendererType(renderer))
+                return RendererAnalysisRefusal.UnsupportedRendererType;
+
+            // Presence only. Reading the block's contents would be
+            // effective-state analysis, which this milestone does not do; a
+            // block that overrides nothing alpha-relevant is refused anyway,
+            // which is a false negative and therefore the safe direction.
+            if (renderer.HasPropertyBlock())
+                return RendererAnalysisRefusal.MaterialPropertyOverridesPresent;
+
+            mesh = SharedMeshOf(renderer);
+            return mesh == null
+                ? RendererAnalysisRefusal.MissingMesh
+                : RendererAnalysisRefusal.None;
+        }
+
+        private static RendererAnalysisRefusal MaterialSlotMappingRefusalFor(
+            Mesh mesh,
+            int materialSlotCount)
+        {
+            return materialSlotCount != mesh.subMeshCount
+                ? RendererAnalysisRefusal.UnprovenMaterialSlotMapping
+                : RendererAnalysisRefusal.None;
         }
 
         internal static RendererAlphaAnalysis Analyze(
@@ -426,7 +572,7 @@ namespace Alrauna.Amuse.Editor.Host
             return resolution;
         }
 
-        private static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
+        internal static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
             GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
         {
             var fields = new Dictionary<TextureSourceId, AlphaTextureData>();
@@ -471,7 +617,7 @@ namespace Alrauna.Amuse.Editor.Host
         /// negative on malformed data, which is the acceptable direction.
         /// </para>
         /// </summary>
-        private static TriangleAlphaOutcome[] Classify(
+        internal static TriangleAlphaOutcome[] Classify(
             IReadOnlyList<int> indices,
             IReadOnlyList<Vector3> positions,
             IReadOnlyList<Vector2> uv,
@@ -519,6 +665,117 @@ namespace Alrauna.Amuse.Editor.Host
             return outcomes;
         }
 
+        /// <summary>
+        /// The proof intersection across every distinct admitted material
+        /// state, one input array per state, all classifying the same ordered
+        /// triangle set. A triangle is <c>ProvenOpaque</c> only when every
+        /// state proves it opaque and <c>MustRemainTransparent</c> only when
+        /// every state agrees on that; any disagreement — including agreement
+        /// on a definite outcome spoiled by a single Unknown — is Unknown.
+        /// This is consensus, not a severity ranking: no outcome outranks
+        /// another, and nothing survives that one admitted state contradicts.
+        /// <para>
+        /// An empty outer list is a programming defect, not an unsupported
+        /// input, and throws. Universal quantification over no states is
+        /// vacuously true, so returning here would prove every triangle opaque
+        /// under no evidence at all — the false-positive direction. Task 20's
+        /// <c>DistinctResolutions</c> deliberately preserves an empty set so
+        /// that this layer, and only this layer, rejects it.
+        /// </para>
+        /// <para>
+        /// Nonempty states classifying zero triangles is a different thing
+        /// entirely and is not a defect: an empty submesh is accepted upstream,
+        /// and intersecting over an empty triangle domain yields no outcomes.
+        /// </para>
+        /// <para>
+        /// Arrays of differing length mean the states did not classify the same
+        /// triangles, so nothing can be intersected index-wise. Truncating,
+        /// padding, or filling the gap with Unknown would each answer a
+        /// question about triangles no caller established, so it throws.
+        /// </para>
+        /// <para>
+        /// Duplicate inputs are harmless — intersection is idempotent, so
+        /// under-deduplication upstream costs a pass and never a proof — and
+        /// this method deliberately contains no equivalence heuristic of its
+        /// own. The result is always freshly allocated; a single state is
+        /// intersection with nothing, so its outcomes pass through by value
+        /// without the caller receiving an alias of its input.
+        /// </para>
+        /// </summary>
+        internal static TriangleAlphaOutcome[] IntersectOutcomes(
+            IReadOnlyList<TriangleAlphaOutcome[]> perResolutionOutcomes)
+        {
+            if (perResolutionOutcomes == null)
+            {
+                throw new ArgumentNullException(nameof(perResolutionOutcomes));
+            }
+
+            if (perResolutionOutcomes.Count == 0)
+            {
+                throw new ArgumentException(
+                    "Intersecting no admitted states would prove every " +
+                    "triangle opaque by vacuous truth.",
+                    nameof(perResolutionOutcomes));
+            }
+
+            // A missing array and a differing length are distinct defects and
+            // are reported as such: a state that classified zero triangles is
+            // legal, so "no outcomes" must never be how a null array reads.
+            const string missing = "An admitted state supplied no outcome array.";
+            var first = perResolutionOutcomes[0];
+            if (first == null)
+            {
+                throw new ArgumentException(
+                    missing, nameof(perResolutionOutcomes));
+            }
+
+            var triangleCount = first.Length;
+            for (var state = 1; state < perResolutionOutcomes.Count; state++)
+            {
+                var outcomes = perResolutionOutcomes[state];
+                if (outcomes == null)
+                {
+                    throw new ArgumentException(
+                        missing, nameof(perResolutionOutcomes));
+                }
+
+                if (outcomes.Length != triangleCount)
+                {
+                    throw new ArgumentException(
+                        "Every admitted state must classify the same ordered " +
+                        "triangle set.",
+                        nameof(perResolutionOutcomes));
+                }
+            }
+
+            var intersected = new TriangleAlphaOutcome[triangleCount];
+            for (var triangle = 0; triangle < triangleCount; triangle++)
+            {
+                // Accumulating the two definite outcomes separately, rather
+                // than carrying the first state's answer forward as a
+                // candidate, keeps an unexpected enum value out of the proof:
+                // it agrees with neither quantifier and falls through to
+                // Unknown instead of being preserved as consensus.
+                var allOpaque = true;
+                var allTransparent = true;
+                for (var state = 0; state < perResolutionOutcomes.Count; state++)
+                {
+                    var outcome = perResolutionOutcomes[state][triangle];
+                    allOpaque &= outcome == TriangleAlphaOutcome.ProvenOpaque;
+                    allTransparent &=
+                        outcome == TriangleAlphaOutcome.MustRemainTransparent;
+                }
+
+                intersected[triangle] = allOpaque
+                    ? TriangleAlphaOutcome.ProvenOpaque
+                    : allTransparent
+                        ? TriangleAlphaOutcome.MustRemainTransparent
+                        : TriangleAlphaOutcome.Unknown;
+            }
+
+            return intersected;
+        }
+
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
@@ -532,6 +789,104 @@ namespace Alrauna.Amuse.Editor.Host
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        // The two renderer-local animation dimensions that invalidate the
+        // premises of every later proof rather than any one value in it: the
+        // mesh the proof is stated over, and the slot topology that maps
+        // submeshes to materials.
+        private const string AnimatedMeshProperty = "m_Mesh";
+        private const string AnimatedMaterialSlotCountProperty =
+            "m_Materials.Array.size";
+
+        /// <summary>
+        /// Whether renderer-local animation invalidates the structure the
+        /// proof rests on. Presence of the dimension is the whole test: the
+        /// replacement mesh is never inspected and animated slot counts are
+        /// never compared against the current one, because V1 has no
+        /// reconciliation theorem to apply to either.
+        /// <para>
+        /// Both captured categories are searched for both properties. Task 3
+        /// observed that Unity generates neither binding: no <c>m_Mesh</c> for
+        /// a <c>SkinnedMeshRenderer</c>, and no <c>m_Materials.Array.size</c>
+        /// at all — an authored float curve targeting the slot count changed
+        /// nothing when sampled, despite a working control. The category that
+        /// can carry a <em>working</em> structural animation is therefore
+        /// <em>unobserved</em>, in neither direction, for either property.
+        /// Searching both is a hedge against externally authored evidence, not
+        /// a claim about which category Unity emits.
+        /// </para>
+        /// <para>
+        /// Matching is exact. An <c>m_Materials.Array.data[n]</c> binding is an
+        /// ordinary material swap owned by the admitted-material machinery, and
+        /// a prefix match would refuse every avatar that swaps a material.
+        /// </para>
+        /// </summary>
+        internal static RendererAnalysisRefusal StructuralRefusalFor(
+            IReadOnlyList<CapturedFloatBinding> floats,
+            IReadOnlyList<CapturedObjectBinding> objects,
+            string rendererPath)
+        {
+            if (NamesStructuralProperty(
+                    floats, objects, rendererPath, AnimatedMeshProperty))
+            {
+                return RendererAnalysisRefusal.AnimatedMeshReplacement;
+            }
+
+            if (NamesStructuralProperty(
+                    floats,
+                    objects,
+                    rendererPath,
+                    AnimatedMaterialSlotCountProperty))
+            {
+                return RendererAnalysisRefusal.AnimatedMaterialSlotCount;
+            }
+
+            return RendererAnalysisRefusal.None;
+        }
+
+        // One property at a time, mesh first, so the reported reason follows
+        // the enum's declaration order rather than the order capture happened
+        // to record two structural bindings in.
+        private static bool NamesStructuralProperty(
+            IReadOnlyList<CapturedFloatBinding> floats,
+            IReadOnlyList<CapturedObjectBinding> objects,
+            string rendererPath,
+            string structural)
+        {
+            foreach (var binding in objects)
+            {
+                if (IsOnRenderer(binding.Path, rendererPath) &&
+                    IsProperty(binding.PropertyName, structural))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var binding in floats)
+            {
+                if (IsOnRenderer(binding.Path, rendererPath) &&
+                    IsProperty(binding.PropertyName, structural))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Ordinal path identity, matching the rest of this feature: a binding
+        // on another path says nothing about this renderer.
+        private static bool IsOnRenderer(string bindingPath, string rendererPath)
+        {
+            return string.Equals(
+                bindingPath, rendererPath, StringComparison.Ordinal);
+        }
+
+        private static bool IsProperty(string propertyName, string structural)
+        {
+            return string.Equals(
+                propertyName, structural, StringComparison.Ordinal);
         }
 
         private static bool IsSupportedRendererType(Renderer renderer)

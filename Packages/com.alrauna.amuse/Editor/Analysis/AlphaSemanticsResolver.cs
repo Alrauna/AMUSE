@@ -111,6 +111,44 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
+        /// Reports the stored uniform outcome, if this resolution has one.
+        /// <para>
+        /// This exposes an existing immutable fact so a consumer can recognize
+        /// the uniform case exactly. It is deliberately the whole of that
+        /// surface: the field, the sampling settings, and any general notion of
+        /// "kind" stay private, and the type still has no equality of its own.
+        /// A refused resolution and a classified one both answer <c>false</c>;
+        /// a caller that must tell those two apart already has
+        /// <see cref="IsResolved"/> and <see cref="Failure"/>.
+        /// </para>
+        /// <para>
+        /// The alternative — inferring uniformity from what
+        /// <see cref="Classify"/> returns for some triangle — is unsound, not
+        /// merely indirect. A classified resolution can return the same outcome
+        /// as a uniform one for any finite set of sampled triangles while
+        /// disagreeing elsewhere, so a consumer relying on that inference would
+        /// treat a varying resolution as constant. In the deduplication
+        /// consumer that is an over-merge, which shrinks a later intersection
+        /// without proof.
+        /// </para>
+        /// </summary>
+        internal bool TryGetUniformOutcome(out TriangleAlphaOutcome outcome)
+        {
+            if (IsResolved && _isUniform)
+            {
+                outcome = _uniformOutcome;
+                return true;
+            }
+
+            // Not `default`. `TriangleAlphaOutcome.ProvenOpaque` is the zero
+            // value, so defaulting would hand a caller who ignored the bool the
+            // least conservative answer in the lattice — from a method whose
+            // entire purpose is soundness. `Unknown` fails closed instead.
+            outcome = TriangleAlphaOutcome.Unknown;
+            return false;
+        }
+
+        /// <summary>
         /// Classifies one triangle under this resolution. A uniform resolution is
         /// independent of geometry and UV data and ignores the triangle: a
         /// constant alpha cannot vary across the surface. A refused resolution

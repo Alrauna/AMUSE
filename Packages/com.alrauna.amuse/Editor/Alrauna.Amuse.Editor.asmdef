@@ -1,7 +1,8 @@
 {
     "name": "Alrauna.Amuse.Editor",
     "references": [
-        "nadena.dev.ndmf"
+        "nadena.dev.ndmf",
+        "nadena.dev.ndmf.runtime"
     ],
     "includePlatforms": [
         "Editor"

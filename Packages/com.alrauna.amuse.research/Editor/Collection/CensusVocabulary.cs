@@ -31,6 +31,12 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.MaterialPropertyOverridesPresent:
                     return Census.RendererRefusal
                         .MaterialPropertyOverridesPresent;
+                case RendererAnalysisRefusal.MaterialDependencyClosureFailed:
+                    return Census.RendererRefusal
+                        .MaterialDependencyClosureFailed;
+                case RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding:
+                    return Census.RendererRefusal
+                        .UnrecognizedAnimatedMaterialBinding;
                 case RendererAnalysisRefusal.MissingMesh:
                     return Census.RendererRefusal.MissingMesh;
                 case RendererAnalysisRefusal.UnprovenMaterialSlotMapping:
@@ -39,6 +45,31 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.RendererRefusal.UnsupportedTopology;
                 case RendererAnalysisRefusal.MalformedMeshData:
                     return Census.RendererRefusal.MalformedMeshData;
+                case RendererAnalysisRefusal.AnimatedMeshReplacement:
+                    return Census.RendererRefusal.AnimatedMeshReplacement;
+                case RendererAnalysisRefusal.AnimatedMaterialSlotCount:
+                    return Census.RendererRefusal.AnimatedMaterialSlotCount;
+                case RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty:
+                    return Census.RendererRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty;
+                case RendererAnalysisRefusal
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty:
+                    return Census.RendererRefusal
+                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty;
+                case RendererAnalysisRefusal.AdmittedStateBudgetExceeded:
+                    return Census.RendererRefusal.AdmittedStateBudgetExceeded;
+                case RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial:
+                    return Census.RendererRefusal
+                        .AnimatedPropertyAbsentFromAdmittedMaterial;
+                case RendererAnalysisRefusal.UnsupportedAnimationCurveForm:
+                    return Census.RendererRefusal.UnsupportedAnimationCurveForm;
+                case RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton:
+                    return Census.RendererRefusal
+                        .AnimatedMaterialPropertyNotSingleton;
+                case RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown:
+                    return Census.RendererRefusal
+                        .AdmittedMaterialSemanticsUnknown;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),
