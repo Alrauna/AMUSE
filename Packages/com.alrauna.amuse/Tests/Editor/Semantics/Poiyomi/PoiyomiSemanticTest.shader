@@ -118,11 +118,54 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _EmissionReplace3 ("Emission 3 Override Base", Float) = 0
 
         // Render-state properties the normalized Alpha equation deliberately
-        // IGNORES (never gated): UI preset, cutoff, and blend factors.
+        // IGNORES (never gated): UI preset, cutoff, blend, depth, and outline
+        // state. The opaque-conversion capability DOES read most of these, so
+        // they reproduce the pinned Poiyomi 9.3.64 declarations exactly: same
+        // names, same types, same defaults, same ranges.
+        //
+        // _Cutoff's upper bound is 1.001, not 1, in the vendor source. That is
+        // not a typo to tidy: the vendor's own declared maximum is above 1, and
+        // the shader clips with `clip(alpha - _Cutoff)`, so a material sitting
+        // at the top of its declared range discards alpha exactly 1. The
+        // conversion eligibility boundary tests depend on 1.001 being settable
+        // here, and the range must stay vendor-faithful.
         [Enum(Opaque,0,Cutout,1,Fade,2,Transparent,3)] _Mode ("Rendering Mode", Float) = 0
-        _Cutoff ("Alpha Cutoff", Range(0,1)) = 0.5
+        _Cutoff ("Alpha Cutoff", Range(0, 1.001)) = 0.5
+
+        // Base pass blend state.
+        _BlendOp ("RGB Blend Op", Int) = 0
         _SrcBlend ("Src Blend", Float) = 1
         _DstBlend ("Dst Blend", Float) = 0
+        _BlendOpAlpha ("Alpha Blend Op", Int) = 0
+        _SrcBlendAlpha ("Alpha Source Blend", Int) = 1
+        _DstBlendAlpha ("Alpha Destination Blend", Int) = 10
+
+        // ForwardAdd pass blend state. _AddBlendOp is declared ONLY so the
+        // conversion tests can vary it and prove it changes nothing: the
+        // canonical recipe never writes it, so the unchanged blend operation
+        // cancels once the factors are proven equivalent at alpha 1. It is not
+        // a conversion-read property and must not enter conversion evidence.
+        _AddBlendOp ("RGB Blend Op", Int) = 4
+        _AddSrcBlend ("RGB Source Blend", Int) = 1
+        _AddDstBlend ("RGB Destination Blend", Int) = 1
+        _AddBlendOpAlpha ("Alpha Blend Op", Int) = 4
+        _AddSrcBlendAlpha ("Alpha Source Blend", Int) = 0
+        _AddDstBlendAlpha ("Alpha Destination Blend", Int) = 1
+
+        // Depth state.
+        _ZWrite ("ZWrite", Int) = 1
+        _ZTest ("ZTest", Float) = 4
+
+        // Outlines. _EnableOutlines gates the vendor's outline pass with
+        // `clip(_EnableOutlines - 0.01)` before any outline colour/alpha work,
+        // and also scales the vertex offset.
+        [ToggleUI] _EnableOutlines ("Enable Outlines", Float) = 0
+        _OutlineBlendOp ("RGB Blend Op", Int) = 0
+        _OutlineSrcBlend ("RGB Source Blend", Int) = 1
+        _OutlineDstBlend ("RGB Destination Blend", Int) = 0
+        _OutlineBlendOpAlpha ("Alpha Blend Op", Int) = 4
+        _OutlineSrcBlendAlpha ("Alpha Source Blend", Int) = 1
+        _OutlineDstBlendAlpha ("Alpha Destination Blend", Int) = 0
     }
 
     SubShader
