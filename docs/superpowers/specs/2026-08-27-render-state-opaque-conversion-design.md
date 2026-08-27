@@ -475,10 +475,13 @@ writes it.
 Conversion attestation is:
 
 1. capture the material with `ConversionEvidenceRequest`;
-2. `GatherConversionSourceEvidence(shader, evidence)` — a thin wrapper passing
-   `ConversionRequiredSchemaProperties` to the **existing private**
-   `PoiyomiMaterialSemantics.GatherSourceEvidence`, exactly as `GatherAlphaSourceEvidence`
-   passes the alpha schema;
+2. `GatherConversionSourceEvidence(shader, evidence)` — a thin wrapper on
+   `PoiyomiOpaqueConversion` passing `ConversionRequiredSchemaProperties` to the existing
+   parameterized `PoiyomiMaterialSemantics.GatherSourceEvidence`, exactly as
+   `GatherAlphaSourceEvidence` passes the alpha schema. That gatherer is currently `private`
+   and becomes assembly-`internal` so the conversion-owned wrapper can call it; its body,
+   signature and every existing caller are unchanged. The conversion class owns its own
+   schema array;
 3. `PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(evidence, out _)`, reused unchanged.
 
 No hashing, GUID lookup, package check, locked-state check or identity conjunction is
