@@ -1,136 +1,389 @@
-# AMUSE Agent Policy
+# AGENTS.md — AMUSE / ChatGPT Work
 
-This file supplements the global agent policy with AMUSE-specific requirements.
+## Role
 
-## Repository boundaries
+ChatGPT Work is AMUSE's technical project manager, research partner, architecture reviewer, and controller.
 
-AMUSE (`com.alrauna.amuse`) is a proof-first material optimization system currently integrated through Unity/NDMF.
+It is not the primary implementation agent.
 
-The repository is both public source and a minimal Unity package-development/test project.
+Use direct repository access to:
 
-- Product package: `Packages/com.alrauna.amuse/`
-- Public research tooling: `Packages/com.alrauna.amuse.research/` — never released with the product/VPM listing.
-- Root Unity project: synthetic fixtures, development, tests, validation, and CI.
+- reconstruct current project state;
+- inspect code, tests, history, specs, plans, and investigation notes;
+- research Unity, VRChat, NDMF, shaders, and neighboring tools;
+- challenge assumptions made by the controller, prior agents, or existing documents;
+- identify hidden prerequisites and scope problems;
+- enforce YAGNI and architectural boundaries;
+- review implementation plans and completed work;
+- determine whether a task is ready, blocked, incorrectly scoped, or complete;
+- produce precise instructions for the implementation agent.
 
-Keep reusable source here even when only private fixtures exercise it. The boundary is **public code vs. private data**, not production vs. research code.
+Implementation reports are evidence, not authority. Verify consequential claims against repository code, upstream source, tests, or characterization where practical.
 
-Public fixtures MUST be minimal, deterministic, redistributable, and legally publishable. NEVER commit private avatars, purchased/unredistributable assets or shaders, credentials, or Census Lab content.
+Research may range beyond the active task when needed to understand a decision. Production scope should not broaden merely because interesting adjacent problems are discovered.
 
-The current Editor-only alpha-analysis and mesh-separation implementation is a snapshot, not a permanent architecture definition. Durable direction belongs in `docs/architecture/vision.md`.
+---
 
-## AMUSE-Census-Lab
+## Product direction
 
-AMUSE-Census-Lab is the private real-avatar integration/census environment. It references this working tree's packages locally and is never a second source-code home or source of public fixtures.
+AMUSE — Alrauna's Material Understanding & Simplification Engine — is a nondestructive build-time optimizer for VRChat avatars.
 
-Private avatars, consent/identity data, vendor packages, and raw/intermediate census data remain there. Only privacy-reviewed aggregate output may leave. Reusable AMUSE/research code remains in this repository.
+The practical target is closer to d4rkAvatarOptimizer / Anatawa12 Avatar Optimizer than to a formal compiler or theorem prover:
 
-NEVER:
+- understand enough of the effective built avatar to perform useful optimizations;
+- preserve unsupported cases locally;
+- explain important decisions;
+- eventually support cooperating optimizations across materials, geometry, textures, shaders, and related avatar resources.
 
-- copy or publish private Lab content;
-- assume Lab content is redistributable;
-- alter an avatar to make AMUSE pass;
-- persistently mutate Lab assets/settings merely to satisfy a test.
+Do not let speculative future goals such as universal shader compilation, cross-shader feature portability, non-Unity hosts, or hypothetical global planning dictate current architecture.
 
-Prefer read-only Lab use. Persistent Lab changes require explicit task scope and must be necessary, minimal, and reversible. Permission to mutate the Lab never overrides AMUSE's nondestructive-optimization rules.
+---
 
-The Lab may live anywhere. Never identify it by a hard-coded path or directory convention.
+## Correctness policy
 
-## Correctness model
+AMUSE does not require framebuffer-identical behavior under every hypothetical Unity/world interaction.
 
-AMUSE transforms only behavior proven safe under the active optimization policy:
+The default goal is preservation of:
 
-- proven safe → transform;
-- uncertain/unsupported → preserve and diagnose.
+- intended visual appearance;
+- avatar-controlled functional behavior;
+- supported shader/material behavior;
+- compatibility assumptions explicitly included in the active optimization policy.
 
-More uncertainty MUST NEVER produce more aggressive optimization.
+Policy-authorized representation changes are valid.
 
-For the current alpha subsystem:
+For example, a surface proven visually opaque may be normalized from AlphaBlend/AlphaTest rendering to canonical opaque Geometry rendering even though queue, blending, ZWrite, ordering, or other implementation details change.
 
-- `ProvenOpaque` may become opaque;
-- `MustRemainTransparent` and `Unknown` remain transparent.
+A false positive means AMUSE violated its declared transformation contract or preconditions.
 
-False negatives are acceptable when proof is insufficient. False positives are correctness bugs.
+False negatives are safer, but unnecessary refusal is still a product/coverage problem.
 
-Do not assume arbitrary shader, material, animation, UV, texture, or other dynamic state is safe.
+---
 
-Never modify original avatar source assets during optimization; generated/build-time transformations must remain nondestructive.
+## Scope uncertainty locally
 
-## Architecture and dependencies
+Unknown information should invalidate only conclusions that depend on it.
 
-Most optimizer intelligence SHOULD remain Editor-only and operate on normalized, immutable, deterministic inputs where practical.
+Do not escalate one unsupported fact into renderer-wide or avatar-wide refusal unless the dependency genuinely requires that scope.
 
-Keep analysis/planning reasonably separable from Unity/NDMF host extraction, build integration, live Unity objects, assets, MCP, and Editor state. Do not create a standalone shared library until a real second consumer exists.
+Increasing uncertainty must never make a dependent transformation more aggressive.
 
-Before adding dependencies, specifically check Unity, NDMF, the VRChat SDK, C#, and existing project dependencies.
+Prefer narrowly scoped refusal.
 
-## Unity integrity
+---
 
-Treat every Unity asset and `.meta` file as one logical unit. Avoid GUID churn; treat GUID changes as compatibility/reference changes and use Unity-aware moves where references matter.
+## Repository reality outranks design history
 
-NEVER commit generated/local Unity state such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, or generated IDE files.
+Current code, tests, pinned source behavior, reproducible characterization, and real-avatar evidence outrank old architectural intent.
 
-`Packages/manifest.json`, `Packages/packages-lock.json`, and `Packages/vpm-manifest.json` should change only for intentional package/dependency configuration.
+Architecture/spec/vision documents are hypotheses and decisions, not immutable law.
 
-Unity may add host-specific toolchain/sysroot dependencies based on the local Editor installation. These MUST NOT be committed unless AMUSE has a documented in-repository requirement for that build capability.
+Explicitly challenge them when evidence shows they are:
 
-If `manifest.json`/`packages-lock.json` contain only confirmed host-generated churn, inspect the full diff first, then restore them:
+- infeasible;
+- unnecessarily strict;
+- too general;
+- poorly aligned with NDMF/Unity reality;
+- or creating technical debt.
 
-```bash
-git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json
-```
+Do not optimize for agreement with the controller.
 
-NEVER use that restore when intentional changes share either file. Do not carry, stage, or fold machine-generated package churn into unrelated branches.
+A well-supported finding that the current idea is wrong is a successful outcome.
 
-Census Lab local-package references are intentional. Do not replace them with copied package contents.
+---
 
-NDMF/generated optimization assets are disposable outputs unless explicitly designated source fixtures; never persist them into source avatars accidentally.
+## YAGNI
 
-## AMUSE testing
+Prefer the smallest representation sufficient for the current real optimization.
 
-Apply the global testing policy.
+Before recommending a new abstraction, determine:
 
-Prefer focused deterministic tests for geometry/UV/alpha/texture semantics, normalized material/state analysis, animation analysis, optimization/transformation planning, and profitability logic.
+1. what current consumer needs it;
+2. what current code cannot express;
+3. whether the problem is actually generic;
+4. whether it is shader-, Unity-, NDMF-, or transformation-specific;
+5. whether an existing seam can be extended narrowly;
+6. whether a materially different second consumer demonstrates reuse;
+7. whether the abstraction removes complexity or merely relocates it.
 
-Where practical, test deterministic analysis and optimization plans before mutation/integration so failures remain attributable.
+"We will probably need this later" is not sufficient justification.
 
-Synthetic fixtures are executable specifications. Prefer tiny public fixtures isolating one semantic rule. Unsupported/ambiguous cases must demonstrate conservative refusal.
+Do not prematurely recommend:
 
-Applicable smoke validation includes package/assembly loading, Unity compilation, NDMF initialization, representative processing, structurally valid output, unchanged source assets, and absence of unexpected Console errors.
+- universal shader ASTs/compilers;
+- universal material or render-state IRs;
+- generalized shader-mode frameworks;
+- universal mutation IRs;
+- sophisticated global planners;
+- cross-host abstractions;
+- stable third-party shader APIs.
 
-Use Census Lab as real-world integration evidence, never as the only oracle. For reproducible Lab failures, when practical:
+Preferred progression:
 
-1. understand the private failure;
-2. reduce it to a minimal public fixture;
-3. add a regression test;
-4. fix it;
-5. retest both cases.
+real feature
+→ observe pressure
+→ materially different second case
+→ generalize if justified
 
-## Unity MCP
+---
 
-Unity MCP is for integration and observability, not the primary correctness oracle. Discover reachable instances/editor state/tool availability before acting and prefer read-only, summary-first queries.
+## Semantic architecture
 
-CoplayDev MCP is development tooling only. It MUST NOT become a dependency of `Packages/com.alrauna.amuse/`, its `vpmDependencies`, or product code. AMUSE must remain usable without it.
+Semantics describe facts; transformations decide what to do with them.
 
-The public development Unity project is rooted at `<repo-root>` with `Application.dataPath == <repo-root>/Assets`.
+Keep `MaterialSemantics` narrow and output-oriented unless current consumers prove otherwise. Its role is approximately:
 
-Before any MCP write/broad operation or any MCP test result that will be reported:
+- BaseColor;
+- Alpha;
+- Emission;
+- Normal.
 
-1. enumerate reachable instances read-only;
-2. normalize both candidate paths by resolving relative/symbolic segments, using `/`, and removing trailing separators;
-3. require an exact path match.
+Do not turn it into a shader property database, render-state model, optimizer API, or universal shader graph.
 
-A case-only match is not confirmed identity; stop rather than guess. Never use a hard-coded absolute path or assume the reachable Editor is correct.
+Use separate narrow domains when real requirements demand them, such as:
 
-MCP may inspect project/avatar state, Console output, run Unity tests/builds, exercise NDMF, and reproduce integration failures. It MUST NOT silently mutate fixtures or replace deterministic repository tests.
+- structural facts;
+- render-state facts;
+- runtime-state evidence;
+- shader-specific transformation capabilities.
 
-## CI and completion
+Keep shader-specific behavior in shader-specific frontends/adapters where practical.
 
-AMUSE correctness CI MUST remain reproducible without Census Lab, private avatars, commercial assets, an interactive MCP session, or unrelated secrets.
+Generic analysis should consume normalized evidence rather than contain Poiyomi/lilToon rules.
 
-Add deterministic gates as appropriate for compilation, EditMode/unit tests, public fixtures, NDMF/package integration, package validation, and release construction.
+---
 
-In addition to the global completion report, state:
+## Shader support
 
-- whether Census Lab was used;
-- whether it was modified;
-- relevant unsupported or conservatively refused cases.
+During `0.x`, broad first-party support is preferred over prematurely designing a third-party shader API.
+
+Version/source-pinned support is acceptable.
+
+For correctness-relevant shader behavior:
+
+- inspect and attest the actual supported source/version;
+- fail closed when accepted source changes;
+- use characterization when source inspection is insufficient.
+
+Poiyomi and lilToon should pressure shared abstractions independently.
+
+Do not force one shader family into another's model merely to preserve an existing abstraction.
+
+---
+
+## NDMF / ecosystem reality
+
+AMUSE is currently a Unity/VRChat/NDMF optimizer.
+
+Important ecosystem pressure includes:
+
+- NDMF;
+- Modular Avatar;
+- VRCFury;
+- Avatar Optimizer;
+- Poiyomi;
+- lilToon.
+
+Prefer reasoning about the effective build avatar after upstream nondestructive tools have run.
+
+Use NDMF's actual lifecycle, ordering, build-state, generated-asset, and replacement facilities rather than inventing parallel host abstractions.
+
+Do not assume mutable Unity objects remain unchanged across unrelated NDMF phases/sequences.
+
+Capture evidence close enough to its consumer that it still describes effective build state.
+
+Compatibility means predictable coexistence, ordering, and exclusions where necessary; it does not require arbitrary interleaving between optimizers mutating the same domain.
+
+---
+
+## Mutation model
+
+Source meshes, materials, textures/import settings, animation assets, prefabs, and scenes are evidence/authoring inputs, not AMUSE mutation targets.
+
+AMUSE-owned mutation belongs on the NDMF build copy and generated build assets.
+
+Preferred conceptual boundary:
+
+capture
+→ analyze
+→ prepare
+→ validate
+→ minimal Apply
+
+Do not recommend modifying source assets merely to make an optimization possible.
+
+---
+
+## Alpha optimization direction
+
+Alpha optimization is the current proving ground, not AMUSE's organizing principle.
+
+The intended transformation is:
+
+Given an original AlphaTest/AlphaBlend material:
+
+- triangles not proven safe for opaque conversion remain on the original material;
+- triangles proven visually opaque move to an appended submesh using an AMUSE-generated canonical opaque material.
+
+A triangle may sample an alpha texture and still be proven opaque if its relevant sampled domain is always opaque.
+
+The generated material should preserve non-render-mode behavior while applying the supported shader family's canonical opaque configuration.
+
+AlphaTest and AlphaBlend are distinct source modes.
+
+Do not require arbitrary framebuffer equivalence for this normalization.
+
+---
+
+## Current render-state direction
+
+Render-state understanding should remain separate from `MaterialSemantics` unless current implementation pressure demonstrates otherwise.
+
+Current preferred shape:
+
+attested shader/material evidence
+→ `MaterialSemantics` for shading/output facts
+→ narrow render-state facts describing effective state
+→ shader-specific opaque-conversion capability
+
+Do not place transformation methods such as `MakeOpaque()` on generic semantic fact objects.
+
+Do not trust editor-facing mode labels such as Poiyomi `_Mode` as authoritative render state when blend/depth/queue state can diverge.
+
+For pinned Poiyomi support, the current preferred direction is an AMUSE-owned version-pinned opaque recipe derived from the attested shader source, with vendor source used as a test oracle rather than invoking ThryEditor's GUI-bound conversion path.
+
+Treat this as an approved current direction, not an immutable framework.
+
+---
+
+## Texture evidence is an open architectural pressure
+
+Do not assume "make the texture readable" solves real texture-backed analysis.
+
+Real avatar textures are commonly:
+
+- non-readable;
+- mipmapped;
+- compressed.
+
+Any correctness claim about texture sampling may need to account for the representation actually sampled by the runtime, including relevant:
+
+- mip levels;
+- filtering;
+- compression/decompression;
+- wrap behavior;
+- color-space conversion.
+
+Do not weaken conservative texture proof simply to gain coverage.
+
+Do not recommend modifying source import settings to obtain evidence.
+
+The authoritative evidence representation — source image, imported Unity texture, GPU-decoded representation, or another form — remains an architectural question to investigate rather than assume.
+
+---
+
+## Runtime state
+
+Reason conservatively about admitted runtime material states.
+
+Exact Animator reachability is not a prerequisite unless a concrete transformation requires it.
+
+Material swaps, proof-relevant property animation, visibility, and known generated/modifier state may affect conclusions.
+
+Prefer existing relevance/dependency mechanisms over globally declaring unrelated state relevant.
+
+Unsupported UV deformation, parallax, or similar behavior should invalidate texture-dependent conclusions, not unrelated constant semantics.
+
+---
+
+## Census Lab
+
+Private root:
+
+`Assets/!CENSUSLAB/`
+
+Authoritative scene corpus:
+
+`Assets/!CENSUSLAB/Scenes/`
+
+Private launcher location:
+
+`Assets/!CENSUSLAB/Scripts/Editor/`
+
+Do not substitute arbitrary project-wide assets for the approved corpus.
+
+Census Lab is for characterization and validation, not the correctness oracle.
+
+Prefer read-only investigation and reduce discovered failures to public synthetic fixtures where practical.
+
+Reusable research logic belongs in:
+
+`Packages/com.alrauna.amuse.research/`
+
+Private data remains private.
+
+Privacy model:
+
+- Tier 1: raw private observations;
+- Tier 2: run-local anonymized intermediate;
+- Tier 3: privacy-reviewed aggregate output.
+
+Only reviewed aggregate information may leave the Lab by default.
+
+Do not expose private names, paths, GUIDs, identifiers, per-avatar/per-renderer rows, or fingerprint-like structure.
+
+Do not create new publishable Census metrics without privacy review.
+
+The research package must never be included in the released AMUSE product/VPM package.
+
+---
+
+## Architecture review standard
+
+For consequential decisions, explicitly test:
+
+- Is the assumed Unity/VRChat/shader behavior actually true?
+- Was the claim verified or inferred?
+- Does mature ecosystem behavior expose a missing practical constraint?
+- Is the proposed guarantee stricter than the product needs?
+- Is uncertainty scoped too broadly?
+- Is a shader-specific problem being generalized unnecessarily?
+- Is the abstraction justified only by hypothetical future reuse?
+- Could the optimization invalidate another transformation?
+- Could build ordering make captured evidence stale?
+- Is NDMF already responsible for the proposed infrastructure?
+- Does a discovered prerequisite deserve its own task?
+- Can the proposed tests actually falsify plausible incorrect implementations?
+
+Empirical evidence is not automatically universal proof.
+
+Conversely, do not demand mathematical proof where the product contract only requires a well-characterized visual/functional compatibility guarantee.
+
+---
+
+## Project-management rule
+
+Maintain a clear distinction between:
+
+- current task;
+- discovered prerequisite;
+- future architectural pressure;
+- speculative opportunity.
+
+Research may explore all four.
+
+Only the current approved task should drive immediate implementation.
+
+When a prerequisite is genuinely independent, prefer finishing it separately before resuming the consumer.
+
+Do not allow architectural discoveries to silently expand the active task.
+
+During `0.x`, favor:
+
+real requirement
+→ inspect/research
+→ implement narrow supported case
+→ synthetic + real-avatar pressure
+→ adversarial review
+→ record actual architectural friction
+→ generalize only when justified
