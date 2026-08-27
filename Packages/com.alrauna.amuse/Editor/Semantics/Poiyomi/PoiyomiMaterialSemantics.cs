@@ -41,6 +41,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string MainTexPanProperty = "_MainTexPan";
         private const string AlphaForceOpaqueProperty = "_AlphaForceOpaque";
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
+        private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
+        private const string AlphaMaskProperty = "_AlphaMask";
+        private const string AlphaMaskBlendStrengthProperty =
+            "_AlphaMaskBlendStrength";
+        private const string AlphaMaskValueProperty = "_AlphaMaskValue";
+        private const string AlphaMaskInvertProperty = "_AlphaMaskInvert";
+        private const string PoiParallaxProperty = "_PoiParallax";
+
+        // Names the whole mask sum rather than one input: an overflow is a
+        // property of the addition, not of either finite operand.
+        private const string AlphaMaskExpressionDetail =
+            AlphaMaskBlendStrengthProperty + " + " + AlphaMaskValueProperty;
         private const string NormalMapProperty = "_BumpMap";
         private const string NormalMapUvProperty = "_BumpMapUV";
         private const string NormalMapPanProperty = "_BumpMapPan";
@@ -153,12 +165,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         };
 
         // Enabled writers/masks that add to or replace the non-forced alpha
-        // term. The alpha mask mode is an exact-off gate: its supported value is
-        // 0 (off); any masking mode needs a second sample this equation omits.
+        // term. The alpha mask mode is deliberately absent: it is interpreted by
+        // TryInterpretAlphaMask rather than gated, because its Replace mode is
+        // provable when no mask texture is bound.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
-            "_MainAlphaMaskMode",
             "_AlphaDistanceFade",
             "_AlphaFresnel",
             "_AlphaAngular",
@@ -180,6 +192,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_VideoEffectsEnable",
             "_EnableTouchGlow",
             "_MainVertexColoringEnabled",
+        };
+
+        // Proven off only immediately before a texture-backed _MainTex alpha
+        // claim. applyParallax overwrites poiMesh.uv[_ParallaxUV] before the
+        // _MainTex sample, so an enabled parallax would make that sample's
+        // coordinate view-dependent. It is not an AlphaFeatureGate: a constant
+        // alpha term never reads a UV, so parallax cannot disturb it.
+        private static readonly string[] TextureBackedAlphaGates =
+        {
+            PoiParallaxProperty,
         };
 
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
@@ -585,12 +607,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// Proves the normalized alpha term. Coverage/clip mechanisms must be
-        /// off on every path. A forced-opaque material is a constant one;
-        /// otherwise alpha is <c>_Color.a</c>, optionally multiplying the alpha
-        /// channel of a single supported <c>_MainTex</c> sample. Any enabled
-        /// alpha writer, non-binary flag, or unprovable sample keeps the output
-        /// Unknown with one diagnostic. Alpha is a raw scalar, so no color-import
-        /// evidence is required.
+        /// off on every path. A forced-opaque material is a constant one.
+        /// Otherwise the alpha mask mode is interpreted: Replace with no bound
+        /// mask is a proven constant, while any other mode or a bound mask stays
+        /// Unknown. With the mask off, alpha is <c>_Color.a</c>, optionally
+        /// multiplying the alpha channel of a single supported <c>_MainTex</c>
+        /// sample; that texture-backed form additionally requires parallax to be
+        /// proven off, because it alone depends on the sampling coordinate. Any
+        /// enabled alpha writer, non-binary flag, or unprovable sample keeps the
+        /// output Unknown with one diagnostic. Alpha is a raw scalar, so no
+        /// color-import evidence is required.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
@@ -644,6 +670,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     featureGate);
             }
 
+            if (!TryInterpretAlphaMask(
+                    evidence,
+                    diagnostics,
+                    out var maskReplacesAlpha,
+                    out var maskReplacement))
+            {
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            // Replace discards the base term outright, so _MainIgnoreTexAlpha,
+            // _Color.a and _MainTex cannot reach the result and are not read.
+            if (maskReplacesAlpha)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.Constant(maskReplacement));
+            }
+
             if (!TryReadBinary(
                     evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
             {
@@ -681,6 +724,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     ScalarSemanticValue.Constant(colorAlpha));
             }
 
+            // Only a texture-backed claim depends on the sampling coordinate, so
+            // the parallax proof is required here and nowhere earlier.
+            var samplingGate =
+                FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
+            if (samplingGate != null)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    samplingGate);
+            }
+
             if (!TryInterpretMainSample(
                     evidence,
                     PoiyomiSemanticOutput.Alpha,
@@ -697,6 +753,137 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 : ScalarSemanticValue.TextureTimesConstant(
                     sample, TextureChannel.Alpha, colorAlpha);
             return SemanticOutput<ScalarSemanticValue>.Complete(value);
+        }
+
+        /// <summary>
+        /// Interprets <c>_MainAlphaMaskMode</c> against the pinned mask
+        /// equation:
+        /// <code>
+        /// alphaMask = saturate(mask.r * _AlphaMaskBlendStrength
+        ///             + (_AlphaMaskInvert ? -_AlphaMaskValue : _AlphaMaskValue));
+        /// if (_AlphaMaskInvert) alphaMask = 1 - alphaMask;
+        /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;   // Replace
+        /// </code>
+        /// Mode 0 never samples the mask and leaves the alpha term to the
+        /// caller. Mode 1 replaces it, which is provable only when no mask
+        /// texture is bound: the pinned source declares the <c>"white"</c>
+        /// default, so <c>mask.r</c> is exactly one and the expression collapses
+        /// to a constant. An assigned mask needs a red-channel texture field
+        /// AMUSE does not produce, and the Multiply, Add and Subtract modes each
+        /// combine a mask term the closed scalar vocabulary cannot express.
+        /// Every refusal records one scoped diagnostic naming the property that
+        /// could not be proven.
+        /// </summary>
+        /// <param name="replacesAlpha">
+        /// True only when the mask proved a constant that supersedes the base
+        /// alpha term; false on mode 0, where the caller continues.
+        /// </param>
+        private static bool TryInterpretAlphaMask(
+            CapturedMaterialEvidence evidence,
+            List<PoiyomiSemanticDiagnostic> diagnostics,
+            out bool replacesAlpha,
+            out float replacement)
+        {
+            replacesAlpha = false;
+            replacement = 0f;
+
+            if (!evidence.TryGetScalar(
+                    MainAlphaMaskModeProperty, out var mode) ||
+                !IsFinite(mode))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    MainAlphaMaskModeProperty);
+                return false;
+            }
+
+            // Off: the shader's `if (_MainAlphaMaskMode)` is false, so no mask
+            // is sampled and the base alpha term stands unchanged.
+            if (mode == 0f)
+            {
+                return true;
+            }
+
+            // Replace is the only interpreted mode. Multiply, Add and Subtract
+            // all combine a mask term the closed vocabulary cannot express.
+            if (mode != 1f)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    MainAlphaMaskModeProperty);
+                return false;
+            }
+
+            if (!evidence.TryGetTexture(AlphaMaskProperty, out var mask) ||
+                mask.IsAssigned)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskProperty);
+                return false;
+            }
+
+            if (!evidence.TryGetScalar(
+                    AlphaMaskBlendStrengthProperty, out var blendStrength) ||
+                !IsFinite(blendStrength))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskBlendStrengthProperty);
+                return false;
+            }
+
+            if (!evidence.TryGetScalar(
+                    AlphaMaskValueProperty, out var value) ||
+                !IsFinite(value))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskValueProperty);
+                return false;
+            }
+
+            if (!TryReadBinary(
+                    evidence, AlphaMaskInvertProperty, out var invert))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskInvertProperty);
+                return false;
+            }
+
+            // The unbound mask samples exactly one, so `mask.r * blendStrength`
+            // is exactly blendStrength and the shader's fused multiply-add
+            // cannot round differently from this addition. That argument is
+            // unavailable for a sampled mask, which is why it stays refused.
+            var sum = blendStrength + (invert ? -value : value);
+            var raw = Mathf.Clamp01(sum);
+            var alpha = invert ? 1f - raw : raw;
+            if (!IsFinite(sum) || !IsFinite(alpha))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskExpressionDetail);
+                return false;
+            }
+
+            replacesAlpha = true;
+            replacement = alpha;
+            return true;
         }
 
         /// <summary>
@@ -1294,10 +1481,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 MainTexUvProperty,
                 AlphaForceOpaqueProperty,
                 IgnoreMainTexAlphaProperty,
+                MainAlphaMaskModeProperty,
+                AlphaMaskBlendStrengthProperty,
+                AlphaMaskValueProperty,
+                AlphaMaskInvertProperty,
             };
             scalars.UnionWith(MainSamplingModeGates);
             scalars.UnionWith(AlphaCoverageGates);
             scalars.UnionWith(AlphaFeatureGates);
+            scalars.UnionWith(TextureBackedAlphaGates);
 
             return new MaterialEvidenceRequest(
                 shaderName: true,
@@ -1314,6 +1506,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
                         TextureEvidenceKinds.AlphaChannel),
+
+                    // Assignment only. The Replace equation is provable exactly
+                    // when no mask is bound, so the mask is never sampled and
+                    // no further texture fact is consumed. Requesting more would
+                    // be unused evidence and would widen animation relevance.
+                    new TexturePropertyEvidenceRequest(
+                        AlphaMaskProperty, TextureEvidenceKinds.None),
                 });
         }
 

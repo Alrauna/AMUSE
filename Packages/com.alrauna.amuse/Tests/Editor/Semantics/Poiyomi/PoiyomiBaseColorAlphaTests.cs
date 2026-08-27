@@ -375,12 +375,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_EnableUDIMDiscardOptions",
         };
 
-        // Enabled writers/masks that modify the non-forced alpha term. The mask
-        // mode is an exact-off gate (its default of 2 is Multiply, not off).
+        // Enabled writers/masks that modify the non-forced alpha term.
+        // _MainAlphaMaskMode is deliberately absent: it is no longer an
+        // exact-off gate but an interpreted mode, so PoiyomiAlphaMaskTests owns
+        // its supported and refused cases.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
-            "_MainAlphaMaskMode",
             "_AlphaDistanceFade",
             "_AlphaFresnel",
             "_AlphaAngular",
