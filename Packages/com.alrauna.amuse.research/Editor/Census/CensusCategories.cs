@@ -16,9 +16,16 @@ namespace Alrauna.Amuse.Research.Census
     /// demanding an explicit schema decision. Half of that lives here, in
     /// <c>CensusCategorySnapshotTests</c>, which pins every member set so no
     /// census-side edit is silent. The other half — parity against AMUSE's own
-    /// enums, and an exhaustive mapping with no guessing default arm — belongs
-    /// to the collector increment, where the friend grant makes those enums
-    /// visible at compile time. Until then, drift is undetected.
+    /// enums, and an exhaustive mapping with no guessing default arm — lives in
+    /// the collector's <c>CensusVocabularyTests</c>, where the friend grant
+    /// makes those enums visible at compile time.
+    /// </para>
+    /// <para>
+    /// That second half was incomplete for <see cref="RendererRefusal"/> until
+    /// it was repaired: parity was asserted, but nothing drove every AMUSE
+    /// refusal through the mapping, so three production refusals were added
+    /// without a mirror and only the parity assertion noticed.
+    /// <c>EveryAmuseRefusalMapsToTheSameCensusName</c> now closes that.
     /// </para>
     /// </summary>
     public enum RendererRefusal
@@ -26,10 +33,21 @@ namespace Alrauna.Amuse.Research.Census
         None,
         UnsupportedRendererType,
         MaterialPropertyOverridesPresent,
+        MaterialDependencyClosureFailed,
+        UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
         UnprovenMaterialSlotMapping,
         UnsupportedTopology,
         MalformedMeshData,
+        AnimatedMeshReplacement,
+        AnimatedMaterialSlotCount,
+        AdditiveLayerWithProofRelevantMaterialProperty,
+        UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
+        AdmittedStateBudgetExceeded,
+        AnimatedPropertyAbsentFromAdmittedMaterial,
+        UnsupportedAnimationCurveForm,
+        AnimatedMaterialPropertyNotSingleton,
+        AdmittedMaterialSemanticsUnknown,
     }
 
     /// <summary>

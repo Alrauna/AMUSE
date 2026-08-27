@@ -64,14 +64,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         protected Material NewFixtureMaterial()
         {
+            return Track(CreateVerifiedMaterial());
+        }
+
+        internal static Material CreateVerifiedMaterial()
+        {
             var shader = Shader.Find(FixtureShaderName);
             Assert.That(
                 shader,
                 Is.Not.Null,
                 $"Test fixture shader '{FixtureShaderName}' must import.");
-            var material = new Material(shader);
-            _transient.Add(material);
-            return material;
+            return new Material(shader);
         }
 
         /// <summary>

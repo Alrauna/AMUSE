@@ -57,6 +57,30 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         }
 
         [Test]
+        public void EveryAmuseRefusalMapsToTheSameCensusName()
+        {
+            // Exhaustiveness with identity. RendererRefusal is a one-to-one
+            // mirror, so a mapping is only correct if it lands on the member of
+            // the same name: this catches an unmapped value (ToCensus throws,
+            // failing here) and a misdirected one (a refusal quietly counted as
+            // a different category) alike, which a count or set comparison
+            // cannot.
+            //
+            // No AMUSE refusal is intentionally excluded from the census today.
+            // If one ever is, it belongs here as its own named exception with
+            // its own reason - never as a catch-all arm, which would restore
+            // exactly the silent drift this test exists to prevent.
+            foreach (RendererAnalysisRefusal value in System.Enum.GetValues(
+                         typeof(RendererAnalysisRefusal)))
+            {
+                Assert.That(
+                    CensusVocabulary.ToCensus(value).ToString(),
+                    Is.EqualTo(value.ToString()),
+                    "Unmapped or misdirected AMUSE refusal: " + value);
+            }
+        }
+
+        [Test]
         public void EveryAmuseAlphaFailureMaps()
         {
             // Exhaustiveness, checked by driving every value through the

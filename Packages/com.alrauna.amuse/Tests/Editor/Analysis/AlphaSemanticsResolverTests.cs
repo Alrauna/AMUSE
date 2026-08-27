@@ -638,5 +638,59 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     () => refusal.Classify(OpaqueCornerTriangle()));
             }
         }
+
+        // The three tests below pin `TryGetUniformOutcome` as an exact report of
+        // stored state. They exist because conservative deduplication must read
+        // a fact the resolution already holds; inferring uniformity by sampling
+        // `Classify` would merge a Classified resolution into a Uniform one
+        // whenever the sampled triangle happened to agree, which shrinks the
+        // later intersection set without proof.
+
+        [Test]
+        public void UniformResolutionExposesItsExactStoredOutcome()
+        {
+            foreach (var expected in new[]
+                     {
+                         TriangleAlphaOutcome.ProvenOpaque,
+                         TriangleAlphaOutcome.MustRemainTransparent,
+                         TriangleAlphaOutcome.Unknown,
+                     })
+            {
+                var resolution = AlphaResolution.Uniform(expected);
+
+                Assert.That(
+                    resolution.TryGetUniformOutcome(out var outcome), Is.True);
+                Assert.That(outcome, Is.EqualTo(expected));
+            }
+        }
+
+        [Test]
+        public void ClassifiedResolutionReportsNoUniformOutcome()
+        {
+            // Deliberately a field whose every texel is opaque, so a
+            // `Classify`-based implementation would look uniform.
+            var resolution = AlphaResolution.Classified(
+                Field(2, 2, 255),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.False);
+            // ProvenOpaque is the zero value of TriangleAlphaOutcome, so a
+            // defaulted `out` would answer "proven opaque" to a caller that
+            // ignored the bool. The false path must fail closed.
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void RefusedResolutionReportsNoUniformOutcome()
+        {
+            var resolution = AlphaResolution.Refused(
+                AlphaResolutionFailure.SemanticsUnknown);
+
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.False);
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
     }
 }
