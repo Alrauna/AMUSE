@@ -26,6 +26,21 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private const string UnattestedShaderFolder =
             "Assets/AmuseTests_UnattestedShaders";
 
+        /// <summary>
+        /// The renderer path every fixture observation in this file is authored
+        /// at. Capture is renderer-scoped, so each test must say which renderer
+        /// it analyzes; passing this keeps the existing same-path closure cases
+        /// non-vacuous.
+        /// </summary>
+        private const string AnalyzedRendererPath = "Body";
+
+        /// <summary>
+        /// A different renderer's path. Material-slot bindings here belong to
+        /// that renderer and must never enter an <see cref="AnalyzedRendererPath"/>
+        /// capture.
+        /// </summary>
+        private const string ForeignRendererPath = "OtherBody";
+
         private readonly List<UnityEngine.Object> _owned =
             new List<UnityEngine.Object>();
         private readonly Dictionary<Material, CapturedAlphaMaterialFamily>
@@ -468,6 +483,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var swapped = NewLilToonMaterial();
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(swapped) },
                 new[] { initial },
                 EmptyGraph());
@@ -500,6 +516,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var initial = NewPoiyomiMaterial();
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithSlotValue(null) },
                 new[] { initial },
                 EmptyGraph());
@@ -522,6 +539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 swapped, swapped, initial);
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { observation }, new[] { initial }, EmptyGraph());
             var indices = evidence.Clips.Single()
                 .ObjectBindings.Single().AdmittedMaterialIndices;
@@ -546,6 +564,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var secondSwap = NewPoiyomiMaterial();
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(firstSwap, secondSwap) },
                 new[] { initial },
                 EmptyGraph());
@@ -567,6 +586,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             foreach (var value in new UnityEngine.Object[] { null, texture })
             {
                 var evidence = CaptureVerified(
+                    AnalyzedRendererPath,
                     new[] { ObservationWithSlotValue(value) },
                     new[] { initial },
                     EmptyGraph());
@@ -585,6 +605,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var initial = NewPoiyomiMaterial();
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[]
                 {
                     ObservationWithObjectBinding(
@@ -605,6 +626,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var initial = NewPoiyomiMaterial();
             var mesh = Own(new Mesh { name = "replacement" });
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithObjectBinding("m_Mesh", mesh) },
                 new[] { initial },
                 EmptyGraph());
@@ -633,6 +655,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 });
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 Array.Empty<LiveClipObservation>(),
                 new[] { material },
                 graph);
@@ -683,6 +706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 });
 
             var evidence = UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                AnalyzedRendererPath,
                 new[] { initial },
                 graph,
                 new StubBindings(specialClip),
@@ -743,6 +767,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(second) },
                 new[] { first },
                 EmptyGraph(),
@@ -768,6 +793,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 });
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 Array.Empty<LiveClipObservation>(),
                 new Material[] { null },
                 graph);
@@ -791,6 +817,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "m_Materials.Array.data[1]", swapped);
 
             var evidence = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { observation },
                 new[] { current, current },
                 EmptyGraph());
@@ -810,10 +837,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var initial = NewPoiyomiMaterial();
             var swapped = NewLilToonMaterial();
             var ordinary = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(swapped, false) },
                 new[] { initial },
                 EmptyGraph());
             var special = CaptureVerified(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(swapped, true) },
                 new[] { initial },
                 EmptyGraph());
@@ -839,6 +868,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = Own(new Material(Shader.Find("Unlit/Color")));
 
             var evidence = UnityAnimationEvidenceCapture.Capture(
+                AnalyzedRendererPath,
                 new[] { material },
                 EmptyGraph(),
                 new StubBindings());
@@ -872,6 +902,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(second) },
                 new[] { first },
                 EmptyGraph(),
@@ -912,6 +943,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
                 new[] { ObservationWithMaterialSwap(unselectable) },
                 new[] { supported },
                 EmptyGraph(),
@@ -945,6 +977,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     PoiyomiMaterialSemantics.PoiyomiToonShaderName)));
 
             var evidence = UnityAnimationEvidenceCapture.Capture(
+                AnalyzedRendererPath,
                 new[] { material },
                 EmptyGraph(),
                 new StubBindings());
@@ -965,8 +998,278 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.Throws<InvalidOperationException>(() =>
                 UnityAnimationEvidenceCapture.Capture(
+                    AnalyzedRendererPath,
                     Array.Empty<Material>(),
                     refused,
+                    new StubBindings()));
+        }
+
+        // --- Renderer-scoped material-swap closure ------------------------
+        //
+        // A material-slot binding addresses exactly one renderer path. Capture
+        // analyzes ONE renderer, so a binding on any other path describes a
+        // different renderer's slots and is not this renderer's evidence.
+
+        [Test]
+        public void ForeignRendererMaterialSlotBindingIsNotRangeCheckedAgainstThisRenderer()
+        {
+            var current = NewPoiyomiMaterial();
+            var foreignSwap = NewPoiyomiMaterial();
+
+            // One slot here; the OTHER renderer animates its slot 1.
+            var evidence = CaptureVerified(
+                AnalyzedRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        ForeignRendererPath,
+                        "m_Materials.Array.data[1]",
+                        foreignSwap),
+                },
+                new[] { current },
+                EmptyGraph());
+
+            Assert.That(
+                evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None),
+                "another renderer's slot index was range-checked against this " +
+                "renderer's slot count");
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                evidence.AdmittedMaterials,
+                Has.Count.EqualTo(1),
+                "only this renderer's current material may be admitted");
+            CollectionAssert.AreEqual(new[] { 0 }, evidence.CurrentMaterialIndices);
+            Assert.That(
+                evidence.Clips.SelectMany(clip => clip.ObjectBindings),
+                Is.Empty,
+                "a foreign material-slot binding must be omitted entirely, not " +
+                "retained with misleading empty material indices");
+        }
+
+        [Test]
+        public void ForeignRendererSwapMaterialIsNeverSelectedCapturedOrRequestRelevant()
+        {
+            var current = NewPoiyomiMaterial();
+            var foreignSwap = NewLilToonMaterial();
+
+            var selected = new List<Material>();
+            var capturedBatch = Array.Empty<Material>();
+            var captureCalls = 0;
+
+            bool Select(
+                Material material,
+                out CapturedAlphaMaterialFamily family,
+                out MaterialEvidenceRequest request)
+            {
+                selected.Add(material);
+                return SelectFixtureRequest(material, out family, out request);
+            }
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                captureCalls++;
+                capturedBatch = materials.ToArray();
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        ForeignRendererPath,
+                        "m_Materials.Array.data[0]",
+                        foreignSwap),
+                },
+                new[] { current },
+                EmptyGraph(),
+                Select,
+                Capture);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            CollectionAssert.AreEqual(
+                new[] { current },
+                selected,
+                "another renderer's swap material reached request selection");
+            Assert.That(captureCalls, Is.EqualTo(1));
+            CollectionAssert.AreEqual(
+                new[] { current },
+                capturedBatch,
+                "another renderer's swap material reached material capture");
+
+            // The lilToon family contributes request properties Poiyomi does not,
+            // so a widened request is directly observable.
+            CollectionAssert.AreEqual(
+                RequestedNames(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                RequestedNames(evidence.RelevanceRequest),
+                "another renderer's material widened this renderer's evidence " +
+                "request, which also widens what counts as proof-relevant here");
+        }
+
+        [Test]
+        public void ForeignRendererUnattestedMaterialCannotRefuseThisRenderer()
+        {
+            var current = NewPoiyomiMaterial();
+            // Never registered in _fixtureFamilies, so selection cannot attest it.
+            var foreignUnattested = Own(new Material(Shader.Find("Unlit/Color")));
+
+            var capturedBatch = Array.Empty<Material>();
+            var captureCalls = 0;
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                captureCalls++;
+                capturedBatch = materials.ToArray();
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        ForeignRendererPath,
+                        "m_Materials.Array.data[0]",
+                        foreignUnattested),
+                },
+                new[] { current },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                Capture);
+
+            Assert.That(
+                evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None),
+                "an unattested material on ANOTHER renderer refused this one");
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(captureCalls, Is.EqualTo(1));
+            CollectionAssert.AreEqual(
+                new[] { current },
+                capturedBatch,
+                "the closed capturer must see only this renderer's batch");
+        }
+
+        [Test]
+        public void OwningRendererStillCapturesItsOwnCurrentAndSwappedMaterials()
+        {
+            var owningCurrent = NewPoiyomiMaterial();
+            var owningSwap = NewPoiyomiMaterial();
+
+            // The SAME observation as the foreign cases, analyzed from the
+            // renderer that actually owns it.
+            var evidence = CaptureVerified(
+                ForeignRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        ForeignRendererPath,
+                        "m_Materials.Array.data[0]",
+                        owningSwap),
+                },
+                new[] { owningCurrent },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                evidence.AdmittedMaterials,
+                Has.Count.EqualTo(2),
+                "the owning renderer must still close over its own swap");
+            CollectionAssert.AreEqual(new[] { 0 }, evidence.CurrentMaterialIndices);
+
+            var objectBindings = evidence.Clips
+                .SelectMany(clip => clip.ObjectBindings)
+                .ToArray();
+            Assert.That(objectBindings, Has.Length.EqualTo(1));
+            Assert.That(objectBindings[0].Path, Is.EqualTo(ForeignRendererPath));
+            CollectionAssert.AreEqual(
+                new[] { 1 },
+                objectBindings[0].AdmittedMaterialIndices,
+                "the owning renderer's swap must keep stable admitted indices");
+        }
+
+        [Test]
+        public void SameSlotPropertyOnAnotherPathDoesNotDisplaceThisRenderersOwnSwap()
+        {
+            var current = NewPoiyomiMaterial();
+            var ownSwap = NewPoiyomiMaterial();
+            var foreignSwap = NewPoiyomiMaterial();
+
+            var evidence = CaptureVerified(
+                AnalyzedRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        ForeignRendererPath,
+                        "m_Materials.Array.data[0]",
+                        foreignSwap),
+                    ObservationWithMaterialSwapAt(
+                        AnalyzedRendererPath,
+                        "m_Materials.Array.data[0]",
+                        ownSwap),
+                },
+                new[] { current },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+
+            var objectBindings = evidence.Clips
+                .SelectMany(clip => clip.ObjectBindings)
+                .ToArray();
+            Assert.That(
+                objectBindings, Has.Length.EqualTo(1),
+                "only the analyzed renderer's own slot binding survives");
+            Assert.That(objectBindings[0].Path, Is.EqualTo(AnalyzedRendererPath));
+            CollectionAssert.AreEqual(
+                new[] { 1 }, objectBindings[0].AdmittedMaterialIndices);
+        }
+
+        [Test]
+        public void RendererOnTheAvatarRootUsesTheEmptyPath()
+        {
+            var current = NewPoiyomiMaterial();
+            var rootSwap = NewPoiyomiMaterial();
+
+            // A renderer on the avatar root has an empty Unity animation path,
+            // so empty must be a valid analyzed path rather than a defect.
+            var evidence = CaptureVerified(
+                string.Empty,
+                new[]
+                {
+                    ObservationWithMaterialSwapAt(
+                        string.Empty, "m_Materials.Array.data[0]", rootSwap),
+                },
+                new[] { current },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+            Assert.That(
+                evidence.Clips.SelectMany(clip => clip.ObjectBindings).ToArray(),
+                Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void NullRendererPathIsACallerDefect()
+        {
+            var current = NewPoiyomiMaterial();
+
+            Assert.Throws<ArgumentNullException>(() =>
+                UnityAnimationEvidenceCapture.Capture(
+                    null,
+                    new[] { current },
+                    EmptyGraph(),
                     new StubBindings()));
         }
 
@@ -1028,11 +1331,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         private CapturedAnimationEvidence CaptureVerified(
+            string rendererPath,
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph)
         {
             return UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                rendererPath,
                 observations,
                 currentSlots,
                 graph,
@@ -1096,6 +1401,33 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Material[] materials,
             bool isSpecialMotion)
         {
+            return ObservationWithMaterialSwapAt(
+                AnalyzedRendererPath,
+                "m_Materials.Array.data[0]",
+                isSpecialMotion,
+                materials);
+        }
+
+        /// <summary>
+        /// A material-slot swap authored at an arbitrary renderer path, so a
+        /// test can express another renderer's animation without pretending it
+        /// belongs to the renderer under analysis.
+        /// </summary>
+        private static LiveClipObservation ObservationWithMaterialSwapAt(
+            string path,
+            string propertyName,
+            params Material[] materials)
+        {
+            return ObservationWithMaterialSwapAt(
+                path, propertyName, false, materials);
+        }
+
+        private static LiveClipObservation ObservationWithMaterialSwapAt(
+            string path,
+            string propertyName,
+            bool isSpecialMotion,
+            Material[] materials)
+        {
             return new LiveClipObservation(
                 "swap",
                 isSpecialMotion,
@@ -1103,9 +1435,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[]
                 {
                     new LiveObjectObservation(
-                        "Body",
+                        path,
                         typeof(SkinnedMeshRenderer).FullName,
-                        "m_Materials.Array.data[0]",
+                        propertyName,
                         materials.Cast<UnityEngine.Object>().ToArray()),
                 });
         }
