@@ -693,6 +693,51 @@ or streaming state without mutating project or importer state, which production 
 do. A second case asserts the texture overload reads those same two facts, so the pure
 predicate cannot drift from the rule it states.
 
+## 10a. Implementation addendum — measured 2026-08-28
+
+Recorded during the production implementation, on the same host and Unity version
+as §2. It is an addendum, not a revision: no earlier measurement changed.
+
+### The reported graphics format is not always the sampled format **[M]**
+
+| Query | Result |
+| --- | --- |
+| `IsFormatSupported(R8G8B8_UNorm, Sample)` | **`False`** |
+| `IsFormatSupported(R8G8B8A8_UNorm, Sample)` | `True` |
+| `IsFormatSupported(R8_UNorm, Sample)` — `Alpha8` | `True` |
+| `IsFormatSupported(RGBA_DXT5_UNorm, Sample)` | `True` |
+| `IsFormatSupported(RGBA_BC7_UNorm, Sample)` | `True` |
+| `GetCompatibleFormat(R8G8B8_UNorm, Sample)` | `R8G8B8A8_UNorm` |
+
+`R8G8B8_UNorm` is what a `RGB24` import reports as its `graphicsFormat`. So a
+preflight gate on exact reported-format `Sample` support **refuses `RGB24`**, which
+§8.2 admits — the two clauses cannot both hold on this host.
+
+The refusal is a false negative. Measured through the production shader route,
+`RGB24` samples alpha exactly one everywhere: every returned byte was `255` at 4x4
+and 8x8, single-mip and mipmapped. Unity 2022.3 converts `RGB24` to `RGBA32` at
+texture load because native `RGB24` support is rare, so the reported storage format
+is not the format actually sampled.
+
+**Resolution, narrow:** alpha-bearing admitted formats keep the exact
+reported-format requirement; `RGB24` alone is exempt. `RGB24` is safe precisely
+because it carries no alpha channel, so the substitution cannot lose alpha
+information — the sampler returns exactly one either way. `GetCompatibleFormat` was
+rejected as a general gate: it promises a supported *similar* format, not the exact
+alpha preservation this contract needs from an uncharacterized alpha-bearing
+substitution.
+
+Only `RGB24` is affected. Every other admitted format was measured exactly
+sampleable, so the exemption applies to exactly one format.
+
+### Block size decides whether a compressed submaximum survives **[M]**
+
+A 4x4 block-compressed fixture is a *single* compression block, and the encoder
+snaps a source alpha of `254` to `255` there — §5.1 already recorded this, and the
+production tests reproduced it. Separating maximum from submaximum therefore
+requires the submaximum in a **different** block, which is why the durable
+characterization and the production tests both use 8x8 quadrant fixtures.
+
 ## 11. Remaining uncertainty and future coverage
 
 The weakest part of the evidence, and it should gate how aggressively the capability is

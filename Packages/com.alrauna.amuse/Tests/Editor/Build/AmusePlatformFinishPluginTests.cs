@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
@@ -718,6 +719,120 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (swapped != null) Object.DestroyImmediate(swapped);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// The mip conjunction reaching the production build handoff. Slot 0's
+        /// single triangle lies wholly inside a texel that is exactly one at mip 0
+        /// and below one at mip 1, so a mip-0-only build implementation would report
+        /// TWO opaque candidates. Slot 1 is uniformly opaque at every level and must
+        /// still prove, so the expected answer is exactly ONE - which distinguishes
+        /// the conjunction from both a mip-0-only implementation and a blanket
+        /// failure of texture-backed build analysis.
+        /// </summary>
+        [Test]
+        public void RuntimeStateIntegration_ALowerMipPreventsAMipZeroOnlyOpaqueProof()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE build lower mip");
+            Mesh mesh = null;
+            Material blockedMaterial = null;
+            Material controlMaterial = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                // Inside the try: if folder creation or the first import throws, the
+                // root GameObject and any partially created folder are still
+                // released by the finally below.
+                if (!AssetDatabase.IsValidFolder(LowerMipTempFolder))
+                {
+                    AssetDatabase.CreateFolder("Assets", "AmuseTests_BuildLowerMip");
+                }
+
+                var blocked = ImportLowerMipTexture(
+                    "odd_boundary", OddBoundaryAlphaPixels());
+                var control = ImportLowerMipTexture(
+                    "uniform_opaque", UniformOpaqueAlphaPixels());
+
+                // Causal preconditions. Without these the final count could be right
+                // for the wrong reason.
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(blocked, out _), Is.True,
+                    "The blocked texture must have a resolvable source identity.");
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(control, out _), Is.True,
+                    "The control texture must have a resolvable source identity.");
+
+                Assert.That(
+                    UnityAlphaFieldEvidence.TryCapture(
+                        blocked, out _, out var blockedChain),
+                    Is.True);
+                Assert.That(
+                    blockedChain.Count, Is.EqualTo(blocked.mipmapCount),
+                    "Every declared mip must be captured.");
+                Assert.That(
+                    blockedChain[0].GetAlpha(4, 0), Is.EqualTo(255),
+                    "Precondition: mip 0 alone would prove slot 0's triangle opaque.");
+                Assert.That(
+                    blockedChain[1].GetAlpha(2, 0), Is.Not.EqualTo(255),
+                    "Precondition: the mip-1 texel covering it is not opaque.");
+
+                Assert.That(
+                    UnityAlphaFieldEvidence.TryCapture(
+                        control, out _, out var controlChain),
+                    Is.True);
+                for (var level = 0; level < controlChain.Count; level++)
+                {
+                    Assert.That(
+                        controlChain[level].IsFullyOpaque, Is.True,
+                        "Control level " + level + " must be opaque at every level.");
+                }
+
+                mesh = BuildLowerMipBuildMesh();
+                blockedMaterial = SampledAlphaMaterial(blocked);
+                controlMaterial = SampledAlphaMaterial(control);
+
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { blockedMaterial, controlMaterial };
+
+                // One layer, one clip, animating something unrelated to alpha, as
+                // CaptureVerifiedRuntimeStateEvidence requires.
+                controller = AddAnimatedObjectReference(
+                    root, "m_ProbeAnchor", root.transform, out clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, renderer, out var evidence);
+
+                Assert.That(
+                    evidence.AdmittedMaterials, Has.Count.EqualTo(2),
+                    "Evidence closure must have admitted both slots.");
+                Assert.That(
+                    result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None),
+                    "The analysis must not refuse; the proof must fail on evidence.");
+
+                Assert.That(
+                    result.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "Exactly one: the uniformly opaque control proves, and the "
+                    + "odd-boundary triangle does not. A mip-0-only implementation "
+                    + "would report two.");
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (blockedMaterial != null) Object.DestroyImmediate(blockedMaterial);
+                if (controlMaterial != null) Object.DestroyImmediate(controlMaterial);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+                if (AssetDatabase.IsValidFolder(LowerMipTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(LowerMipTempFolder);
+                }
             }
         }
 
@@ -2060,6 +2175,127 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal SkinnedMeshRenderer Renderer;
             internal Mesh Mesh;
             internal Material Material;
+        }
+
+        private const string LowerMipTempFolder = "Assets/AmuseTests_BuildLowerMip";
+
+        /// <summary>
+        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
+        /// boundary does not survive halving: source texel x = 4 is exactly one at
+        /// mip 0, and the mip-1 texel covering it is not.
+        /// </summary>
+        private static Color32[] OddBoundaryAlphaPixels()
+        {
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
+            {
+                for (var x = 0; x < 8; x++)
+                {
+                    pixels[y * 8 + x] =
+                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
+                }
+            }
+
+            return pixels;
+        }
+
+        private static Color32[] UniformOpaqueAlphaPixels()
+        {
+            var pixels = new Color32[64];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(64, 32, 16, 255);
+            }
+
+            return pixels;
+        }
+
+        /// <summary>
+        /// Imports an 8x8 mipmapped, non-readable RGBA32 asset with Point/Clamp
+        /// sampling, zero mip bias, anisotropy 1 and no streaming - the exact state
+        /// every acquisition gate admits. The folder is created by the caller and
+        /// deleted in its finally.
+        /// </summary>
+        private static Texture2D ImportLowerMipTexture(string name, Color32[] pixels)
+        {
+            var path = LowerMipTempFolder + "/" + name + ".png";
+            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+            try
+            {
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+            }
+            finally
+            {
+                // Encoding or writing can throw; the in-memory staging texture must
+                // not survive that.
+                Object.DestroyImmediate(staging);
+            }
+
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.mipmapEnabled = true;
+            importer.isReadable = false;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.filterMode = FilterMode.Point;
+            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+            importer.mipMapBias = 0f;
+            importer.anisoLevel = 1;
+            importer.streamingMipmaps = false;
+            importer.SaveAndReimport();
+
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(loaded, Is.Not.Null, $"'{path}' must import.");
+            return loaded;
+        }
+
+        /// <summary>
+        /// A verified Poiyomi fixture material whose alpha comes from _MainTex. Only
+        /// the two gates the stand-in shader declares non-zero are changed; _Color
+        /// already defaults to opaque white.
+        /// </summary>
+        private static Material SampledAlphaMaterial(Texture2D mainTex)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetTexture("_MainTex", mainTex);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            return material;
+        }
+
+        /// <summary>
+        /// Submesh 0: one triangle whose UV support lies wholly inside source texel
+        /// (4, 0) of an 8x8 texture - that texel spans u in [0.5, 0.625) and v in
+        /// [0, 0.125). Submesh 1: one triangle on the uniformly opaque control.
+        /// </summary>
+        private static Mesh BuildLowerMipBuildMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.51f, 0.01f),
+                new Vector2(0.61f, 0.01f),
+                new Vector2(0.51f, 0.11f),
+                new Vector2(0.2f, 0.2f),
+                new Vector2(0.4f, 0.2f),
+                new Vector2(0.2f, 0.4f)
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+            return mesh;
         }
 
         private static AnalyzableRendererFixture AddAnalyzableRenderer(
