@@ -574,7 +574,7 @@ describes each gate, it does not order them.
 | 7 | `width > 0 && height > 0 && mipmapCount > 0` | property reads |
 | 8 | `SystemInfo.supportsAsyncGPUReadback` | device query, host-constant |
 | 9 | `SystemInfo.IsFormatSupported(R8_UNorm, Render)` **and** `SystemInfo.IsFormatSupported(R8_UNorm, ReadPixels)` | device query, host-constant |
-| 10 | `SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.Sample)` | device query, per texture |
+| 10 | `SourceSamplingGatePasses(texture.format, SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.Sample))` | device query, per texture |
 | 11 | shader loads at the production path and `shader.isSupported` | asset-db load |
 | 12 | the host-capability check of §8.2 has passed | one lazy evaluation per Editor AppDomain |
 
@@ -594,15 +594,48 @@ than assumed.
 
 **Gate 10 is not a duplicate of gate 4.** Gate 4 asks a policy question — is this
 `TextureFormat` one AMUSE has characterized — over the enum Unity reports for the
-imported asset. Gate 10 asks a device question about the **actual imported source
-representation**: can this GPU sample `texture.graphicsFormat`. The shader reads the
-source through `Load` on exactly that representation, so a source the device cannot
-sample must refuse *before* anything is allocated, rather than producing a blit
-whose result has no defined meaning.
+imported asset. Gate 10 asks a device question about the source the shader will
+`Load`, so a source the device cannot sample refuses *before* anything is allocated
+rather than producing a blit whose result has no defined meaning.
+
+**Gate 10 carries one measured exception, and exactly one.** Measured on this host
+(investigation §10a): `IsFormatSupported(R8G8B8_UNorm, Sample)` is `False`, and
+`R8G8B8_UNorm` is what a `RGB24` import reports as its `graphicsFormat` — so an
+exact-format requirement would refuse `RGB24`, which the allowlist above admits. The
+refusal is a false negative: Unity 2022.3 converts `RGB24` to `RGBA32` at texture
+load because native `RGB24` support is rare, and the production route was measured
+to sample `RGB24` alpha as exactly one everywhere, at 4x4 and 8x8, single-mip and
+mipmapped.
+
+Gate 10 therefore means:
+
+- **alpha-bearing admitted formats** require exact reported-format `Sample` support;
+- **`RGB24` is exempt**, because it carries no alpha channel at all — the
+  substitution cannot lose alpha information, the sampler returns exactly one either
+  way, gate 12 exercises the RGBA32 route on this host, and a real `RGB24`
+  integration test drives the production route and asserts every returned byte is
+  `255`.
+
+The policy lives in one production-called pure predicate, which makes no
+`SystemInfo` call of its own:
+
+```
+SourceSamplingGatePasses(textureFormat, exactGraphicsFormatSampleable)
+    exact format sampleable -> true
+    otherwise RGB24         -> true
+    otherwise               -> false
+```
+
+`GetCompatibleFormat(...) != GraphicsFormat.None` was rejected as a general
+replacement: it promises a supported *similar* format, not the exact alpha
+preservation this evidence contract needs from an uncharacterized alpha-bearing
+substitution. No other format is special-cased, and no second acquisition path
+exists. Every other admitted format was measured exactly sampleable, so the
+exemption applies to exactly one format.
 
 Gates 8, 9 and 10 together are a **pure predicate over four capability facts** —
-`(supportsAsyncGPUReadback, r8Renderable, r8Readable, sourceSampleable)` — and are
-written that way. That is acceptable, and is the preferred shape, because
+`(supportsAsyncGPUReadback, r8Renderable, r8Readable, sourceSampleable)`, the last
+supplied by `SourceSamplingGatePasses` — and are written that way. That is acceptable, and is the preferred shape, because
 production is the predicate's caller: the predicate *is* the gate, not a
 restatement of it (§13.4).
 
@@ -625,9 +658,11 @@ because it has no durable approved production-shaped characterization in this
 milestone); all ASTC (tolerance-based decode, and it is the Quest format); ETC/EAC,
 PVRTC, BC1/BC4/BC5, and everything unlisted (not characterized); every non-
 `StandaloneWindows64` target; streaming textures; nonzero mip limits; non-alpha
-channels; a host missing async GPU readback, exact `R8_UNorm` render/readback, or
-the ability to sample the source's `graphicsFormat`; a host whose §8.2
-capability check did not pass; and any partial or malformed GPU result.
+channels; a host missing async GPU readback or exact `R8_UNorm` render/readback; an
+**alpha-bearing** admitted format whose exact reported `graphicsFormat` the host
+cannot `Sample` — `RGB24` is the one measured exception, admitted because it carries
+no alpha channel and Unity converts it to `RGBA32` at load (gate 10 above); a host
+whose §8.2 capability check did not pass; and any partial or malformed GPU result.
 
 The allowlist is not broadened by this design.
 

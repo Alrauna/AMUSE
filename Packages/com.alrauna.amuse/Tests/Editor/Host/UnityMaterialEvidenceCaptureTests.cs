@@ -353,9 +353,22 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.Throws<ArgumentException>(
                 () => captured[1].TryGetTexture("_MainTex", out _));
             Assert.That(ReferenceEquals(main.Texture, emission.Texture), Is.True);
+            // Both assignments share one evidence object, so both share one chain
+            // instance. This proves shared evidence identity across the batch; it
+            // does NOT prove the GPU capture executed exactly once - a discarded
+            // second capture would leave this green. Once-per-batch acquisition is
+            // a code-structure property of UnityMaterialEvidenceCapture.Capture,
+            // confirmed by review rather than by instrumentation.
+            Assert.That(
+                ReferenceEquals(
+                    main.Texture.AlphaChannel, emission.Texture.AlphaChannel),
+                Is.True);
             Assert.That(main.Texture.HasAlphaChannel, Is.True);
-            Assert.That(main.Texture.AlphaChannel.GetAlpha(0, 0), Is.EqualTo(128));
-            Assert.That(main.Texture.AlphaChannel.GetAlpha(3, 3), Is.EqualTo(254));
+            // Predicate bytes, not magnitudes: sampled alpha exactly one stores
+            // 255, and every finite value below one stores 0.
+            Assert.That(main.Texture.AlphaChannel[0].GetAlpha(1, 1), Is.EqualTo(255));
+            Assert.That(main.Texture.AlphaChannel[0].GetAlpha(0, 0), Is.EqualTo(0));
+            Assert.That(main.Texture.AlphaChannel[0].GetAlpha(3, 3), Is.EqualTo(0));
             Assert.That(main.HasScaleOffset, Is.True);
             Assert.That(main.Scale, Is.EqualTo(new Vector2(2f, 3f)));
             Assert.That(main.Offset, Is.EqualTo(new Vector2(0.1f, 0.2f)));
@@ -393,8 +406,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(main.Scale, Is.EqualTo(new Vector2(2f, 3f)));
             Assert.That(main.Offset, Is.EqualTo(new Vector2(0.1f, 0.2f)));
             Assert.That(main.Texture.AlphaChannel, Is.SameAs(alpha));
-            Assert.That(alpha.GetAlpha(0, 0), Is.EqualTo(128));
-            Assert.That(alpha.GetAlpha(3, 3), Is.EqualTo(254));
+            Assert.That(alpha[0].GetAlpha(1, 1), Is.EqualTo(255));
+            Assert.That(alpha[0].GetAlpha(0, 0), Is.EqualTo(0));
+            Assert.That(alpha[0].GetAlpha(3, 3), Is.EqualTo(0));
             AssertNoLiveObjectsOrDelegates(captured);
         }
 
