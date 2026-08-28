@@ -186,12 +186,14 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </para>
         /// </summary>
         /// <param name="relevance">
-        /// MUST be the same closed request the supplied bindings were resolved
-        /// against — that is, <c>CapturedAnimationEvidence.RelevanceRequest</c>.
-        /// It is the only source that can invert a derived
-        /// <c>&lt;texture&gt;_ST</c> name back to its owning texture request,
-        /// and a different request would either fail that inversion outright or
-        /// resolve the name against the wrong closed schema.
+        /// MUST be the same decision-specific relevance request the supplied
+        /// bindings were resolved against — for ordinary alpha proof, that is
+        /// <c>CapturedAnimationEvidence.AlphaRelevanceRequest</c>, never the
+        /// broader schema the one capture gathered. It is the only source that
+        /// can invert a derived <c>&lt;texture&gt;_ST</c> name back to its
+        /// owning texture request, and a different request would either fail
+        /// that inversion outright or resolve the name against a schema the
+        /// bindings were never judged against.
         /// </param>
         internal static SlotResolutionResult ResolveSlot(
             CapturedMaterialSlotEvidence slot,
@@ -440,14 +442,14 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Inverts the exact derivation that produced the animated name:
         /// <c>DeriveTextureScaleOffsetProperties</c> appends
         /// <c>_ST</c> to each texture request whose evidence includes
-        /// <c>ScaleOffset</c>. This scans that same closed request rather than
-        /// parsing the suffix off an arbitrary name, so no name outside the
-        /// closed evidence request can reach texture evidence.
+        /// <c>ScaleOffset</c>. This scans the supplied relevance request rather
+        /// than parsing the suffix off an arbitrary name, so no name outside
+        /// that request can reach texture evidence.
         /// </summary>
         /// <exception cref="InvalidOperationException">
         /// The relationship is one-to-one by construction. No owner means the
         /// reference could not have been produced by proof-relevance
-        /// resolution, and two owners mean the closed request contains
+        /// resolution, and two owners mean the relevance request contains
         /// colliding texture names; both are invariant violations rather than
         /// domain outcomes.
         /// </exception>
