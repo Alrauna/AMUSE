@@ -193,28 +193,113 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void UnsupportedTexture_RefusesWithMissingTextureEvidence()
         {
-            var path = TempFolder + "/unsupported.png";
-            var staging = new Texture2D(Size, Size, TextureFormat.RGBA32, false);
-            staging.SetPixels32(new Color32[Size * Size]);
+            // Non-readability is no longer a refusal, so the cause here is a format
+            // outside the closed allowlist. ARGB4444 is allocatable directly and
+            // produces no console error; the producer refuses it at the format gate,
+            // before any GPU work.
+            var texture = new Texture2D(Size, Size, TextureFormat.ARGB4444, false);
+            texture.Apply();
+            var path = TempFolder + "/unsupported.asset";
+            AssetDatabase.CreateAsset(texture, path);
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(loaded, Is.Not.Null, path);
+            Assert.That(loaded.format, Is.EqualTo(TextureFormat.ARGB4444));
+
+            var resolution = Resolve(loaded);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+        }
+
+        /// <summary>
+        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
+        /// boundary does not survive halving: source texel x = 4 is exactly one at
+        /// mip 0, and the mip-1 texel covering it is not.
+        /// </summary>
+        private static Color32[] OddBoundaryPixels()
+        {
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
+            {
+                for (var x = 0; x < 8; x++)
+                {
+                    pixels[y * 8 + x] =
+                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
+                }
+            }
+
+            return pixels;
+        }
+
+        /// <summary>
+        /// A mipmapped, non-readable 8x8 fixture with the Point/Clamp sampling the
+        /// classifier's exact domain requires. A newly created synthetic asset under
+        /// TempFolder, which TearDown deletes whether or not assertions pass.
+        /// </summary>
+        private static Texture2D ImportMippedOddBoundary(string name)
+        {
+            var path = TempFolder + "/" + name + ".png";
+            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+            staging.SetPixels32(OddBoundaryPixels());
             staging.Apply();
             File.WriteAllBytes(path, staging.EncodeToPNG());
             UnityEngine.Object.DestroyImmediate(staging);
 
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
             var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
+            importer.mipmapEnabled = true;
             importer.isReadable = false;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.filterMode = FilterMode.Point;
             importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
             importer.SaveAndReimport();
-            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
+            return loaded;
+        }
+
+        /// <summary>
+        /// The exact UV support of source texel (4, 0) in an 8x8 texture: that texel
+        /// spans u in [0.5, 0.625) and v in [0, 0.125).
+        /// </summary>
+        private static TriangleAlphaInput MipZeroOpaqueTexelTriangle()
+        {
+            return Triangle(
+                new Vector2(0.51f, 0.01f),
+                new Vector2(0.61f, 0.01f),
+                new Vector2(0.51f, 0.11f));
+        }
+
+        /// <summary>
+        /// A triangle wholly inside a texel that is exactly one at mip 0 must still
+        /// not be proven opaque, because a lower level covering it is not. A
+        /// mip-0-only implementation reports ProvenOpaque here.
+        /// </summary>
+        [Test]
+        public void ATriangleInsideAMipZeroOpaqueTexelIsRefusedByALowerMip()
+        {
+            var texture = ImportMippedOddBoundary("classifier_odd_boundary");
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(texture, out _, out var chain),
+                Is.True);
+            Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
+            Assert.That(
+                chain[0].GetAlpha(4, 0), Is.EqualTo(255),
+                "Precondition: mip 0 alone would prove this triangle opaque.");
+            Assert.That(
+                chain[1].GetAlpha(2, 0), Is.Not.EqualTo(255),
+                "Precondition: the mip-1 texel covering it is not opaque.");
 
             var resolution = Resolve(texture);
 
-            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
-                resolution.Failure,
-                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+                resolution.Classify(MipZeroOpaqueTexelTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
     }
 }

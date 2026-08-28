@@ -293,7 +293,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_UseEmission", 1f);
             material.SetTexture(
                 "_MainTex",
-                ImportTexture("mippedmain", importer => importer.mipmapEnabled = true));
+                ImportTexture(
+                    "trilinearmain",
+                    importer => importer.filterMode = FilterMode.Trilinear));
             material.SetTexture("_EmissionMap", ImportOpaqueColorMap("cleanemi"));
 
             var emission = Interpret(material).Semantics.Emission;

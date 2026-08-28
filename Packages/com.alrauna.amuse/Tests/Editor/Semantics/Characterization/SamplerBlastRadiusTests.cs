@@ -37,7 +37,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         /// the forced-opaque short-circuit, because a forced-opaque material
         /// never consults the sampler and would understate the coupling.
         /// </summary>
-        private Material AllOutputsMaterial(bool mippedMain)
+        private Material AllOutputsMaterial(bool unsupportedMain)
         {
             var material = NewFixtureMaterial();
 
@@ -46,8 +46,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 
             material.SetTexture(
                 "_MainTex",
-                mippedMain
-                    ? ImportTexture("blast_main", i => i.mipmapEnabled = true)
+                unsupportedMain
+                    ? ImportTexture("blast_main", i => i.filterMode = FilterMode.Trilinear)
                     : ImportTexture("blast_main"));
 
             material.SetTexture(
@@ -72,7 +72,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         {
             // A blast-radius test that started from an accidentally-unknown
             // baseline would prove nothing, so the baseline is asserted first.
-            var result = Interpret(AllOutputsMaterial(mippedMain: false));
+            var result = Interpret(AllOutputsMaterial(unsupportedMain: false));
 
             AssertOutputComplete(result, PoiyomiSemanticOutput.BaseColor);
             AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
@@ -83,7 +83,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         [Test]
         public void UnsupportedMainSampler_InvalidatesAllFourOutputs()
         {
-            var result = Interpret(AllOutputsMaterial(mippedMain: true));
+            var result = Interpret(AllOutputsMaterial(unsupportedMain: true));
 
             // Poiyomi routes every assigned sample through the _MainTex
             // sampler, including the emission map and the bump map, so the
@@ -117,14 +117,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         /// Every output populated and provable. The main texture must be a
         /// bounded LDR import so the tone-correction range proof holds.
         /// </summary>
-        private Material AllOutputsMaterial(bool mippedMain)
+        private Material AllOutputsMaterial(bool unsupportedMain)
         {
             var material = NewFixtureMaterial();
 
             material.SetTexture(
                 "_MainTex",
-                mippedMain
-                    ? ImportTexture("blast_main", i => i.mipmapEnabled = true)
+                unsupportedMain
+                    ? ImportTexture("blast_main", i => i.filterMode = FilterMode.Trilinear)
                     : ImportTexture("blast_main"));
 
             material.SetFloat("_UseBumpMap", 1f);
@@ -139,7 +139,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         [Test]
         public void Baseline_AllFourOutputsAreProven()
         {
-            var semantics = Interpret(AllOutputsMaterial(mippedMain: false))
+            var semantics = Interpret(AllOutputsMaterial(unsupportedMain: false))
                 .Semantics;
 
             Assert.That(semantics.BaseColor.IsComplete, Is.True, "BaseColor");
@@ -151,7 +151,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         [Test]
         public void UnsupportedMainSampler_InvalidatesOnlyBaseColorAndNormal()
         {
-            var result = Interpret(AllOutputsMaterial(mippedMain: true));
+            var result = Interpret(AllOutputsMaterial(unsupportedMain: true));
 
             // BaseColor samples _MainTex; Normal borrows its sampler.
             AssertSingleDiagnostic(
