@@ -138,17 +138,29 @@ namespace Alrauna.Amuse.Editor.Semantics
                 materials, families, shaders, evidence);
         }
 
-        internal static bool TryAttestAlphaMaterial(
+        /// <summary>
+        /// Selects the supported family for one material and hands back that
+        /// family's existing alpha evidence request. This is a pure selection
+        /// pass: it identifies the family from the exact shader name and does
+        /// nothing else. It captures no material evidence, reads no shader
+        /// source, computes no source hash, and acquires no texture — so a
+        /// material carrying a supported shader name over an unattested source
+        /// is selected here and refused later.
+        /// <para>
+        /// <see cref="TryCaptureClosedAlphaMaterials"/> is the sole
+        /// material-evidence capture and the sole source-attestation decision
+        /// for the admitted batch. Selection exists only to determine the union
+        /// of evidence that one capture must gather.
+        /// </para>
+        /// </summary>
+        internal static bool TrySelectAlphaMaterialRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
             out MaterialEvidenceRequest request)
         {
             family = IdentifyFamily(material);
             request = RequestForFamily(family);
-            if (request == null) return false;
-
-            var captured = CaptureAlphaMaterials(new[] { material });
-            return IsAttestedAlphaMaterial(captured[0]);
+            return request != null;
         }
 
         internal static bool TryCaptureClosedAlphaMaterials(

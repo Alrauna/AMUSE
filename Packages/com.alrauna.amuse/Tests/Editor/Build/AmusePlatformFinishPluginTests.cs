@@ -80,7 +80,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     VerifiedAlphaOnly);
 
@@ -500,7 +500,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     VerifiedAlphaOnly);
 
@@ -1178,7 +1178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     _ => UnityMaterialSemantics.AllUnknown());
                 var amuse = context.GetState<AmusePlatformFinishState>();
@@ -2022,7 +2022,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     VerifiedAlphaOnly);
 
@@ -2057,7 +2057,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     VerifiedAlphaOnly);
 
@@ -2142,7 +2142,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
-                    TryAttestVerifiedFixture,
+                    SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
                     VerifiedAlphaOnly);
 
@@ -2198,7 +2198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishPass.Execute(
                 context,
                 SupportedFacts(),
-                TryAttestVerifiedFixture,
+                SelectVerifiedFixtureRequest,
                 CaptureVerifiedFixtureMaterials,
                 VerifiedAlphaOnly);
             return context.GetState<AmusePlatformFinishState>();
@@ -2643,11 +2643,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 renderer.sharedMaterials,
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
-                TryAttestVerifiedFixture,
+                SelectVerifiedFixtureRequest,
                 CaptureVerifiedFixtureMaterials);
         }
 
-        private static bool TryAttestVerifiedFixture(
+        private static bool SelectVerifiedFixtureRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
             out MaterialEvidenceRequest request)
