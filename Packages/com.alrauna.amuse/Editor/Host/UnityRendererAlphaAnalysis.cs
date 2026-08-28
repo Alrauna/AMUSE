@@ -502,11 +502,11 @@ namespace Alrauna.Amuse.Editor.Host
                 resolveSemantics,
                 (TextureSourceId source,
                  TextureChannel channel,
-                 out AlphaTextureData field) =>
+                 out AlphaMipChain chain) =>
                 {
-                    field = null;
+                    chain = null;
                     return channel == TextureChannel.Alpha &&
-                           fields.TryGetValue(source, out field);
+                           fields.TryGetValue(source, out chain);
                 });
         }
 
@@ -572,10 +572,10 @@ namespace Alrauna.Amuse.Editor.Host
             return resolution;
         }
 
-        internal static IReadOnlyDictionary<TextureSourceId, AlphaTextureData>
+        internal static IReadOnlyDictionary<TextureSourceId, AlphaMipChain>
             GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
         {
-            var fields = new Dictionary<TextureSourceId, AlphaTextureData>();
+            var fields = new Dictionary<TextureSourceId, AlphaMipChain>();
             foreach (var material in materials)
             {
                 if (material == null)

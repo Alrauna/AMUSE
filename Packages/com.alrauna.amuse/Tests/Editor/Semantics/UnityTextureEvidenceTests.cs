@@ -126,15 +126,50 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
         }
 
+        /// <summary>
+        /// The blanket mipmap refusal is gone: AlphaResolution now classifies every
+        /// level of the captured chain, so "some level, bilinear within it" is
+        /// exactly the model the conjunction covers. Unity's Bilinear filters within
+        /// the selected level and selects a level without blending.
+        /// </summary>
         [Test]
-        public void TryGetSampling_MipmappedTexture_IsRefused()
+        public void TryGetSampling_MipmappedTexture_IsAdmitted()
         {
             var texture = Import(
                 "mipped",
                 sourceHasAlpha: true,
                 importer => importer.mipmapEnabled = true);
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
 
-            Assert.That(UnityTextureEvidence.TryGetSampling(texture, out _), Is.False);
+            Assert.That(texture.mipmapCount, Is.GreaterThan(1));
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(texture, out var sampling), Is.True);
+            Assert.That(
+                sampling,
+                Is.EqualTo(new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+        }
+
+        /// <summary>
+        /// Over-deletion guard. Only the mipmapCount clause goes; a mipmapped
+        /// texture that also carries a nonzero bias or anisotropy must still refuse.
+        /// </summary>
+        [Test]
+        public void TryGetSampling_MipmappedWithBiasOrAnisotropy_StillRefuses()
+        {
+            var biased = Import(
+                "mipped_biased", sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            biased.mipMapBias = -1f;
+            Assert.That(UnityTextureEvidence.TryGetSampling(biased, out _), Is.False);
+
+            var aniso = Import(
+                "mipped_aniso", sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            aniso.anisoLevel = 4;
+            Assert.That(UnityTextureEvidence.TryGetSampling(aniso, out _), Is.False);
         }
 
         [Test]
