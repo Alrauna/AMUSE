@@ -57,8 +57,6 @@ namespace Alrauna.Amuse.Research.Collection
                         .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty:
                     return Census.RendererRefusal
                         .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty;
-                case RendererAnalysisRefusal.AdmittedStateBudgetExceeded:
-                    return Census.RendererRefusal.AdmittedStateBudgetExceeded;
                 case RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial:
                     return Census.RendererRefusal
                         .AnimatedPropertyAbsentFromAdmittedMaterial;

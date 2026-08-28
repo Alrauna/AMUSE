@@ -43,7 +43,6 @@ namespace Alrauna.Amuse.Research.Census
         AnimatedMaterialSlotCount,
         AdditiveLayerWithProofRelevantMaterialProperty,
         UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
-        AdmittedStateBudgetExceeded,
         AnimatedPropertyAbsentFromAdmittedMaterial,
         UnsupportedAnimationCurveForm,
         AnimatedMaterialPropertyNotSingleton,
