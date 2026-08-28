@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
@@ -2553,6 +2554,132 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Renderer-scoped material-swap closure driven through the production
+        /// renderer loop. Two renderers share one committed graph in which only
+        /// renderer B's material slot is animated; the injected closed capturer
+        /// records the batch each renderer capture receives.
+        /// <para>
+        /// This enters <see cref="AmusePlatformFinishPass"/>'s own Execute — the
+        /// existing selector/capturer/resolver seam — rather than calling capture
+        /// directly, so it falsifies a production loop that failed to thread each
+        /// renderer's path: graph-wide closure would hand BOTH captures the same
+        /// two materials.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_MaterialSwapClosureIsScopedToTheAnalyzedRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE renderer-scoped swap closure");
+            var fixtureA = default(AnalyzableRendererFixture);
+            var fixtureB = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material swapped = null;
+
+            try
+            {
+                var childA = new GameObject("RendererA");
+                childA.transform.SetParent(root.transform, false);
+                fixtureA = AddVerifiedOpaqueRenderer(childA);
+
+                var childB = new GameObject("RendererB");
+                childB.transform.SetParent(root.transform, false);
+                fixtureB = AddVerifiedOpaqueRenderer(childB);
+
+                swapped = VerifiedOpaqueMaterial();
+
+                // Only renderer B's slot 0 is animated. Renderer A is untouched
+                // by animation, so every material it ever holds is its current
+                // one.
+                controller = AddAnimatedObjectReference(
+                    root,
+                    "RendererB",
+                    "m_Materials.Array.data[0]",
+                    swapped,
+                    out clip);
+
+                var batches = new List<Material[]>();
+
+                bool RecordingCapturer(
+                    IReadOnlyList<Material> materials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                    MaterialEvidenceRequest request,
+                    out IReadOnlyList<CapturedAlphaMaterial> captured)
+                {
+                    batches.Add(materials.ToArray());
+                    return CaptureVerifiedFixtureMaterials(
+                        materials, families, request, out captured);
+                }
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                // The production renderer loop, including the path it derives
+                // per renderer and threads into capture.
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    RecordingCapturer,
+                    VerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    batches, Has.Count.EqualTo(2),
+                    "the production loop must capture exactly once per renderer");
+
+                // Order-independent: NDMF/Unity does not promise renderer
+                // enumeration order, and the claim does not depend on it.
+                var batchSizes = batches
+                    .Select(batch => batch.Length)
+                    .OrderBy(size => size)
+                    .ToArray();
+
+                CollectionAssert.AreEqual(
+                    new[] { 1, 2 },
+                    batchSizes,
+                    "graph-wide closure hands every renderer the same admitted " +
+                    "set, which would be {2, 2} here; {1, 2} is only reachable " +
+                    "when each capture is scoped to its own renderer path");
+
+                var isolated = batches.Single(batch => batch.Length == 1);
+                var owning = batches.Single(batch => batch.Length == 2);
+
+                CollectionAssert.AreEqual(
+                    new[] { fixtureA.Material },
+                    isolated,
+                    "the unanimated renderer's batch must hold only its own " +
+                    "current material");
+                CollectionAssert.AreEquivalent(
+                    new[] { fixtureB.Material, swapped },
+                    owning,
+                    "the owning renderer must still close over its current and " +
+                    "swapped materials");
+
+                Assert.That(
+                    amuse.AnalyzedRendererCount, Is.EqualTo(2),
+                    "both renderers are supported and opaque, so neither may be " +
+                    "refused");
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixtureA);
+                DisposeAnalyzableRenderer(fixtureB);
+                if (swapped != null) Object.DestroyImmediate(swapped);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
         /// Authors one object-reference curve on the root renderer under an
         /// arbitrary property name, so a fixture can present the committed graph
         /// with binding syntax Unity's own generator does not emit.
@@ -2563,11 +2690,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Object value,
             out AnimationClip clip)
         {
+            return AddAnimatedObjectReference(
+                root, string.Empty, propertyName, value, out clip);
+        }
+
+        /// <summary>
+        /// The same fixture at an explicit renderer path, so a test can animate
+        /// one renderer's material slot while analyzing another.
+        /// </summary>
+        private static AnimatorController AddAnimatedObjectReference(
+            GameObject root,
+            string rendererPath,
+            string propertyName,
+            Object value,
+            out AnimationClip clip)
+        {
             clip = new AnimationClip { name = "AMUSE object reference" };
             AnimationUtility.SetObjectReferenceCurve(
                 clip,
                 EditorCurveBinding.PPtrCurve(
-                    string.Empty,
+                    rendererPath,
                     typeof(SkinnedMeshRenderer),
                     propertyName),
                 new[]
@@ -2639,7 +2781,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(graph.Layers, Has.Count.EqualTo(1));
             Assert.That(graph.Layers[0].Clips, Has.Count.EqualTo(1));
 
+            // The same path production derives, so this helper exercises the real
+            // renderer-scoped capture rather than a stand-in path.
             return UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                AnimationUtility.CalculateTransformPath(
+                    renderer.transform, root.transform),
                 renderer.sharedMaterials,
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
