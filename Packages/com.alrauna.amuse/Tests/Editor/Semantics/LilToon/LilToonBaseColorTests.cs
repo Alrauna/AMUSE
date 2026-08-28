@@ -163,12 +163,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void MipmappedMainTex_IsUnsupportedSampling()
+        public void TrilinearMainTex_IsUnsupportedSampling()
         {
             var material = NewFixtureMaterial();
             material.SetTexture(
                 "_MainTex",
-                ImportTexture("mipped", importer => importer.mipmapEnabled = true));
+                ImportTexture(
+                    "trilinear",
+                    importer => importer.filterMode = FilterMode.Trilinear));
 
             var result = Interpret(material);
 

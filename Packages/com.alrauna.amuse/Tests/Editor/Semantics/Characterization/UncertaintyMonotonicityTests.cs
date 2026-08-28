@@ -126,7 +126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             return material;
         }
 
-        [TestCase("MainTexBecomesMipmapped")]
+        [TestCase("MainTexBecomesTrilinear")]
         [TestCase("BumpMapLosesNormalImport")]
         [TestCase("BumpMapGreenChannelFlipped")]
         [TestCase("EmissionMapGainsImportedAlpha")]
@@ -143,9 +143,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 
             switch (mutation)
             {
-                case "MainTexBecomesMipmapped":
+                case "MainTexBecomesTrilinear":
                     MonotonicityAssert.Reimport(
-                        _main, i => i.mipmapEnabled = true);
+                        _main, i => i.filterMode = FilterMode.Trilinear);
                     break;
                 case "BumpMapLosesNormalImport":
                     MonotonicityAssert.Reimport(
@@ -204,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                 "The monotonicity baseline must start fully proven.");
         }
 
-        [TestCase("MainTexBecomesMipmapped")]
+        [TestCase("MainTexBecomesTrilinear")]
         [TestCase("BumpMapLosesNormalImport")]
         [TestCase("BumpMapGreenChannelFlipped")]
         [TestCase("EmissionMapGainsImportedAlpha")]
@@ -217,9 +217,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 
             switch (mutation)
             {
-                case "MainTexBecomesMipmapped":
+                case "MainTexBecomesTrilinear":
                     MonotonicityAssert.Reimport(
-                        _main, i => i.mipmapEnabled = true);
+                        _main, i => i.filterMode = FilterMode.Trilinear);
                     break;
                 case "BumpMapLosesNormalImport":
                     MonotonicityAssert.Reimport(

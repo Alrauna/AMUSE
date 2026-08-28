@@ -472,9 +472,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static bool NoAlphaFields(
             TextureSourceId source,
             TextureChannel channel,
-            out AlphaTextureData field)
+            out AlphaMipChain chain)
         {
-            field = null;
+            chain = null;
             return false;
         }
 
@@ -1186,7 +1186,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaResolution ClassifiedResolution(byte texel)
         {
             return AlphaResolution.Classified(
-                new AlphaTextureData(1, 1, new[] { texel }),
+                new AlphaMipChain(new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Point, AlphaWrapMode.Clamp));
         }
