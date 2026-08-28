@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -22,6 +23,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             EditorCurveBinding.FloatCurve(
                 "Body", typeof(SkinnedMeshRenderer), "material._Cutoff");
 
+        private const string UnattestedShaderFolder =
+            "Assets/AmuseTests_UnattestedShaders";
+
         private readonly List<UnityEngine.Object> _owned =
             new List<UnityEngine.Object>();
         private readonly Dictionary<Material, CapturedAlphaMaterialFamily>
@@ -38,6 +42,35 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             _owned.Clear();
             _fixtureFamilies.Clear();
+            if (AssetDatabase.IsValidFolder(UnattestedShaderFolder))
+            {
+                AssetDatabase.DeleteAsset(UnattestedShaderFolder);
+            }
+        }
+
+        /// <summary>
+        /// Imports a stand-in shader asset carrying a real supported shader
+        /// name. Its source is not the pinned vendor source, so it can pass
+        /// family selection and never source attestation.
+        /// </summary>
+        private static Shader UnattestedShader(string fileName, string shaderName)
+        {
+            if (!AssetDatabase.IsValidFolder(UnattestedShaderFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_UnattestedShaders");
+            }
+
+            var path = UnattestedShaderFolder + "/" + fileName;
+            File.WriteAllText(
+                path,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    SubShader { Pass {} }\n}\n");
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(shader, Is.Not.Null, path);
+            return shader;
         }
 
         [Test]
@@ -653,7 +686,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { initial },
                 graph,
                 new StubBindings(specialClip),
-                TryAttestFixture,
+                SelectFixtureRequest,
                 CaptureFixtureMaterials);
 
             Assert.That(evidence.Clips, Has.Count.EqualTo(2));
@@ -668,20 +701,32 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(evidence.Clips[1].FloatBindings, Has.Count.EqualTo(1));
         }
 
+        /// <summary>
+        /// Selection is a whole-batch pass, and the capture that follows it is
+        /// the only one: every admitted material is selected before capture
+        /// begins, and the capturer is invoked exactly once with the complete
+        /// admitted batch rather than once per material.
+        /// </summary>
         [Test]
-        public void EveryAttestationCompletesBeforeClosedCaptureStarts()
+        public void EverySelectionCompletesBeforeTheSingleClosedCapture()
         {
             var first = NewPoiyomiMaterial();
             var second = NewLilToonMaterial();
-            var attested = 0;
+            var selected = 0;
+            var captureCalls = 0;
+            var capturedBatch = Array.Empty<Material>();
 
-            bool Attest(
+            bool Select(
                 Material material,
                 out CapturedAlphaMaterialFamily family,
                 out MaterialEvidenceRequest request)
             {
-                attested++;
-                return TryAttestFixture(material, out family, out request);
+                Assert.That(
+                    captureCalls,
+                    Is.Zero,
+                    "no evidence may be captured while selection is still running");
+                selected++;
+                return SelectFixtureRequest(material, out family, out request);
             }
 
             bool Capture(
@@ -690,7 +735,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 MaterialEvidenceRequest request,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
-                Assert.That(attested, Is.EqualTo(2));
+                Assert.That(selected, Is.EqualTo(2));
+                captureCalls++;
+                capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
                     materials, families, request, out captured);
             }
@@ -699,10 +746,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { ObservationWithMaterialSwap(second) },
                 new[] { first },
                 EmptyGraph(),
-                Attest,
+                Select,
                 Capture);
 
             Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                captureCalls,
+                Is.EqualTo(1),
+                "the admitted batch must be captured exactly once");
+            CollectionAssert.AreEqual(new[] { first, second }, capturedBatch);
         }
 
         [Test]
@@ -798,6 +850,112 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
         }
 
+        /// <summary>
+        /// The closed batch capture is the sole source-attestation decision, so
+        /// its refusal is the same conservative outcome as a material no family
+        /// selects: unattested, with nothing partial escaping.
+        /// </summary>
+        [Test]
+        public void RefusedClosedCaptureIsUnattestedWithNoPartialEvidence()
+        {
+            var first = NewPoiyomiMaterial();
+            var second = NewLilToonMaterial();
+
+            bool RefuseCapture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                captured = null;
+                return false;
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                new[] { ObservationWithMaterialSwap(second) },
+                new[] { first },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                RefuseCapture);
+
+            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(
+                evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+            Assert.That(RequestedNames(evidence.RelevanceRequest), Is.Empty);
+            Assert.That(evidence.Clips, Is.Empty);
+            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+            Assert.That(evidence.CurrentMaterialIndices, Is.Empty);
+        }
+
+        /// <summary>
+        /// A family no frontend supports is refused during selection, before the
+        /// batch capture is reached, so no evidence is gathered for a batch that
+        /// can never close.
+        /// </summary>
+        [Test]
+        public void UnselectableFamilyFailsBeforeTheClosedCaptureIsInvoked()
+        {
+            var supported = NewPoiyomiMaterial();
+            var unselectable = Own(new Material(Shader.Find("Unlit/Color")));
+            var captureCalls = 0;
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                captureCalls++;
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                new[] { ObservationWithMaterialSwap(unselectable) },
+                new[] { supported },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                Capture);
+
+            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(
+                evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+            Assert.That(
+                captureCalls,
+                Is.Zero,
+                "an unselectable family must not reach the batch capture");
+            Assert.That(evidence.Clips, Is.Empty);
+            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+        }
+
+        /// <summary>
+        /// The real closure path refuses conservatively from both directions: a
+        /// shader no family claims, and a shader carrying a supported name over
+        /// a source no attestation can verify. Only the closed batch capture
+        /// decides the second case, and it still refuses.
+        /// </summary>
+        [Test]
+        public void SupportedShaderNameWithUnattestedSourceFailsTheRealPath()
+        {
+            var material = Own(new Material(
+                UnattestedShader(
+                    "poiyomi-named.shader",
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName)));
+
+            var evidence = UnityAnimationEvidenceCapture.Capture(
+                new[] { material },
+                EmptyGraph(),
+                new StubBindings());
+
+            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+            Assert.That(evidence.Clips, Is.Empty);
+            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+        }
+
         [Test]
         public void AvatarGraphRefusalIsCallerMisuseNotClosureFailure()
         {
@@ -878,11 +1036,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 observations,
                 currentSlots,
                 graph,
-                TryAttestFixture,
+                SelectFixtureRequest,
                 CaptureFixtureMaterials);
         }
 
-        private bool TryAttestFixture(
+        private bool SelectFixtureRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
             out MaterialEvidenceRequest request)

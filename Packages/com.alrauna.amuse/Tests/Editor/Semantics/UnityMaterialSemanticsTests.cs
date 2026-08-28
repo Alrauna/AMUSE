@@ -110,10 +110,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var lilToon = NewMaterial(
                 "liltoon.shader",
                 LilToonSourceAttestation.SupportedShaderName,
-                @"
-        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
-        _Invisible (""Invisible"", Int) = 0
-        _UDIMDiscardCompile (""UDIM"", Int) = 0");
+                LilToonProperties());
 
             var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
                 new[] { poiyomi, lilToon });
@@ -140,6 +137,98 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(
                 lilToonAlpha.GetCompleteValue().GetConstantValue(),
                 Is.EqualTo(1f));
+        }
+
+        /// <summary>
+        /// Request selection identifies the family and hands back that family's
+        /// existing alpha request. It deliberately does not attest the source:
+        /// this material carries the supported shader name over a stand-in
+        /// source no attestation can verify, and selection still succeeds.
+        /// <see cref="ClosedCaptureRevalidatesSourceAttestation"/> is the pass
+        /// that refuses it.
+        /// </summary>
+        [Test]
+        public void SelectionIdentifiesPoiyomiWithoutAttestingSource()
+        {
+            var material = NewMaterial(
+                "selected-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
+                material, out var family, out var request);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                request,
+                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                "selection must hand back the family's existing request");
+        }
+
+        [Test]
+        public void SelectionIdentifiesLilToonWithoutAttestingSource()
+        {
+            var material = NewMaterial(
+                "selected-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
+                material, out var family, out var request);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+            Assert.That(
+                request,
+                Is.SameAs(LilToonMaterialSemantics.AlphaEvidenceRequest),
+                "selection must hand back the family's existing request");
+        }
+
+        [Test]
+        public void SelectionRejectsAnUnsupportedShaderFamily()
+        {
+            _material = new Material(Shader.Find("Unlit/Color"));
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
+                _material, out var family, out var request);
+
+            Assert.That(selected, Is.False);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(request, Is.Null);
+        }
+
+        [Test]
+        public void SelectionRejectsANullMaterial()
+        {
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
+                null, out var family, out var request);
+
+            Assert.That(selected, Is.False);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(request, Is.Null);
+        }
+
+        [Test]
+        public void ClosedCaptureRevalidatesLilToonSourceAttestation()
+        {
+            var material = NewMaterial(
+                "unattested-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var success = UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                new[] { material },
+                new[] { CapturedAlphaMaterialFamily.LilToon },
+                LilToonMaterialSemantics.AlphaEvidenceRequest,
+                out var captured);
+
+            Assert.That(success, Is.False);
+            Assert.That(captured, Is.Null);
         }
 
         [Test]
@@ -193,6 +282,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var material = new Material(shader);
             _batchMaterials.Add(material);
             return material;
+        }
+
+        private static string LilToonProperties()
+        {
+            return @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIM"", Int) = 0";
         }
 
         private static string PoiyomiProperties()
