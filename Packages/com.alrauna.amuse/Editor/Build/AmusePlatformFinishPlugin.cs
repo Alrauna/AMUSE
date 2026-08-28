@@ -412,7 +412,7 @@ namespace Alrauna.Amuse.Editor.Build
                     UnityAnimationEvidenceCapture.ResolveProofRelevant(
                         binding,
                         rendererPath,
-                        evidence.RelevanceRequest,
+                        evidence.AlphaRelevanceRequest,
                         out var reference);
                 if (resolution ==
                     ProofRelevantBindingResolution.UnrecognizedMaterialBinding)
@@ -435,7 +435,7 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 if (UnityAnimationEvidenceCapture
                         .IsUnrecognizedObjectMaterialBinding(
-                            binding, rendererPath, evidence.RelevanceRequest))
+                            binding, rendererPath, evidence.AlphaRelevanceRequest))
                 {
                     return Refused(
                         RendererAnalysisRefusal
@@ -479,7 +479,7 @@ namespace Alrauna.Amuse.Editor.Build
                     slots[slotIndex],
                     evidence.AdmittedMaterials,
                     relevantBindings,
-                    evidence.RelevanceRequest,
+                    evidence.AlphaRelevanceRequest,
                     AlphaFields,
                     resolveSemantics);
                 if (!resolved.IsResolved)

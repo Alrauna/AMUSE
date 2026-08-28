@@ -504,7 +504,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             foreach (var property in onlyInSwapped)
             {
                 Assert.That(
-                    RequestedNames(evidence.RelevanceRequest),
+                    RequestedNames(evidence.AlphaRelevanceRequest),
                     Contains.Item(property),
                     "missed a dependency contributed only by the swapped family: " +
                     property);
@@ -524,7 +524,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(evidence.ClosureFailure,
                 Is.EqualTo(MaterialDependencyClosureFailure.InvalidSwapValue));
-            Assert.That(RequestedNames(evidence.RelevanceRequest), Is.Empty);
+            Assert.That(RequestedNames(evidence.AlphaRelevanceRequest), Is.Empty);
             Assert.That(evidence.Clips, Is.Empty);
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
             Assert.That(evidence.CurrentMaterialIndices, Is.Empty);
@@ -743,14 +743,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             bool Select(
                 Material material,
                 out CapturedAlphaMaterialFamily family,
-                out MaterialEvidenceRequest request)
+                out MaterialEvidenceRequest alphaRelevance,
+                out MaterialEvidenceRequest captureSchema)
             {
                 Assert.That(
                     captureCalls,
                     Is.Zero,
                     "no evidence may be captured while selection is still running");
                 selected++;
-                return SelectFixtureRequest(material, out family, out request);
+                return SelectFixtureRequest(
+                    material, out family, out alphaRelevance, out captureSchema);
             }
 
             bool Capture(
@@ -780,6 +782,186 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(1),
                 "the admitted batch must be captured exactly once");
             CollectionAssert.AreEqual(new[] { first, second }, capturedBatch);
+        }
+
+        [Test]
+        public void ConversionEvidenceIsCapturedWithoutWideningAlphaRelevance()
+        {
+            var poiyomi = NewPoiyomiMaterial();
+
+            // Off the shader's default of 1, so proving the captured value
+            // equals the source material's is not 1 == 1. This is a transient
+            // test-owned material, never a source asset.
+            poiyomi.SetFloat("_ZWrite", 0f);
+            MaterialEvidenceRequest capturerSaw = null;
+
+            bool Select(
+                Material material,
+                out CapturedAlphaMaterialFamily family,
+                out MaterialEvidenceRequest alphaRelevance,
+                out MaterialEvidenceRequest captureSchema)
+            {
+                family = CapturedAlphaMaterialFamily.Poiyomi;
+                alphaRelevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+                captureSchema = MaterialEvidenceRequest.Combine(
+                    alphaRelevance,
+                    PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+                return true;
+            }
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                capturerSaw = request;
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                Array.Empty<LiveClipObservation>(),
+                new[] { poiyomi },
+                EmptyGraph(),
+                Select,
+                Capture);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            CollectionAssert.Contains(
+                RequestedNames(capturerSaw),
+                "_ZWrite",
+                "fixture precondition: the capture schema must carry " +
+                "conversion-only render state");
+            CollectionAssert.DoesNotContain(
+                RequestedNames(evidence.AlphaRelevanceRequest),
+                "_ZWrite",
+                "conversion-only render state became ordinary alpha relevance");
+
+            // The request reaching the capturer proves only what was asked for.
+            // This is the evidence the real capture actually returned, so it
+            // proves conversion state survives the one capture rather than
+            // being requested and dropped.
+            var captured = evidence.AdmittedMaterials.Single().Evidence;
+            Assert.That(
+                captured.TryGetScalar("_ZWrite", out var capturedZWrite),
+                Is.True,
+                "conversion-only render state was requested but not captured");
+            Assert.That(
+                capturedZWrite,
+                Is.EqualTo(poiyomi.GetFloat("_ZWrite")),
+                "captured conversion state disagrees with the source material");
+
+            // The same evidence, read through ordinary alpha proof, still does
+            // not see it.
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._ZWrite"),
+                    AnalyzedRendererPath,
+                    evidence.AlphaRelevanceRequest,
+                    out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant),
+                "captured conversion state became an alpha proof input");
+        }
+
+        /// <summary>
+        /// Conversion evidence widens what the batch capture gathers, not what
+        /// ordinary alpha proof considers. lilToon contributes no conversion
+        /// request, so a mixed batch must still store exactly the union of the
+        /// two families' alpha requests.
+        /// </summary>
+        [Test]
+        public void MixedFamilyClosureKeepsCaptureSchemaApartFromAlphaRelevance()
+        {
+            var poiyomi = NewPoiyomiMaterial();
+            var lilToon = NewLilToonMaterial();
+            MaterialEvidenceRequest capturerSaw = null;
+            var captureCalls = 0;
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                captureCalls++;
+                capturerSaw = request;
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                new[] { ObservationWithMaterialSwap(lilToon) },
+                new[] { poiyomi },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                Capture);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                captureCalls,
+                Is.EqualTo(1),
+                "the admitted batch must still be captured exactly once");
+
+            var expectedAlpha = RequestedNames(
+                MaterialEvidenceRequest.Combine(
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest));
+            CollectionAssert.AreEqual(
+                expectedAlpha,
+                RequestedNames(evidence.AlphaRelevanceRequest),
+                "stored alpha relevance must be exactly the union of the " +
+                "admitted families' alpha requests");
+
+            CollectionAssert.Contains(
+                RequestedNames(capturerSaw),
+                "_EnableOutlines",
+                "the capture schema lost Poiyomi's conversion evidence");
+            foreach (var conversionOnly in ConversionOnlyProperties())
+            {
+                CollectionAssert.DoesNotContain(
+                    RequestedNames(evidence.AlphaRelevanceRequest),
+                    conversionOnly,
+                    "conversion-only render state widened alpha relevance, " +
+                    "including lilToon's: " + conversionOnly);
+            }
+        }
+
+        /// <summary>
+        /// A conversion-only property is still observed and captured like any
+        /// other animated binding; it is the stored alpha request that decides
+        /// it is not an ordinary alpha proof input. Storing the broader capture
+        /// schema instead would resolve this binding as renderer-wide.
+        /// </summary>
+        [Test]
+        public void ConversionOnlyAnimatedBindingIsCapturedYetIrrelevantToAlphaProof()
+        {
+            var poiyomi = NewPoiyomiMaterial();
+
+            var evidence = CaptureVerified(
+                AnalyzedRendererPath,
+                new[] { ObservationWithFloatBinding("material._ZWrite") },
+                new[] { poiyomi },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            var binding = evidence.Clips.Single().FloatBindings.Single();
+            Assert.That(
+                binding.PropertyName,
+                Is.EqualTo("material._ZWrite"),
+                "the conversion-only binding was not captured at all");
+
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    binding,
+                    AnalyzedRendererPath,
+                    evidence.AlphaRelevanceRequest,
+                    out _),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant),
+                "a conversion-only animated property became an ordinary alpha " +
+                "proof input");
         }
 
         [Test]
@@ -850,8 +1032,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(ordinary.Clips.Single().IsSpecialMotion, Is.False);
             Assert.That(special.Clips.Single().IsSpecialMotion, Is.True);
             CollectionAssert.AreEqual(
-                RequestedNames(ordinary.RelevanceRequest),
-                RequestedNames(special.RelevanceRequest));
+                RequestedNames(ordinary.AlphaRelevanceRequest),
+                RequestedNames(special.AlphaRelevanceRequest));
             CollectionAssert.AreEqual(
                 ordinary.CurrentMaterialIndices,
                 special.CurrentMaterialIndices);
@@ -913,7 +1095,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 evidence.ClosureFailure,
                 Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
-            Assert.That(RequestedNames(evidence.RelevanceRequest), Is.Empty);
+            Assert.That(RequestedNames(evidence.AlphaRelevanceRequest), Is.Empty);
             Assert.That(evidence.Clips, Is.Empty);
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
             Assert.That(evidence.CurrentMaterialIndices, Is.Empty);
@@ -1060,10 +1242,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             bool Select(
                 Material material,
                 out CapturedAlphaMaterialFamily family,
-                out MaterialEvidenceRequest request)
+                out MaterialEvidenceRequest alphaRelevance,
+                out MaterialEvidenceRequest captureSchema)
             {
                 selected.Add(material);
-                return SelectFixtureRequest(material, out family, out request);
+                return SelectFixtureRequest(
+                    material, out family, out alphaRelevance, out captureSchema);
             }
 
             bool Capture(
@@ -1107,7 +1291,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             // so a widened request is directly observable.
             CollectionAssert.AreEqual(
                 RequestedNames(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
-                RequestedNames(evidence.RelevanceRequest),
+                RequestedNames(evidence.AlphaRelevanceRequest),
                 "another renderer's material widened this renderer's evidence " +
                 "request, which also widens what counts as proof-relevant here");
         }
@@ -1345,20 +1529,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 CaptureFixtureMaterials);
         }
 
+        /// <summary>
+        /// Mirrors production's family mapping over the public stand-in
+        /// fixtures: each family's existing alpha request is what ordinary
+        /// alpha proof may consider, and Poiyomi's capture schema additionally
+        /// carries conversion evidence.
+        /// </summary>
         private bool SelectFixtureRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
-            out MaterialEvidenceRequest request)
+            out MaterialEvidenceRequest alphaRelevance,
+            out MaterialEvidenceRequest captureSchema)
         {
             if (_fixtureFamilies.TryGetValue(material, out family))
             {
-                request = family == CapturedAlphaMaterialFamily.Poiyomi
-                    ? PoiyomiMaterialSemantics.AlphaEvidenceRequest
-                    : LilToonMaterialSemantics.AlphaEvidenceRequest;
+                if (family == CapturedAlphaMaterialFamily.Poiyomi)
+                {
+                    alphaRelevance =
+                        PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+                    captureSchema = MaterialEvidenceRequest.Combine(
+                        alphaRelevance,
+                        PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+                }
+                else
+                {
+                    alphaRelevance =
+                        LilToonMaterialSemantics.AlphaEvidenceRequest;
+                    captureSchema = alphaRelevance;
+                }
+
                 return true;
             }
 
-            request = null;
+            alphaRelevance = null;
+            captureSchema = null;
             return false;
         }
 
@@ -1440,6 +1644,47 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         propertyName,
                         materials.Cast<UnityEngine.Object>().ToArray()),
                 });
+        }
+
+        /// <summary>
+        /// Requested names carried by Poiyomi's conversion evidence but by
+        /// neither family's alpha request, derived rather than retyped so the
+        /// assertions cannot drift from the vendor recipe.
+        /// </summary>
+        private static string[] ConversionOnlyProperties()
+        {
+            var alpha = RequestedNames(
+                MaterialEvidenceRequest.Combine(
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest));
+            var conversionOnly = RequestedNames(
+                    PoiyomiOpaqueConversion.ConversionEvidenceRequest)
+                .Except(alpha, StringComparer.Ordinal)
+                .ToArray();
+            Assert.That(
+                conversionOnly,
+                Contains.Item("_ZWrite"),
+                "fixture precondition: conversion evidence must carry render " +
+                "state no alpha request asks for");
+            return conversionOnly;
+        }
+
+        private static LiveClipObservation ObservationWithFloatBinding(
+            string propertyName)
+        {
+            return new LiveClipObservation(
+                "floats",
+                false,
+                new[]
+                {
+                    new LiveFloatObservation(
+                        AnalyzedRendererPath,
+                        typeof(SkinnedMeshRenderer).FullName,
+                        propertyName,
+                        true,
+                        new[] { 1f }),
+                },
+                Array.Empty<LiveObjectObservation>());
         }
 
         private static LiveClipObservation ObservationWithSlotValue(
