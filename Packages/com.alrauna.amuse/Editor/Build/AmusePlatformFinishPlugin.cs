@@ -453,15 +453,6 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var slots = MaterialSlotsFor(evidence, rendererPath);
-            var admittedCounts = new int[slots.Count];
-            for (var slot = 0; slot < slots.Count; slot++)
-                admittedCounts[slot] = slots[slot].AdmittedMaterialIndices.Count;
-            if (!AdmittedMaterialStates.TryBudgetProduct(
-                    admittedCounts, out _))
-            {
-                return Refused(
-                    RendererAnalysisRefusal.AdmittedStateBudgetExceeded);
-            }
 
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
                 evidence.AdmittedMaterials);

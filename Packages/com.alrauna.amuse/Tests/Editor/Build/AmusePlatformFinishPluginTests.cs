@@ -1296,11 +1296,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Regression for the removed renderer-wide admitted-state budget.
+        /// Runtime-state analysis resolves each material slot independently and
+        /// classifies each submesh against only its own slot's resolutions, so
+        /// the Cartesian product across slots is never constructed and costs
+        /// nothing. The removed bound refused a renderer purely on the size of
+        /// that product, which was a false negative about work that does not
+        /// exist.
+        /// <para>
+        /// Non-vacuity. The fixture pins three independently admitted materials
+        /// on each of eight slots, so the product the old gate computed is
+        /// 3^8 = 6561, above its cap of 4096; every assertion below is checked
+        /// against the captured evidence rather than assumed. Geometry is
+        /// deliberately supported here — the fixture this replaced used Lines
+        /// topology precisely because the budget refused before geometry was
+        /// inspected — and the analysis result is asserted to be
+        /// <c>None</c> with the exact opaque-candidate count, so no other
+        /// refusal can make this test pass.
+        /// </para>
+        /// </summary>
         [Test]
-        public void RuntimeStateIntegration_OverBudgetWinsBeforeGeometry()
+        public void RuntimeStateIntegration_LargeCrossSlotProductIsNotRefused()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE admitted-state budget");
+            var root = new GameObject("AMUSE independent material slots");
             var materials = new List<Material>();
             AnimatorController controller = null;
             AnimationClip clip = null;
@@ -1308,55 +1328,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
+                const int slotCount = 8;
                 var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                var vertices = new Vector3[slotCount * 3];
+                for (var slot = 0; slot < slotCount; slot++)
+                {
+                    vertices[slot * 3] = new Vector3(slot, 0f, 0f);
+                    vertices[slot * 3 + 1] = new Vector3(slot + 1f, 0f, 0f);
+                    vertices[slot * 3 + 2] = new Vector3(slot, 1f, 0f);
+                }
+
                 mesh = new Mesh
                 {
-                    vertices = new[]
-                    {
-                        Vector3.zero,
-                        Vector3.right,
-                    },
-                    subMeshCount = 8,
+                    vertices = vertices,
+                    subMeshCount = slotCount,
                 };
-                for (var slot = 0; slot < mesh.subMeshCount; slot++)
+                for (var slot = 0; slot < slotCount; slot++)
                 {
-                    // Deliberately unsupported geometry. Correct ordering returns
-                    // the budget refusal before this is inspected.
-                    mesh.SetIndices(new[] { 0, 1 }, MeshTopology.Lines, slot);
+                    mesh.SetTriangles(
+                        new[] { slot * 3, slot * 3 + 1, slot * 3 + 2 }, slot);
                 }
 
                 renderer.sharedMesh = mesh;
                 var current = VerifiedOpaqueMaterial();
                 materials.Add(current);
-                var currentSlots = new Material[mesh.subMeshCount];
+                var currentSlots = new Material[slotCount];
                 for (var slot = 0; slot < currentSlots.Length; slot++)
                     currentSlots[slot] = current;
                 renderer.sharedMaterials = currentSlots;
 
-                controller = AddOverBudgetMaterialAssignments(
-                    root, mesh.subMeshCount, materials, out clip);
+                controller = AddIndependentMaterialAssignments(
+                    root, slotCount, materials, out clip);
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, TestGenericPlatform.Instance);
-                SeedRetainedHostBindings(context);
-                var evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
-                AmusePlatformFinishPass.Execute(
-                    context,
-                    SupportedFacts(),
-                    TryAttestVerifiedFixture,
-                    CaptureVerifiedFixtureMaterials,
-                    VerifiedAlphaOnly);
-                var amuse = context.GetState<AmusePlatformFinishState>();
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, renderer, out var evidence);
 
                 Assert.That(evidence.IsClosed, Is.True);
-                Assert.That(evidence.Clips[0].ObjectBindings,
-                    Has.Count.EqualTo(mesh.subMeshCount));
-                Assert.That(amuse.RendererRefusalCount(
-                        RendererAnalysisRefusal.AdmittedStateBudgetExceeded),
-                    Is.EqualTo(1),
-                    "geometry ran before the admitted-state budget");
-                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
-                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1));
+                Assert.That(evidence.CurrentMaterialIndices,
+                    Has.Count.EqualTo(slotCount));
+
+                // The intended admitted count per slot, read off the captured
+                // evidence rather than assumed: the current material plus the
+                // two the slot's own object curve assigns, and neither of those
+                // is already a current material.
+                var bindings = evidence.Clips[0].ObjectBindings;
+                Assert.That(bindings, Has.Count.EqualTo(slotCount));
+                var currentIndices = new HashSet<int>(
+                    evidence.CurrentMaterialIndices);
+                var boundSlots = new HashSet<string>();
+                foreach (var binding in bindings)
+                {
+                    boundSlots.Add(binding.PropertyName);
+                    Assert.That(binding.AdmittedMaterialIndices,
+                        Has.Count.EqualTo(2),
+                        "fixture precondition: a slot curve did not admit two materials");
+                    foreach (var index in binding.AdmittedMaterialIndices)
+                    {
+                        Assert.That(currentIndices.Contains(index), Is.False,
+                            "fixture precondition: an assigned material is already current");
+                    }
+                }
+
+                Assert.That(boundSlots, Has.Count.EqualTo(slotCount),
+                    "fixture precondition: the curves did not cover distinct slots");
+
+                var product = 1L;
+                for (var slot = 0; slot < slotCount; slot++)
+                    product *= 3;
+                Assert.That(product, Is.GreaterThan(4096),
+                    "fixture precondition: the cross-slot product no longer exceeds the removed cap");
+
+                // The correct per-slot result, not merely the absence of the old
+                // refusal. Every admitted material forces opacity, so each of the
+                // eight submeshes classifies as an opaque candidate.
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(result.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(slotCount));
             }
             finally
             {
@@ -2434,13 +2482,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return tree;
         }
 
-        private static AnimatorController AddOverBudgetMaterialAssignments(
+        private static AnimatorController AddIndependentMaterialAssignments(
             GameObject root,
             int slotCount,
             ICollection<Material> ownedMaterials,
             out AnimationClip clip)
         {
-            clip = new AnimationClip { name = "AMUSE over-budget assignments" };
+            clip = new AnimationClip { name = "AMUSE independent slot assignments" };
             for (var slot = 0; slot < slotCount; slot++)
             {
                 var first = VerifiedOpaqueMaterial();
@@ -2468,7 +2516,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     });
             }
 
-            var controller = new AnimatorController { name = "AMUSE budget graph" };
+            var controller = new AnimatorController { name = "AMUSE slot assignment graph" };
             controller.AddLayer("L0");
             controller.layers[0].stateMachine.AddState("S0").motion = clip;
             root.AddComponent<Animator>().runtimeAnimatorController = controller;
