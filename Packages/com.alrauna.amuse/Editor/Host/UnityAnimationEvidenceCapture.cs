@@ -40,7 +40,15 @@ namespace Alrauna.Amuse.Editor.Host
         internal int ComponentIndex { get; }
     }
 
-    internal delegate bool AlphaMaterialAttestor(
+    /// <summary>
+    /// Selects the supported shader family and that family's alpha evidence
+    /// request for one admitted material. Selection decides only what evidence
+    /// the closed batch must gather; it attests nothing and captures nothing.
+    /// The single <see cref="ClosedAlphaMaterialCapturer"/> call that follows is
+    /// the sole material-evidence capture and the sole source-attestation
+    /// decision for the whole admitted batch.
+    /// </summary>
+    internal delegate bool AlphaMaterialRequestSelector(
         Material material,
         out CapturedAlphaMaterialFamily family,
         out MaterialEvidenceRequest request);
@@ -81,7 +89,7 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 bindings,
-                UnityMaterialSemantics.TryAttestAlphaMaterial,
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequest,
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials);
         }
 
@@ -93,29 +101,29 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
             return CaptureObserved(
-                observations, currentSlots, graph, attestor, capturer);
+                observations, currentSlots, graph, selectRequest, capturer);
         }
 
         internal static CapturedAnimationEvidence CaptureGraphForTests(
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
             return CaptureGraph(
-                currentSlots, graph, bindings, attestor, capturer);
+                currentSlots, graph, bindings, selectRequest, capturer);
         }
 
         private static CapturedAnimationEvidence CaptureGraph(
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
             if (graph == null) throw new ArgumentNullException(nameof(graph));
@@ -137,14 +145,14 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return CaptureObserved(
-                observations, currentSlots, graph, attestor, capturer);
+                observations, currentSlots, graph, selectRequest, capturer);
         }
 
         private static CapturedAnimationEvidence CaptureObserved(
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
             if (observations == null)
@@ -152,7 +160,8 @@ namespace Alrauna.Amuse.Editor.Host
             if (currentSlots == null)
                 throw new ArgumentNullException(nameof(currentSlots));
             if (graph == null) throw new ArgumentNullException(nameof(graph));
-            if (attestor == null) throw new ArgumentNullException(nameof(attestor));
+            if (selectRequest == null)
+                throw new ArgumentNullException(nameof(selectRequest));
             if (capturer == null) throw new ArgumentNullException(nameof(capturer));
             if (graph.Refusal != AvatarAnimationRefusal.None)
                 throw new InvalidOperationException(
@@ -235,11 +244,18 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
 
+            // Every admitted material completes request selection before any
+            // evidence is captured: the closed request is the union of what the
+            // whole batch needs, so no material's evidence can be gathered until
+            // that union is known.
             var families = new CapturedAlphaMaterialFamily[admitted.Count];
             var requests = new MaterialEvidenceRequest[admitted.Count];
             for (var index = 0; index < admitted.Count; index++)
             {
-                if (!attestor(admitted[index], out families[index], out requests[index]) ||
+                if (!selectRequest(
+                        admitted[index],
+                        out families[index],
+                        out requests[index]) ||
                     requests[index] == null)
                 {
                     return Failed(
@@ -247,6 +263,10 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
 
+            // The closed batch capture is the sole source-attestation decision,
+            // so its refusal means exactly what an unselectable family means:
+            // some admitted material is not attested. There is no second,
+            // weaker capture outcome to distinguish.
             var closedRequest = MaterialEvidenceRequest.Combine(requests);
             if (!capturer(
                     admitted,
@@ -255,7 +275,7 @@ namespace Alrauna.Amuse.Editor.Host
                     out var capturedMaterials))
             {
                 return Failed(
-                    MaterialDependencyClosureFailure.CaptureFailed);
+                    MaterialDependencyClosureFailure.UnattestedMaterial);
             }
             if (capturedMaterials == null ||
                 capturedMaterials.Count != admitted.Count)
