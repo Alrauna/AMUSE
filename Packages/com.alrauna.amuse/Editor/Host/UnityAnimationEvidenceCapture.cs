@@ -80,12 +80,20 @@ namespace Alrauna.Amuse.Editor.Host
                 Array.Empty<string>(),
                 Array.Empty<TexturePropertyEvidenceRequest>());
 
+        /// <summary>
+        /// Captures animation evidence for one renderer. <paramref name="rendererPath"/>
+        /// is that renderer's Unity animation path and scopes material-slot
+        /// closure to it: a renderer on the avatar root has the empty path, so
+        /// empty is valid and only null is rejected.
+        /// </summary>
         internal static CapturedAnimationEvidence Capture(
+            string rendererPath,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings)
         {
             return CaptureGraph(
+                rendererPath,
                 currentSlots,
                 graph,
                 bindings,
@@ -96,8 +104,9 @@ namespace Alrauna.Amuse.Editor.Host
         // Public-project vendor fixtures exercise verified frontend equations but
         // intentionally do not publish vendor source assets. This seam exists only
         // for the package's friend test assembly to test closure mechanics; product
-        // integration must call the three-argument graph entry point above.
+        // integration must call the graph entry point above.
         internal static CapturedAnimationEvidence CaptureObservedForTests(
+            string rendererPath,
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
@@ -105,10 +114,16 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer)
         {
             return CaptureObserved(
-                observations, currentSlots, graph, selectRequest, capturer);
+                rendererPath,
+                observations,
+                currentSlots,
+                graph,
+                selectRequest,
+                capturer);
         }
 
         internal static CapturedAnimationEvidence CaptureGraphForTests(
+            string rendererPath,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
@@ -116,16 +131,26 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer)
         {
             return CaptureGraph(
-                currentSlots, graph, bindings, selectRequest, capturer);
+                rendererPath,
+                currentSlots,
+                graph,
+                bindings,
+                selectRequest,
+                capturer);
         }
 
         private static CapturedAnimationEvidence CaptureGraph(
+            string rendererPath,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
+            // Empty is the avatar root's animation path and is valid; only an
+            // absent path is a caller defect.
+            if (rendererPath == null)
+                throw new ArgumentNullException(nameof(rendererPath));
             if (graph == null) throw new ArgumentNullException(nameof(graph));
             if (bindings == null) throw new ArgumentNullException(nameof(bindings));
             if (graph.Refusal != AvatarAnimationRefusal.None)
@@ -145,16 +170,24 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return CaptureObserved(
-                observations, currentSlots, graph, selectRequest, capturer);
+                rendererPath,
+                observations,
+                currentSlots,
+                graph,
+                selectRequest,
+                capturer);
         }
 
         private static CapturedAnimationEvidence CaptureObserved(
+            string rendererPath,
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer)
         {
+            if (rendererPath == null)
+                throw new ArgumentNullException(nameof(rendererPath));
             if (observations == null)
                 throw new ArgumentNullException(nameof(observations));
             if (currentSlots == null)
@@ -222,7 +255,8 @@ namespace Alrauna.Amuse.Editor.Host
                 foreach (var binding in observation.Objects)
                 {
                     if (!LiveAnimationObservation.TryParseMaterialSlotBinding(
-                            binding.PropertyName, out var slot))
+                            binding.PropertyName, out var slot) ||
+                        !AddressesAnalyzedRenderer(binding.Path, rendererPath))
                     {
                         continue;
                     }
@@ -307,6 +341,18 @@ namespace Alrauna.Amuse.Editor.Host
                     if (LiveAnimationObservation.TryParseMaterialSlotBinding(
                             binding.PropertyName, out _))
                     {
+                        // Same condition as admission above, so the immutable
+                        // copy can never disagree with what was admitted. A
+                        // foreign slot binding is another renderer's evidence:
+                        // it is dropped outright rather than retained with an
+                        // empty index list, which would read as "this renderer
+                        // has a swap that admits nothing".
+                        if (!AddressesAnalyzedRenderer(
+                                binding.Path, rendererPath))
+                        {
+                            continue;
+                        }
+
                         foreach (var value in binding.Values)
                         {
                             indices.Add(materialIndices[(Material)value]);
@@ -335,6 +381,31 @@ namespace Alrauna.Amuse.Editor.Host
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
                 hasAdditiveLayer);
+        }
+
+        /// <summary>
+        /// Whether an observed binding addresses the renderer being analyzed.
+        /// <para>
+        /// A capture describes exactly one renderer, but the observations it
+        /// receives come from the whole committed graph. A material-slot binding
+        /// names one renderer path, so a binding on any other path describes a
+        /// <em>different</em> renderer's slots: its slot index is meaningless
+        /// against this renderer's slot count, and its values are not this
+        /// renderer's material dependencies. Admitting them would let one
+        /// renderer's animation refuse, widen, or pad another's evidence.
+        /// </para>
+        /// <para>
+        /// Ordinal comparison, matching every other animation-path comparison in
+        /// AMUSE. The empty path is the avatar root's own path and compares like
+        /// any other.
+        /// </para>
+        /// </summary>
+        private static bool AddressesAnalyzedRenderer(
+            string bindingPath,
+            string rendererPath)
+        {
+            return string.Equals(
+                bindingPath, rendererPath, StringComparison.Ordinal);
         }
 
         internal static IReadOnlyCollection<string>
