@@ -139,18 +139,22 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Exercises the exact lifecycle, retained-bindings, committed-graph,
         /// renderer-loop, and accounting entry while substituting only the
-        /// existing public-fixture seams for unavailable vendor source
-        /// attestation and verified frontend interpretation.
+        /// existing public-fixture seams for family/request selection,
+        /// unavailable vendor source attestation, and verified frontend
+        /// interpretation.
         /// </summary>
         internal static void Execute(
             BuildContext context,
             HostLifecycleFacts facts,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
-            if (attestor == null) throw new ArgumentNullException(nameof(attestor));
+            if (selectRequest == null)
+            {
+                throw new ArgumentNullException(nameof(selectRequest));
+            }
             if (capturer == null) throw new ArgumentNullException(nameof(capturer));
             if (resolveSemantics == null)
             {
@@ -161,7 +165,7 @@ namespace Alrauna.Amuse.Editor.Build
                 context,
                 PendingState(context),
                 HostLifecycleCapability.Evaluate(facts),
-                attestor,
+                selectRequest,
                 capturer,
                 resolveSemantics);
         }
@@ -237,7 +241,7 @@ namespace Alrauna.Amuse.Editor.Build
             BuildContext context,
             AmusePlatformFinishState state,
             HostLifecycleCapability lifecycle,
-            AlphaMaterialAttestor attestor,
+            AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics)
         {
@@ -282,7 +286,7 @@ namespace Alrauna.Amuse.Editor.Build
 
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform, context.AvatarRootObject.transform);
-                var evidence = attestor == null
+                var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
                         renderer.sharedMaterials,
                         graph,
@@ -291,7 +295,7 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
-                        attestor,
+                        selectRequest,
                         capturer);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, resolveSemantics);
