@@ -45,8 +45,6 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
 
-        AdmittedStateBudgetExceeded,
-
         /// <summary>
         /// A proof-relevant animated material property is absent from an
         /// admitted material. Task 5 observed that a bare
@@ -273,8 +271,8 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// Performs the host facts whose named renderer refusal must take
         /// precedence over animation-evidence closure. Geometry is deliberately
-        /// excluded: runtime-state admission and its budget must run before any
-        /// topology, vertex, UV, or index inspection.
+        /// excluded: runtime-state admission must run before any topology,
+        /// vertex, UV, or index inspection.
         /// </summary>
         internal static RendererAnalysisRefusal HostStructuralRefusalFor(
             Renderer renderer)
