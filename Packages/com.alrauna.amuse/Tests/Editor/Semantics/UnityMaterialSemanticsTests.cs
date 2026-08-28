@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -155,8 +156,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 PoiyomiMaterialSemantics.PoiyomiToonShaderName,
                 PoiyomiProperties());
 
-            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
-                material, out var family, out var request);
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out var family, out var request, out _);
 
             Assert.That(selected, Is.True);
             Assert.That(
@@ -175,8 +176,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 LilToonSourceAttestation.SupportedShaderName,
                 LilToonProperties());
 
-            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
-                material, out var family, out var request);
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out var family, out var request, out _);
 
             Assert.That(selected, Is.True);
             Assert.That(
@@ -187,30 +188,156 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "selection must hand back the family's existing request");
         }
 
+        /// <summary>
+        /// Selection answers two separate questions for one material: what
+        /// ordinary alpha proof may consider, and what the single closed
+        /// capture must gather. Poiyomi is the family where they differ,
+        /// because conversion reads render state alpha does not depend on.
+        /// </summary>
+        [Test]
+        public void PoiyomiCaptureSchemaCarriesConversionEvidenceAlphaRelevanceDoesNot()
+        {
+            var material = NewMaterial(
+                "schema-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material,
+                out _,
+                out var alphaRelevance,
+                out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                "alpha relevance must remain the family's existing request");
+
+            // Representative conversion-only render state. Neither name appears
+            // in the alpha request, so each one separates the two questions.
+            foreach (var conversionOnly in new[] { "_ZWrite", "_EnableOutlines" })
+            {
+                CollectionAssert.Contains(
+                    captureSchema.ScalarProperties,
+                    conversionOnly,
+                    "the capture schema must gather conversion evidence: " +
+                    conversionOnly);
+                CollectionAssert.Contains(
+                    captureSchema.PresenceProperties,
+                    conversionOnly,
+                    "the capture schema must gather conversion presence: " +
+                    conversionOnly);
+                CollectionAssert.DoesNotContain(
+                    alphaRelevance.ScalarProperties,
+                    conversionOnly,
+                    "conversion-only render state widened alpha relevance: " +
+                    conversionOnly);
+                CollectionAssert.DoesNotContain(
+                    alphaRelevance.PresenceProperties,
+                    conversionOnly,
+                    "conversion-only render state widened alpha relevance: " +
+                    conversionOnly);
+            }
+
+            CollectionAssert.IsSubsetOf(
+                alphaRelevance.ScalarProperties,
+                captureSchema.ScalarProperties,
+                "the capture schema must still gather everything alpha needs");
+            Assert.That(
+                PoiyomiOpaqueConversion.ConversionEvidenceRequest
+                    .TextureProperties,
+                Is.Empty,
+                "conversion evidence must acquire no texture");
+            CollectionAssert.AreEqual(
+                alphaRelevance.TextureProperties
+                    .Select(value => value.PropertyName).ToArray(),
+                captureSchema.TextureProperties
+                    .Select(value => value.PropertyName).ToArray(),
+                "conversion capture introduced a new texture acquisition");
+        }
+
+        /// <summary>
+        /// lilToon has no opaque-conversion request, so its two questions have
+        /// the same answer and neither may acquire conversion render state.
+        /// </summary>
+        [Test]
+        public void LilToonCaptureSchemaIsExactlyItsAlphaRelevance()
+        {
+            var material = NewMaterial(
+                "schema-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material,
+                out _,
+                out var alphaRelevance,
+                out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(LilToonMaterialSemantics.AlphaEvidenceRequest));
+            Assert.That(
+                captureSchema,
+                Is.SameAs(LilToonMaterialSemantics.AlphaEvidenceRequest),
+                "lilToon has no conversion request, so its capture schema is " +
+                "its alpha request");
+
+            foreach (var conversionOnly in new[] { "_ZWrite", "_EnableOutlines" })
+            {
+                CollectionAssert.DoesNotContain(
+                    captureSchema.ScalarProperties,
+                    conversionOnly,
+                    "conversion render state entered lilToon's schema: " +
+                    conversionOnly);
+                CollectionAssert.DoesNotContain(
+                    captureSchema.PresenceProperties,
+                    conversionOnly,
+                    "conversion render state entered lilToon's schema: " +
+                    conversionOnly);
+            }
+        }
+
         [Test]
         public void SelectionRejectsAnUnsupportedShaderFamily()
         {
             _material = new Material(Shader.Find("Unlit/Color"));
 
-            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
-                _material, out var family, out var request);
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                _material,
+                out var family,
+                out var request,
+                out var captureSchema);
 
             Assert.That(selected, Is.False);
             Assert.That(
                 family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
             Assert.That(request, Is.Null);
+            Assert.That(
+                captureSchema,
+                Is.Null,
+                "an unsupported family must yield no capture schema either");
         }
 
         [Test]
         public void SelectionRejectsANullMaterial()
         {
-            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequest(
-                null, out var family, out var request);
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                null,
+                out var family,
+                out var request,
+                out var captureSchema);
 
             Assert.That(selected, Is.False);
             Assert.That(
                 family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
             Assert.That(request, Is.Null);
+            Assert.That(
+                captureSchema,
+                Is.Null,
+                "an unsupported family must yield no capture schema either");
         }
 
         [Test]
