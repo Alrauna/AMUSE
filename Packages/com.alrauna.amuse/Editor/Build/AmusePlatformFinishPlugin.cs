@@ -288,10 +288,12 @@ namespace Alrauna.Amuse.Editor.Build
                     renderer.transform, context.AvatarRootObject.transform);
                 var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
+                        rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
+                        rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
