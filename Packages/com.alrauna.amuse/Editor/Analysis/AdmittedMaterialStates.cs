@@ -172,7 +172,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// <strong>Classified resolutions never merge — not even with
         /// themselves.</strong> Two of them are interchangeable only if their
         /// alpha fields are semantically equivalent, and reference-distinct
-        /// <see cref="AlphaTextureData"/> cannot be proven equivalent cheaply.
+        /// <see cref="AlphaMipChain"/> cannot be proven equivalent cheaply.
         /// Recognizing the same instance twice would be sound in isolation but
         /// is deliberately not done either, because it invites the field-,
         /// fingerprint-, and reference-equality variants that are not. Keeping
