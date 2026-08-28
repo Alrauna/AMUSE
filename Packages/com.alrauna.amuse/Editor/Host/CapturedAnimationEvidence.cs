@@ -12,7 +12,6 @@ namespace Alrauna.Amuse.Editor.Host
         SlotOutOfRange,
         InvalidSwapValue,
         UnattestedMaterial,
-        CaptureFailed,
     }
 
     internal sealed class CapturedFloatBinding
