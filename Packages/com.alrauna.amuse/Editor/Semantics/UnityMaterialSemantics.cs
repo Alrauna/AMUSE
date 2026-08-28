@@ -139,28 +139,32 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
-        /// Selects the supported family for one material and hands back that
-        /// family's existing alpha evidence request. This is a pure selection
-        /// pass: it identifies the family from the exact shader name and does
-        /// nothing else. It captures no material evidence, reads no shader
-        /// source, computes no source hash, and acquires no texture — so a
-        /// material carrying a supported shader name over an unattested source
-        /// is selected here and refused later.
+        /// Selects the supported family for one material and hands back the two
+        /// existing requests that family answers with: the alpha evidence
+        /// ordinary proof may consider, and the schema the closed capture must
+        /// gather. This is a pure selection pass: it identifies the family from
+        /// the exact shader name and does nothing else. It captures no material
+        /// evidence, reads no shader source, computes no source hash, and
+        /// acquires no texture — so a material carrying a supported shader name
+        /// over an unattested source is selected here and refused later.
         /// <para>
         /// <see cref="TryCaptureClosedAlphaMaterials"/> is the sole
         /// material-evidence capture and the sole source-attestation decision
-        /// for the admitted batch. Selection exists only to determine the union
-        /// of evidence that one capture must gather.
+        /// for the admitted batch. Selection exists only to determine the
+        /// unions of evidence that one capture must gather and that alpha proof
+        /// may then consider.
         /// </para>
         /// </summary>
-        internal static bool TrySelectAlphaMaterialRequest(
+        internal static bool TrySelectAlphaMaterialRequests(
             Material material,
             out CapturedAlphaMaterialFamily family,
-            out MaterialEvidenceRequest request)
+            out MaterialEvidenceRequest alphaRelevanceRequest,
+            out MaterialEvidenceRequest captureRequest)
         {
             family = IdentifyFamily(material);
-            request = RequestForFamily(family);
-            return request != null;
+            alphaRelevanceRequest = AlphaRequestForFamily(family);
+            captureRequest = CaptureRequestForFamily(family);
+            return alphaRelevanceRequest != null;
         }
 
         internal static bool TryCaptureClosedAlphaMaterials(
@@ -258,13 +262,38 @@ namespace Alrauna.Amuse.Editor.Semantics
                 : CapturedAlphaMaterialFamily.Unsupported;
         }
 
-        private static MaterialEvidenceRequest RequestForFamily(
+        private static MaterialEvidenceRequest AlphaRequestForFamily(
             CapturedAlphaMaterialFamily family)
         {
             switch (family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     return PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToon:
+                    return LilToonMaterialSemantics.AlphaEvidenceRequest;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Poiyomi's capture schema is its alpha request plus conversion's own
+        /// request, so one capture serves both readers. lilToon has no
+        /// opaque-conversion request, so its schema is its alpha request and
+        /// nothing widens it.
+        /// </summary>
+        private static readonly MaterialEvidenceRequest PoiyomiCaptureRequest =
+            MaterialEvidenceRequest.Combine(
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+
+        private static MaterialEvidenceRequest CaptureRequestForFamily(
+            CapturedAlphaMaterialFamily family)
+        {
+            switch (family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiCaptureRequest;
                 case CapturedAlphaMaterialFamily.LilToon:
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
                 default:

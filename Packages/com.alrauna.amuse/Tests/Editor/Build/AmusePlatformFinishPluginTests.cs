@@ -699,10 +699,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.False,
                     "the fixture must not be a material-slot swap binding");
                 Assert.That(
-                    RequestedTextureProperties(evidence.RelevanceRequest),
+                    RequestedTextureProperties(evidence.AlphaRelevanceRequest),
                     Contains.Item("_MainTex"),
-                    "_MainTex is not proof-relevant in the closed request, so " +
-                    "this fixture proves nothing about relevant syntax");
+                    "_MainTex is not proof-relevant in the alpha relevance " +
+                    "request, so this fixture proves nothing about relevant syntax");
 
                 Assert.That(
                     result.Refusal,
@@ -921,7 +921,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(binding.PropertyName,
                     Is.EqualTo("material[0]._AlphaForceOpaque"));
                 Assert.That(
-                    evidence.RelevanceRequest.ScalarProperties,
+                    evidence.AlphaRelevanceRequest.ScalarProperties,
                     Contains.Item("_AlphaForceOpaque"),
                     "the fixture property is not proof-relevant, so the " +
                     "refusal would prove nothing about relevant syntax");
@@ -929,7 +929,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     UnityAnimationEvidenceCapture.ResolveProofRelevant(
                         binding,
                         string.Empty,
-                        evidence.RelevanceRequest,
+                        evidence.AlphaRelevanceRequest,
                         out _),
                     Is.EqualTo(ProofRelevantBindingResolution
                         .UnrecognizedMaterialBinding),
@@ -1718,9 +1718,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     UnityAnimationEvidenceCapture
                         .DeriveTextureScaleOffsetProperties(
-                            evidence.RelevanceRequest),
+                            evidence.AlphaRelevanceRequest),
                     Contains.Item("_MainTex_ST"),
-                    "fixture precondition: only the closed request can own _MainTex_ST");
+                    "fixture precondition: only the alpha relevance request can own _MainTex_ST");
                 Assert.That(evidence.Clips[0].FloatBindings,
                     Has.Count.EqualTo(1),
                     "fixture precondition: the real _ST curve was not captured");
@@ -1728,10 +1728,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     UnityAnimationEvidenceCapture.ResolveProofRelevant(
                         evidence.Clips[0].FloatBindings[0],
                         string.Empty,
-                        evidence.RelevanceRequest,
+                        evidence.AlphaRelevanceRequest,
                         out var reference),
                     Is.EqualTo(ProofRelevantBindingResolution.RendererWide),
-                    "fixture precondition: the closed request did not resolve " +
+                    "fixture precondition: the alpha relevance request did not resolve " +
                     "the captured _ST owner");
                 Assert.That(reference.Kind,
                     Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
@@ -2793,13 +2793,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 CaptureVerifiedFixtureMaterials);
         }
 
+        /// <summary>
+        /// Mirrors production's Poiyomi mapping: alpha proof considers the
+        /// family's alpha request, while the closed capture also gathers
+        /// conversion evidence.
+        /// </summary>
         private static bool SelectVerifiedFixtureRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
-            out MaterialEvidenceRequest request)
+            out MaterialEvidenceRequest alphaRelevance,
+            out MaterialEvidenceRequest captureSchema)
         {
             family = CapturedAlphaMaterialFamily.Poiyomi;
-            request = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+            alphaRelevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+            captureSchema = MaterialEvidenceRequest.Combine(
+                alphaRelevance,
+                PoiyomiOpaqueConversion.ConversionEvidenceRequest);
             return material != null;
         }
 

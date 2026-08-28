@@ -41,17 +41,26 @@ namespace Alrauna.Amuse.Editor.Host
     }
 
     /// <summary>
-    /// Selects the supported shader family and that family's alpha evidence
-    /// request for one admitted material. Selection decides only what evidence
-    /// the closed batch must gather; it attests nothing and captures nothing.
-    /// The single <see cref="ClosedAlphaMaterialCapturer"/> call that follows is
-    /// the sole material-evidence capture and the sole source-attestation
-    /// decision for the whole admitted batch.
+    /// Selects the supported shader family for one admitted material and the
+    /// two requests that family answers with: what ordinary alpha proof may
+    /// consider, and what the closed batch must gather. Selection attests
+    /// nothing and captures nothing. The single
+    /// <see cref="ClosedAlphaMaterialCapturer"/> call that follows is the sole
+    /// material-evidence capture and the sole source-attestation decision for
+    /// the whole admitted batch.
+    /// <para>
+    /// The two are separate because the capture schema also carries evidence
+    /// no alpha proof depends on. Folding that into
+    /// <paramref name="alphaRelevanceRequest"/> would make ordinary alpha
+    /// analysis treat conversion-only render state as a proof input — a
+    /// coverage regression, not a safety improvement.
+    /// </para>
     /// </summary>
     internal delegate bool AlphaMaterialRequestSelector(
         Material material,
         out CapturedAlphaMaterialFamily family,
-        out MaterialEvidenceRequest request);
+        out MaterialEvidenceRequest alphaRelevanceRequest,
+        out MaterialEvidenceRequest captureRequest);
 
     internal delegate bool ClosedAlphaMaterialCapturer(
         IReadOnlyList<Material> materials,
@@ -97,7 +106,7 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 bindings,
-                UnityMaterialSemantics.TrySelectAlphaMaterialRequest,
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials);
         }
 
@@ -279,33 +288,44 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             // Every admitted material completes request selection before any
-            // evidence is captured: the closed request is the union of what the
-            // whole batch needs, so no material's evidence can be gathered until
-            // that union is known.
+            // evidence is captured: each union below spans the whole batch, so
+            // no material's evidence can be gathered until both are known.
             var families = new CapturedAlphaMaterialFamily[admitted.Count];
-            var requests = new MaterialEvidenceRequest[admitted.Count];
+            var alphaRequests = new MaterialEvidenceRequest[admitted.Count];
+            var captureRequests = new MaterialEvidenceRequest[admitted.Count];
             for (var index = 0; index < admitted.Count; index++)
             {
                 if (!selectRequest(
                         admitted[index],
                         out families[index],
-                        out requests[index]) ||
-                    requests[index] == null)
+                        out alphaRequests[index],
+                        out captureRequests[index]) ||
+                    alphaRequests[index] == null ||
+                    captureRequests[index] == null)
                 {
                     return Failed(
                         MaterialDependencyClosureFailure.UnattestedMaterial);
                 }
             }
 
+            // Two closed unions over the same admitted batch. The capture
+            // schema is what the one capture gathers; the alpha request is what
+            // ordinary alpha proof may consider afterwards. Only the latter is
+            // retained, because no consumer reads the broader schema once the
+            // evidence it authorized has been captured.
+            var alphaRelevanceRequest =
+                MaterialEvidenceRequest.Combine(alphaRequests);
+            var captureRequest =
+                MaterialEvidenceRequest.Combine(captureRequests);
+
             // The closed batch capture is the sole source-attestation decision,
             // so its refusal means exactly what an unselectable family means:
             // some admitted material is not attested. There is no second,
             // weaker capture outcome to distinguish.
-            var closedRequest = MaterialEvidenceRequest.Combine(requests);
             if (!capturer(
                     admitted,
                     families,
-                    closedRequest,
+                    captureRequest,
                     out var capturedMaterials))
             {
                 return Failed(
@@ -375,7 +395,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             return new CapturedAnimationEvidence(
                 MaterialDependencyClosureFailure.None,
-                closedRequest,
+                alphaRelevanceRequest,
                 clips,
                 new List<CapturedAlphaMaterial>(capturedMaterials),
                 currentMaterialIndices,
@@ -534,7 +554,7 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// The closed request's texture property names. An object-reference curve
+        /// The relevance request's texture property names. An object-reference curve
         /// assigns a reference, so these are exactly the proof inputs it can name.
         /// The float path deliberately omits them: a float binding cannot assign a
         /// texture, only its derived scale/offset components, which
