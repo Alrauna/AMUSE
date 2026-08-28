@@ -119,7 +119,7 @@ namespace Alrauna.Amuse.Editor.Host
     {
         internal CapturedAnimationEvidence(
             MaterialDependencyClosureFailure closureFailure,
-            MaterialEvidenceRequest relevanceRequest,
+            MaterialEvidenceRequest alphaRelevanceRequest,
             IList<CapturedClipEvidence> clips,
             IList<CapturedAlphaMaterial> admittedMaterials,
             IList<int> currentMaterialIndices,
@@ -127,8 +127,8 @@ namespace Alrauna.Amuse.Editor.Host
             bool hasAdditiveLayer)
         {
             ClosureFailure = closureFailure;
-            RelevanceRequest = relevanceRequest
-                ?? throw new ArgumentNullException(nameof(relevanceRequest));
+            AlphaRelevanceRequest = alphaRelevanceRequest
+                ?? throw new ArgumentNullException(nameof(alphaRelevanceRequest));
             Clips = new ReadOnlyCollection<CapturedClipEvidence>(
                 new List<CapturedClipEvidence>(clips));
             AdmittedMaterials = new ReadOnlyCollection<CapturedAlphaMaterial>(
@@ -142,7 +142,7 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool IsClosed =>
             ClosureFailure == MaterialDependencyClosureFailure.None;
         internal MaterialDependencyClosureFailure ClosureFailure { get; }
-        internal MaterialEvidenceRequest RelevanceRequest { get; }
+        internal MaterialEvidenceRequest AlphaRelevanceRequest { get; }
         internal IReadOnlyList<CapturedClipEvidence> Clips { get; }
         internal IReadOnlyList<CapturedAlphaMaterial> AdmittedMaterials { get; }
 

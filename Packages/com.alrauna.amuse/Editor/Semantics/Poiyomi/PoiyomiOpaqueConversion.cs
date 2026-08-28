@@ -202,16 +202,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new ReadOnlyCollection<string>(ConversionSchema);
 
         /// <summary>
-        /// Conversion's own closed request. It is independently sufficient for
+        /// Conversion's own request. It is independently sufficient for
         /// conversion source attestation and conversion eligibility, so
         /// conversion never runs the alpha capture path.
         /// <para>
-        /// It is kept separate from
-        /// <see cref="PoiyomiMaterialSemantics.AlphaEvidenceRequest"/> because
-        /// the closed request also decides which animated bindings count as
-        /// proof-relevant. Folding conversion-only render state into the alpha
-        /// request would make ordinary alpha analysis refuse on state alpha does
-        /// not depend on - a coverage regression, not a safety improvement.
+        /// Material-dependency closure combines this into the broader schema
+        /// one capture gathers, so conversion evidence is captured alongside
+        /// alpha evidence. That combination does not merge the two questions:
+        /// this request remains independently usable as conversion's own
+        /// relevance, and
+        /// <see cref="PoiyomiMaterialSemantics.AlphaEvidenceRequest"/> remains
+        /// what ordinary alpha proof considers. Keeping them separate is what
+        /// stops conversion-only render state from making alpha analysis refuse
+        /// on state alpha does not depend on - a coverage regression, not a
+        /// safety improvement.
         /// </para>
         /// </summary>
         internal static MaterialEvidenceRequest ConversionEvidenceRequest { get; } =
@@ -567,7 +571,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <para>
         /// It takes already-captured evidence and deliberately offers no
         /// live-<see cref="UnityEngine.Material"/> overload: capture belongs to
-        /// the caller that owns the closed request, and re-capturing here would
+        /// the caller that owns the capture schema, and re-capturing here would
         /// read mutable state after the evidence a decision depends on.
         /// </para>
         /// </summary>
