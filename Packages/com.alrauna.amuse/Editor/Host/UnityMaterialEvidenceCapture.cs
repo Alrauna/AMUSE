@@ -260,7 +260,7 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool SampledAlphaIsProvenOne { get; }
         internal bool IsCanonicalNormalMap { get; }
         internal bool HasAlphaChannel { get; }
-        internal AlphaTextureData AlphaChannel { get; }
+        internal AlphaMipChain AlphaChannel { get; }
 
         internal CapturedTextureEvidence(
             bool hasSourceIdentity,
@@ -272,7 +272,7 @@ namespace Alrauna.Amuse.Editor.Host
             bool sampledAlphaIsProvenOne,
             bool isCanonicalNormalMap,
             bool hasAlphaChannel,
-            AlphaTextureData alphaChannel)
+            AlphaMipChain alphaChannel)
         {
             HasSourceIdentity = hasSourceIdentity;
             SourceIdentity = sourceIdentity;
@@ -986,7 +986,7 @@ namespace Alrauna.Amuse.Editor.Host
             var canonicalNormal =
                 (evidence & TextureEvidenceKinds.CanonicalNormalMap) != 0 &&
                 UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
-            AlphaTextureData alphaChannel = null;
+            AlphaMipChain alphaChannel = null;
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(

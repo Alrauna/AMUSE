@@ -468,11 +468,11 @@ namespace Alrauna.Amuse.Editor.Build
             bool AlphaFields(
                 TextureSourceId source,
                 TextureChannel channel,
-                out AlphaTextureData field)
+                out AlphaMipChain chain)
             {
-                field = null;
+                chain = null;
                 return channel == TextureChannel.Alpha &&
-                       fields.TryGetValue(source, out field);
+                       fields.TryGetValue(source, out chain);
             }
 
             var resolutionsBySlot = new IReadOnlyList<AlphaResolution>[slots.Count];

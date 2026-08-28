@@ -1,4 +1,5 @@
 using System;
+using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -93,17 +94,16 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
     /// an <see cref="GraphicsFormat.R8_UNorm"/> predicate target, one byte per
     /// texel.
     /// <para>
-    /// It is a research probe, not production code: nothing in
-    /// <c>com.alrauna.amuse</c> references it, every fixture is built in
-    /// memory, and it opens no importer and writes no asset.
+    /// It is a research probe, not production code: every fixture is built in
+    /// memory, and it opens no importer and writes no asset. It deliberately
+    /// loads the <em>product</em> shader through
+    /// <see cref="UnityAlphaFieldEvidence.ShaderAssetPath"/>, so the
+    /// characterization and production exercise one asset and the predicate
+    /// cannot drift between them.
     /// </para>
     /// </summary>
     internal static class AlphaEvidenceProbe
     {
-        private const string ShaderPath =
-            "Packages/com.alrauna.amuse.research/Tests/Editor/Calibration/"
-            + "AlphaExactOneProbe.shader";
-
         /// <summary>The production-shaped predicate target: one byte per texel.</summary>
         internal const GraphicsFormat PredicateTarget = GraphicsFormat.R8_UNorm;
 
@@ -113,7 +113,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
 
         internal static AlphaProbeSupport ProbeSupport()
         {
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(ShaderPath);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(UnityAlphaFieldEvidence.ShaderAssetPath);
             return new AlphaProbeSupport(
                 shader != null && shader.isSupported,
                 SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.Render),
@@ -176,7 +176,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
             var support = ProbeSupport();
             if (!support.IsUsable) return null;
 
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(ShaderPath);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(UnityAlphaFieldEvidence.ShaderAssetPath);
             if (shader == null || !shader.isSupported) return null;
 
             ExpectedSize(texture, mip, out var width, out var height);
@@ -260,7 +260,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
             if (texture == null) throw new ArgumentNullException(nameof(texture));
             if (mip < 0 || mip >= texture.mipmapCount) return null;
 
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(ShaderPath);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(UnityAlphaFieldEvidence.ShaderAssetPath);
             if (shader == null || !shader.isSupported) return null;
 
             ExpectedSize(texture, mip, out var width, out var height);

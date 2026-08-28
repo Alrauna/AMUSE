@@ -50,12 +50,61 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 2, 2, new byte[] { 255, 255, 0, 0 });
         }
 
+        private static AlphaMipChain Chain(params AlphaTextureData[] levels)
+        {
+            return new AlphaMipChain(levels);
+        }
+
+        /// <summary>
+        /// A level the classifier answers Unknown for, by the only mechanism that
+        /// actually produces Unknown from grid contents: exceeding
+        /// TriangleAlphaClassifier.MaxSupportRegions. It must not be fully opaque or
+        /// fully non-opaque, or the short-circuit answers before the budget check,
+        /// so one texel is 254 and the rest are 255.
+        /// <para>
+        /// 512x256 against SpanningTriangle gives roughly 462x232 candidate texels,
+        /// comfortably above the 65536 budget; its 256x128 successor gives roughly
+        /// 232x116, comfortably below.
+        /// </para>
+        /// </summary>
+        private static AlphaTextureData BudgetExceedingLevel()
+        {
+            var bytes = new byte[512 * 256];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = 255;
+            }
+
+            bytes[0] = 254;
+            return new AlphaTextureData(512, 256, bytes);
+        }
+
+        /// <summary>2x2 fully opaque over 1x1 fully opaque.</summary>
+        private static AlphaMipChain AllOpaqueChain()
+        {
+            return Chain(Field(2, 2, 255), Field(1, 1, 255));
+        }
+
+        /// <summary>
+        /// Mip 0 fully opaque, mip 1 fully non-opaque. Mip-0-only reasoning would
+        /// call this ProvenOpaque; the conjunction must not.
+        /// </summary>
+        private static AlphaMipChain OpaqueThenTransparentChain()
+        {
+            return Chain(Field(2, 2, 255), Field(1, 1, 0));
+        }
+
         private static AlphaFieldProvider Providing(AlphaTextureData field)
         {
+            return Providing(new AlphaMipChain(new[] { field }));
+        }
+
+        private static AlphaFieldProvider Providing(AlphaMipChain chain)
+        {
             return (TextureSourceId source, TextureChannel channel,
-                out AlphaTextureData result) =>
+                out AlphaMipChain result) =>
             {
-                result = field;
+                result = chain;
                 return true;
             };
         }
@@ -63,7 +112,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaFieldProvider ProvidingNothing()
         {
             return (TextureSourceId source, TextureChannel channel,
-                out AlphaTextureData result) =>
+                out AlphaMipChain result) =>
             {
                 result = null;
                 return false;
@@ -96,6 +145,20 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.55f, 0.55f),
                 new Vector2(0.95f, 0.55f),
                 new Vector2(0.55f, 0.95f));
+        }
+
+        /// <summary>
+        /// Spans all of UV space, so a half-opaque field cannot decide it.
+        /// </summary>
+        private static TriangleAlphaInput SpanningTriangle()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.95f, 0.05f),
+                new Vector2(0.05f, 0.95f));
         }
 
         // --- Task 1: resolution boundary --------------------------------------
@@ -210,7 +273,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var consulted = false;
             AlphaFieldProvider provider = (TextureSourceId source,
-                TextureChannel channel, out AlphaTextureData result) =>
+                TextureChannel channel, out AlphaMipChain result) =>
             {
                 consulted = true;
                 result = null;
@@ -279,10 +342,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var requested = (TextureChannel?)null;
                 AlphaFieldProvider provider = (TextureSourceId source,
                     TextureChannel requestedChannel,
-                    out AlphaTextureData result) =>
+                    out AlphaMipChain result) =>
                 {
                     requested = requestedChannel;
-                    result = MixedField();
+                    result = Chain(MixedField());
                     return true;
                 };
 
@@ -456,10 +519,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var consulted = false;
             AlphaFieldProvider provider = (TextureSourceId source,
-                TextureChannel channel, out AlphaTextureData result) =>
+                TextureChannel channel, out AlphaMipChain result) =>
             {
                 consulted = true;
-                result = MixedField();
+                result = Chain(MixedField());
                 return true;
             };
 
@@ -572,10 +635,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var seen = default(TextureSourceId);
             AlphaFieldProvider provider = (TextureSourceId source,
-                TextureChannel channel, out AlphaTextureData result) =>
+                TextureChannel channel, out AlphaMipChain result) =>
             {
                 seen = source;
-                result = MixedField();
+                result = Chain(MixedField());
                 return true;
             };
 
@@ -670,7 +733,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // Deliberately a field whose every texel is opaque, so a
             // `Classify`-based implementation would look uniform.
             var resolution = AlphaResolution.Classified(
-                Field(2, 2, 255),
+                Chain(Field(2, 2, 255)),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Point, AlphaWrapMode.Clamp));
 
@@ -690,6 +753,131 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(
                 resolution.TryGetUniformOutcome(out var outcome), Is.False);
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        // --- Mip chain aggregation --------------------------------------------
+
+        [Test]
+        public void EveryLevelOpaqueIsProvenOpaque()
+        {
+            var resolution = AlphaResolution.Classified(
+                AllOpaqueChain(),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ALowerLevelTransparencyDefeatsAMipZeroOpaqueProof()
+        {
+            var resolution = AlphaResolution.Classified(
+                OpaqueThenTransparentChain(),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void MipZeroTransparencyIsNotOverriddenByALowerOpaqueLevel()
+        {
+            var resolution = AlphaResolution.Classified(
+                Chain(Field(2, 2, 0), Field(1, 1, 255)),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// Mip 0 genuinely answers Unknown (support budget exceeded) and the
+        /// transparent level is deliberately LAST. An implementation that returns on
+        /// the first Unknown reports Unknown and loses the refusal.
+        /// </summary>
+        [Test]
+        public void TransparencyOutranksUnknownEvenWhenItComesLast()
+        {
+            var resolution = AlphaResolution.Classified(
+                Chain(BudgetExceedingLevel(), Field(256, 128, 0)),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.Classify(SpanningTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// Mip 0 exceeds the classifier's support budget and answers Unknown; mip 1
+        /// is fully opaque and answers ProvenOpaque. No level is transparent, so
+        /// Unknown must survive to the end rather than being swallowed by the
+        /// all-opaque conclusion.
+        /// </summary>
+        [Test]
+        public void OneUnknownLevelWithNoTransparencyIsUnknown()
+        {
+            var resolution = AlphaResolution.Classified(
+                Chain(BudgetExceedingLevel(), Field(256, 128, 255)),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(
+                resolution.Classify(SpanningTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// Every level Unknown. A triangle with no UV0 is Unknown at every level
+        /// regardless of contents, and the levels here are deliberately fully
+        /// opaque so a short-circuiting implementation would answer ProvenOpaque.
+        /// ProvenOpaque is also the zero value of TriangleAlphaOutcome, so an
+        /// implementation that defaults instead of tracking sawUnknown reports it
+        /// too.
+        /// </summary>
+        [Test]
+        public void EveryLevelUnknownIsUnknown()
+        {
+            var resolution = AlphaResolution.Classified(
+                AllOpaqueChain(),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            var noUv = TriangleAlphaInput.MissingUv0(
+                Vector3.zero, Vector3.right, Vector3.up);
+
+            Assert.That(
+                resolution.Classify(noUv),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// Disagreement across levels must not be re-described as uniform either.
+        /// </summary>
+        [Test]
+        public void ADisagreeingChainIsNotAUniformResolution()
+        {
+            var resolution = AlphaResolution.Classified(
+                OpaqueThenTransparentChain(),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// A chain whose levels agree is still a classified resolution. Reporting it
+        /// as uniform would let the deduplication consumer merge it.
+        /// </summary>
+        [Test]
+        public void AnAgreeingChainIsStillNotAUniformResolution()
+        {
+            var resolution = AlphaResolution.Classified(
+                AllOpaqueChain(),
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+
+            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
     }

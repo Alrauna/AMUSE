@@ -54,8 +54,24 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         /// <summary>
         /// Extracts a texture's sampler state. Supported only for Point or
-        /// Bilinear filtering with equal Clamp/Repeat wrap and no mipmapped,
-        /// mip-biased, or anisotropic sampling.
+        /// Bilinear filtering with equal Clamp/Repeat wrap and no mip-biased or
+        /// anisotropic sampling.
+        /// <para>
+        /// Mipmapped sampling is admitted because the resolver classifies every
+        /// level of the captured chain, and Unity's Bilinear filters within the
+        /// selected level and selects a level without blending - so "some level,
+        /// bilinear within it" is exactly the model the conjunction covers.
+        /// </para>
+        /// <para>
+        /// Nonzero mip bias stays refused as conservative deferred coverage: the
+        /// conjunction would in fact cover it, since bias only shifts which level is
+        /// selected. Trilinear likewise stays refused for scope rather than
+        /// soundness - interpolating between two levels whose contributing samples
+        /// are all exactly one is itself exactly one, but the sampling vocabulary
+        /// does not express trilinear and widening it is a separate milestone.
+        /// Anisotropy stays refused because it averages texels across an elongated
+        /// footprint the classifier does not model at all.
+        /// </para>
         /// </summary>
         internal static bool TryGetSampling(
             Texture texture,
@@ -79,8 +95,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            if (texture.mipmapCount > 1 ||
-                texture.mipMapBias != 0f ||
+            if (texture.mipMapBias != 0f ||
                 texture.anisoLevel > 1)
             {
                 return false;

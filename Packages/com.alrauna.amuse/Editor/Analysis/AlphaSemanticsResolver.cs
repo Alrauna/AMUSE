@@ -22,19 +22,27 @@ namespace Alrauna.Amuse.Editor.Analysis
     /// <summary>
     /// Host-supplied lookup of immutable, predicate-equivalent scalar evidence.
     /// It returns false unless the provider can prove, for the named source and
-    /// channel over the relevant base-level texel domain in bottom-to-top order,
-    /// that every effective per-texel scalar value is finite and within [0, 1],
-    /// that byte 255 marks exactly the texels whose value is exactly 1, and that
-    /// every other byte marks a value strictly below 1. Under Point or Bilinear
-    /// sampling those facts give the classifier its predicate: the sampled value
-    /// is 1 exactly when every positive-weight contributing texel is 255. The
-    /// source need not itself be an uncompressed 8-bit b/255 field. The resolver
-    /// never opens an asset.
+    /// channel and for <em>every level of the returned chain</em> over that
+    /// level's texel domain in bottom-to-top order, that every effective per-texel
+    /// scalar value is finite and within [0, 1], that byte 255 marks exactly the
+    /// texels whose value is exactly 1, and that every other byte marks a value
+    /// strictly below 1. Under Point or Bilinear sampling those facts give the
+    /// classifier its predicate: the sampled value is 1 exactly when every
+    /// positive-weight contributing texel is 255. The source need not itself be an
+    /// uncompressed 8-bit b/255 field. The resolver never opens an asset.
+    /// <para>
+    /// It further attests that the chain is the source's <strong>complete declared
+    /// mip chain</strong>, mip 0 first. The hardware may select any level for a
+    /// given fragment and the resolver cannot know which, so an incomplete chain
+    /// would let an unexamined level escape the proof.
+    /// <see cref="AlphaMipChain"/> validates shape only and cannot check
+    /// completeness; the provider owns it.
+    /// </para>
     /// </summary>
     internal delegate bool AlphaFieldProvider(
         TextureSourceId source,
         TextureChannel channel,
-        out AlphaTextureData field);
+        out AlphaMipChain chain);
 
     /// <summary>
     /// One immutable decision about how a normalized Alpha semantic value may be
@@ -45,7 +53,7 @@ namespace Alrauna.Amuse.Editor.Analysis
     {
         private readonly bool _isUniform;
         private readonly TriangleAlphaOutcome _uniformOutcome;
-        private readonly AlphaTextureData _field;
+        private readonly AlphaMipChain _chain;
         private readonly AlphaSamplingSettings _sampling;
 
         private AlphaResolution(
@@ -53,7 +61,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaResolutionFailure failure,
             bool isUniform,
             TriangleAlphaOutcome uniformOutcome,
-            AlphaTextureData field,
+            AlphaMipChain chain,
             AlphaSamplingSettings sampling)
         {
             // Invariants: a resolved value carries no failure, a refusal
@@ -64,16 +72,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                     "A resolution is resolved exactly when it has no failure.",
                     nameof(failure));
             }
-            if (isResolved && !isUniform && field == null)
+            if (isResolved && !isUniform && chain == null)
             {
-                throw new ArgumentNullException(nameof(field));
+                throw new ArgumentNullException(nameof(chain));
             }
 
             IsResolved = isResolved;
             Failure = failure;
             _isUniform = isUniform;
             _uniformOutcome = uniformOutcome;
-            _field = field;
+            _chain = chain;
             _sampling = sampling;
         }
 
@@ -98,7 +106,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         internal static AlphaResolution Classified(
-            AlphaTextureData field,
+            AlphaMipChain chain,
             AlphaSamplingSettings sampling)
         {
             return new AlphaResolution(
@@ -106,7 +114,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 AlphaResolutionFailure.None,
                 false,
                 default,
-                field,
+                chain,
                 sampling);
         }
 
@@ -162,9 +170,37 @@ namespace Alrauna.Amuse.Editor.Analysis
                     "A refused alpha resolution has no triangle outcome.");
             }
 
-            return _isUniform
-                ? _uniformOutcome
-                : TriangleAlphaClassifier.Classify(triangle, _field, _sampling);
+            if (_isUniform)
+            {
+                return _uniformOutcome;
+            }
+
+            // A mip chain is alternative evidence about one configuration, not a
+            // set of admitted configurations: the hardware may select any level and
+            // AMUSE cannot know which, so one non-opaque level refutes the proof.
+            // MustRemainTransparent is absorbing, so returning on it cannot change
+            // the result. Unknown must NOT exit early - a later level may be
+            // MustRemainTransparent, which outranks it.
+            var sawUnknown = false;
+            for (var index = 0; index < _chain.Count; index++)
+            {
+                var outcome = TriangleAlphaClassifier.Classify(
+                    triangle, _chain[index], _sampling);
+                if (outcome == TriangleAlphaOutcome.MustRemainTransparent)
+                {
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
+                if (outcome == TriangleAlphaOutcome.Unknown)
+                {
+                    sawUnknown = true;
+                }
+            }
+
+            // Never vacuous: AlphaMipChain forbids an empty chain, so the loop body
+            // ran at least once.
+            return sawUnknown
+                ? TriangleAlphaOutcome.Unknown
+                : TriangleAlphaOutcome.ProvenOpaque;
         }
     }
 
@@ -226,6 +262,12 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// s == 1/k, which the classifier cannot express, and would leave alpha
         /// above one, whose opacity meaning the semantic model deliberately does
         /// not define.
+        /// <para>
+        /// The evidence contract bounds the sampled value to [0, 1] at
+        /// <em>every</em> level of the chain, so the bound holds whichever level
+        /// the hardware selects: the lemma is strengthened, not weakened, and still
+        /// needs no byte of the contents.
+        /// </para>
         /// </summary>
         private static AlphaResolution ResolveScaledSample(
             TextureSample sample,
@@ -244,8 +286,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return ResolveSampled(sample, channel, fieldProvider);
             }
 
-            if (!fieldProvider(sample.Source, channel, out var field) ||
-                field == null)
+            if (!fieldProvider(sample.Source, channel, out var chain) ||
+                chain == null)
             {
                 return AlphaResolution.Refused(
                     AlphaResolutionFailure.MissingTextureEvidence);
@@ -272,14 +314,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                     AlphaResolutionFailure.UnsupportedSampling);
             }
 
-            if (!fieldProvider(sample.Source, channel, out var field) ||
-                field == null)
+            if (!fieldProvider(sample.Source, channel, out var chain) ||
+                chain == null)
             {
                 return AlphaResolution.Refused(
                     AlphaResolutionFailure.MissingTextureEvidence);
             }
 
-            return AlphaResolution.Classified(field, sampling);
+            return AlphaResolution.Classified(chain, sampling);
         }
 
         /// <summary>

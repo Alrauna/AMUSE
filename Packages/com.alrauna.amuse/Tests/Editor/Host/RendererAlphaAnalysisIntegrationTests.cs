@@ -84,17 +84,27 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// IsFullyOpaque before geometry was examined and would pass even if the
         /// wiring were wrong.
         /// </summary>
-        private static Texture2D ImportTexture(string name, bool readable)
+        private static Texture2D ImportTexture(
+            string name,
+            bool readable,
+            bool mipmapped = false,
+            Color32[] pixels = null,
+            int width = Size,
+            int height = Size)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(Size, Size, TextureFormat.RGBA32, false);
-            var pixels = new Color32[Size * Size];
-            for (var index = 0; index < pixels.Length; index++)
+            var staging = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            if (pixels == null)
             {
-                pixels[index] = new Color32(64, 32, 16, 255);
+                pixels = new Color32[width * height];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(64, 32, 16, 255);
+                }
+
+                pixels[0] = new Color32(64, 32, 16, 128);
             }
 
-            pixels[0] = new Color32(64, 32, 16, 128);
             staging.SetPixels32(pixels);
             staging.Apply();
             File.WriteAllBytes(path, staging.EncodeToPNG());
@@ -103,7 +113,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             AssetDatabase.ImportAsset(
                 path, ImportAssetOptions.ForceSynchronousImport);
             var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
+            importer.mipmapEnabled = mipmapped;
             importer.isReadable = readable;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.filterMode = FilterMode.Point;
@@ -390,11 +400,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// </para>
         /// </summary>
         [Test]
-        public void ANonReadableAlphaTextureRefusesOnlyItsOwnSubmesh()
+        public void ARefusedFormatAlphaTextureRefusesOnlyItsOwnSubmesh()
         {
-            var nonReadable = ImportTexture("non_readable", readable: false);
+            var refusedFormat = CreateRefusedFormatTexture("refused_format");
             var readable = ImportTexture("readable", readable: true);
-            var blocked = NewSampledAlphaMaterial(nonReadable);
+            var blocked = NewSampledAlphaMaterial(refusedFormat);
             var proven = NewSampledAlphaMaterial(readable);
             var renderer = NewRenderer(BuildFixtureMesh(), blocked, proven);
 
@@ -404,7 +414,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 result.Refusal,
                 Is.EqualTo(RendererAnalysisRefusal.None),
-                "A non-readable texture must not refuse the whole renderer.");
+                "A refused-format texture must not refuse the whole renderer.");
             Assert.That(
                 result.Submeshes[0].Failure,
                 Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
@@ -425,6 +435,154 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(new[] { 0, 2 }));
             Assert.That(result.Plan.HasAnyOpaqueCandidates, Is.True);
             Assert.That(result.Plan.OpaqueTriangleCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Builds a texture asset in a refused format. ARGB4444 is allocatable
+        /// directly and produces no console error; the producer refuses it at the
+        /// format gate, before any GPU work.
+        /// </summary>
+        private static Texture2D CreateRefusedFormatTexture(string name)
+        {
+            var texture = new Texture2D(Size, Size, TextureFormat.ARGB4444, false);
+            texture.Apply();
+            var path = TempFolder + "/" + name + ".asset";
+            AssetDatabase.CreateAsset(texture, path);
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(loaded, Is.Not.Null, path);
+            return loaded;
+        }
+
+        /// <summary>
+        /// The milestone's headline change at renderer level: a non-readable
+        /// texture, which refused before, now proves geometry.
+        /// </summary>
+        [Test]
+        public void ANonReadableAlphaTextureNowProvesItsOwnSubmesh()
+        {
+            var nonReadable = ImportTexture("non_readable", readable: false);
+            var material = NewSampledAlphaMaterial(nonReadable);
+            var renderer = NewRenderer(BuildFixtureMesh(), material, material);
+
+            var result = AnalyzeVerified(renderer, material, material);
+
+            Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                result.Submeshes[0].Failure, Is.EqualTo(AlphaResolutionFailure.None));
+            Assert.That(result.Plan.HasAnyOpaqueCandidates, Is.True);
+        }
+
+        /// <summary>
+        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
+        /// boundary does not survive halving.
+        /// </summary>
+        private static Color32[] OddBoundaryPixels()
+        {
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
+            {
+                for (var x = 0; x < 8; x++)
+                {
+                    pixels[y * 8 + x] =
+                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
+                }
+            }
+
+            return pixels;
+        }
+
+        private static Color32[] UniformOpaquePixels()
+        {
+            var pixels = new Color32[64];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(64, 32, 16, 255);
+            }
+
+            return pixels;
+        }
+
+        /// <summary>
+        /// Submesh 0: one triangle whose UV support lies wholly inside source texel
+        /// (4, 0) of an 8x8 texture, which spans u in [0.5, 0.625) and v in
+        /// [0, 0.125). Submesh 1: one triangle on the uniformly opaque control.
+        /// <para>
+        /// BuildFixtureMesh is not reused: its UVs are 0.55-0.9 and 0.01-0.2 against
+        /// a 4x4 texture, and neither region lies inside texel (4, 0) of an 8x8 one.
+        /// </para>
+        /// </summary>
+        private Mesh BuildLowerMipFixtureMesh()
+        {
+            var mesh = Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.51f, 0.01f),
+                new Vector2(0.61f, 0.01f),
+                new Vector2(0.51f, 0.11f),
+                new Vector2(0.2f, 0.2f),
+                new Vector2(0.4f, 0.2f),
+                new Vector2(0.2f, 0.4f)
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// The conjunction reaching renderer analysis. Submesh 0's triangle is
+        /// exactly one at mip 0 and below one at mip 1, so a mip-0-only
+        /// implementation would report it as an opaque candidate. Submesh 1 is the
+        /// control: uniformly opaque at every level, so it still proves, which shows
+        /// the refusal is evidence-scoped and not a blanket failure.
+        /// </summary>
+        [Test]
+        public void ALowerMipPreventsAnOtherwiseMipZeroOnlyOpaqueProof()
+        {
+            var oddBoundary = ImportTexture(
+                "odd_boundary", readable: false, mipmapped: true,
+                pixels: OddBoundaryPixels(), width: 8, height: 8);
+            var uniform = ImportTexture(
+                "uniform_opaque", readable: false, mipmapped: true,
+                pixels: UniformOpaquePixels(), width: 8, height: 8);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(oddBoundary, out _, out var chain),
+                Is.True);
+            Assert.That(chain.Count, Is.EqualTo(oddBoundary.mipmapCount));
+            Assert.That(
+                chain[0].GetAlpha(4, 0), Is.EqualTo(255),
+                "Precondition: mip 0 alone would prove submesh 0 opaque.");
+            Assert.That(
+                chain[1].GetAlpha(2, 0), Is.Not.EqualTo(255),
+                "Precondition: the mip-1 texel covering it is not opaque.");
+
+            var blocked = NewSampledAlphaMaterial(oddBoundary);
+            var control = NewSampledAlphaMaterial(uniform);
+            var renderer = NewRenderer(BuildLowerMipFixtureMesh(), blocked, control);
+
+            var result = AnalyzeVerified(renderer, blocked, control);
+
+            Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                result.Submeshes[0].Failure, Is.EqualTo(AlphaResolutionFailure.None),
+                "Evidence was available; the triangle is simply not proven.");
+            Assert.That(
+                result.Plan.Submeshes[0].OpaqueTriangleOrdinals, Is.Empty,
+                "A lower mip contradicts the mip-0 opaque texel.");
+            Assert.That(
+                result.Plan.Submeshes[1].OpaqueTriangleOrdinals,
+                Is.EqualTo(new[] { 0 }),
+                "The uniformly opaque control must still prove.");
         }
 
         /// <summary>

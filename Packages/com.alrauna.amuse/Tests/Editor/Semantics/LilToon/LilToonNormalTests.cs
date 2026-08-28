@@ -98,7 +98,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var material = NormalMaterial(out _);
             material.SetTexture(
                 "_MainTex",
-                ImportTexture("mippedmain", importer => importer.mipmapEnabled = true));
+                ImportTexture(
+                    "trilinearmain",
+                    importer => importer.filterMode = FilterMode.Trilinear));
 
             var result = Interpret(material);
 
