@@ -402,21 +402,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(ok, Is.False);
         }
 
+        /// <summary>
+        /// Mipmapped sampling is admitted now that the resolver classifies every
+        /// level of the captured chain, so the frontend must stop refusing it.
+        /// Trilinear remains unsupported and is pinned by
+        /// <see cref="Sampler_Trilinear_IsUnsupported"/>.
+        /// </summary>
         [Test]
-        public void Sampler_Mipmapped_IsUnsupported()
+        public void Sampler_Mipmapped_IsSupported()
         {
             var material = NewFixtureMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_mip", i =>
             {
+                i.mipmapEnabled = true;
                 i.filterMode = FilterMode.Bilinear;
                 i.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-                i.mipmapEnabled = true;
             }));
 
             var ok = PoiyomiMaterialSemantics.TryGetMainTextureSampling(
-                material, out _);
+                material, out var sampling);
 
-            Assert.That(ok, Is.False);
+            Assert.That(ok, Is.True);
+            Assert.That(sampling.Filter, Is.EqualTo(TextureFilterMode.Bilinear));
+            Assert.That(sampling.Wrap, Is.EqualTo(CoreWrapMode.Repeat));
         }
 
         [Test]
