@@ -312,7 +312,7 @@ namespace Alrauna.Amuse.Editor.Build
                     {
                         opaqueCandidateTriangleCount = ClassifyRuntimeStates(
                             extraction.Snapshot,
-                            resolved.ResolutionsBySlot);
+                            resolved.SlotResults);
                     }
                 }
 
@@ -354,7 +354,7 @@ namespace Alrauna.Amuse.Editor.Build
             return resolved.Refusal == RendererAnalysisRefusal.None
                 ? (RendererAnalysisRefusal.None,
                     ClassifyRuntimeStates(
-                        snapshot, resolved.ResolutionsBySlot))
+                        snapshot, resolved.SlotResults))
                 : (resolved.Refusal, 0);
         }
 
@@ -363,16 +363,33 @@ namespace Alrauna.Amuse.Editor.Build
             internal ResolvedRuntimeStates(
                 RendererAnalysisRefusal refusal,
                 IReadOnlyList<CapturedAlphaMaterial> currentMaterials,
-                IReadOnlyList<AlphaResolution>[] resolutionsBySlot)
+                SlotResolutionResult[] slotResults)
             {
                 Refusal = refusal;
                 CurrentMaterials = currentMaterials;
-                ResolutionsBySlot = resolutionsBySlot;
+                SlotResults = slotResults;
             }
 
             internal RendererAnalysisRefusal Refusal { get; }
             internal IReadOnlyList<CapturedAlphaMaterial> CurrentMaterials { get; }
-            internal IReadOnlyList<AlphaResolution>[] ResolutionsBySlot { get; }
+
+            /// <summary>
+            /// One retained result per material slot: either that slot's
+            /// deduplicated resolutions or its own named refusal. Renderer- and
+            /// avatar-scoped failures are reported through
+            /// <see cref="Refusal"/> instead and leave this empty.
+            /// <para>
+            /// A refused slot's reason is retained here but is deliberately not
+            /// reported anywhere: this milestone reuses the existing
+            /// <see cref="SlotResolutionResult"/> and
+            /// <see cref="RendererAnalysisRefusal"/> vocabulary and adds no
+            /// persistent per-slot diagnostics. A concrete consumer that needs
+            /// durable per-slot reporting is the point at which a separate
+            /// vocabulary and state representation should be designed, not
+            /// before.
+            /// </para>
+            /// </summary>
+            internal SlotResolutionResult[] SlotResults { get; }
         }
 
         private static ResolvedRuntimeStates ResolveRuntimeStates(
@@ -472,7 +489,16 @@ namespace Alrauna.Amuse.Editor.Build
                        fields.TryGetValue(source, out chain);
             }
 
-            var resolutionsBySlot = new IReadOnlyList<AlphaResolution>[slots.Count];
+            // Every slot is resolved; no slot's failure stops the loop. A
+            // slot's admission failure is a fact about that slot's own admitted
+            // materials, so it must not decide anything for a sibling slot
+            // whose proof does not depend on it.
+            // Renderer-scoped facts — closure, structural refusals,
+            // unrecognized bindings, additive layers and unnormalized direct
+            // blend trees — are all established above and keep their scope.
+            var slotResults = new SlotResolutionResult[slots.Count];
+            var firstSlotRefusal = RendererAnalysisRefusal.None;
+            var anySlotResolved = false;
             for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
             {
                 var resolved = AdmittedMaterialStates.ResolveSlot(
@@ -483,11 +509,29 @@ namespace Alrauna.Amuse.Editor.Build
                     AlphaFields,
                     resolveSemantics);
                 if (!resolved.IsResolved)
-                    return Refused(resolved.Refusal);
+                {
+                    // Retained as it stands, refusal reason included, so the
+                    // slot is preserved rather than dropped.
+                    slotResults[slotIndex] = resolved;
+                    if (firstSlotRefusal == RendererAnalysisRefusal.None)
+                        firstSlotRefusal = resolved.Refusal;
+                    continue;
+                }
 
-                resolutionsBySlot[slotIndex] =
+                anySlotResolved = true;
+                slotResults[slotIndex] = SlotResolutionResult.Resolved(
                     AdmittedMaterialStates.DistinctResolutions(
-                        resolved.Resolutions);
+                        resolved.Resolutions));
+            }
+
+            // Nothing resolved, so there is no partial result to preserve and
+            // the renderer keeps exactly its previous refusal, reason and
+            // accounting. The first refusal is the reported one, which is the
+            // same one the earlier return-on-first-failure produced.
+            if (firstSlotRefusal != RendererAnalysisRefusal.None &&
+                !anySlotResolved)
+            {
+                return Refused(firstSlotRefusal);
             }
 
             var currentMaterials =
@@ -501,7 +545,7 @@ namespace Alrauna.Amuse.Editor.Build
             return new ResolvedRuntimeStates(
                 RendererAnalysisRefusal.None,
                 currentMaterials,
-                resolutionsBySlot);
+                slotResults);
         }
 
         private static ResolvedRuntimeStates Refused(
@@ -510,37 +554,77 @@ namespace Alrauna.Amuse.Editor.Build
             return new ResolvedRuntimeStates(
                 refusal,
                 Array.Empty<CapturedAlphaMaterial>(),
-                Array.Empty<IReadOnlyList<AlphaResolution>>());
+                Array.Empty<SlotResolutionResult>());
         }
 
         private static int ClassifyRuntimeStates(
             UnityRendererAlphaSnapshot snapshot,
-            IReadOnlyList<AlphaResolution>[] resolutionsBySlot)
+            IReadOnlyList<SlotResolutionResult> slotResults)
         {
             var submeshes = new List<SubmeshSeparationInput>(
                 snapshot.Submeshes.Count);
             foreach (var submesh in snapshot.Submeshes)
             {
-                var perResolution = new List<TriangleAlphaOutcome[]>();
-                foreach (var resolution in
-                         resolutionsBySlot[submesh.MaterialSlotIndex])
-                {
-                    perResolution.Add(UnityRendererAlphaAnalysis.Classify(
-                        submesh.Indices,
-                        snapshot.Positions,
-                        snapshot.HasUv0 ? snapshot.Uv0 : null,
-                        resolution));
-                }
-
+                var slot = slotResults[submesh.MaterialSlotIndex];
                 submeshes.Add(new SubmeshSeparationInput(
                     submesh.MaterialSlotIndex,
                     submesh.Indices,
-                    UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution)));
+                    slot.IsResolved
+                        ? IntersectResolvedOutcomes(snapshot, submesh, slot)
+                        : UnprovenOutcomes(submesh.Indices.Count / 3)));
             }
 
             var plan = MeshSeparationPlanner.Create(
                 new MeshSeparationInput(snapshot.VertexCount, submeshes));
             return plan.OpaqueTriangleCount;
+        }
+
+        private static TriangleAlphaOutcome[] IntersectResolvedOutcomes(
+            UnityRendererAlphaSnapshot snapshot,
+            UnitySubmeshAlphaSnapshot submesh,
+            SlotResolutionResult slot)
+        {
+            var perResolution = new List<TriangleAlphaOutcome[]>(
+                slot.Resolutions.Count);
+            foreach (var resolution in slot.Resolutions)
+            {
+                perResolution.Add(UnityRendererAlphaAnalysis.Classify(
+                    submesh.Indices,
+                    snapshot.Positions,
+                    snapshot.HasUv0 ? snapshot.Uv0 : null,
+                    resolution));
+            }
+
+            return UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
+        }
+
+        /// <summary>
+        /// The outcomes for a slot whose admitted states could not be resolved.
+        /// Such a slot proves nothing about its own triangles and nothing about
+        /// any other slot's, so it keeps its submesh and its positional
+        /// correspondence with its material slot, and every triangle is
+        /// explicitly <see cref="TriangleAlphaOutcome.Unknown"/>: not opaque,
+        /// and not asserted to require transparency either, which would be a
+        /// claim this slot has no evidence for.
+        /// <para>
+        /// Written out rather than left to the enum's numeric default, which is
+        /// <see cref="TriangleAlphaOutcome.ProvenOpaque"/> and would turn an
+        /// unresolved slot into a false positive.
+        /// </para>
+        /// <para>
+        /// This also keeps the empty-state guard in
+        /// <c>IntersectOutcomes</c> intact: an unresolved slot never reaches it
+        /// with no admitted states, so intersecting nothing still means what it
+        /// means today.
+        /// </para>
+        /// </summary>
+        private static TriangleAlphaOutcome[] UnprovenOutcomes(int triangleCount)
+        {
+            var outcomes = new TriangleAlphaOutcome[triangleCount];
+            for (var triangle = 0; triangle < outcomes.Length; triangle++)
+                outcomes[triangle] = TriangleAlphaOutcome.Unknown;
+
+            return outcomes;
         }
 
         private static IReadOnlyList<CapturedMaterialSlotEvidence>
