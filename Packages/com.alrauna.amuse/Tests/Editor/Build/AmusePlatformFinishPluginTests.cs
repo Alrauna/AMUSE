@@ -3133,26 +3133,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
                 SelectVerifiedFixtureRequest,
-                CaptureVerifiedFixtureMaterials);
+                CaptureVerifiedFixtureMaterials,
+                out _);
         }
 
-        /// <summary>
-        /// Mirrors production's Poiyomi mapping: alpha proof considers the
-        /// family's alpha request, while the closed capture also gathers
-        /// conversion evidence.
-        /// </summary>
+        // The three verified-frontend seams live in VerifiedPoiyomiTestSeams so
+        // the alpha-separation test classes share one copy of production's own
+        // Poiyomi mapping. These delegate rather than duplicate, and keep their
+        // existing names so every call site in this file is unchanged.
         private static bool SelectVerifiedFixtureRequest(
             Material material,
             out CapturedAlphaMaterialFamily family,
             out MaterialEvidenceRequest alphaRelevance,
             out MaterialEvidenceRequest captureSchema)
         {
-            family = CapturedAlphaMaterialFamily.Poiyomi;
-            alphaRelevance = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
-            captureSchema = MaterialEvidenceRequest.Combine(
-                alphaRelevance,
-                PoiyomiOpaqueConversion.ConversionEvidenceRequest);
-            return material != null;
+            return VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest(
+                material, out family, out alphaRelevance, out captureSchema);
         }
 
         private static bool CaptureVerifiedFixtureMaterials(
@@ -3161,37 +3157,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             MaterialEvidenceRequest request,
             out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
-            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
-            for (var index = 0; index < materials.Count; index++)
-            {
-                inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
-            }
-
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
-            var result = new CapturedAlphaMaterial[materials.Count];
-            for (var index = 0; index < result.Length; index++)
-            {
-                result[index] = new CapturedAlphaMaterial(
-                    families[index],
-                    evidence[index],
-                    default(PoiyomiSourceEvidence),
-                    null);
-            }
-
-            captured = result;
-            return true;
+            return VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials(
+                materials, families, request, out captured);
         }
 
         private static MaterialSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                    material.Evidence),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+            return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(material);
         }
 
         private static void DisposeAnalyzableRenderer(

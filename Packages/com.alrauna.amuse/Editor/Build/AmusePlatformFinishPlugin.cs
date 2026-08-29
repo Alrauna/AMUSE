@@ -75,6 +75,16 @@ namespace Alrauna.Amuse.Editor.Build
         /// that graph's no-live-Unity-object guarantee.
         /// </summary>
         internal IPlatformAnimatorBindings AnimatorBindings { get; set; }
+
+        /// <summary>
+        /// What the barrier prepared for alpha separation, or null when no
+        /// renderer produced a candidate slot.
+        ///
+        /// Like <see cref="AnimatorBindings"/> this is a live, transient host
+        /// capability rather than proof evidence, and is deliberately outside
+        /// the captured-evidence graph's no-live-Unity-object guarantee.
+        /// </summary>
+        internal PreparedAlphaSeparation Separation { get; set; }
     }
 
     [RunsOnPlatforms(WellKnownPlatforms.VRChatAvatar30)]
@@ -286,19 +296,25 @@ namespace Alrauna.Amuse.Editor.Build
 
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform, context.AvatarRootObject.transform);
+                // The live build-copy materials behind the captured admitted
+                // set, index-aligned with evidence.AdmittedMaterials. Held as a
+                // local transient host capability, never inside the evidence.
+                IReadOnlyList<Material> admittedLiveMaterials;
                 var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
-                        state.AnimatorBindings)
+                        state.AnimatorBindings,
+                        out admittedLiveMaterials)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
                         selectRequest,
-                        capturer);
+                        capturer,
+                        out admittedLiveMaterials);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, resolveSemantics);
                 refusal = resolved.Refusal;
@@ -310,9 +326,16 @@ namespace Alrauna.Amuse.Editor.Build
                     refusal = extraction.Refusal;
                     if (refusal == RendererAnalysisRefusal.None)
                     {
-                        opaqueCandidateTriangleCount = ClassifyRuntimeStates(
+                        var plan = ClassifyRuntimeStates(
                             extraction.Snapshot,
                             resolved.SlotResults);
+                        opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                        RetainPreparedSeparation(
+                            state,
+                            extraction.MutationTarget,
+                            rendererPath,
+                            plan,
+                            evidence);
                     }
                 }
 
@@ -354,7 +377,7 @@ namespace Alrauna.Amuse.Editor.Build
             return resolved.Refusal == RendererAnalysisRefusal.None
                 ? (RendererAnalysisRefusal.None,
                     ClassifyRuntimeStates(
-                        snapshot, resolved.SlotResults))
+                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
                 : (resolved.Refusal, 0);
         }
 
@@ -557,7 +580,13 @@ namespace Alrauna.Amuse.Editor.Build
                 Array.Empty<SlotResolutionResult>());
         }
 
-        private static int ClassifyRuntimeStates(
+        /// <summary>
+        /// Classifies every submesh against its own slot's admitted states and
+        /// returns the separation plan. The plan was previously reduced to its
+        /// opaque triangle count here; it is returned whole so the caller can
+        /// also retain it, which changes no classification.
+        /// </summary>
+        private static MeshSeparationPlan ClassifyRuntimeStates(
             UnityRendererAlphaSnapshot snapshot,
             IReadOnlyList<SlotResolutionResult> slotResults)
         {
@@ -574,10 +603,62 @@ namespace Alrauna.Amuse.Editor.Build
                         : UnprovenOutcomes(submesh.Indices.Count / 3)));
             }
 
-            var plan = MeshSeparationPlanner.Create(
+            return MeshSeparationPlanner.Create(
                 new MeshSeparationInput(snapshot.VertexCount, submeshes));
-            return plan.OpaqueTriangleCount;
         }
+
+        /// <summary>
+        /// Retains what this renderer's plan found, for the later pass that
+        /// prepares and applies it. A renderer whose plan proves no triangle
+        /// opaque has nothing to prepare and is not retained at all.
+        /// <para>
+        /// Deliberately inert at this milestone: it names the candidate slots
+        /// and nothing more. No opaque mapping is prepared, no material or mesh
+        /// clone is created, no refusal is recorded and no counter changes —
+        /// creating a transient object before the sweep that destroys an
+        /// unreferenced one exists would leak it.
+        /// </para>
+        /// </summary>
+        private static void RetainPreparedSeparation(
+            AmusePlatformFinishState state,
+            UnityRendererMutationTarget mutationTarget,
+            string rendererPath,
+            MeshSeparationPlan plan,
+            CapturedAnimationEvidence evidence)
+        {
+            if (!plan.HasAnyOpaqueCandidates)
+            {
+                return;
+            }
+
+            var candidateSlots = new List<PreparedSlotSeparation>(
+                plan.Submeshes.Count);
+            foreach (var submesh in plan.Submeshes)
+            {
+                if (submesh.Disposition ==
+                    SubmeshSeparationDisposition.Unchanged)
+                {
+                    continue;
+                }
+
+                candidateSlots.Add(new PreparedSlotSeparation(
+                    submesh, EmptyOpaqueMapping));
+            }
+
+            state.Separation ??= new PreparedAlphaSeparation();
+            state.Separation.Add(new PreparedRendererSeparation(
+                mutationTarget,
+                rendererPath,
+                plan,
+                evidence,
+                candidateSlots));
+        }
+
+        // One shared empty mapping: this milestone prepares none, and an empty
+        // read-only dictionary carries no per-slot state that could differ.
+        private static readonly IReadOnlyDictionary<Material, Material>
+            EmptyOpaqueMapping =
+                new Dictionary<Material, Material>();
 
         private static TriangleAlphaOutcome[] IntersectResolvedOutcomes(
             UnityRendererAlphaSnapshot snapshot,
