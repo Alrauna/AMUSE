@@ -2680,6 +2680,349 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// One renderer-wide proof-relevant curve; two slots whose admitted
+        /// materials disagree about it. Slot 0's captured serialized default
+        /// differs from the animated singleton, so its admission returns
+        /// SourcesDisagree; slot 1's default is exactly that singleton, so it
+        /// admits and proves its triangle opaque.
+        /// <para>
+        /// The failure is post-closure and genuinely slot-scoped, so it must not
+        /// refuse the renderer. The per-slot loop previously returned on slot 0,
+        /// which discarded slot 1's provable triangle and counted a renderer
+        /// refusal for a fact slot 1 does not depend on.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE post-closure slot refusal");
+            Material refusing = null;
+            Material resolving = null;
+            Mesh mesh = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                refusing = VerifiedForceOpaqueMaterial(0f);
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                var renderer = AddTwoSlotRenderer(
+                    root, refusing, resolving, out mesh);
+                controller = AddRendererWideForceOpaqueGraph(root, out clip);
+
+                AssertTwoSlotTriangleFixture(mesh);
+                Assert.That(
+                    refusing.GetFloat("_AlphaForceOpaque"), Is.EqualTo(0f),
+                    "fixture precondition: slot 0's default must differ from the " +
+                    "animated singleton");
+                Assert.That(
+                    resolving.GetFloat("_AlphaForceOpaque"), Is.EqualTo(1f),
+                    "fixture precondition: slot 1's default must equal the " +
+                    "animated singleton");
+
+                var evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
+                AssertRendererWideForceOpaqueFixture(evidence);
+
+                // Each slot's outcome under that one shared binding, pinned on
+                // its own single-slot renderer so the claim stays true whatever
+                // the multi-slot loop does.
+                Assert.That(
+                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                        refusing, out var refusedCandidates),
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AnimatedMaterialPropertyNotSingleton),
+                    "fixture precondition: slot 0's material must refuse admission");
+                Assert.That(refusedCandidates, Is.Zero);
+                Assert.That(
+                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                        resolving, out var resolvedCandidates),
+                    Is.EqualTo(RendererAnalysisRefusal.None),
+                    "fixture precondition: slot 1's material must admit and resolve");
+                Assert.That(
+                    resolvedCandidates, Is.EqualTo(1),
+                    "fixture precondition: slot 1 must prove exactly one opaque " +
+                    "triangle on its own");
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    amuse.AvatarRefusal, Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "one slot's post-closure admission failure refused the whole " +
+                    "renderer");
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton),
+                    Is.Zero);
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "exactly the resolving slot's triangle may be an opaque " +
+                    "candidate: zero means the slot refusal still escalated, and " +
+                    "two means the refused slot was treated as proven");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (refusing != null) Object.DestroyImmediate(refusing);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// The same fixture with no slot able to admit the animated value. With
+        /// nothing resolved there is no partial result to preserve, so the
+        /// renderer keeps its existing refusal, reason and accounting exactly.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_EverySlotFailingRefusesTheRendererOnce()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE every slot refuses");
+            Material first = null;
+            Material second = null;
+            Mesh mesh = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                first = VerifiedForceOpaqueMaterial(0f);
+                second = VerifiedForceOpaqueMaterial(0f);
+                var renderer = AddTwoSlotRenderer(root, first, second, out mesh);
+                controller = AddRendererWideForceOpaqueGraph(root, out clip);
+
+                AssertTwoSlotTriangleFixture(mesh);
+                var evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
+                AssertRendererWideForceOpaqueFixture(evidence);
+
+                Assert.That(
+                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                        first, out _),
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AnimatedMaterialPropertyNotSingleton),
+                    "fixture precondition: slot 0's material must refuse admission");
+                Assert.That(
+                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                        second, out _),
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AnimatedMaterialPropertyNotSingleton),
+                    "fixture precondition: slot 1's material must refuse admission");
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    amuse.AvatarRefusal, Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1),
+                    "the renderer must still be refused exactly once when no slot " +
+                    "resolves");
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton),
+                    Is.EqualTo(1),
+                    "the existing refusal reason must be preserved unchanged");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (first != null) Object.DestroyImmediate(first);
+                if (second != null) Object.DestroyImmediate(second);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        private static void AssertTwoSlotTriangleFixture(Mesh mesh)
+        {
+            Assert.That(
+                mesh.subMeshCount, Is.EqualTo(2),
+                "fixture precondition: the renderer must present two submeshes");
+            Assert.That(
+                mesh.GetTriangles(0), Has.Length.EqualTo(3),
+                "fixture precondition: slot 0 has no triangle to classify");
+            Assert.That(
+                mesh.GetTriangles(1), Has.Length.EqualTo(3),
+                "fixture precondition: slot 1 has no triangle to classify");
+        }
+
+        /// <summary>
+        /// Pins that closure succeeded and that exactly one renderer-wide
+        /// proof-relevant binding, carrying one finite exact value, reaches both
+        /// slots — so the two slots differ only in their captured materials.
+        /// </summary>
+        private static void AssertRendererWideForceOpaqueFixture(
+            CapturedAnimationEvidence evidence)
+        {
+            Assert.That(
+                evidence.IsClosed, Is.True,
+                "fixture precondition: closure failed, so no slot would be " +
+                "resolved and the fixture would prove nothing about slot scope");
+            Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(2));
+            Assert.That(
+                evidence.CurrentMaterialIndices[0],
+                Is.Not.EqualTo(evidence.CurrentMaterialIndices[1]),
+                "fixture precondition: the two slots must retain distinct " +
+                "admitted materials and must not collapse to the same admitted " +
+                "material index");
+
+            var relevant = evidence.Clips[0].FloatBindings
+                .Where(binding => binding.PropertyName ==
+                    "material._AlphaForceOpaque")
+                .ToArray();
+            Assert.That(
+                relevant, Has.Length.EqualTo(1),
+                "fixture precondition: the proof-relevant curve is not a single " +
+                "renderer-wide binding");
+            Assert.That(
+                relevant[0].Path, Is.Empty,
+                "fixture precondition: the binding must address the analyzed " +
+                "renderer");
+            Assert.That(
+                relevant[0].IsFiniteExact, Is.True,
+                "fixture precondition: a non-finite-exact curve refuses every " +
+                "slot before any material's default is consulted");
+            Assert.That(
+                relevant[0].Values, Is.All.EqualTo(1f),
+                "fixture precondition: the binding must carry one exact singleton");
+        }
+
+        /// <summary>
+        /// The same renderer-wide binding over a renderer holding exactly one
+        /// material, so each admitted material's own admission outcome is pinned
+        /// independently of the multi-slot loop.
+        /// </summary>
+        private static RendererAnalysisRefusal
+            AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                Material material,
+                out int opaqueCandidateTriangleCount)
+        {
+            var root = new GameObject("AMUSE single-slot control");
+            Mesh mesh = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+                controller = AddRendererWideForceOpaqueGraph(root, out clip);
+
+                var result = AnalyzeVerifiedRuntimeStates(root, renderer, out _);
+                opaqueCandidateTriangleCount = result.OpaqueCandidateTriangleCount;
+                return result.Refusal;
+            }
+            finally
+            {
+                // The material belongs to the caller and is deliberately not
+                // destroyed here.
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        private static Material VerifiedForceOpaqueMaterial(float forceOpaque)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", forceOpaque);
+            return material;
+        }
+
+        private static SkinnedMeshRenderer AddTwoSlotRenderer(
+            GameObject root,
+            Material slotZero,
+            Material slotOne,
+            out Mesh mesh)
+        {
+            mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    new Vector3(2f, 0f, 0f),
+                    new Vector3(3f, 0f, 0f),
+                    new Vector3(2f, 1f, 0f),
+                },
+                subMeshCount = 2,
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+
+            var renderer = root.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { slotZero, slotOne };
+            return renderer;
+        }
+
+        /// <summary>
+        /// One clip carrying only the renderer-wide proof-relevant property, so
+        /// the admitted set is exactly the renderer's current materials and no
+        /// material-swap closure participates.
+        /// </summary>
+        private static AnimatorController AddRendererWideForceOpaqueGraph(
+            GameObject root,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE renderer-wide property" };
+            AddAgreeingAnimatedProperty(clip);
+
+            var controller = new AnimatorController
+            {
+                name = "AMUSE renderer-wide property graph",
+            };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        /// <summary>
         /// Authors one object-reference curve on the root renderer under an
         /// arbitrary property name, so a fixture can present the committed graph
         /// with binding syntax Unity's own generator does not emit.
