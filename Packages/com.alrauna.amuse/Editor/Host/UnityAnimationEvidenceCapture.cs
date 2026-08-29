@@ -62,6 +62,21 @@ namespace Alrauna.Amuse.Editor.Host
         out MaterialEvidenceRequest alphaRelevanceRequest,
         out MaterialEvidenceRequest captureRequest);
 
+    /// <summary>
+    /// Captures the closed evidence batch for one admitted material batch.
+    /// <para>
+    /// The positional order is part of this delegate's contract, not an
+    /// accidental property of one implementation: on success,
+    /// <paramref name="captured"/>[i] corresponds to <paramref name="materials"/>[i]
+    /// and therefore also to <paramref name="families"/>[i], and
+    /// <c>captured.Count</c> equals <c>materials.Count</c>.
+    /// </para>
+    /// <para>
+    /// Returning <c>false</c> rejects the complete batch. A refusal exposes no
+    /// partial captured result to the caller: <paramref name="captured"/> must
+    /// be left null or empty, never a prefix of the batch.
+    /// </para>
+    /// </summary>
     internal delegate bool ClosedAlphaMaterialCapturer(
         IReadOnlyList<Material> materials,
         IReadOnlyList<CapturedAlphaMaterialFamily> families,
@@ -95,11 +110,23 @@ namespace Alrauna.Amuse.Editor.Host
         /// closure to it: a renderer on the avatar root has the empty path, so
         /// empty is valid and only null is rejected.
         /// </summary>
+        /// <param name="admittedLiveMaterials">
+        /// The live build-copy materials behind the returned evidence's
+        /// <see cref="CapturedAnimationEvidence.AdmittedMaterials"/>, in the same
+        /// order, so index <c>i</c> of one addresses index <c>i</c> of the other.
+        /// <para>
+        /// This is a live, transient host capability, NOT proof evidence: it is
+        /// deliberately handed back beside the immutable evidence rather than
+        /// stored in it, so the evidence graph's no-live-Unity-object guarantee is
+        /// unchanged. A closure failure yields an empty list, never a partial one.
+        /// </para>
+        /// </param>
         internal static CapturedAnimationEvidence Capture(
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
-            IPlatformAnimatorBindings bindings)
+            IPlatformAnimatorBindings bindings,
+            out IReadOnlyList<Material> admittedLiveMaterials)
         {
             return CaptureGraph(
                 rendererPath,
@@ -107,7 +134,8 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 bindings,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials);
+                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                out admittedLiveMaterials);
         }
 
         // Public-project vendor fixtures exercise verified frontend equations but
@@ -120,7 +148,8 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             AlphaMaterialRequestSelector selectRequest,
-            ClosedAlphaMaterialCapturer capturer)
+            ClosedAlphaMaterialCapturer capturer,
+            out IReadOnlyList<Material> admittedLiveMaterials)
         {
             return CaptureObserved(
                 rendererPath,
@@ -128,7 +157,8 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 selectRequest,
-                capturer);
+                capturer,
+                out admittedLiveMaterials);
         }
 
         internal static CapturedAnimationEvidence CaptureGraphForTests(
@@ -137,7 +167,8 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
             AlphaMaterialRequestSelector selectRequest,
-            ClosedAlphaMaterialCapturer capturer)
+            ClosedAlphaMaterialCapturer capturer,
+            out IReadOnlyList<Material> admittedLiveMaterials)
         {
             return CaptureGraph(
                 rendererPath,
@@ -145,7 +176,8 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 bindings,
                 selectRequest,
-                capturer);
+                capturer,
+                out admittedLiveMaterials);
         }
 
         private static CapturedAnimationEvidence CaptureGraph(
@@ -154,7 +186,8 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
             AlphaMaterialRequestSelector selectRequest,
-            ClosedAlphaMaterialCapturer capturer)
+            ClosedAlphaMaterialCapturer capturer,
+            out IReadOnlyList<Material> admittedLiveMaterials)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -184,7 +217,8 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 selectRequest,
-                capturer);
+                capturer,
+                out admittedLiveMaterials);
         }
 
         private static CapturedAnimationEvidence CaptureObserved(
@@ -193,8 +227,15 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             AlphaMaterialRequestSelector selectRequest,
-            ClosedAlphaMaterialCapturer capturer)
+            ClosedAlphaMaterialCapturer capturer,
+            out IReadOnlyList<Material> admittedLiveMaterials)
         {
+            // Assigned once here so that EVERY closure-failure return below hands
+            // back an empty list rather than a partial one. The real pairing is
+            // assigned only at the single success return, after the captured count
+            // has been checked against the admitted count.
+            admittedLiveMaterials = Array.Empty<Material>();
+
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
             if (observations == null)
@@ -392,6 +433,14 @@ namespace Alrauna.Amuse.Editor.Host
                     floats,
                     objects));
             }
+
+            // The success return, and the only place the live pairing escapes.
+            // This list preserves the exact admitted-material order passed into
+            // the capturer, and ClosedAlphaMaterialCapturer's contract places
+            // captured[i] against materials[i], so index i of this list
+            // addresses index i of AdmittedMaterials. The count check above
+            // proves only the expected cardinality, not this ordering.
+            admittedLiveMaterials = Array.AsReadOnly(admitted.ToArray());
 
             return new CapturedAnimationEvidence(
                 MaterialDependencyClosureFailure.None,
