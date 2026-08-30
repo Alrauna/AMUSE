@@ -177,8 +177,11 @@ structural refusal.
 
 **Kept out of the vertical slice.** This design does not implement the prerequisite, does not
 depend on its internal shape, and does not fold it into the feature branch. Its own falsifiers
-belong to it; the vertical slice's obligation is test 19 (§13), which asserts the end state
-through the feature.
+belong to it. The vertical slice's falsifier-19 obligation is discharged by the merged
+prerequisite regression `RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling`
+(`914d9db`), re-run on this branch, with falsifier 1 proving at the feature layer that a wholly
+opaque candidate which reaches the feature is applied. No standalone feature-level F19 test
+exists; §13 records why.
 
 ### 2.6 Renderer-wide dependency closure — existing coverage pressure, not a prerequisite
 
@@ -1019,7 +1022,7 @@ where the falsifier is not obvious it is stated.
 | 16 | **Assigned generated objects persist through NDMF serialization**: with a real temporary directory, the assigned mesh and materials — including a material referenced *only* by a rewritten object curve — are persistent after the build, with no `SaveAsset` call | assuming curve-only references are not traversed; adding an eager save (which the same test can catch by asserting no abandoned asset was persisted) |
 | 17 | **No partial mutation before validation completes**: `prepare` is observably non-mutating — after it returns, and with at least one slot invalidated, every renderer's `sharedMesh`, `sharedMaterials` and every clip curve are exactly as before — **and** every candidate slot was validated before it returned (assert the observed validation count) | per-slot apply-as-you-go; short-circuiting validation on first failure |
 | 18 | **Wrong appended index and wrong binding matching fail**: two surviving split slots on one renderer, so `n`, `i+1` and descending-order implementations all fail; plus two clips sharing a display name, a decoy binding at another renderer path, and a decoy binding at another slot, so name-based, path-blind and slot-blind matching all fail | exactly those |
-| 19 | **A material-dependent post-closure admission failure does not eliminate a valid sibling.** One renderer, two slots, **evidence closes successfully** — every material is attested and captured. **One** proof-relevant alpha property is animated to a **single exact finite value** `v` by a `material.<Property>` curve at the renderer path, so **[SOURCE]** the identical renderer-wide binding reaches both slots. The two admitted materials differ in their *serialized defaults*: slot 0's is not `v`, so `AdmitScalar` returns `SourcesDisagree` and the slot refuses with `AnimatedMaterialPropertyNotSingleton`; slot 1's **is** `v`, so it admits, resolves, and is a valid candidate. Slot 1 reaches preparation, validation and apply; slot 0 is entirely unchanged. The test asserts closure succeeded, and asserts both admission outcomes, so the two slots are shown to receive **different** outcomes from the **same** binding. Equivalent permitted variant: the property is present on slot 1's material and absent from slot 0's, giving slot 0 `AnimatedPropertyAbsentFromAdmittedMaterial` | the pre-existing first-refusal return in the per-slot `ResolveSlot` loop (§2.5). **This test cannot pass until `fix/scope-slot-alpha-refusal-to-slot` is merged**, which is precisely why that branch is a prerequisite and not a follow-up. Two fixture mistakes it must avoid, both of which would make it prove nothing: an **unattested material** — **[SOURCE]** that fails renderer-wide closure before any slot is resolved (§2.6); and a **non-singleton or non-finite-exact curve**, which **[SOURCE]** refuses *every* slot the renderer-wide binding reaches, so no sibling could survive under any implementation. Unknown semantics injected purely to make a slot fail is likewise not used, because the differing-default fixture exercises the real mechanism |
+| 19 | **A material-dependent post-closure admission failure does not eliminate a valid sibling.** Discharged at the **prerequisite level** by the merged regression `AmusePlatformFinishPluginTests.RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling` (`914d9db`) — re-run, not re-created — which proves the surviving sibling reaches the separation plan with per-slot refusals instead of being eliminated. **Feature layer:** falsifier 1 is the consumer proof that a wholly opaque candidate which reaches the feature is applied, and falsifier 15 that only surviving writes are applied. **No standalone feature-level F19 test exists, deliberately: [MEASURED]** the production-like `AnimatorServicesContext` lifecycle materializes a renderer-wide `material.<Property>` float curve as a non-empty `MaterialPropertyBlock` on the build renderer before the barrier, so the pre-existing structural refusal `MaterialPropertyOverridesPresent` refuses the renderer before any feature code runs — a conservative false negative this milestone retains (§15.2). Reaching the feature layer would require bypassing a retained production gate, and the feature layer receives only candidate slots, so it has no representation for an already-refused sibling. Revisit only if real-avatar evidence justifies it | the pre-existing first-refusal return in the per-slot `ResolveSlot` loop (§2.5) — proven fixed by the merged regression; the `MaterialPropertyOverridesPresent` boundary itself is retained, not fixed (§15.2) |
 | 20 | **The live current material is used, not barrier state**: between the barrier and pass 3, a probe pass replaces one candidate slot's `sharedMaterials[i]` **without changing the array length**. (a) replaced with a material absent from `OpaqueOfAdmitted` → that slot is entirely unchanged and an independent sibling slot still applies; (b) replaced with a *different already-admitted, already-mapped* material → the slot applies using **that** material's opaque result, and the assertion names the expected opaque material by reference | an implementation carrying `CurrentOpaque` from the barrier: (a) would overwrite a foreign pass's assignment with a stale opaque result, and (b) would apply the wrong opaque material while looking successful. Neither is visible without a same-length replacement between the passes |
 
 **Layering.**
@@ -1032,14 +1035,18 @@ where the falsifier is not obvious it is stated.
 - **Feature seams over synthetic fixtures** — #6, #10, #11, #14, #18.
 - **NDMF build, through `AvatarProcessor.ProcessAvatar`** with a confined synthetic
   `INDMFPlatformProvider`, following `AmusePlatformFinishPluginTests` and
-  `AnimatorServicesReactivationCharacterizationTests` — #1, #2, #5, #7, #8, #9, #13, #16, #19, #20.
+  `AnimatorServicesReactivationCharacterizationTests` — #1, #2, #5, #7, #8, #9, #13, #16, #20.
   #20 additionally declares a probe pass between the barrier and pass 3, the same technique
   `AmusePlatformFinishPluginTests` already uses for `ZzzAnonymousOptimizingProducerPlugin` and
   `AfterAmusePlatformFinishObserverPlugin`.
 
 Successful persistence (#16) and source-asset preservation (#13) stay end-to-end NDMF tests, because
-those are exactly the claims only a completed build can support. Only #16 uses a real temporary
-directory; every other test uses `OverrideTemporaryDirectoryScope(null)` and writes no project asset.
+those are exactly the claims only a completed build can support. Only #16 points NDMF's persistence
+scope at a real temporary directory; every other test uses `OverrideTemporaryDirectoryScope(null)`.
+The split fixtures (#2, #4, #5, #14, #15, #18) additionally require a synthetic **importer-backed**
+texture — current texture evidence refuses textures without importer identity (§15.2) — so their
+tests create the test-owned `Assets/AmuseTests_AlphaSplit` folder in the AssetDatabase and delete it
+unconditionally in `finally`, including on assertion failure.
 Every fixture tracks and destroys its Unity objects through a `using`-scoped disposable so teardown
 runs on assertion failure.
 
@@ -1057,8 +1064,8 @@ mandatory here.
 |---|---|
 | Contradictions with current code | Four found and corrected in the design: seam E is already closed (§2.1); closure is already renderer-scoped (§2.1); the mesh-finalization route is already characterized (§2.2); the conversion design's obligation-1 wording is stale (§2.1). One contradiction with the *older* note is deliberate and load-bearing: multi-admitted-material slots **are** separable, given curve rewriting (§2.3). |
 | Stale investigation claims | Enumerated in §2.3 rather than left implicit. |
-| Hidden renderer-wide refusal | Three things, all stated rather than hidden. (a) Two genuine renderer-scoped groups are declared in §8.1 with their dependency justification. (b) The **pre-existing** first-refusal escalation in the per-slot `ResolveSlot` loop is promoted to a merge-first prerequisite (§2.5, §3) with its own vertical-slice falsifier (test 19). (c) Renderer-wide **material-dependency closure** stays renderer-wide and is disclosed as such in §2.6 and §8.2, not papered over — the local-refusal claim is explicitly conditioned on closure having succeeded. |
-| Overclaimed local refusal | Closed. §8.2 now states the three-part qualification; §11 marks the unattestable-lilToon case as closure-scoped rather than slot-local; tests 9, 10 and 19 must assert closure succeeded, so none of them can pass through a renderer-wide closure refusal. |
+| Hidden renderer-wide refusal | Three things, all stated rather than hidden. (a) Two genuine renderer-scoped groups are declared in §8.1 with their dependency justification. (b) The **pre-existing** first-refusal escalation in the per-slot `ResolveSlot` loop is promoted to a merge-first prerequisite (§2.5, §3), discharged by the merged prerequisite regression (§13, falsifier 19). (c) Renderer-wide **material-dependency closure** stays renderer-wide and is disclosed as such in §2.6 and §8.2, not papered over — the local-refusal claim is explicitly conditioned on closure having succeeded. |
+| Overclaimed local refusal | Closed. §8.2 now states the three-part qualification; §11 marks the unattestable-lilToon case as closure-scoped rather than slot-local; tests 9 and 10 must assert closure succeeded, so neither can pass through a renderer-wide closure refusal. |
 | Mutation before complete validation | §9 orders validate → finalize → sweep → apply, with `AmuseBuildOperation`'s single boundary, and test 17 asserts `prepare` is observably non-mutating with every candidate validated. |
 | Stale barrier state reaching a live write | Closed. No current material is carried across the passes: `PreparedSlotSeparation` has no `CurrentOpaque`, pass 3 snapshots and validates the live `sharedMaterials` array (§9.1), finalization builds the output array from that snapshot so unrelated same-count changes survive (§9.2), and test 20 falsifies the stale-state implementation in both its wrong-refusal and wrong-material forms. |
 | Duplicated prepared state | Closed. `PreparedRendererSeparation` holds `UnityRendererMutationTarget` whole and `PreparedSlotSeparation` holds `SubmeshSeparationPlan` whole; every value previously copied is derived from them (§4). Neither existing type changes. |
@@ -1139,8 +1146,17 @@ evidence rather than a coverage wish. It is neither a prerequisite nor a follow-
 Structural refusals unchanged by this feature also remain: property blocks, non-triangle topology,
 animated mesh or slot count, and every host structural refusal.
 
-The feature is fully exercisable, and every test in §13 is expressible, on constant-alpha fixtures,
-so none of these boundaries gates implementation.
+**Material-property animation under the reactivated extension.** **[MEASURED]** A renderer-wide
+`material.<Property>` float curve committed through the production-like `AnimatorServicesContext`
+lifecycle materializes as a non-empty `MaterialPropertyBlock` on the build renderer before the
+barrier, so the pre-existing structural refusal (`MaterialPropertyOverridesPresent`) refuses that
+renderer before any feature code runs. Retained deliberately as a conservative false negative —
+the same direction as every boundary in this section; revisited only if real-avatar evidence
+justifies it. This is why falsifier 19 (§13) has no standalone feature-level fixture.
+
+The feature is fully exercisable on public synthetic fixtures — constant-alpha for most falsifiers
+and the synthetic importer-backed texture for the split fixtures (§13) — so none of these boundaries
+gates implementation.
 
 ---
 

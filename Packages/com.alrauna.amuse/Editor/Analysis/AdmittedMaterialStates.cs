@@ -216,7 +216,6 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
 
-            var groups = GroupByProperty(slotBindings);
             var resolutions = new List<AlphaResolution>(
                 slot.AdmittedMaterialIndices.Count);
             foreach (var index in slot.AdmittedMaterialIndices)
@@ -225,17 +224,14 @@ namespace Alrauna.Amuse.Editor.Analysis
 
                 // Each admitted material accumulates its own derivations from
                 // its own captured evidence. Nothing crosses between materials.
-                var evidence = material.Evidence;
-                foreach (var group in groups)
+                if (!TryAdmitDerivedEvidence(
+                        material, slotBindings, relevance,
+                        out var evidence, out var refusal))
                 {
-                    var refusal = Admit(group, relevance, ref evidence);
-                    if (refusal != RendererAnalysisRefusal.None)
-                    {
-                        // No partial prefix: resolutions gathered for earlier
-                        // admitted materials authorize nothing once the slot
-                        // is refused.
-                        return SlotResolutionResult.Refused(refusal);
-                    }
+                    // No partial prefix: resolutions gathered for earlier
+                    // admitted materials authorize nothing once the slot
+                    // is refused.
+                    return SlotResolutionResult.Refused(refusal);
                 }
 
                 var admitted = ReferenceEquals(evidence, material.Evidence)
@@ -260,6 +256,52 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return SlotResolutionResult.Resolved(resolutions);
+        }
+
+        /// <summary>
+        /// Admits every proof-relevant binding against <em>this</em> material's
+        /// own captured defaults and hands back the evidence those admissions
+        /// derive. This is exactly the per-material half of
+        /// <see cref="ResolveSlot"/>, extracted so one implementation serves
+        /// every decision-specific relevance set rather than being duplicated
+        /// per decision.
+        /// <para>
+        /// <paramref name="derived"/> is reference-equal to the material's own
+        /// evidence when no group changed anything, so a caller can still
+        /// detect "nothing was substituted" by reference.
+        /// </para>
+        /// </summary>
+        /// <param name="relevance">
+        /// MUST be the same decision-specific relevance request the supplied
+        /// bindings were resolved against, for the reason
+        /// <see cref="ResolveSlot"/> documents.
+        /// </param>
+        internal static bool TryAdmitDerivedEvidence(
+            CapturedAlphaMaterial material,
+            IReadOnlyList<(CapturedFloatBinding Binding,
+                           AnimatedPropertyRef Reference)> bindings,
+            MaterialEvidenceRequest relevance,
+            out CapturedMaterialEvidence derived,
+            out RendererAnalysisRefusal refusal)
+        {
+            if (material == null) throw new ArgumentNullException(nameof(material));
+            if (bindings == null) throw new ArgumentNullException(nameof(bindings));
+            if (relevance == null)
+                throw new ArgumentNullException(nameof(relevance));
+
+            derived = material.Evidence;
+            refusal = RendererAnalysisRefusal.None;
+            foreach (var group in GroupByProperty(bindings))
+            {
+                refusal = Admit(group, relevance, ref derived);
+                if (refusal != RendererAnalysisRefusal.None)
+                {
+                    derived = material.Evidence;
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

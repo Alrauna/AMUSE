@@ -577,6 +577,69 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     .AdmittedMaterialIndices);
         }
 
+        /// <summary>
+        /// The live pairing returned beside a closed capture is positional: the
+        /// returned list preserves the admitted order exactly, and index i of
+        /// the live list pairs with index i of the stored captured evidence.
+        /// This is the regression for an implementation that returns the live
+        /// materials in a different order from the captured batch.
+        /// <para>
+        /// Evidence distinguishing is a real captured scalar: the Poiyomi
+        /// capture schema gathers <c>_ZWrite</c>, and each transient test-owned
+        /// material carries a distinct value, so a live/captured misalignment
+        /// cannot pass. Material identity, not just name or value equality, is
+        /// asserted by reference.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void SuccessCapturePairsLiveMaterialsPositionallyWithCapturedEvidence()
+        {
+            var current = NewPoiyomiMaterial();
+            var firstSwap = NewPoiyomiMaterial();
+            var secondSwap = NewPoiyomiMaterial();
+            current.SetFloat("_ZWrite", 0.25f);
+            firstSwap.SetFloat("_ZWrite", 0.5f);
+            secondSwap.SetFloat("_ZWrite", 0.75f);
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                new[] { ObservationWithMaterialSwap(firstSwap, secondSwap) },
+                new[] { current },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                CaptureFixtureMaterials,
+                out var admittedLiveMaterials);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                admittedLiveMaterials,
+                Has.Count.EqualTo(3),
+                "the live pairing must carry every admitted material");
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(3));
+
+            // The pairing itself: captured evidence at index i must belong to
+            // the live material at index i. A reordered live list fails here
+            // even though every entry and every captured value is present.
+            for (var i = 0; i < admittedLiveMaterials.Count; i++)
+            {
+                Assert.That(
+                    evidence.AdmittedMaterials[i].Evidence.TryGetScalar(
+                        "_ZWrite", out var capturedZWrite),
+                    Is.True,
+                    "fixture precondition: _ZWrite must be captured");
+                Assert.That(
+                    capturedZWrite,
+                    Is.EqualTo(admittedLiveMaterials[i].GetFloat("_ZWrite")),
+                    $"captured evidence {i} must pair with live material {i}");
+            }
+
+            // Admitted order: the current material first, then swap values in
+            // observation order — each returned entry by reference.
+            Assert.That(admittedLiveMaterials[0], Is.SameAs(current));
+            Assert.That(admittedLiveMaterials[1], Is.SameAs(firstSwap));
+            Assert.That(admittedLiveMaterials[2], Is.SameAs(secondSwap));
+        }
+
         [Test]
         public void NullOrNonMaterialSlotAssignmentsFailClosure()
         {
@@ -711,7 +774,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 graph,
                 new StubBindings(specialClip),
                 SelectFixtureRequest,
-                CaptureFixtureMaterials);
+                CaptureFixtureMaterials,
+                out _);
 
             Assert.That(evidence.Clips, Has.Count.EqualTo(2));
             Assert.That(evidence.Clips[0].Name, Is.EqualTo("graph swap"));
@@ -774,7 +838,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { first },
                 EmptyGraph(),
                 Select,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(evidence.IsClosed, Is.True);
             Assert.That(
@@ -826,7 +891,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { poiyomi },
                 EmptyGraph(),
                 Select,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(evidence.IsClosed, Is.True);
             CollectionAssert.Contains(
@@ -897,7 +963,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { poiyomi },
                 EmptyGraph(),
                 SelectFixtureRequest,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(evidence.IsClosed, Is.True);
             Assert.That(
@@ -1053,7 +1120,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AnalyzedRendererPath,
                 new[] { material },
                 EmptyGraph(),
-                new StubBindings());
+                new StubBindings(),
+                out _);
 
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(evidence.ClosureFailure,
@@ -1065,13 +1133,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// <summary>
         /// The closed batch capture is the sole source-attestation decision, so
         /// its refusal is the same conservative outcome as a material no family
-        /// selects: unattested, with nothing partial escaping.
+        /// selects: unattested, with nothing partial escaping — including the
+        /// live/captured pairing, after selection and admission have already
+        /// found multiple materials and the capturer refused the whole batch.
         /// </summary>
         [Test]
         public void RefusedClosedCaptureIsUnattestedWithNoPartialEvidence()
         {
             var first = NewPoiyomiMaterial();
             var second = NewLilToonMaterial();
+            var refusedBatch = Array.Empty<Material>();
 
             bool RefuseCapture(
                 IReadOnlyList<Material> materials,
@@ -1079,6 +1150,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 MaterialEvidenceRequest request,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
+                refusedBatch = materials.ToArray();
                 captured = null;
                 return false;
             }
@@ -1089,12 +1161,23 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { first },
                 EmptyGraph(),
                 SelectFixtureRequest,
-                RefuseCapture);
+                RefuseCapture,
+                out var admittedLiveMaterials);
+
+            // Fixture precondition: the capturer refused a batch that admission
+            // had already populated with multiple distinct materials.
+            Assert.That(refusedBatch, Has.Length.EqualTo(2));
+            Assert.That(refusedBatch[0], Is.SameAs(first));
+            Assert.That(refusedBatch[1], Is.SameAs(second));
 
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(
                 evidence.ClosureFailure,
                 Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+            Assert.That(
+                admittedLiveMaterials,
+                Is.Empty,
+                "a refused batch must expose no live/captured pairing");
             Assert.That(RequestedNames(evidence.AlphaRelevanceRequest), Is.Empty);
             Assert.That(evidence.Clips, Is.Empty);
             Assert.That(evidence.AdmittedMaterials, Is.Empty);
@@ -1130,7 +1213,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { supported },
                 EmptyGraph(),
                 SelectFixtureRequest,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(
@@ -1162,7 +1246,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AnalyzedRendererPath,
                 new[] { material },
                 EmptyGraph(),
-                new StubBindings());
+                new StubBindings(),
+                out _);
 
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(evidence.ClosureFailure,
@@ -1183,7 +1268,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     AnalyzedRendererPath,
                     Array.Empty<Material>(),
                     refused,
-                    new StubBindings()));
+                    new StubBindings(),
+                    out _));
         }
 
         // --- Renderer-scoped material-swap closure ------------------------
@@ -1274,7 +1360,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { current },
                 EmptyGraph(),
                 Select,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(evidence.IsClosed, Is.True);
             CollectionAssert.AreEqual(
@@ -1330,7 +1417,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { current },
                 EmptyGraph(),
                 SelectFixtureRequest,
-                Capture);
+                Capture,
+                out _);
 
             Assert.That(
                 evidence.ClosureFailure,
@@ -1454,7 +1542,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     null,
                     new[] { current },
                     EmptyGraph(),
-                    new StubBindings()));
+                    new StubBindings(),
+                    out _));
         }
 
         private static bool ObserveFiniteExact(AnimationCurve curve)
@@ -1526,7 +1615,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 currentSlots,
                 graph,
                 SelectFixtureRequest,
-                CaptureFixtureMaterials);
+                CaptureFixtureMaterials,
+                out _);
         }
 
         /// <summary>
