@@ -19,6 +19,14 @@ namespace Alrauna.Amuse.Editor.Build
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
 
+        /// <summary>How many renderers received at least one applied
+        /// alpha-separation write.</summary>
+        internal int AppliedRendererCount { get; set; }
+
+        /// <summary>How many triangles were moved to proven-opaque rendering
+        /// by applied writes.</summary>
+        internal int AppliedOpaqueTriangleCount { get; set; }
+
         // Private setter, unlike the counters above: this total must stay in
         // lockstep with the per-reason buckets, so RecordRendererRefusal is its
         // only writer.
@@ -26,6 +34,39 @@ namespace Alrauna.Amuse.Editor.Build
 
         private readonly int[] rendererRefusals =
             new int[Enum.GetValues(typeof(RendererAnalysisRefusal)).Length];
+
+        private readonly int[] slotRefusals =
+            new int[Enum.GetValues(typeof(AlphaSeparationSlotRefusal)).Length];
+
+        /// <summary>
+        /// How many candidate slots were refused for this exact feature
+        /// reason. <see cref="AlphaSeparationSlotRefusal.None"/> is not a
+        /// refusal and never becomes a bucket, because
+        /// <see cref="RecordSlotRefusal"/> is the only writer and rejects it
+        /// outright.
+        /// </summary>
+        internal int SlotRefusalCount(AlphaSeparationSlotRefusal reason)
+        {
+            return slotRefusals[(int)reason];
+        }
+
+        /// <summary>
+        /// Records one alpha-separation slot refusal. Slot-scoped members
+        /// describe one failing slot; renderer-scoped members are recorded
+        /// once per candidate slot they drop, so the buckets always count
+        /// dropped slots.
+        /// </summary>
+        internal void RecordSlotRefusal(AlphaSeparationSlotRefusal reason)
+        {
+            if (reason == AlphaSeparationSlotRefusal.None)
+            {
+                throw new ArgumentException(
+                    "AlphaSeparationSlotRefusal.None is not a refusal.",
+                    nameof(reason));
+            }
+
+            slotRefusals[(int)reason]++;
+        }
 
         /// <summary>
         /// How many renderers were refused for this exact reason.
@@ -75,6 +116,16 @@ namespace Alrauna.Amuse.Editor.Build
         /// that graph's no-live-Unity-object guarantee.
         /// </summary>
         internal IPlatformAnimatorBindings AnimatorBindings { get; set; }
+
+        /// <summary>
+        /// What the barrier prepared for alpha separation, or null when no
+        /// renderer produced a candidate slot.
+        ///
+        /// Like <see cref="AnimatorBindings"/> this is a live, transient host
+        /// capability rather than proof evidence, and is deliberately outside
+        /// the captured-evidence graph's no-live-Unity-object guarantee.
+        /// </summary>
+        internal PreparedAlphaSeparation Separation { get; set; }
     }
 
     [RunsOnPlatforms(WellKnownPlatforms.VRChatAvatar30)]
@@ -101,6 +152,17 @@ namespace Alrauna.Amuse.Editor.Build
             // ...then analyze with no extension declared, so NDMF has deactivated
             // and committed the animator graph before the barrier observes it.
             sequence.Run(BarrierPassName, AmusePlatformFinishPass.Execute);
+
+            // Finally, validate every prepared candidate slot, finalize against
+            // the surviving set, sweep unreferenced transients and apply the
+            // single build-avatar mutation. Reactivating the extension here is
+            // what makes the committed graph's clips reachable again; NDMF
+            // deactivates and commits it again before this pass runs.
+            sequence.WithRequiredExtension(
+                typeof(AnimatorServicesContext),
+                inner => inner.Run(
+                    AlphaSeparationApply.PassName,
+                    AlphaSeparationApply.Execute));
         }
     }
 
@@ -113,6 +175,7 @@ namespace Alrauna.Amuse.Editor.Build
                 context,
                 state,
                 HostLifecycleCapability.CaptureAndEvaluate(context),
+                null,
                 null,
                 null,
                 null);
@@ -133,6 +196,7 @@ namespace Alrauna.Amuse.Editor.Build
                 HostLifecycleCapability.Evaluate(facts),
                 null,
                 null,
+                null,
                 null);
         }
 
@@ -140,15 +204,23 @@ namespace Alrauna.Amuse.Editor.Build
         /// Exercises the exact lifecycle, retained-bindings, committed-graph,
         /// renderer-loop, and accounting entry while substituting only the
         /// existing public-fixture seams for family/request selection,
-        /// unavailable vendor source attestation, and verified frontend
-        /// interpretation.
+        /// unavailable vendor source attestation, verified frontend
+        /// interpretation, and the shader-family opaque-conversion step.
+        /// <para>
+        /// <paramref name="conversion"/> is the fourth public-fixture seam. A
+        /// null value means "run the real <c>PoiyomiOpaqueConversion</c>
+        /// path", which is what production does; the three other delegates
+        /// keep their guards because their null is a caller defect, while this
+        /// one's null is meaningful.
+        /// </para>
         /// </summary>
         internal static void Execute(
             BuildContext context,
             HostLifecycleFacts facts,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            CapturedAlphaMaterialSemanticsResolver resolveSemantics)
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics,
+            VerifiedOpaqueConversion conversion = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -167,7 +239,8 @@ namespace Alrauna.Amuse.Editor.Build
                 HostLifecycleCapability.Evaluate(facts),
                 selectRequest,
                 capturer,
-                resolveSemantics);
+                resolveSemantics,
+                conversion);
         }
 
         /// <summary>
@@ -243,7 +316,8 @@ namespace Alrauna.Amuse.Editor.Build
             HostLifecycleCapability lifecycle,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            CapturedAlphaMaterialSemanticsResolver resolveSemantics)
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics,
+            VerifiedOpaqueConversion conversion)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -286,19 +360,25 @@ namespace Alrauna.Amuse.Editor.Build
 
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform, context.AvatarRootObject.transform);
+                // The live build-copy materials behind the captured admitted
+                // set, index-aligned with evidence.AdmittedMaterials. Held as a
+                // local transient host capability, never inside the evidence.
+                IReadOnlyList<Material> admittedLiveMaterials;
                 var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
-                        state.AnimatorBindings)
+                        state.AnimatorBindings,
+                        out admittedLiveMaterials)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
                         selectRequest,
-                        capturer);
+                        capturer,
+                        out admittedLiveMaterials);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, resolveSemantics);
                 refusal = resolved.Refusal;
@@ -310,9 +390,18 @@ namespace Alrauna.Amuse.Editor.Build
                     refusal = extraction.Refusal;
                     if (refusal == RendererAnalysisRefusal.None)
                     {
-                        opaqueCandidateTriangleCount = ClassifyRuntimeStates(
+                        var plan = ClassifyRuntimeStates(
                             extraction.Snapshot,
                             resolved.SlotResults);
+                        opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                        RetainPreparedSeparation(
+                            state,
+                            extraction.MutationTarget,
+                            rendererPath,
+                            plan,
+                            evidence,
+                            admittedLiveMaterials,
+                            conversion);
                     }
                 }
 
@@ -354,7 +443,7 @@ namespace Alrauna.Amuse.Editor.Build
             return resolved.Refusal == RendererAnalysisRefusal.None
                 ? (RendererAnalysisRefusal.None,
                     ClassifyRuntimeStates(
-                        snapshot, resolved.SlotResults))
+                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
                 : (resolved.Refusal, 0);
         }
 
@@ -557,7 +646,13 @@ namespace Alrauna.Amuse.Editor.Build
                 Array.Empty<SlotResolutionResult>());
         }
 
-        private static int ClassifyRuntimeStates(
+        /// <summary>
+        /// Classifies every submesh against its own slot's admitted states and
+        /// returns the separation plan. The plan was previously reduced to its
+        /// opaque triangle count here; it is returned whole so the caller can
+        /// also retain it, which changes no classification.
+        /// </summary>
+        private static MeshSeparationPlan ClassifyRuntimeStates(
             UnityRendererAlphaSnapshot snapshot,
             IReadOnlyList<SlotResolutionResult> slotResults)
         {
@@ -574,9 +669,44 @@ namespace Alrauna.Amuse.Editor.Build
                         : UnprovenOutcomes(submesh.Indices.Count / 3)));
             }
 
-            var plan = MeshSeparationPlanner.Create(
+            return MeshSeparationPlanner.Create(
                 new MeshSeparationInput(snapshot.VertexCount, submeshes));
-            return plan.OpaqueTriangleCount;
+        }
+
+        /// <summary>
+        /// Retains what this renderer's plan found, for the later pass that
+        /// validates and applies it. A renderer whose plan proves no triangle
+        /// opaque has nothing to prepare and is not retained at all; neither
+        /// is a renderer whose every candidate slot refused conversion.
+        /// <para>
+        /// Preparation mutates nothing but AMUSE-owned transient objects: no
+        /// renderer, no clip, no source asset, and no asset saving.
+        /// </para>
+        /// </summary>
+        private static void RetainPreparedSeparation(
+            AmusePlatformFinishState state,
+            UnityRendererMutationTarget mutationTarget,
+            string rendererPath,
+            MeshSeparationPlan plan,
+            CapturedAnimationEvidence evidence,
+            IReadOnlyList<Material> admittedLiveMaterials,
+            VerifiedOpaqueConversion conversion)
+        {
+            var prepared = AlphaSeparationPreparation.Prepare(
+                state,
+                mutationTarget,
+                rendererPath,
+                plan,
+                evidence,
+                admittedLiveMaterials,
+                conversion);
+            if (prepared == null)
+            {
+                return;
+            }
+
+            state.Separation ??= new PreparedAlphaSeparation();
+            state.Separation.Add(prepared);
         }
 
         private static TriangleAlphaOutcome[] IntersectResolvedOutcomes(
@@ -627,7 +757,14 @@ namespace Alrauna.Amuse.Editor.Build
             return outcomes;
         }
 
-        private static IReadOnlyList<CapturedMaterialSlotEvidence>
+        /// <summary>
+        /// One entry per renderer material slot addressing
+        /// <see cref="CapturedAnimationEvidence.AdmittedMaterials"/>: the
+        /// current assignment first, then clip/binding/value order. Shared
+        /// with the barrier-side alpha-separation preparation, which maps the
+        /// same per-slot admitted sets.
+        /// </summary>
+        internal static IReadOnlyList<CapturedMaterialSlotEvidence>
             MaterialSlotsFor(
                 CapturedAnimationEvidence evidence,
                 string rendererPath)
