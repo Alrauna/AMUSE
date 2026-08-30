@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
+using nadena.dev.ndmf.animator;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Build
@@ -20,6 +22,75 @@ namespace Alrauna.Amuse.Editor.Build
     internal enum AlphaSeparationSlotRefusal
     {
         None,
+
+        // --- Slot-scoped members. A failing slot keeps its original submesh,
+        // its original material assignment and its original material-swap
+        // curve; independently valid slots on the same renderer continue.
+
+        /// <summary>An admitted material of this slot is not Poiyomi. This
+        /// includes every lilToon material and every mixed-family slot: not
+        /// every admitted runtime value can be mapped to an opaque result, so
+        /// the whole slot is refused.</summary>
+        OpaqueConversionUnsupportedFamily,
+
+        /// <summary><c>PoiyomiOpaqueConversion</c> refused an admitted
+        /// material of this slot, either at source attestation or at verified
+        /// eligibility.</summary>
+        OpaqueConversionRefused,
+
+        /// <summary>A conversion-relevant animated property is not an exact
+        /// singleton, is not finite-exact, or is absent from an admitted
+        /// material of this slot.</summary>
+        ConversionStateNotAdmitted,
+
+        /// <summary>A canonical recipe property carrying an admitted
+        /// conversion binding does not hold its canonical value, so the recipe
+        /// AMUSE would write is provably overwritten at runtime and the tuple
+        /// the proof reasons about would be fiction.</summary>
+        ConversionPropertyOverwrittenAtRuntime,
+
+        /// <summary>A special/marker motion carries this slot's
+        /// material-swap binding. Marker clips cannot be edited —
+        /// <c>VirtualClip.SetObjectCurve</c> silently no-ops on them — so the
+        /// slot must be refused rather than edited.</summary>
+        MarkerClipCarriesSlotBinding,
+
+        /// <summary>A live runtime material value for this slot is absent
+        /// from its mapping — whether it arrives from a curve keyframe or
+        /// from the live current assignment. One member, because the
+        /// condition is identical and the arrival route carries no
+        /// information.</summary>
+        RuntimeMaterialValueNotMapped,
+
+        /// <summary>A target binding exists live that the captured evidence
+        /// did not record, so the slot's runtime material behavior is not
+        /// fully described by what was proven.</summary>
+        SlotBindingAbsentFromEvidence,
+
+        // --- Renderer-scoped members. Applied to all candidate slots of one
+        // renderer and to nothing else: never to that renderer's alpha
+        // analysis, never to another renderer.
+
+        /// <summary>A material binding that could address a
+        /// conversion-relevant property is not recognized by conversion's own
+        /// relevance request. The binding is renderer-wide, so it invalidates
+        /// every candidate slot on the renderer.</summary>
+        ConversionBindingUnrecognized,
+
+        /// <summary>The renderer has conversion-relevant animated material
+        /// state while the committed graph contains an additive layer.</summary>
+        ConversionStateUnderAdditiveLayer,
+
+        /// <summary>The renderer has conversion-relevant animated material
+        /// state while the committed graph contains an unnormalized direct
+        /// blend tree.</summary>
+        ConversionStateUnderUnnormalizedDirectBlendTree,
+
+        /// <summary>The renderer, its mesh or its material-slot count changed
+        /// between preparation and the apply pass. This is an ordinary
+        /// refusal, not a defect: another pass in this phase may legitimately
+        /// have replaced the mesh or the slot array.</summary>
+        RendererChangedSincePreparation,
     }
 
     /// <summary>
@@ -68,6 +139,47 @@ namespace Alrauna.Amuse.Editor.Build
         {
             if (renderer == null) throw new ArgumentNullException(nameof(renderer));
             renderers.Add(renderer);
+        }
+
+        /// <summary>
+        /// The already-prepared opaque result for this source material, or
+        /// false when none exists yet. Clones are deduplicated avatar-wide by
+        /// source material through this map, so two renderers referencing the
+        /// same source material share one clone.
+        /// </summary>
+        internal bool TryGetOpaque(Material source, out Material opaque)
+        {
+            return opaqueBySource.TryGetValue(source, out opaque);
+        }
+
+        /// <summary>
+        /// Registers one prepared opaque result. An <c>AlreadyOpaque</c>
+        /// identity is recorded in the mapping but never enters
+        /// <see cref="CreatedClones"/>, so the sweep can never destroy a
+        /// source asset — a categorical guarantee, not a check. A clone is
+        /// named <c>"&lt;source.name&gt; (AMUSE Opaque &lt;n&gt;)"</c> with
+        /// <c>n</c> its zero-based position in <see cref="CreatedClones"/>,
+        /// which is appended to in the barrier's deterministic order.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// The source material already has a registered result. Callers
+        /// consult <see cref="TryGetOpaque"/> first; a duplicate registration
+        /// would silently fork the avatar-wide deduplication.
+        /// </exception>
+        internal void RegisterOpaque(Material source, Material opaque)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (opaque == null) throw new ArgumentNullException(nameof(opaque));
+
+            opaqueBySource.Add(source, opaque);
+            if (ReferenceEquals(opaque, source))
+            {
+                return;
+            }
+
+            opaque.name = source.name + " (AMUSE Opaque " +
+                          createdClones.Count + ")";
+            createdClones.Add(opaque);
         }
     }
 
@@ -145,5 +257,109 @@ namespace Alrauna.Amuse.Editor.Build
         /// <see cref="PreparedAlphaSeparation"/> documents.
         /// </summary>
         internal IReadOnlyDictionary<Material, Material> OpaqueOfAdmitted { get; }
+    }
+
+    /// <summary>
+    /// The finalized writes produced by validating the prepared record against
+    /// live build state. A plain record of what will be written; not a mutation
+    /// IR and not a transaction. Everything here is computed against the
+    /// surviving set and the validated live <c>sharedMaterials</c> snapshot,
+    /// never against barrier-time current state.
+    /// </summary>
+    internal sealed class AlphaSeparationFinalization
+    {
+        internal AlphaSeparationFinalization(
+            IReadOnlyList<AlphaSeparationRendererWrite> writes)
+        {
+            if (writes == null) throw new ArgumentNullException(nameof(writes));
+
+            var copy = new AlphaSeparationRendererWrite[writes.Count];
+            for (var index = 0; index < copy.Length; index++)
+            {
+                if (writes[index] == null)
+                {
+                    throw new ArgumentException(
+                        "The finalization writes cannot contain null.",
+                        nameof(writes));
+                }
+
+                copy[index] = writes[index];
+            }
+
+            Writes = Array.AsReadOnly(copy);
+        }
+
+        internal IReadOnlyList<AlphaSeparationRendererWrite> Writes { get; }
+    }
+
+    /// <summary>
+    /// One renderer's finalized write, in deterministic apply order: curve
+    /// edits first, then <c>sharedMesh</c>, then <c>sharedMaterials</c>.
+    /// </summary>
+    internal sealed class AlphaSeparationRendererWrite
+    {
+        internal AlphaSeparationRendererWrite(
+            Renderer renderer,
+            Mesh mesh,
+            Material[] materials,
+            IReadOnlyList<AlphaSeparationCurveEdit> curveEdits)
+        {
+            Renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+            Mesh = mesh;
+            Materials = materials
+                ?? throw new ArgumentNullException(nameof(materials));
+            if (curveEdits == null)
+            {
+                throw new ArgumentNullException(nameof(curveEdits));
+            }
+
+            var copy = new AlphaSeparationCurveEdit[curveEdits.Count];
+            for (var index = 0; index < copy.Length; index++)
+            {
+                copy[index] = curveEdits[index];
+            }
+
+            CurveEdits = Array.AsReadOnly(copy);
+        }
+
+        internal Renderer Renderer { get; }
+
+        /// <summary>
+        /// The finalized mesh clone to assign, or null when no surviving
+        /// <c>Split</c> slot requires one — a wholly-opaque-only write leaves
+        /// the mesh and the submesh layout untouched.
+        /// </summary>
+        internal Mesh Mesh { get; }
+
+        /// <summary>
+        /// The complete new <c>sharedMaterials</c> array, built from the
+        /// validated live snapshot. Unrelated slots and foreign assignments are
+        /// carried through untouched.
+        /// </summary>
+        internal Material[] Materials { get; }
+
+        internal IReadOnlyList<AlphaSeparationCurveEdit> CurveEdits { get; }
+    }
+
+    /// <summary>
+    /// One material-swap curve rewrite: the live clip, the exact binding
+    /// identity to write, and the complete keyframe curve with every time
+    /// preserved and every value mapped. Nothing is written until apply.
+    /// </summary>
+    internal readonly struct AlphaSeparationCurveEdit
+    {
+        internal AlphaSeparationCurveEdit(
+            VirtualClip clip,
+            EditorCurveBinding binding,
+            ObjectReferenceKeyframe[] curve)
+        {
+            Clip = clip ?? throw new ArgumentNullException(nameof(clip));
+            Binding = binding;
+            Curve = curve ?? throw new ArgumentNullException(nameof(curve));
+        }
+
+        internal VirtualClip Clip { get; }
+        internal EditorCurveBinding Binding { get; }
+        internal ObjectReferenceKeyframe[] Curve { get; }
     }
 }
