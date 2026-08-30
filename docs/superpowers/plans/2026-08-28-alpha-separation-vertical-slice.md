@@ -108,7 +108,7 @@ Report the focused test result, the changed-file list, and any churn inspected o
 | `Packages/com.alrauna.amuse/Tests/Editor/Build/AmusePlatformFinishPluginTests.cs` | Modify | none — one capture call site at line 3129; three private seams deleted after extraction. Its **10** fixture-overload call sites (81, 501, 1179, 2023, 2058, 2143, 2199, 2621, 2750, 2831) compile unchanged under the optional-parameter shape |
 | `Packages/com.alrauna.amuse/Tests/Editor/Build/VerifiedPoiyomiTestSeams.cs` | Create (+ `.meta`) | none — extracted shared seams |
 | `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationPreparationTests.cs` | Create (+ `.meta`) | 3, 9, 10, 11, 12 |
-| `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationApplyTests.cs` | Create (+ `.meta`) | 1, 4, 6, 7, 8, 15, 17, 19-feature, 20. Also hosts the test-local seam plugin, its dedicated `INDMFPlatformProvider` and its `[assembly: ExportsPlugin(...)]` line — nested test types, not production architecture |
+| `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationApplyTests.cs` | Create (+ `.meta`) | 1, 4, 6, 7, 8, 15, 17, 20. Also hosts the test-local seam plugin, its dedicated `INDMFPlatformProvider` and its `[assembly: ExportsPlugin(...)]` line — nested test types, not production architecture |
 | `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationSplitTests.cs` | Create (+ `.meta`) | 2, 5, 14, 18 |
 | `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationPersistenceTests.cs` | Create (+ `.meta`) | 13, 16, and the `SaveAsset` structural guard |
 
@@ -145,10 +145,21 @@ Report the focused test result, the changed-file list, and any churn inspected o
 | 17 | no partial mutation before validation completes | 2 | ApplyTests |
 | 18 | wrong appended index or wrong curve binding fails | 2 | SplitTests |
 | 19 | **prerequisite level** — a post-closure per-slot alpha failure does not eliminate a valid sibling | merged | `AmusePlatformFinishPluginTests.RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling` (`914d9db`) — re-run, not re-created |
-| 19 | **feature level** — the surviving sibling reaches preparation, validation and apply | 2 | ApplyTests |
 | 20 | live current material used, not barrier state | 2 | ApplyTests |
 
-**Why 19 needs both levels.** The merged prerequisite test proves only that runtime-state analysis stops escalating and that opaque-candidate accounting survives. It says nothing about whether the surviving sibling reaches alpha-separation preparation, validation and apply, nor whether the refused slot is left untouched by the feature. The feature-level test closes exactly that gap.
+**Why 19 has no standalone feature-level test.** The merged prerequisite regression is the
+direct F19 proof: it establishes that the valid sibling survives runtime-state analysis and
+reaches the separation plan. Falsifier 1 is the feature-layer consumer proof — a wholly opaque
+candidate that reaches the feature is applied — and falsifier 15 proves only surviving writes
+are applied. A second end-to-end F19 fixture through the production-like
+`AnimatorServicesContext` lifecycle is not expressible: **[MEASURED]** that lifecycle
+materializes a renderer-wide `material.<Property>` float curve as a non-empty
+`MaterialPropertyBlock` on the build renderer before the barrier, and
+`UnityRendererAlphaAnalysis` refuses property blocks structurally — a conservative false
+negative this milestone retains (design §15.2). Reaching the feature layer would require
+bypassing a retained production gate, and the feature layer receives only candidate slots, so
+it has no representation for an already-refused sibling. Revisit only if real-avatar evidence
+justifies it.
 
 ---
 
@@ -603,7 +614,6 @@ calls `ApplyFinalization`, and the assertions read the probe it recorded.
 - **Falsifier 4** — a planned split later invalidated: the clone reference recorded by the probe is non-null after preparation and reports Unity-destroyed once `PrepareSurvivingSet` has returned; the renderer's mesh, materials and curve digests are unchanged.
 - **Falsifier 15** — the sweep destroys exactly the unreferenced clones and leaves referenced ones alive, observed through the probe's retained `CreatedClones` and `MeshClone` references.
 - **Falsifier 17** — several candidate slots each failing for a **different** reason: the probe's digests show every renderer's `sharedMesh`, `sharedMaterials` and every clip curve unchanged after prepare returned, **and** `SlotRefusalCount` is 1 for every one of those distinct reasons, which a short-circuiting validator cannot produce.
-- **Falsifier 19, feature level** — one renderer, two slots, closure asserted successful; slot 0 carries a proof-relevant animated alpha property whose singleton differs from its own material's serialized default, so `ResolveSlot` refuses it. Assert slot 0's material, submesh and curve are unchanged and no feature refusal is recorded against the renderer, **and** that slot 1 appears in `Separation`, survives validation, and is applied.
 
 - [ ] **Step 5: Write the failing split tests**
 
@@ -664,7 +674,7 @@ Adds no production behavior.
 
 - [ ] **Step 1: Write the dynamic persistence and preservation tests**
 
-- **Falsifier 16** — with a **real** temporary directory (`new OverrideTemporaryDirectoryScope(<temp folder>)`; `null` disables saving, and this is the only test in this feature that writes to the AssetDatabase), the assigned mesh and materials — **including a material referenced only by a rewritten object curve** — are persistent after the build. What this proves is exactly that: assigned generated objects become persistent and curve-only references are traversed by `Serialize()`. **It does not prove production never called `SaveAsset`**, and no assertion in it may be described as proving that. Teardown deletes the folder unconditionally.
+- **Falsifier 16** — with a **real** temporary directory (`new OverrideTemporaryDirectoryScope(<temp folder>)`; `null` disables saving — this is the only test that points NDMF's persistence scope at a real temporary directory; the split fixtures additionally create the test-owned `Assets/AmuseTests_AlphaSplit` folder for an importer-backed texture, which current texture evidence requires, and delete it unconditionally), the assigned mesh and materials — **including a material referenced only by a rewritten object curve** — are persistent after the build. What this proves is exactly that: assigned generated objects become persistent and curve-only references are traversed by `Serialize()`. **It does not prove production never called `SaveAsset`**, and no assertion in it may be described as proving that. Teardown deletes the folder unconditionally.
 - **Falsifier 13** — source materials' full property sets, the source mesh's characterized state, and the source `AnimationClip` / `AnimatorController` are unchanged after a successful build; the committed clip is asserted **not** reference-equal to the source clip.
 
 - [ ] **Step 2: Write the deterministic `SaveAsset` structural guard**
