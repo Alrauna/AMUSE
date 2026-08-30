@@ -104,9 +104,12 @@ correctness-relevant question resolved from source.
 
 ### 3.3 Fragment alpha chain, in execution order
 
-Shared by `FORWARD`, `FORWARD_ADD`, and `SHADOW_CASTER` (the shadow caster
-runs the same chain through `Includes/lil_common_frag_alpha.hlsl`, included
-at `lil_pass_shadowcaster.hlsl:67`).
+`FORWARD` and `FORWARD_ADD` share one fragment chain. `SHADOW_CASTER` runs
+the same chain through `Includes/lil_common_frag_alpha.hlsl` (included at
+`lil_pass_shadowcaster.hlsl:67`) with two differences that do not affect the
+theorem: it has no parallax step (forward-only, §3.3.3) and it has a Fur
+block this family never compiles — both absent from the gated state
+(§5 clause 2).
 
 1. **UDIM discard, pixel path** — `#if defined(LIL_FEATURE_UDIMDISCARD)`
    (defined) runs `OVERRIDE_UDIMDISCARD` = `if(_UDIMDiscardMode == 1 &&
@@ -160,9 +163,19 @@ at `lil_pass_shadowcaster.hlsl:67`).
    `defined(LIL_FEATURE_DISSOLVE) && LIL_RENDER != 0`
    (`lil_pass_forward_normal.hlsl:368-383`) with the runtime gate
    `if(fd.dissolveActive)`. That flag is initialized `true`
-   (`lil_common_vert.hlsl:55`; `lil_common.hlsl:163`) and is only ever set
-   false by the IDMask path (`lil_common_vert.hlsl:396-402`) — **not** by
-   `_DissolveParams`. The effective gate is inside
+   (`lil_common_vert.hlsl:55`; `lil_common.hlsl:163`) and is only ever
+   changed by the IDMask path (`lil_common_vert.hlsl:396-402`) — **not**
+   by `_DissolveParams`. That same IDMask path also sets
+   `dissolveInvert = priorIdMasked`, so with
+   `_IDMaskControlsDissolve == 1` and a prior flag matching, the wrapper's
+   `fd.col.a = 1.0f; OVERRIDE_DISSOLVE; if(fd.dissolveInvert)
+   fd.col.a = 1.0f - fd.col.a; fd.col.a *= priorAlpha;`
+   (`lil_pass_forward_normal.hlsl:371-382`) forces `fd.col.a` to `0` even
+   when dissolve mode 0 leaves `OVERRIDE_DISSOLVE` a no-op — a
+   fully-discarded state that any sound gate set must exclude (the
+   theorem gates `_IDMaskControlsDissolve == 0`, §5). With the block
+   entered and invert false, mode 0 leaves `fd.col.a = 1.0 × priorAlpha`
+   — neutral. The effective dissolve gate is inside
    `lilCalcDissolveWithNoise` / `lilCalcDissolve`
    (`lil_common_frag.hlsl:487-519`): after
    `dissolveParams.xy = round(dissolveParams.xy)` the entire body is
@@ -193,8 +206,11 @@ at `lil_pass_shadowcaster.hlsl:67`).
 11. **Compile-time-excluded transparent machinery** — the subpass dither /
     `_SubpassCutoff` block (`lil_common_frag_alpha.hlsl:100-115`),
     `LIL_PREMULTIPLY` (`lil_common_frag.hlsl:554-560`; empty for
-    `LIL_RENDER != 2`), depth-fade alpha (`:2047-2049`, alpha write only in
-    the `LIL_RENDER == 2` arm), and `_PreColor`/`_PreCutoff`
+    `LIL_RENDER != 2`), depth-fade alpha (`if(_DepthFadeToAlpha) ...`,
+    `lil_common_frag.hlsl:1996-1997`, call site compile-excluded by
+    `LIL_FEATURE_DEPTH_FADE && LIL_RENDER == 2`), the distance-fade
+    alpha write (`lil_common_frag.hlsl:2047-2049`, the `LIL_RENDER == 2`
+    arm of `lilDistanceFade`), and `_PreColor`/`_PreCutoff`
     (`lil_pass_forward_normal.hlsl:404-413`) are excluded for
     `LIL_RENDER 1`. `_AlphaBoostFA` is read only by the transparent FA
     premultiply (`lil_common_frag.hlsl:557`). The post-branch tail — rim
@@ -236,7 +252,7 @@ how AMUSE can know the state.
 | # | Block / mechanism | Generator symbol / site | Runtime gate (OFF state) | Alpha/coverage effect when active | Off-state neutrality |
 |---|---|---|---|---|---|
 | 1 | Invisible | `_Invisible` (`vert:69-82`) | `== 0` | All geometry vanishes | No code executes; value unused elsewhere `[SOURCE]` |
-| 2 | IDMask | `LIL_FEATURE_IDMASK` (`vert:362-409`) | `_IDMask1..8` all `== 0` | Vertex NaN collapse; can drive dissolve gate | `idMasked` false; `dissolveActive` untouched `[SOURCE]` |
+| 2 | IDMask | `LIL_FEATURE_IDMASK` (`vert:362-409`) | `_IDMask1..8` all `== 0` **and** `_IDMaskControlsDissolve == 0` | Vertex NaN collapse; with controls on, sets `dissolveActive`/`dissolveInvert` from ID compare (`vert:396-402`) — invert forces wrapper alpha to `0` (full discard) even at dissolve mode 0 | Flags 0 → `idMasked` false; controls 0 → block skipped, `dissolveActive` stays init-true and `dissolveInvert` false `[SOURCE]` |
 | 3 | UDIM vertex collapse | `LIL_FEATURE_UDIMDISCARD` (`vert:413-423`) | `_UDIMDiscardCompile == 0` (with mode 0) | Whole-vertex NaN | Condition requires `compile == 1` `[SOURCE]` |
 | 4 | UDIM pixel discard | `LIL_FEATURE_UDIMDISCARD` (`frag:717-720`) | `_UDIMDiscardMode == 0` | Per-pixel `discard` outside allowed tiles | Condition requires `mode == 1` `[SOURCE]` |
 | 5 | Backface UV shift | `_ShiftBackfaceUV` (`functions:467-470`) | `== 0` | Backface samples `uv.x + 1` (different texels) | Comparison `facing < -1.0` unreachable for any `VFACE` `[SOURCE]`+`[INFERENCE]` |
@@ -251,7 +267,7 @@ how AMUSE can know the state.
 | 14 | Dissolve | `LIL_FEATURE_DISSOLVE` + `LIL_FEATURE_DissolveNoiseMask` (`frag:487-519`, `functions:626-715`) | `_DissolveParams.x == 0` (shader rounds first) | `alpha *= maskVal` (+invert) | `round(x) == 0` → body skipped `[SOURCE]` |
 | 15 | Dither | `LIL_FEATURE_DITHER`, `LIL_RENDER == 1` (`frag:524-549`; `forward:399-401`) | `_UseDither == 0` | Replaces distance-fade alpha AND disables the cutoff transform | `if(_UseDither)` false → no-op; `if(!_UseDither)` true → standard equation `[SOURCE]` |
 | 16 | Cutout transform | `LIL_RENDER 1` (`forward:402-403`) | — | The equation under proof | core, cannot be stripped `[SOURCE]` |
-| 17 | Subpass dither / `_SubpassCutoff` / premultiply / depth-fade alpha / `_Pre*` | `LIL_RENDER == 2` arms (`frag_alpha:100-115`, `frag:554-560`, `functions:2047-2049`) | compile-time excluded | — | Not compiled for cutout `[SOURCE]` |
+| 17 | Subpass dither / `_SubpassCutoff` / premultiply / depth-fade alpha / `_Pre*` | `LIL_RENDER == 2` arms (`frag_alpha:100-115`, `frag:554-560`, `frag:1996-1997`, `functions:2047-2049`) | compile-time excluded | — | Not compiled for cutout `[SOURCE]` |
 | 18 | Distance fade (fragment) | `LIL_FEATURE_DISTANCE_FADE` (`functions:2028-2053`) | none needed | alpha only in `LIL_RENDER == 2` arm | Cutout takes the RGB-only arm `[SOURCE]` |
 | 19 | Everything else RGB-lit | shadow/rim/emission/reflection/matcap/glitter/backlight/anisotropy/normals/VRCLV/fog/deexposure/backface color | none needed | none | No `fd.col.a` writes; audiolink value not consumed by alpha `[SOURCE]` |
 
@@ -283,7 +299,13 @@ closed.
    `_UseMain2ndTex == 0`; `_UseMain3rdTex == 0`; `_AlphaMaskMode == 0`;
    `_DissolveParams.x == 0`; `_UseDither == 0`;
    `_UDIMDiscardCompile == 0`; `_UDIMDiscardMode == 0`;
-   `_IDMask1..8 == 0` (all eight). (`_UsePOM` need not be gated: it only
+   `_IDMask1..8 == 0` (all eight) **and** `_IDMaskControlsDissolve == 0`
+   — the control flag is load-bearing: with it `1`, the vertex IDMask
+   path sets `dissolveInvert` from the prior-flag comparison
+   (`lil_common_vert.hlsl:396-402`), and the forward dissolve wrapper
+   (`lil_pass_forward_normal.hlsl:371-382`) then forces chain alpha to
+   `0` even at dissolve mode 0, fully discarding the triangle (§3.3.8).
+   (`_UsePOM` need not be gated: it only
    selects which `_UseParallax`-gated function runs, §4 row 7.)
 3. **UV domain (captured).** `_MainTex_ST == (1,1,0,0)` and
    `_MainTex_ScrollRotate == (0,0,0,0)`, so the sampled domain is exactly
@@ -344,6 +366,13 @@ the triangle is proven opaque. `[SOURCE]` derivation.
   (constant `c ≥ cutoff + 5×10⁻⁵` ⇒ opaque) is deferred (§11 row 5).
 - Trilinear or anisotropic filter, differing wrapU/wrapV, mirrored wrap →
   `UnsupportedSampling` refusal (`AlphaSemanticsResolver.cs:353-387`).
+- `_IDMaskControlsDissolve = 1` with any matching nonzero prior flag and
+  all `_IDMask* = 0` (e.g. defaults plus `_IDMaskPrior8 = 1`): the vertex
+  path sets `dissolveInvert = true`, the forward dissolve wrapper drives
+  chain alpha to `0` at dissolve mode 0, and the triangle is fully
+  discarded — conversion would materialize invisible geometry → refuse.
+  This counterexample (found by adversarial review) is why §5 clause 2
+  gates `_IDMaskControlsDissolve == 0`.
 - Non-identity `_MainTex_ST` → `UnsupportedUvMapping` refusal today
   (`AlphaSemanticsResolver.cs:338-345`).
 
@@ -363,7 +392,10 @@ inputs:
   **`_UDIMDiscardMode`** (the current request lacks it — required because the
   pixel path is runtime-gated independently of the compile flag, §4 row 4),
   `_ShiftBackfaceUV`, `_UseParallax`, `_UseMain2ndTex`, `_UseMain3rdTex`,
-  `_AlphaMaskMode`, `_UseDither`, `_IDMask1..8`;
+  `_AlphaMaskMode`, `_UseDither`, `_IDMask1..8`,
+  **`_IDMaskControlsDissolve`** (with it `1` the vertex IDMask path drives
+  `dissolveInvert` and can force chain alpha to `0` — §5 clause 2,
+  §3.3.8);
 - colors: `_Color` (so per-component bindings, including `.a`, are
   recognized and singleton-admitted);
 - vectors: `_DissolveParams` (`.x` gate), `_MainTex_ST` is **not** requested
@@ -474,10 +506,10 @@ Source-backed argument, per alpha/coverage-affecting compile-time feature:
   `lilOptimizer.cs:313-318`), so capture-time assets are the stable
   committed ones. Avatar builds always set `forceOptimize = true`
   (`VRChatModule.cs:28-31`), so regeneration runs in the supported
-  environment; the UsePass-bug workaround skips optimization only below
-  Unity 2022.3.14 (`lilToonSetting.cs:877-895`) — 2022.3.22f1 is not
-  skipped. `SetupMultiMaterial` touches only Multi materials
-  (controlling §5) and is a no-op for this family.
+  environment; the UsePass-bug workaround skips optimization for
+  2022.<3, 2022.3.<14, and 2023.<20 (`lilToonSetting.cs:875-892`) —
+  2022.3.22f1 is not skipped. `SetupMultiMaterial` touches only Multi
+  materials (controlling §5) and is a no-op for this family.
 - **What regeneration cannot change.** `LIL_RENDER` is fixed per pass asset
   (`ltspass_cutout.shader:639`) and never rewritten; the core equation —
   main sample, `_Color` multiply, cutout transform, shadow clip — is
@@ -526,7 +558,7 @@ Source-backed argument, per alpha/coverage-affecting compile-time feature:
 | Degenerate triangle, missing/NaN UV | `Unknown` (acceptable false negative) |
 | Exact-UV region complexity overflow (> 65536 cells) | `Unknown` (`MaxSupportRegions`) |
 | UDIM discard in either path active | Refusal (neither path provable without tile/UV-domain analysis — deferred) |
-| IDMask any flag nonzero | Refusal (vertex collapse not provable without mesh+ID analysis — deferred) |
+| IDMask any flag nonzero, or `_IDMaskControlsDissolve == 1` (which can force `dissolveInvert` and full discard even at dissolve mode 0) | Refusal (vertex collapse / invert path not provable without mesh+ID analysis — deferred) |
 | Dither `_UseDither == 1` | Refusal (replaces the cutoff equation entirely) |
 
 ## 11. Current AMUSE capability-gap classification
@@ -549,9 +581,12 @@ Public synthetic tests (future implementation work; none written here) that
 must fail plausible unsound implementations:
 
 1. **Constant opaque core.** Fully-opaque `_MainTex` (all mips), `_Color.a = 1`,
-   `_Cutoff = 0.5`, gates off → every triangle `ProvenOpaque`. Fails an
-   implementation that ignores `_Color.a` or re-derives the boundary from
-   `a > cutoff`.
+   `_Cutoff = 0.5`, gates off → every triangle `ProvenOpaque`; a negative
+   variant with `_Color.a = 0.8` must refuse (§5 boundary list). Fails an
+   implementation that re-derives the boundary from
+   `a > cutoff` or that ignores `_Color.a` (the negative variant is its
+   discriminator; on the positive variant ignoring `_Color.a` is
+   indistinguishable).
 2. **Cutoff boundary.** `_Cutoff = 0.9999` proven; `_Cutoff = 1.0` not proven;
    `_Cutoff = 1.001` refused (conversion would materialize invisible
    geometry). Fails implementations using Poiyomi's `cutoff ≤ 1` gate
@@ -573,10 +608,12 @@ must fail plausible unsound implementations:
    implementations that read live values instead of captured evidence.
 7. **Every optional path refuses.** Alpha mask mode 1–4, `_UseDither = 1`
    (including a variant where texture alpha is constant 1 — dither still
-   replaces the equation), dissolve mode 1, 2nd/3rd layers with alpha modes,
-   parallax, backface shift, UDIM (compile or mode), IDMask flag — each
-   refuses. Fails implementations that gate only on compiled features
-   (`ScanCompiledFeatures`) rather than runtime material state.
+   replaces the equation), dissolve mode 1, 2nd/3rd layers with alpha
+   modes, parallax, backface shift, UDIM (compile or mode), IDMask flag,
+   and `_IDMaskControlsDissolve = 1` with `_IDMaskPrior8 = 1` and all
+   `_IDMask* = 0` (renders nothing; the theorem must refuse, never prove)
+   — each refuses. Fails implementations that gate only on compiled
+   features (`ScanCompiledFeatures`) rather than runtime material state.
 8. **Compilation-variant invariance.** The same gate-off material must
    receive the identical verdict whether the pass source defines all
    features (committed) or only a superset of unrelated ones (simulating a
@@ -644,6 +681,17 @@ callback-independence claim verified against the pinned generator with a
 per-feature invariance argument — **NDMF-complete restricted core is
 feasible; Outcome B is not a prerequisite** (§9). Nothing in this note
 required production code, a Unity scratch project, or Census Lab.
+
+Amended after adversarial review (glm 5.3 reviewer agent, 2026-08-30): the
+review refuted the original gate set — `_IDMaskControlsDissolve == 1` with
+a matching prior flag forces `dissolveInvert` and full discard even at
+dissolve mode 0, a state the original §5 called ProvenOpaque. The theorem,
+inventory row 2, evidence request, refusal table, and falsifiers now carry
+the `_IDMaskControlsDissolve == 0` gate and its counterexample. The review
+independently re-verified the boundary math, the full include-tree
+alpha-site sweep, the callback-100 invariance argument (including a
+committed-vs-regenerated falsification attempt), the VFACE platform
+reading, the AMUSE capability claims, and 55 line citations.
 
 ## 16. Next recommended task
 
