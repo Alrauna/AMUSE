@@ -178,6 +178,7 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
+                null,
                 null);
         }
 
@@ -197,6 +198,7 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
+                null,
                 null);
         }
 
@@ -207,11 +209,13 @@ namespace Alrauna.Amuse.Editor.Build
         /// unavailable vendor source attestation, verified frontend
         /// interpretation, and the shader-family opaque-conversion step.
         /// <para>
-        /// <paramref name="conversion"/> is the fourth public-fixture seam. A
-        /// null value means "run the real <c>PoiyomiOpaqueConversion</c>
+        /// <paramref name="poiyomiConversion"/> and
+        /// <paramref name="lilToonConversion"/> are the fourth and fifth
+        /// public-fixture seams. A null value means "run the real
+        /// <c>PoiyomiOpaqueConversion</c> resp. <c>LilToonOpaqueConversion</c>
         /// path", which is what production does; the three other delegates
-        /// keep their guards because their null is a caller defect, while this
-        /// one's null is meaningful.
+        /// keep their guards because their null is a caller defect, while
+        /// these two's null is meaningful.
         /// </para>
         /// </summary>
         internal static void Execute(
@@ -220,7 +224,8 @@ namespace Alrauna.Amuse.Editor.Build
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
-            VerifiedOpaqueConversion conversion = null)
+            VerifiedPoiyomiConversion poiyomiConversion = null,
+            VerifiedLilToonConversion lilToonConversion = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -240,7 +245,8 @@ namespace Alrauna.Amuse.Editor.Build
                 selectRequest,
                 capturer,
                 resolveSemantics,
-                conversion);
+                poiyomiConversion,
+                lilToonConversion);
         }
 
         /// <summary>
@@ -317,7 +323,8 @@ namespace Alrauna.Amuse.Editor.Build
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
-            VerifiedOpaqueConversion conversion)
+            VerifiedPoiyomiConversion poiyomiConversion,
+            VerifiedLilToonConversion lilToonConversion)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -401,7 +408,8 @@ namespace Alrauna.Amuse.Editor.Build
                             plan,
                             evidence,
                             admittedLiveMaterials,
-                            conversion);
+                            poiyomiConversion,
+                            lilToonConversion);
                     }
                 }
 
@@ -690,7 +698,8 @@ namespace Alrauna.Amuse.Editor.Build
             MeshSeparationPlan plan,
             CapturedAnimationEvidence evidence,
             IReadOnlyList<Material> admittedLiveMaterials,
-            VerifiedOpaqueConversion conversion)
+            VerifiedPoiyomiConversion poiyomiConversion,
+            VerifiedLilToonConversion lilToonConversion)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -699,7 +708,8 @@ namespace Alrauna.Amuse.Editor.Build
                 plan,
                 evidence,
                 admittedLiveMaterials,
-                conversion);
+                poiyomiConversion,
+                lilToonConversion);
             if (prepared == null)
             {
                 return;
