@@ -13,6 +13,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         Unsupported,
         Poiyomi,
         LilToon,
+        LilToonCutout,
     }
 
     internal sealed class CapturedAlphaMaterial
@@ -110,23 +111,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                 if (material != null && material.shader != null)
                 {
                     shaders[index] = material.shader;
-                    var shaderName = material.shader.name;
-                    if (string.Equals(
-                            shaderName,
-                            PoiyomiMaterialSemantics.PoiyomiToonShaderName,
-                            StringComparison.Ordinal))
-                    {
-                        families[index] = CapturedAlphaMaterialFamily.Poiyomi;
-                        request = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
-                    }
-                    else if (string.Equals(
-                                 shaderName,
-                                 LilToonSourceAttestation.SupportedShaderName,
-                                 StringComparison.Ordinal))
-                    {
-                        families[index] = CapturedAlphaMaterialFamily.LilToon;
-                        request = LilToonMaterialSemantics.AlphaEvidenceRequest;
-                    }
+                    var classified = ClassifyShaderName(
+                        material.shader.name);
+                    families[index] = classified.family;
+                    request = classified.alpha ?? EmptyEvidenceRequest;
                 }
 
                 inputs[index] = new MaterialEvidenceCaptureInput(
@@ -231,6 +219,13 @@ namespace Alrauna.Amuse.Editor.Semantics
                     lilToon = LilToonSourceAttestation.GatherSourceEvidence(
                         shaders[index], evidence[index]);
                 }
+                else if (families[index] ==
+                    CapturedAlphaMaterialFamily.LilToonCutout)
+                {
+                    lilToon = LilToonSourceAttestation
+                        .GatherCutoutSourceEvidence(
+                            shaders[index], evidence[index]);
+                }
 
                 results[index] = new CapturedAlphaMaterial(
                     families[index], evidence[index], poiyomi, lilToon);
@@ -239,27 +234,58 @@ namespace Alrauna.Amuse.Editor.Semantics
             return new ReadOnlyCollection<CapturedAlphaMaterial>(results);
         }
 
+        /// <summary>
+        /// The exact shader-name map selection and batch capture must agree
+        /// on. One map, two consumers: a second place deciding "is this a
+        /// cutout material" could only drift away from the first. The cutout
+        /// name is exact like the others; near-miss vendor names stay
+        /// Unsupported and are refused downstream.
+        /// </summary>
+        private static (
+            CapturedAlphaMaterialFamily family,
+            MaterialEvidenceRequest alpha) ClassifyShaderName(
+            string shaderName)
+        {
+            if (string.Equals(
+                    shaderName,
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.SupportedShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToon,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.CutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonCutout,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            return (CapturedAlphaMaterialFamily.Unsupported, null);
+        }
+
         private static CapturedAlphaMaterialFamily IdentifyFamily(
             Material material)
         {
             if (material == null || material.shader == null)
                 return CapturedAlphaMaterialFamily.Unsupported;
 
-            var shaderName = material.shader.name;
-            if (string.Equals(
-                    shaderName,
-                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
-                    StringComparison.Ordinal))
-            {
-                return CapturedAlphaMaterialFamily.Poiyomi;
-            }
-
-            return string.Equals(
-                    shaderName,
-                    LilToonSourceAttestation.SupportedShaderName,
-                    StringComparison.Ordinal)
-                ? CapturedAlphaMaterialFamily.LilToon
-                : CapturedAlphaMaterialFamily.Unsupported;
+            return ClassifyShaderName(material.shader.name).family;
         }
 
         private static MaterialEvidenceRequest AlphaRequestForFamily(
@@ -271,6 +297,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return PoiyomiMaterialSemantics.AlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToon:
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    return LilToonCutoutMaterialSemantics
+                        .AlphaEvidenceRequest;
                 default:
                     return null;
             }
@@ -278,14 +307,21 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         /// <summary>
         /// Poiyomi's capture schema is its alpha request plus conversion's own
-        /// request, so one capture serves both readers. lilToon has no
-        /// opaque-conversion request, so its schema is its alpha request and
-        /// nothing widens it.
+        /// request, so one capture serves both readers. The cutout frontend
+        /// widens its alpha request the same way: one capture serves both the
+        /// cutout alpha proof and the lilToon conversion. Opaque lilToon has
+        /// no opaque-conversion request, so its schema is its alpha request
+        /// and nothing widens it.
         /// </summary>
         private static readonly MaterialEvidenceRequest PoiyomiCaptureRequest =
             MaterialEvidenceRequest.Combine(
                 PoiyomiMaterialSemantics.AlphaEvidenceRequest,
                 PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+
+        private static readonly MaterialEvidenceRequest LilToonCaptureRequest =
+            MaterialEvidenceRequest.Combine(
+                LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                LilToonOpaqueConversion.ConversionEvidenceRequest);
 
         private static MaterialEvidenceRequest CaptureRequestForFamily(
             CapturedAlphaMaterialFamily family)
@@ -296,6 +332,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return PoiyomiCaptureRequest;
                 case CapturedAlphaMaterialFamily.LilToon:
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    return LilToonCaptureRequest;
                 default:
                     return null;
             }
@@ -313,6 +351,11 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return material.LilToonEvidence != null &&
                         LilToonSourceAttestation.TryVerifyLilToonIdentity(
                             material.LilToonEvidence, out _);
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    return material.LilToonEvidence != null &&
+                        LilToonSourceAttestation
+                            .TryVerifyLilToonCutoutIdentity(
+                                material.LilToonEvidence, out _);
                 default:
                     return false;
             }
@@ -349,6 +392,18 @@ namespace Alrauna.Amuse.Editor.Semantics
 
                     alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
                         captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    if (captured.LilToonEvidence == null ||
+                        !LilToonSourceAttestation
+                            .TryVerifyLilToonCutoutIdentity(
+                                captured.LilToonEvidence, out _))
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = LilToonCutoutMaterialSemantics
+                        .InterpretVerifiedCutoutAlpha(captured.Evidence);
                     break;
                 default:
                     return AllUnknown();

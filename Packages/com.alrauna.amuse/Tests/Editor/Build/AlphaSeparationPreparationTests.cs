@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
@@ -420,8 +422,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Falsifier 9: mixed Poiyomi + lilToon slot -----------------------
 
         [Test]
-        public void MixedPoiyomiAndLilToonSlotIsRefusedAsUnsupportedFamily()
+        public void MixedPoiyomiAndLilToonSlotMapsCompletely()
         {
+            // Spec §10: a same-slot mixed admitted set of supported
+            // families maps completely — each admitted value through its
+            // own family. The pre-slice contract refused this slot
+            // (OpaqueConversionUnsupportedFamily); the reviewed conversion
+            // design supersedes that refusal. Falsifies: a per-family
+            // routing that still refuses mixed sets, or one family's
+            // mapping corrupting the other's.
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mixed family slot");
             Material poiyomi = null;
@@ -452,33 +461,43 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
                 Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
                     "fixture precondition: the mixed slot must resolve and " +
-                    "produce an opaque candidate — closure and alpha proof " +
-                    "succeeded — or the family refusal proves nothing");
-                Assert.That(
-                    amuse.SlotRefusalCount(
-                        AlphaSeparationSlotRefusal
-                            .OpaqueConversionUnsupportedFamily),
-                    Is.EqualTo(1),
-                    "a slot mixing an attested lilToon material with a " +
-                    "Poiyomi one must be refused as an unsupported " +
-                    "conversion family");
-                Assert.That(amuse.Separation, Is.Null,
-                    "the only candidate slot was refused, so nothing is " +
-                    "retained");
+                    "produce an opaque candidate");
                 foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
                              typeof(AlphaSeparationSlotRefusal)))
                 {
-                    if (reason == AlphaSeparationSlotRefusal.None ||
-                        reason == AlphaSeparationSlotRefusal
-                            .OpaqueConversionUnsupportedFamily)
+                    if (reason == AlphaSeparationSlotRefusal.None)
                     {
                         continue;
                     }
 
                     Assert.That(
                         amuse.SlotRefusalCount(reason), Is.Zero,
-                        "no other reason may be recorded: " + reason);
+                        "a fully supported mixed admitted set must map: " +
+                        reason);
                 }
+
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "the mixed slot must prepare now that both families " +
+                    "convert");
+                Assert.That(amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                var candidates = amuse.Separation.Renderers[0].CandidateSlots;
+                Assert.That(candidates, Has.Count.EqualTo(1));
+                var mapping = candidates[0].OpaqueOfAdmitted;
+                Assert.That(mapping, Has.Count.EqualTo(2),
+                    "both admitted values must map");
+                Assert.That(
+                    mapping.ContainsKey(lilToon) && mapping[lilToon] == lilToon,
+                    Is.True,
+                    "the attested opaque lilToon admitted value must map " +
+                    "to itself with no clone");
+                Assert.That(mapping.ContainsKey(poiyomi), Is.True,
+                    "the Poiyomi admitted value must map through its own " +
+                    "conversion");
+                Assert.That(mapping[poiyomi], Is.Not.SameAs(poiyomi),
+                    "the Poiyomi value converts to a generated clone");
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(1),
+                    "only the Poiyomi conversion creates a clone");
             }
             finally
             {
@@ -492,12 +511,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        // --- Falsifier 10: Poiyomi slot survives beside a refused lilToon ----
+        // --- Falsifier 10: Poiyomi slot survives beside an opaque lilToon ---
 
         [Test]
         public void
-            PoiyomiSlotPreparesBesideARefusedLilToonSlotOnTheSameRenderer()
+            PoiyomiSlotPreparesBesideAnOpaqueLilToonSlotOnTheSameRenderer()
         {
+            // Spec §10: the attested opaque lilToon frontend maps to itself,
+            // so its slot prepares as a wholly-opaque candidate with an
+            // identity mapping and no clone — the same outcome an attested
+            // opaque Poiyomi slot already produces. The pre-slice contract
+            // refused this slot; the reviewed conversion design supersedes
+            // that refusal. Falsifies: sibling-slot corruption, refusal of
+            // the map-to-self slot, or a clone created for it.
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE lilToon sibling");
             Material poiyomi = null;
@@ -522,30 +548,50 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
                 Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
                     "fixture precondition: the renderer must analyze — the " +
-                    "lilToon material passes family selection and closure, " +
-                    "so only conversion can refuse it");
+                    "lilToon material passes family selection and closure");
                 Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(2),
                     "fixture precondition: both slots must prove their " +
-                    "triangle opaque, or the same-renderer escalation " +
-                    "proves nothing");
-                Assert.That(
-                    amuse.SlotRefusalCount(
-                        AlphaSeparationSlotRefusal
-                            .OpaqueConversionUnsupportedFamily),
-                    Is.EqualTo(1),
-                    "the lilToon slot must be refused as an unsupported " +
-                    "conversion family");
+                    "triangle opaque");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "both slots are supported families and must map: " +
+                        reason);
+                }
 
                 Assert.That(amuse.Separation, Is.Not.Null);
                 Assert.That(amuse.Separation.Renderers, Has.Count.EqualTo(1));
                 var candidates = amuse.Separation.Renderers[0].CandidateSlots;
-                Assert.That(candidates, Has.Count.EqualTo(1),
-                    "the Poiyomi slot must survive beside the refused " +
-                    "lilToon slot on the same renderer");
-                Assert.That(
-                    candidates[0].Plan.SourceMaterialBindingIndex, Is.Zero);
-                Assert.That(candidates[0].OpaqueOfAdmitted, Is.Not.Empty,
+                Assert.That(candidates, Has.Count.EqualTo(2),
+                    "both slots must survive on the same renderer");
+                var poiyomiSlot = candidates.Single(
+                    candidate =>
+                        candidate.Plan.SourceMaterialBindingIndex == 0);
+                var lilToonSlot = candidates.Single(
+                    candidate =>
+                        candidate.Plan.SourceMaterialBindingIndex == 1);
+                Assert.That(poiyomiSlot.OpaqueOfAdmitted, Is.Not.Empty,
                     "the Poiyomi slot's mapping must be prepared");
+                Assert.That(poiyomiSlot.OpaqueOfAdmitted[poiyomi],
+                    Is.Not.SameAs(poiyomi),
+                    "the Poiyomi slot converts to a generated clone");
+                var lilToonMapping = lilToonSlot.OpaqueOfAdmitted;
+                Assert.That(
+                    lilToonMapping.ContainsKey(lilToon) &&
+                    lilToonMapping[lilToon] == lilToon,
+                    Is.True,
+                    "the opaque lilToon slot must map its material to " +
+                    "itself with no clone");
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(1),
+                    "only the Poiyomi conversion creates a clone");
             }
             finally
             {
@@ -653,7 +699,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 controller = NewController(
                     root, "AMUSE cutoff graph", clip);
 
-                VerifiedOpaqueConversion conversion =
+                VerifiedPoiyomiConversion conversion =
                     (Material live, CapturedMaterialEvidence derived,
                      Material preparedOpaque,
                      out Material opaque,
@@ -666,7 +712,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         return true;
                     };
 
-                amuse = RunBarrier(root, conversion: conversion);
+                amuse = RunBarrier(root, poiyomiConversion: conversion);
 
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
@@ -829,6 +875,1383 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (controller != null) DestroyControllerGraph(controller);
             }
         }
+
+        /// <summary>
+        /// End-to-end cutout conversion: a convertible cutout fixture
+        /// material at fresh defaults — its main texture a fully-opaque
+        /// mipmap chain — driven through the barrier with the family-aware
+        /// lilToon seams and the Poiyomi conversion seam default. The cutout
+        /// family must convert the way Poiyomi does: the slot prepares and
+        /// the prepared record carries the source-to-opaque mapping, instead
+        /// of being refused as an unsupported family.
+        /// </summary>
+        [Test]
+        public void CutoutFixtureSlotPreparesAndCarriesTheOpaqueMapping()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE cutout conversion candidate");
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap("cutout_conversion"));
+                var renderer =
+                    AddSingleTriangleRenderer(root, material, out mesh);
+                // The cutout proof is texture-backed, so the candidate
+                // triangle needs a UV0 domain; the Poiyomi fixtures' constant
+                // alpha never exercised one. Any in-bounds domain works over
+                // a fully-opaque chain.
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "fixture precondition: the cutout slot over a " +
+                    "fully-opaque mip chain must prove one opaque " +
+                    "candidate triangle, or there is no conversion " +
+                    "candidate at all");
+
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionUnsupportedFamily),
+                    Is.Zero,
+                    "the cutout family must convert, not refuse as an " +
+                    "unsupported family");
+                Assert.That(
+                    amuse.Separation,
+                    Is.Not.Null,
+                    "the cutout slot must prepare");
+                Assert.That(
+                    amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                Assert.That(
+                    amuse.Separation.Renderers[0].Target.Renderer,
+                    Is.SameAs(renderer));
+                Assert.That(
+                    amuse.Separation.TryGetOpaque(material, out var opaque),
+                    Is.True,
+                    "the prepared record must carry the cutout " +
+                    "source-to-opaque mapping");
+                Assert.That(opaque, Is.Not.Null);
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+
+        // --- Task 5 integration coverage: the cutout family end to end -----
+
+        /// <summary>
+        /// Cutoff slot outcomes through the full barrier path (spec §8.3).
+        /// <para>
+        /// Falsifies: an eligibility boundary read as a strict less-than
+        /// (which would refuse the at-bound positive control), a cutoff gate
+        /// read from the live material instead of the captured evidence, and
+        /// a classification that treats an unresolvable admitted material as
+        /// transparent instead of refusing the renderer with
+        /// <c>AdmittedMaterialSemanticsUnknown</c>.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutCutoffSlotOutcomesThroughTheFullPath()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture =
+                    fixtures.ImportFullyOpaqueMipmap("cutoff_outcomes");
+
+                // (a) A cutoff exactly at the twice-margin bound prepares.
+                using (var arm = CutoutArmFixture.Create(
+                           texture,
+                           "AMUSE cutoff at bound",
+                           material => material.SetFloat(
+                               "_Cutoff",
+                               LilToonOpaqueConversion.MaxProvableCutoff),
+                           null,
+                           null))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero);
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: a cutoff exactly at the " +
+                        "twice-margin bound must still prove the triangle " +
+                        "opaque, or the boundary has no positive control");
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the at-bound slot must prepare: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.Material, out var opaque),
+                        Is.True,
+                        "the at-bound slot must convert and carry the " +
+                        "opaque mapping");
+                    Assert.That(opaque, Is.Not.Null);
+                }
+
+                // (b) Above the bound and non-finite refuse at alpha
+                // resolution: no provable triangle, nothing retained.
+                foreach (var cutoff in new[] { 1f, 1.001f, float.NaN })
+                {
+                    using (var arm = CutoutArmFixture.Create(
+                               texture,
+                               "AMUSE cutoff refused",
+                               material => material.SetFloat(
+                                   "_Cutoff", cutoff),
+                               null,
+                               null))
+                    {
+                        var amuse = arm.Run();
+
+                        Assert.That(amuse.AvatarRefusal,
+                            Is.EqualTo(AvatarAnimationRefusal.None));
+                        Assert.That(
+                            amuse.RendererRefusalCount(
+                                RendererAnalysisRefusal
+                                    .AdmittedMaterialSemanticsUnknown),
+                            Is.EqualTo(1),
+                            "a cutoff of " + cutoff + " leaves the cutout " +
+                            "alpha equation unresolved, which must refuse " +
+                            "the renderer at alpha resolution");
+                        Assert.That(amuse.SemanticallyRefusedRendererCount,
+                            Is.EqualTo(1),
+                            "exactly the refusing renderer may be counted");
+                        Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                            "a refused renderer is never analyzed");
+                        Assert.That(amuse.OpaqueCandidateTriangleCount,
+                            Is.Zero,
+                            "no triangle may be proven over an unresolved " +
+                            "alpha equation");
+                        Assert.That(amuse.Separation, Is.Null,
+                            "nothing may be retained for the refusing " +
+                            "variant, so nothing can ever be applied from " +
+                            "it");
+                    }
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+        [Test]
+        public void CutoutOptionalCoveragePathsRefuseEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_optional_paths");
+                var cases = new (string Label, Action<Material> Configure)[]
+                {
+                    ("_UseDither",
+                        material => material.SetFloat("_UseDither", 1f)),
+                    ("_AlphaMaskMode=1",
+                        material => material.SetFloat("_AlphaMaskMode", 1f)),
+                    ("_AlphaMaskMode=2",
+                        material => material.SetFloat("_AlphaMaskMode", 2f)),
+                    ("_AlphaMaskMode=3",
+                        material => material.SetFloat("_AlphaMaskMode", 3f)),
+                    ("_AlphaMaskMode=4",
+                        material => material.SetFloat("_AlphaMaskMode", 4f)),
+                    ("_DissolveParams.x",
+                        material => material.SetVector(
+                            "_DissolveParams",
+                            new Vector4(1f, 0f, 0f, 0f))),
+                    ("_UseParallax",
+                        material => material.SetFloat("_UseParallax", 1f)),
+                    ("_ShiftBackfaceUV",
+                        material => material.SetFloat(
+                            "_ShiftBackfaceUV", 1f)),
+                    ("_UDIMDiscardCompile",
+                        material => material.SetFloat(
+                            "_UDIMDiscardCompile", 1f)),
+                    ("_UDIMDiscardMode",
+                        material => material.SetFloat(
+                            "_UDIMDiscardMode", 1f)),
+                    ("_IDMask1",
+                        material => material.SetFloat("_IDMask1", 1f)),
+                    ("_IDMaskControlsDissolve",
+                        material => material.SetFloat(
+                            "_IDMaskControlsDissolve", 1f)),
+                };
+
+                foreach (var optionalPath in cases)
+                {
+                    using var arm = CutoutArmFixture.Create(
+                        texture,
+                        "AMUSE cutout optional " + optionalPath.Label,
+                        optionalPath.Configure,
+                        null,
+                        null);
+                    var amuse = arm.Run();
+
+                    Assert.That(
+                        amuse.RendererRefusalCount(
+                            RendererAnalysisRefusal
+                                .AdmittedMaterialSemanticsUnknown),
+                        Is.EqualTo(1),
+                        optionalPath.Label +
+                        ": an active optional coverage path must refuse " +
+                        "at alpha resolution");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero,
+                        optionalPath.Label);
+                    Assert.That(amuse.Separation, Is.Null,
+                        optionalPath.Label);
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        [Test]
+        public void UnsupportedCutoutTextureEvidenceRefusesEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            var renderTexture = new RenderTexture(4, 4, 0);
+            try
+            {
+                fixtures.BaseSetUp();
+                var cases = new (string Label, Texture Texture)[]
+                {
+                    ("trilinear",
+                        fixtures.ImportTrilinearMipmap("cutout_trilinear")),
+                    ("mismatched-wrap",
+                        fixtures.ImportMismatchedWrapMipmap(
+                            "cutout_mismatched_wrap")),
+                    ("streaming-mipmap",
+                        fixtures.ImportStreamingMipmap(
+                            "cutout_streaming")),
+                    ("non-Texture2D", renderTexture),
+                };
+
+                foreach (var unsupported in cases)
+                {
+                    using var arm = CutoutArmFixture.Create(
+                        unsupported.Texture,
+                        "AMUSE cutout texture " + unsupported.Label,
+                        null,
+                        null,
+                        null);
+                    var amuse = arm.Run();
+
+                    var unknownRefusals = amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown);
+                    Assert.That(unknownRefusals,
+                        Is.EqualTo(0).Or.EqualTo(1),
+                        unsupported.Label +
+                        ": unsupported evidence may refuse resolution or " +
+                        "analyze to no candidate, but never prove opaque");
+                    if (unknownRefusals == 0)
+                    {
+                        Assert.That(amuse.AnalyzedRendererCount,
+                            Is.EqualTo(1), unsupported.Label);
+                    }
+                    Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero,
+                        unsupported.Label);
+                    Assert.That(amuse.Separation, Is.Null,
+                        unsupported.Label);
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(renderTexture);
+            }
+        }
+
+        /// <summary>
+        /// Non-singleton animation of every cutout alpha-request scalar,
+        /// every addressable alpha vector/color/scale-offset component, and
+        /// every conversion recipe scalar refuses at its own relevance layer
+        /// (coverage 11).
+        /// <para>
+        /// Falsifies live-value admission and any relevance set that omits
+        /// one requested scalar or addressable component.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            CutoutNonSingletonAnimationRefusesAtItsRelevanceLayer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_animation");
+                using var probe = CutoutArmFixture.Create(
+                    texture, "AMUSE cutout defaults probe", null, null, null);
+
+                foreach (var animated in
+                         CutoutAnimatedPropertyCases(probe.Material))
+                {
+                    using var arm = CutoutArmFixture.Create(
+                        texture,
+                        "AMUSE cutout non-singleton " + animated.Label,
+                        null,
+                        animated.Binding,
+                        animated.Refused);
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None),
+                        animated.Label);
+                    if (animated.AlphaRelevant)
+                    {
+                        Assert.That(
+                            amuse.RendererRefusalCount(
+                                RendererAnalysisRefusal
+                                    .AnimatedMaterialPropertyNotSingleton),
+                            Is.EqualTo(1),
+                            animated.Label + ": every cutout-alpha input " +
+                            "must refuse at alpha admission when its curve " +
+                            "disagrees with the serialized value");
+                    }
+                    else
+                    {
+                        Assert.That(amuse.SemanticallyRefusedRendererCount,
+                            Is.Zero, animated.Label);
+                        Assert.That(
+                            amuse.SlotRefusalCount(
+                                AlphaSeparationSlotRefusal
+                                    .ConversionStateNotAdmitted),
+                            Is.EqualTo(1),
+                            animated.Label + ": every conversion recipe " +
+                            "input must refuse at conversion admission when " +
+                            "its curve disagrees with the serialized value");
+                    }
+
+                    Assert.That(amuse.Separation, Is.Null,
+                        animated.Label +
+                        ": no non-singleton proof input may prepare");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Positive controls for every alpha-proof input: each binding
+        /// animated exactly at its material's serialized value remains a
+        /// singleton, so the slot prepares.
+        /// <para>
+        /// Falsifies an admission that cannot represent the
+        /// singleton-at-serialized-value case — one that refuses every
+        /// animated property outright, or one that substitutes the wrong
+        /// component and breaks the alpha proof.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutAnimationAtTheSerializedValuePrepares()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_animation_serialized");
+                using var probe = CutoutArmFixture.Create(
+                    texture, "AMUSE cutout singleton defaults", null, null,
+                    null);
+
+                foreach (var animated in
+                         CutoutAnimatedPropertyCases(probe.Material))
+                {
+                    if (!animated.AlphaRelevant)
+                    {
+                        continue;
+                    }
+
+                    using var arm = CutoutArmFixture.Create(
+                        texture,
+                        "AMUSE cutout singleton " + animated.Label,
+                        null,
+                        animated.Binding,
+                        animated.Serialized);
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None),
+                        animated.Label);
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero, animated.Label);
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(amuse.SlotRefusalCount(reason), Is.Zero,
+                            animated.Label +
+                            ": animation at the serialized value must " +
+                            "remain an admitted singleton: " + reason);
+                    }
+
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1), animated.Label);
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        animated.Label);
+                    Assert.That(amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(1), animated.Label);
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+        private static readonly string[] ExpectedLilToonCutoutAlphaScalars =
+        {
+            "_lilToonVersion",
+            "_Invisible",
+            "_UDIMDiscardCompile",
+            "_UDIMDiscardMode",
+            "_ShiftBackfaceUV",
+            "_UseParallax",
+            "_UseMain2ndTex",
+            "_UseMain3rdTex",
+            "_AlphaMaskMode",
+            "_UseDither",
+            "_IDMask1",
+            "_IDMask2",
+            "_IDMask3",
+            "_IDMask4",
+            "_IDMask5",
+            "_IDMask6",
+            "_IDMask7",
+            "_IDMask8",
+            "_IDMaskControlsDissolve",
+            "_Cutoff",
+        };
+
+        private static readonly string[] ExpectedLilToonCanonicalOpaqueScalars =
+        {
+            "_SrcBlend",
+            "_DstBlend",
+            "_AlphaToMask",
+            "_ZWrite",
+            "_ZTest",
+            "_OffsetFactor",
+            "_OffsetUnits",
+            "_ColorMask",
+            "_SrcBlendAlpha",
+            "_DstBlendAlpha",
+            "_BlendOp",
+            "_BlendOpAlpha",
+            "_SrcBlendFA",
+            "_DstBlendFA",
+            "_SrcBlendAlphaFA",
+            "_DstBlendAlphaFA",
+            "_BlendOpFA",
+            "_BlendOpAlphaFA",
+        };
+
+        private static IReadOnlyList<(
+            string Label,
+            string Binding,
+            float Serialized,
+            float Refused,
+            bool AlphaRelevant)> CutoutAnimatedPropertyCases(
+                Material material)
+        {
+            var cases = new List<(
+                string Label,
+                string Binding,
+                float Serialized,
+                float Refused,
+                bool AlphaRelevant)>();
+
+            foreach (var property in ExpectedLilToonCutoutAlphaScalars)
+            {
+                var serialized = material.GetFloat(property);
+                cases.Add((
+                    property,
+                    "material." + property,
+                    serialized,
+                    serialized + 1f,
+                    true));
+            }
+
+            var colorAlpha = material.GetColor("_Color").a;
+            cases.Add((
+                "_Color.a",
+                "material._Color.a",
+                colorAlpha,
+                colorAlpha + 1f,
+                true));
+
+            AddVectorCases(
+                cases,
+                "_DissolveParams",
+                material.GetVector("_DissolveParams"));
+            AddVectorCases(
+                cases,
+                "_MainTex_ScrollRotate",
+                material.GetVector("_MainTex_ScrollRotate"));
+
+            var scale = material.GetTextureScale("_MainTex");
+            var offset = material.GetTextureOffset("_MainTex");
+            AddComponentCase(cases, "_MainTex_ST", "x", scale.x);
+            AddComponentCase(cases, "_MainTex_ST", "y", scale.y);
+            AddComponentCase(cases, "_MainTex_ST", "z", offset.x);
+            AddComponentCase(cases, "_MainTex_ST", "w", offset.y);
+
+            foreach (var property in ExpectedLilToonCanonicalOpaqueScalars)
+            {
+                var serialized = material.GetFloat(property);
+                cases.Add((
+                    property,
+                    "material." + property,
+                    serialized,
+                    serialized + 1f,
+                    false));
+            }
+
+            return cases;
+        }
+
+        private static void AddVectorCases(
+            ICollection<(
+                string Label,
+                string Binding,
+                float Serialized,
+                float Refused,
+                bool AlphaRelevant)> cases,
+            string property,
+            Vector4 value)
+        {
+            var suffixes = new[] { "x", "y", "z", "w" };
+            for (var component = 0; component < suffixes.Length; component++)
+            {
+                AddComponentCase(
+                    cases, property, suffixes[component], value[component]);
+            }
+        }
+
+        private static void AddComponentCase(
+            ICollection<(
+                string Label,
+                string Binding,
+                float Serialized,
+                float Refused,
+                bool AlphaRelevant)> cases,
+            string property,
+            string suffix,
+            float serialized)
+        {
+            cases.Add((
+                property + "." + suffix,
+                "material." + property + "." + suffix,
+                serialized,
+                serialized + 1f,
+                true));
+        }
+
+
+        /// <summary>
+        /// The cutout conversion-only recipe animation (controlling
+        /// falsifier 3): the runtime-overwrite rule fires against the
+        /// cutout family's own canonical recipe before the conversion step
+        /// runs, and an animation agreeing with the canonical value admits.
+        /// <para>
+        /// Falsifies: a cutout routing that skips the overwrite rule (a
+        /// clone would be prepared for a recipe provably overwritten at
+        /// runtime), an ordering that runs the conversion before the rule
+        /// (the counting seam must never be invoked on the refusing arm),
+        /// and an admission that reads the live _ZWrite instead of the
+        /// captured serialized value (which would misjudge every arm).
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            CutoutConversionRecipeAnimationRefusesWhenOverwrittenAndPreparesAtCanonical()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_zwrite");
+
+                // (a) Serialized away from canonical and animated at that
+                // serialized value: admission succeeds, but the recipe
+                // AMUSE would write is provably overwritten at runtime.
+                using (var arm = CutoutArmFixture.Create(
+                           texture,
+                           "AMUSE cutout zwrite overwritten",
+                           material => material.SetFloat("_ZWrite", 0f),
+                           "material._ZWrite",
+                           0f))
+                {
+                    Assert.That(arm.Material.GetFloat("_ZWrite"),
+                        Is.EqualTo(0f),
+                        "fixture precondition: the serialized _ZWrite " +
+                        "default must be 0, so animating it to 0 admits " +
+                        "while violating the canonical 1");
+
+                    var conversionInvocations = 0;
+                    var amuse = arm.Run(
+                        (Material live, CapturedMaterialEvidence derived,
+                         Material preparedOpaque, out Material opaque,
+                         out LilToonOpaqueConversionRefusal refusal) =>
+                        {
+                            conversionInvocations++;
+                            opaque = null;
+                            refusal =
+                                LilToonOpaqueConversionRefusal.None;
+                            return false;
+                        });
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero);
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: the slot must be a " +
+                        "candidate, or the overwrite refusal proves " +
+                        "nothing");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .ConversionPropertyOverwrittenAtRuntime),
+                        Is.EqualTo(1),
+                        "a recipe property animated at a non-canonical " +
+                        "serialized value must refuse the slot");
+                    Assert.That(conversionInvocations, Is.Zero,
+                        "the overwrite rule must be validated before the " +
+                        "conversion step runs, so no conversion boundary " +
+                        "call may happen for a slot already known to " +
+                        "violate the recipe");
+                    Assert.That(amuse.Separation, Is.Null,
+                        "the only candidate slot was refused, so nothing " +
+                        "is retained");
+                }
+
+                // (b) Animated exactly at the canonical value: the slot
+                // prepares and converts.
+                using (var arm = CutoutArmFixture.Create(
+                           texture,
+                           "AMUSE cutout zwrite at canonical",
+                           null,
+                           "material._ZWrite",
+                           1f))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero);
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1));
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "animation at the canonical value must " +
+                            "prepare: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(1));
+                }
+
+                // (c) Serialized at the canonical value and animated away
+                // from it: the singleton admission itself refuses — the
+                // animated set and the serialized default disagree — which
+                // is the non-singleton arm, not the overwrite rule.
+                using (var arm = CutoutArmFixture.Create(
+                           texture,
+                           "AMUSE cutout zwrite non-singleton",
+                           null,
+                           "material._ZWrite",
+                           0f))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.Separation, Is.Null);
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .ConversionStateNotAdmitted),
+                        Is.EqualTo(1),
+                        "an animated value disagreeing with the " +
+                        "serialized default refuses at conversion " +
+                        "admission, before any overwrite question");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .ConversionPropertyOverwrittenAtRuntime),
+                        Is.Zero,
+                        "the overwrite rule speaks only about admitted " +
+                        "singletons");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Avatar-wide deduplication of one cutout source across two
+        /// renderers, in both renderer orders: exactly one clone exists and
+        /// every prepared slot maps to it by reference.
+        /// <para>
+        /// Falsifies a per-renderer (or per-slot) conversion cache that
+        /// prepares one clone per renderer, and an ordering-dependent
+        /// registration that forks the avatar-wide mapping when the
+        /// hierarchy order flips.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutSharedSourceReusesOneAvatarWideClone()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            // Each variant is a complete build over its own avatar, so the
+            // renderer order the barrier sees is the child creation order.
+            void RunVariant(string rootName, string firstChild,
+                            string secondChild)
+            {
+                var root = new GameObject(rootName);
+                Material material = null;
+                Mesh meshFirst = null;
+                Mesh meshSecond = null;
+                AmusePlatformFinishState amuse = null;
+                try
+                {
+                    material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                    material.SetTexture(
+                        "_MainTex",
+                        fixtures.ImportFullyOpaqueMipmap(
+                            "cutout_dedup_" + firstChild));
+                    AddNamedChildRenderer(
+                        root, firstChild, material, out meshFirst);
+                    AddNamedChildRenderer(
+                        root, secondChild, material, out meshSecond);
+                    FillInBoundsUvs(meshFirst);
+                    FillInBoundsUvs(meshSecond);
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        "fixture precondition: both renderers must be " +
+                        "analyzable");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(2),
+                        "fixture precondition: both slots must prove " +
+                        "their triangle opaque, or the deduplication " +
+                        "proves nothing");
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(amuse.Separation.Renderers,
+                        Has.Count.EqualTo(2),
+                        "fixture precondition: both renderers must be " +
+                        "retained, or the shared mapping proves nothing");
+
+                    Assert.That(amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(1),
+                        "two renderers proven against one cutout source " +
+                        "material must share one avatar-wide clone");
+                    var clone = amuse.Separation.CreatedClones[0];
+                    Assert.That(
+                        amuse.Separation.OpaqueBySource[material],
+                        Is.SameAs(clone),
+                        "the avatar-wide mapping must hold the shared " +
+                        "clone");
+                    foreach (var prepared in amuse.Separation.Renderers)
+                    {
+                        Assert.That(
+                            prepared.CandidateSlots.Single()
+                                .OpaqueOfAdmitted[material],
+                            Is.SameAs(clone),
+                            "every renderer's slot mapping must reference " +
+                            "the shared clone, never a local duplicate");
+                    }
+                }
+                finally
+                {
+                    DestroyGenerated(amuse);
+                    if (meshFirst != null)
+                        UnityEngine.Object.DestroyImmediate(meshFirst);
+                    if (meshSecond != null)
+                        UnityEngine.Object.DestroyImmediate(meshSecond);
+                    UnityEngine.Object.DestroyImmediate(root);
+                    if (material != null)
+                        UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+
+            try
+            {
+                fixtures.BaseSetUp();
+                RunVariant(
+                    "AMUSE cutout dedup forward", "first", "second");
+                RunVariant(
+                    "AMUSE cutout dedup reversed", "second", "first");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// A refused sibling renderer — a schema-complete cutout whose
+        /// effective depth-write state is unsupported — must not corrupt the
+        /// convertible renderer's preparation: its refusal is slot-scoped,
+        /// its source never enters the avatar-wide mapping, and the
+        /// convertible renderer still prepares and converts.
+        /// <para>
+        /// Falsifies: a dedup that registers an entry for the refused
+        /// source, a refusal that poisons the whole avatar, and a cutout with
+        /// unsupported effective render state that silently converts anyway.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            CutoutRefusedSiblingLeavesTheConvertibleRendererUncorrupted()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            var root = new GameObject("AMUSE cutout refused sibling");
+            Material convertible = null;
+            Material bareCutout = null;
+            Mesh convertibleMesh = null;
+            Mesh bareMesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture =
+                    fixtures.ImportFullyOpaqueMipmap("cutout_refusal");
+
+                convertible = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                convertible.SetTexture("_MainTex", texture);
+                AddNamedChildRenderer(
+                    root, "convertible", convertible, out convertibleMesh);
+                FillInBoundsUvs(convertibleMesh);
+
+                bareCutout = LilToonFixtureTestBase
+                    .CreateCutoutConversionMaterial();
+                bareCutout.SetTexture("_MainTex", texture);
+                bareCutout.SetFloat("_ZWrite", 0f);
+                AddNamedChildRenderer(
+                    root, "bare", bareCutout, out bareMesh);
+                FillInBoundsUvs(bareMesh);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "fixture precondition: both renderers must analyze — " +
+                    "the unsupported depth-write state is refused by " +
+                    "conversion, not by alpha analysis");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(2),
+                    "fixture precondition: both slots must produce " +
+                    "opaque candidates, so the refusal is " +
+                    "conversion-owned");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                    Is.EqualTo(1),
+                    "exactly the unsupported cutout slot may refuse");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None ||
+                        reason == AlphaSeparationSlotRefusal
+                            .OpaqueConversionRefused)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "no other reason may be recorded: " + reason);
+                }
+
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "the convertible renderer must still prepare");
+                Assert.That(amuse.Separation.Renderers,
+                    Has.Count.EqualTo(1));
+                Assert.That(
+                    amuse.Separation.Renderers[0].RendererPath,
+                    Is.EqualTo("convertible"),
+                    "only the convertible renderer may be retained");
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(1));
+                Assert.That(
+                    amuse.Separation.TryGetOpaque(
+                        convertible, out var opaque),
+                    Is.True,
+                    "the convertible source must carry its mapping");
+                Assert.That(opaque, Is.Not.Null);
+                Assert.That(
+                    amuse.Separation.TryGetOpaque(bareCutout, out _),
+                    Is.False,
+                    "a refused slot's source must never enter the " +
+                    "avatar-wide mapping");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (convertibleMesh != null)
+                    UnityEngine.Object.DestroyImmediate(convertibleMesh);
+                if (bareMesh != null)
+                    UnityEngine.Object.DestroyImmediate(bareMesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (convertible != null)
+                    UnityEngine.Object.DestroyImmediate(convertible);
+                if (bareCutout != null)
+                    UnityEngine.Object.DestroyImmediate(bareCutout);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Sibling slots of two conversion families convert independently:
+        /// the Poiyomi slot and the cutout slot each prepare, each map
+        /// through their own conversion, and the clone registration order
+        /// names them deterministically.
+        /// <para>
+        /// Falsifies: a single-family conversion branch that refuses or
+        /// drops the sibling slot, clones that collide across families (one
+        /// clone reused for both sources), and clone-order corruption in
+        /// the " (AMUSE Opaque n)" numbering.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            CutoutSlotPreparesBesideAPoiyomiSlotWithIndependentClones()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE cutout poiyomi siblings");
+            Material poiyomi = null;
+            Material cutout = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                poiyomi = VerifiedOpaqueMaterial();
+                cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                cutout.SetTexture(
+                    "_MainTex", fixtures.ImportFullyOpaqueMipmap(
+                        "cutout_sibling"));
+                AddTwoTriangleRenderer(root, poiyomi, cutout, out mesh);
+                FillInBoundsUvs(mesh);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(2),
+                    "fixture precondition: both slots must prove their " +
+                    "triangle opaque");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "both supported slots must map: " + reason);
+                }
+
+                Assert.That(amuse.Separation, Is.Not.Null);
+                var candidates =
+                    amuse.Separation.Renderers[0].CandidateSlots;
+                Assert.That(candidates, Has.Count.EqualTo(2),
+                    "both sibling slots must survive on the renderer");
+                var poiyomiSlot = candidates.Single(
+                    candidate =>
+                        candidate.Plan.SourceMaterialBindingIndex == 0);
+                var cutoutSlot = candidates.Single(
+                    candidate =>
+                        candidate.Plan.SourceMaterialBindingIndex == 1);
+
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(2),
+                    "each family converts its own source into its own " +
+                    "clone");
+                var poiyomiClone = amuse.Separation.CreatedClones[0];
+                var cutoutClone = amuse.Separation.CreatedClones[1];
+                Assert.That(poiyomiClone, Is.Not.SameAs(cutoutClone));
+                Assert.That(
+                    poiyomiSlot.OpaqueOfAdmitted[poiyomi],
+                    Is.SameAs(poiyomiClone),
+                    "the Poiyomi slot maps through its own conversion");
+                Assert.That(
+                    cutoutSlot.OpaqueOfAdmitted[cutout],
+                    Is.SameAs(cutoutClone),
+                    "the cutout slot maps through its own conversion");
+                Assert.That(poiyomiClone.name,
+                    Is.EqualTo(poiyomi.name + " (AMUSE Opaque 0)"),
+                    "clone naming follows the barrier's slot order");
+                Assert.That(cutoutClone.name,
+                    Is.EqualTo(cutout.name + " (AMUSE Opaque 1)"));
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (poiyomi != null)
+                    UnityEngine.Object.DestroyImmediate(poiyomi);
+                if (cutout != null)
+                    UnityEngine.Object.DestroyImmediate(cutout);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// A mixed supported admitted set — a material-swap clip
+        /// alternating the Poiyomi stand-in with the convertible cutout —
+        /// maps completely, each admitted value through its own family's
+        /// conversion (spec §10).
+        /// <para>
+        /// Falsifies a mapping that resolves one family's admitted value
+        /// through the other family's conversion, or one that refuses the
+        /// mixed set now that both families convert.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            MixedPoiyomiAndCutoutAdmittedSetMapsThroughEachOwnConversion()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE mixed poiyomi cutout slot");
+            Material poiyomi = null;
+            Material cutout = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                poiyomi = VerifiedOpaqueMaterial();
+                cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                cutout.SetTexture(
+                    "_MainTex", fixtures.ImportFullyOpaqueMipmap(
+                        "cutout_mixed"));
+                AddSingleTriangleRenderer(root, cutout, out mesh);
+                FillInBoundsUvs(mesh);
+
+                clip = NewSwapClip(
+                    "AMUSE mixed poiyomi cutout swap", string.Empty, 0,
+                    (0f, poiyomi), (1f, cutout));
+                controller = NewController(
+                    root, "AMUSE mixed poiyomi cutout graph", clip);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the mixed slot must resolve " +
+                    "and produce an opaque candidate");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "a fully supported mixed admitted set must map: " +
+                        reason);
+                }
+
+                Assert.That(amuse.Separation, Is.Not.Null);
+                var mapping = amuse.Separation.Renderers[0]
+                    .CandidateSlots.Single().OpaqueOfAdmitted;
+                Assert.That(mapping, Has.Count.EqualTo(2),
+                    "both admitted values must map");
+                Assert.That(mapping.ContainsKey(poiyomi), Is.True);
+                Assert.That(mapping.ContainsKey(cutout), Is.True);
+                Assert.That(mapping[poiyomi], Is.Not.SameAs(poiyomi),
+                    "the Poiyomi value converts through its own family");
+                Assert.That(mapping[cutout], Is.Not.SameAs(cutout),
+                    "the cutout value converts through its own family");
+                Assert.That(mapping[poiyomi], Is.Not.SameAs(mapping[cutout]),
+                    "the two conversions must not share one clone");
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(2));
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (poiyomi != null)
+                    UnityEngine.Object.DestroyImmediate(poiyomi);
+                if (cutout != null)
+                    UnityEngine.Object.DestroyImmediate(cutout);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (controller != null)
+                    DestroyControllerGraph(controller);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// A non-allowlisted lilToon identity (a stand-in cutout-outline
+        /// shader) is unselectable at family selection and refuses its
+        /// renderer-wide through material-dependency closure, while a
+        /// later sibling renderer holding only supported materials still
+        /// prepares with its mapping uncorrupted (spec §10).
+        /// <para>
+        /// Falsifies: a family selection that attests any lilToon-named
+        /// shader, a closure that skips the unselectable material instead
+        /// of failing the renderer's whole dependency set, and a renderer
+        /// loop that stops at the refused renderer so the later supported
+        /// sibling never prepares.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            UnsupportedLilToonFamilyRefusesRendererWideThroughClosure()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE unsupported family closure");
+            Material cutout = null;
+            Material outline = null;
+            Mesh blockedMesh = null;
+            Mesh supportedMesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture =
+                    fixtures.ImportFullyOpaqueMipmap("cutout_closure");
+                var shader = ImportUnsupportedFamilyShader();
+                outline = new Material(shader);
+
+                cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                cutout.SetTexture("_MainTex", texture);
+
+                // The refused renderer comes first: the renderer loop must
+                // continue past it. It holds one supported slot and one
+                // unsupported slot, so closure spans the whole admitted set.
+                var blockedChild = new GameObject("blocked");
+                blockedChild.transform.SetParent(root.transform, false);
+                blockedMesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                        new Vector3(2f, 0f, 0f),
+                        new Vector3(3f, 0f, 0f),
+                        new Vector3(2f, 1f, 0f),
+                    },
+                    subMeshCount = 2,
+                };
+                blockedMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                blockedMesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+                FillInBoundsUvs(blockedMesh);
+                var blockedRenderer =
+                    blockedChild.AddComponent<SkinnedMeshRenderer>();
+                blockedRenderer.sharedMesh = blockedMesh;
+                blockedRenderer.sharedMaterials =
+                    new[] { cutout, outline };
+
+                // Fixture precondition: family selection itself cannot
+                // attest the unsupported identity.
+                Assert.That(
+                    VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest(
+                        outline,
+                        out _,
+                        out _,
+                        out _),
+                    Is.False,
+                    "fixture precondition: the outline identity must be " +
+                    "unselectable at family selection");
+
+                var supported = AddNamedChildRenderer(
+                    root, "supported", cutout, out supportedMesh);
+                FillInBoundsUvs(supportedMesh);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.EqualTo(1),
+                    "the unselectable member must fail the renderer's " +
+                    "whole material dependency closure");
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1),
+                    "exactly the renderer holding the unsupported member " +
+                    "may refuse");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "the supported sibling must still analyze");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the supported sibling must " +
+                    "prove its triangle opaque");
+                Assert.That(amuse.Separation, Is.Not.Null);
+                Assert.That(amuse.Separation.Renderers,
+                    Has.Count.EqualTo(1));
+                Assert.That(
+                    amuse.Separation.Renderers[0].Target.Renderer,
+                    Is.SameAs(supported),
+                    "the retained renderer must be the supported sibling");
+                Assert.That(amuse.Separation.CreatedClones,
+                    Has.Count.EqualTo(1));
+                Assert.That(
+                    amuse.Separation.TryGetOpaque(cutout, out var opaque),
+                    Is.True,
+                    "the supported sibling's mapping must be prepared and " +
+                    "uncorrupted by the refused renderer");
+                Assert.That(opaque, Is.Not.Null);
+                Assert.That(
+                    amuse.Separation.TryGetOpaque(outline, out _),
+                    Is.False,
+                    "the unsupported identity must never enter the " +
+                    "avatar-wide mapping");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "the refusal is renderer-scoped closure, not a " +
+                        "slot refusal: " + reason);
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (blockedMesh != null)
+                    UnityEngine.Object.DestroyImmediate(blockedMesh);
+                if (supportedMesh != null)
+                    UnityEngine.Object.DestroyImmediate(supportedMesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (cutout != null)
+                    UnityEngine.Object.DestroyImmediate(cutout);
+                if (outline != null)
+                    UnityEngine.Object.DestroyImmediate(outline);
+                AssetDatabase.DeleteAsset(UnsupportedFamilyTempFolder);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Mixed-family fixture seams --------------------------------------
 
         /// <summary>
@@ -883,6 +2306,249 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal const string ShaderName = FixtureShaderName;
         }
 
+        /// <summary>
+        /// Imports the fully-opaque mipmap texture the cutout conversion
+        /// fixture assigns to <c>_MainTex</c>. The base's SetUp/TearDown are
+        /// driven manually: NUnit never instantiates this helper.
+        /// </summary>
+        private sealed class LilToonCutoutConversionFixtures
+            : LilToonFixtureTestBase
+        {
+            internal Texture2D ImportFullyOpaqueMipmap(string name)
+            {
+                return ImportMipmapTexture(
+                    name, 4, 4, FullyOpaquePixels());
+            }
+
+            internal Texture2D ImportTrilinearMipmap(string name)
+            {
+                return ImportMipmapTexture(
+                    name,
+                    4,
+                    4,
+                    FullyOpaquePixels(),
+                    FilterMode.Trilinear);
+            }
+
+            internal Texture2D ImportMismatchedWrapMipmap(string name)
+            {
+                return ImportMipmapTexture(
+                    name,
+                    4,
+                    4,
+                    FullyOpaquePixels(),
+                    configure: importer =>
+                    {
+                        importer.wrapModeU =
+                            UnityEngine.TextureWrapMode.Repeat;
+                        importer.wrapModeV =
+                            UnityEngine.TextureWrapMode.Clamp;
+                    });
+            }
+
+            internal Texture2D ImportStreamingMipmap(string name)
+            {
+                const int size = 64;
+                var pixels = new Color32[size * size];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                var texture = ImportMipmapTexture(
+                    name,
+                    size,
+                    size,
+                    pixels,
+                    configure: importer =>
+                        importer.streamingMipmaps = true);
+                Assert.That(texture.streamingMipmaps, Is.True,
+                    "fixture precondition: the imported texture must " +
+                    "retain streaming residency");
+                return texture;
+            }
+
+            private static Color32[] FullyOpaquePixels()
+            {
+                var pixels = new Color32[4 * 4];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                return pixels;
+            }
+        }
+
+        /// <summary>
+        /// One cutout conversion arm: a transient single-triangle renderer
+        /// fixture over a caller-owned texture plus the barrier run over it,
+        /// with everything the arm created destroyed on disposal. An arm
+        /// that animates a material binding carries one constant float clip;
+        /// an arm that varies the serialized state configures the material
+        /// before the build.
+        /// </summary>
+        private sealed class CutoutArmFixture : IDisposable
+        {
+            private GameObject root;
+            private Mesh mesh;
+            private AnimationClip clip;
+            private AnimatorController controller;
+            private AmusePlatformFinishState amuse;
+
+            private CutoutArmFixture() { }
+
+            internal Material Material { get; private set; }
+
+            internal static CutoutArmFixture Create(
+                Texture mainTex,
+                string rootName,
+                Action<Material> configure,
+                string animatedBinding,
+                float? animatedValue)
+            {
+                var fixture = new CutoutArmFixture
+                {
+                    root = new GameObject(rootName),
+                    Material = LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
+                };
+                fixture.Material.SetTexture("_MainTex", mainTex);
+                configure?.Invoke(fixture.Material);
+
+                fixture.mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(fixture.mesh);
+
+                var renderer = fixture.root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = fixture.mesh;
+                renderer.sharedMaterials = new[] { fixture.Material };
+
+                if (animatedBinding != null)
+                {
+                    fixture.clip = NewFloatClip(
+                        rootName + " clip", string.Empty,
+                        animatedBinding, animatedValue ?? 0f);
+                    fixture.controller = NewController(
+                        fixture.root, rootName + " graph", fixture.clip);
+                }
+
+                return fixture;
+            }
+
+            internal AmusePlatformFinishState Run(
+                VerifiedLilToonConversion lilToonConversion = null)
+            {
+                amuse = RunBarrier(
+                    root, lilToonConversion: lilToonConversion);
+                return amuse;
+            }
+
+            public void Dispose()
+            {
+                DestroyGenerated(amuse);
+                if (root != null)
+                {
+                    DestroyControllerGraph(root, controller);
+                }
+
+                if (controller != null)
+                {
+                    DestroyControllerGraph(controller);
+                }
+
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (Material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(Material);
+                }
+
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Gives every vertex one in-bounds UV0 domain, so a texture-backed
+        /// cutout proof has the domain it needs. Any in-bounds domain works
+        /// over a fully-opaque chain.
+        /// </summary>
+        private static void FillInBoundsUvs(Mesh mesh)
+        {
+            var uvs = new Vector2[mesh.vertexCount];
+            for (var index = 0; index < uvs.Length; index++)
+            {
+                uvs[index] = new Vector2(0.25f, 0.25f);
+            }
+
+            mesh.uv = uvs;
+        }
+
+        // --- Unsupported-family fixture ---------------------------------------
+
+        /// <summary>
+        /// A stand-in shader carrying a non-allowlisted lilToon identity (a
+        /// cutout-outline shader). Written and imported under one
+        /// test-owned folder; the caller deletes the folder in its finally.
+        /// </summary>
+        private const string UnsupportedFamilyTempFolder =
+            "Assets/AmuseTests_AlphaUnsupportedFamily";
+
+        private const string UnsupportedFamilyShaderName =
+            "Hidden/lilToonCutoutOutline";
+
+        /// <summary>
+        /// Writes, imports, and returns the unsupported-family temp shader
+        /// without authoring a .meta (Unity generates it on import).
+        /// </summary>
+        private static Shader ImportUnsupportedFamilyShader()
+        {
+            if (!AssetDatabase.IsValidFolder(UnsupportedFamilyTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_AlphaUnsupportedFamily");
+            }
+
+            var path = UnsupportedFamilyTempFolder +
+                       "/LilToonCutoutOutline.shader";
+            File.WriteAllText(
+                path,
+                "Shader \"" + UnsupportedFamilyShaderName + "\"\n" +
+                "{\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            CGPROGRAM\n" +
+                "            #pragma vertex vert\n" +
+                "            #pragma fragment frag\n" +
+                "            #include \"UnityCG.cginc\"\n" +
+                "            float4 vert(float4 vertex : POSITION) : " +
+                "SV_POSITION\n" +
+                "            { return UnityObjectToClipPos(vertex); }\n" +
+                "            fixed4 frag() : SV_Target\n" +
+                "            { return fixed4(1, 1, 1, 1); }\n" +
+                "            ENDCG\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n");
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+
+            var shader = Shader.Find(UnsupportedFamilyShaderName);
+            Assert.That(
+                shader, Is.Not.Null,
+                "The unsupported-family temp shader must import.");
+            return shader;
+        }
+
         // --- Fixture helpers ---------------------------------------------------
 
         /// <summary>
@@ -894,8 +2560,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static AmusePlatformFinishState RunBarrier(
             GameObject root,
             AlphaMaterialRequestSelector selectRequest = null,
+            ClosedAlphaMaterialCapturer capturer = null,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
-            VerifiedOpaqueConversion conversion = null)
+            VerifiedPoiyomiConversion poiyomiConversion = null,
+            VerifiedLilToonConversion lilToonConversion = null)
         {
             var context = AvatarProcessor.ProcessAvatar(
                 root, PreparationTestPlatform.Instance);
@@ -905,11 +2573,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishPass.Execute(
                 context,
                 SupportedFacts(),
-                selectRequest ?? VerifiedPoiyomiTestSeams
+                selectRequest ?? VerifiedLilToonTestSeams
                     .SelectVerifiedFixtureRequest,
-                VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials,
-                resolveSemantics ?? VerifiedPoiyomiTestSeams.VerifiedAlphaOnly,
-                conversion ?? VerifiedPoiyomiTestSeams.VerifiedConversion);
+                capturer ?? VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics ?? VerifiedLilToonTestSeams.VerifiedAlphaOnly,
+                poiyomiConversion ?? VerifiedPoiyomiTestSeams
+                    .VerifiedConversion,
+                lilToonConversion ?? VerifiedLilToonTestSeams
+                    .VerifiedConversion);
 
             return context.GetState<AmusePlatformFinishState>();
         }

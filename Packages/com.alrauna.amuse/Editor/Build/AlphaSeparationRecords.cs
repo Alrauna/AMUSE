@@ -27,10 +27,14 @@ namespace Alrauna.Amuse.Editor.Build
         // its original material assignment and its original material-swap
         // curve; independently valid slots on the same renderer continue.
 
-        /// <summary>An admitted material of this slot is not Poiyomi. This
-        /// includes every lilToon material and every mixed-family slot: not
-        /// every admitted runtime value can be mapped to an opaque result, so
-        /// the whole slot is refused.</summary>
+        /// <summary>An admitted material of this slot belongs to a family
+        /// with no opaque conversion — every non-`lilToon` lilToon identity
+        /// (outline, transparent, Lite, Tessellation, Multi, Gem, Fur,
+        /// Refraction, overlay, fake shadow, container) and every mixed
+        /// admitted set containing one: not every admitted runtime value can
+        /// be mapped to an opaque result, so the whole slot is refused. The
+        /// attested opaque `lilToon` and the attested cutout identity are
+        /// conversion families and never refuse here.</summary>
         OpaqueConversionUnsupportedFamily,
 
         /// <summary><c>PoiyomiOpaqueConversion</c> refused an admitted

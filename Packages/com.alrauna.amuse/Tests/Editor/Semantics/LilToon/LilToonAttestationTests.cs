@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -1472,6 +1475,387 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonSourceAttestation.IncludeTreeDigest,
                 Is.EqualTo(
                     "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"));
+        }
+
+        // --- cutout profile: Task 1 Step 2 RED tests ---
+
+        /// <summary>
+        /// Mirrors <see cref="Evidence"/> for the pinned cutout identity: the
+        /// same <see cref="UsePin"/> sentinel mechanics, the same shared
+        /// package/format/include-tree pins, and the cutout name, GUIDs,
+        /// render mode, and canonical digests by default.
+        /// </summary>
+        private static LilToonSourceEvidence CutoutEvidence(
+            string shaderName = "Hidden/lilToonCutout",
+            string assetGuid = "85d6126cae43b6847aff4b13f4adb8ec",
+            bool hasVersion = true,
+            float version = 45f,
+            bool hasPackage = true,
+            string packageName = "jp.lilxyzw.liltoon",
+            string packageVersion = "2.3.4",
+            string passGuid = "ad219df2a46e841488aee6a013e84e36",
+            string shaderDigest = UsePin,
+            string passDigest = UsePin,
+            string includeDigest = UsePin,
+            bool hasRenderMode = true,
+            int renderMode = 1,
+            IReadOnlyCollection<string> features = null,
+            bool hasShaderCanonicalization = true,
+            LilToonCanonicalizationAnalysis shaderCanonicalization = null,
+            bool hasPassCanonicalization = true,
+            LilToonCanonicalizationAnalysis passCanonicalization = null)
+        {
+            return new LilToonSourceEvidence(
+                shaderName,
+                assetGuid,
+                hasVersion,
+                version,
+                hasPackage,
+                packageName,
+                packageVersion,
+                passGuid,
+                ReferenceEquals(shaderDigest, UsePin)
+                    ? LilToonSourceAttestation.CutoutShaderCanonicalDigest
+                    : shaderDigest,
+                ReferenceEquals(passDigest, UsePin)
+                    ? LilToonSourceAttestation.CutoutPassCanonicalDigest
+                    : passDigest,
+                ReferenceEquals(includeDigest, UsePin)
+                    ? LilToonSourceAttestation.IncludeTreeDigest
+                    : includeDigest,
+                hasRenderMode,
+                renderMode,
+                features ?? new string[0],
+                hasShaderCanonicalization
+                    ? shaderCanonicalization ?? EmptyShaderAnalysis()
+                    : null,
+                hasPassCanonicalization
+                    ? passCanonicalization ?? PassAnalysis(DefaultStandaloneRecords())
+                    : null);
+        }
+
+        [Test]
+        public void VerifyCutout_CanonicalEvidence_Succeeds()
+        {
+            // The true case also pins the cutout provenance premise: the
+            // unchanged canonicalization conjunction (two removed regions,
+            // official setting record) accepts the cutout pass, exactly as
+            // B2 §5 clause 1 attests.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [Test]
+        public void Verify_OpaqueVerifierStillRejectsCutoutIdentity()
+        {
+            // Profile-leakage guard: the opaque verifier must keep refusing
+            // the cutout identity even after the cutout profile goes live.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    CutoutEvidence(), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShader));
+        }
+
+        [TestCase("Standard")]
+        [TestCase("Hidden/lilToonTransparent")]
+        [TestCase("lilToonCutout")]
+        public void VerifyCutout_UnsupportedShaderName_IsRefused(string name)
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(shaderName: name), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShader));
+        }
+
+        [Test]
+        public void VerifyCutout_GuidMismatch_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(assetGuid: new string('0', 32)),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShader));
+        }
+
+        [Test]
+        public void VerifyCutout_WrongPassShaderGuid_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(passGuid: new string('0', 32)),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.MissingSourceEvidence));
+        }
+
+        [TestCase(0)]
+        [TestCase(2)]
+        public void VerifyCutout_NonCutoutRenderMode_IsRefused(int mode)
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(renderMode: mode), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(
+                    LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+            Assert.That(diagnostic.Detail, Does.Contain("LIL_RENDER"));
+        }
+
+        [Test]
+        public void VerifyCutout_UnreadableRenderMode_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(hasRenderMode: false, renderMode: 0),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(
+                    LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+        }
+
+        [Test]
+        public void VerifyCutout_EditedMaterialShaderAsset_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(shaderDigest: new string('0', 64)),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [Test]
+        public void VerifyCutout_EditedPassAsset_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(passDigest: new string('0', 64)),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [Test]
+        public void VerifyCutout_EditedIncludeTree_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(includeDigest: new string('0', 64)),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+            Assert.That(diagnostic.Detail, Does.Contain("Includes"));
+        }
+
+        [Test]
+        public void VerifyCutout_MissingDigestEvidence_IsRefused()
+        {
+            // The sentinel default means this genuinely passes null, rather
+            // than being coalesced back to the pin.
+            var evidence = CutoutEvidence(includeDigest: null);
+            Assert.That(evidence.IncludeTreeDigest, Is.Null);
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    evidence, out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.MissingSourceEvidence));
+        }
+
+        [Test]
+        public void VerifyCutout_FormatVersion44_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(version: 44f), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        [Test]
+        public void VerifyCutout_WrongPackageVersion_IsRefused()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(packageVersion: "2.3.3"), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        [Test]
+        public void VerifyCutout_ExternalActivatorProvenance_IsRefused()
+        {
+            // One representative mutation from the existing provenance-refusal
+            // family: an external activator define keeps the old canonical
+            // output but refuses as an unsupported variant.
+            var clean = PassAnalysis(DefaultStandaloneRecords());
+            var records = DefaultStandaloneRecords();
+            records.Insert(1, "#define LIL_FEATURE_LTCGI");
+            var mutated = PassAnalysis(records);
+
+            Assert.That(
+                mutated.CanonicalSource, Is.EqualTo(clean.CanonicalSource));
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(passCanonicalization: mutated),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(
+                    LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+            Assert.That(diagnostic.Detail, Does.Contain("LIL_FEATURE_LTCGI"));
+        }
+
+        [Test]
+        public void GatherCutout_MissingPassAsset_FailsClosedWithoutNameOnlyFallback()
+        {
+            const string folder = "Assets/AmuseTests_LilToonAttestation";
+            const string shaderPath =
+                folder + "/LilToonCutoutAttestationProbe.shader";
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_LilToonAttestation");
+            }
+
+            try
+            {
+                // A stand-in carrying the pinned cutout identity: the exact
+                // shader name, the exact pinned asset GUID (hand-written
+                // .meta), and the format stamp. The pass asset
+                // Hidden/ltspass_cutout is deliberately never created — this
+                // project has no resolvable cutout pass, which is the
+                // fail-closed premise under test.
+                File.WriteAllText(
+                    shaderPath,
+                    "Shader \"Hidden/lilToonCutout\"\n" +
+                    "{\n" +
+                    "    Properties\n" +
+                    "    {\n" +
+                    "        [HideInInspector] _lilToonVersion" +
+                    " (\"Version\", Int) = 45\n" +
+                    "        _Invisible (\"Invisible\", Int) = 0\n" +
+                    "        _UDIMDiscardCompile (\"UDIM\", Int) = 0\n" +
+                    "    }\n" +
+                    "    SubShader { Pass {} }\n" +
+                    "}\n");
+                File.WriteAllText(
+                    shaderPath + ".meta",
+                    "fileFormatVersion: 2\n" +
+                    "guid: 85d6126cae43b6847aff4b13f4adb8ec\n" +
+                    "ShaderImporter:\n" +
+                    "  externalObjects: {}\n" +
+                    "  defaultTextures: []\n" +
+                    "  nonModifiableTextures: []\n" +
+                    "  userData: \n" +
+                    "  assetBundleName: \n" +
+                    "  assetBundleVariant: \n");
+                AssetDatabase.ImportAsset(
+                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
+                var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+                Assert.That(shader, Is.Not.Null, shaderPath);
+
+                var material = new Material(shader);
+                try
+                {
+                    var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            material,
+                            LilToonMaterialSemantics.AlphaEvidenceRequest),
+                    })[0];
+
+                    var evidence =
+                        LilToonSourceAttestation.GatherCutoutSourceEvidence(
+                            shader, captured);
+
+                    // No resolvable Hidden/ltspass_cutout asset: the gather
+                    // must leave the pass unidentified rather than fall back
+                    // to the material shader's name.
+                    Assert.That(evidence.PassShaderGuid, Is.Null);
+
+                    Assert.That(
+                        LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                            evidence, out var diagnostic),
+                        Is.False);
+                    Assert.That(
+                        diagnostic.Code,
+                        Is.EqualTo(
+                            LilToonSemanticDiagnosticCode.MissingSourceEvidence));
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(folder))
+                {
+                    AssetDatabase.DeleteAsset(folder);
+                }
+            }
+        }
+
+        // --- cutout pins are the B1 measurements ---
+
+        [Test]
+        public void PinnedCutoutConstants_AreTheB1Measurements()
+        {
+            Assert.That(
+                LilToonSourceAttestation.CutoutShaderName,
+                Is.EqualTo("Hidden/lilToonCutout"));
+            Assert.That(
+                LilToonSourceAttestation.CutoutShaderGuid,
+                Is.EqualTo("85d6126cae43b6847aff4b13f4adb8ec"));
+            Assert.That(
+                LilToonSourceAttestation.CutoutPassShaderName,
+                Is.EqualTo("Hidden/ltspass_cutout"));
+            Assert.That(
+                LilToonSourceAttestation.CutoutPassShaderGuid,
+                Is.EqualTo("ad219df2a46e841488aee6a013e84e36"));
+            Assert.That(
+                LilToonSourceAttestation.CutoutRenderMode,
+                Is.EqualTo(1));
+            Assert.That(
+                LilToonSourceAttestation.CutoutShaderCanonicalDigest,
+                Is.EqualTo(
+                    "c83d73a26ab86e933f8cacb8c71307d8715fcc1693cdc08d209011bb0f836178"));
+            Assert.That(
+                LilToonSourceAttestation.CutoutPassCanonicalDigest,
+                Is.EqualTo(
+                    "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92"));
         }
     }
 }
