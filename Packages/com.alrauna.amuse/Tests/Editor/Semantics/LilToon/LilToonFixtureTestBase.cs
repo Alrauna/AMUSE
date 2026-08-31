@@ -23,6 +23,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
         protected const string TempFolder = "Assets/AmuseTests_LilToon";
 
+        protected const string CutoutConversionShaderName =
+            "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
+        protected const string OpaqueConversionShaderName =
+            "Hidden/Alrauna/AmuseTests/LilToonOpaqueConversionTest";
+
         /// <summary>Every feature symbol a fully compiled lilToon exposes.</summary>
         protected static readonly string[] AllFeatures =
         {
@@ -74,13 +79,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return Track(CreateVerifiedMaterial());
         }
 
+        protected Material NewCutoutFixtureMaterial()
+        {
+            return Track(CreateCutoutConversionMaterial());
+        }
+
+        protected Material NewOpaqueConversionMaterial()
+        {
+            return Track(CreateOpaqueConversionMaterial());
+        }
+
         internal static Material CreateVerifiedMaterial()
         {
-            var shader = Shader.Find(FixtureShaderName);
+            return CreateFixtureMaterial(FixtureShaderName);
+        }
+
+        /// <summary>
+        /// Creates a cutout-stand-in material for the cutout-to-opaque
+        /// conversion tests by shader name, without subclassing this base.
+        /// The caller owns destruction.
+        /// </summary>
+        internal static Material CreateCutoutConversionMaterial()
+        {
+            return CreateFixtureMaterial(CutoutConversionShaderName);
+        }
+
+        /// <summary>
+        /// Creates the opaque-target stand-in carrying the canonical
+        /// conversion tuple by shader name, without subclassing this base.
+        /// The caller owns destruction.
+        /// </summary>
+        internal static Material CreateOpaqueConversionMaterial()
+        {
+            return CreateFixtureMaterial(OpaqueConversionShaderName);
+        }
+
+        private static Material CreateFixtureMaterial(string shaderName)
+        {
+            var shader = Shader.Find(shaderName);
             Assert.That(
                 shader,
                 Is.Not.Null,
-                $"Test fixture shader '{FixtureShaderName}' must import.");
+                $"Test fixture shader '{shaderName}' must import.");
             return new Material(shader);
         }
 
@@ -155,6 +195,75 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
             return loaded;
+        }
+
+        /// <summary>
+        /// Writes an explicit RGBA32 pixel grid as mip 0 and imports it as a
+        /// mipmap-enabled asset; the lower levels are the importer's own
+        /// downsample of the supplied base level, so the loaded texture's mip
+        /// count follows from the grid size. The import is pinned to the
+        /// sampler vocabulary the alpha evidence admits: Point/Bilinear
+        /// filter and Clamp/Repeat wrap, no mip bias, no streaming. The
+        /// default sampler is Bilinear over Repeat unless a test configures
+        /// otherwise.
+        /// </summary>
+        protected Texture2D ImportMipmapTexture(
+            string name,
+            int width,
+            int height,
+            Color32[] baseLevelBottomToTop,
+            FilterMode filterMode = FilterMode.Bilinear,
+            UnityEngine.TextureWrapMode wrapMode =
+                UnityEngine.TextureWrapMode.Repeat,
+            Action<TextureImporter> configure = null)
+        {
+            if (baseLevelBottomToTop.Length != width * height)
+            {
+                throw new ArgumentException(
+                    "Pixel grid length must equal width times height.",
+                    nameof(baseLevelBottomToTop));
+            }
+
+            var path = TempFolder + "/" + name + ".png";
+            var staging = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            staging.SetPixels32(baseLevelBottomToTop);
+            staging.Apply();
+            File.WriteAllBytes(path, staging.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(staging);
+
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.mipmapEnabled = true;
+            importer.filterMode = filterMode;
+            importer.wrapMode = wrapMode;
+            importer.streamingMipmaps = false;
+            // Uncompressed keeps the imported GPU format RGBA32: the
+            // alpha-evidence format allowlist admits RGBA32 exactly, while
+            // platform compression would collapse an all-opaque source to
+            // DXT1, which has no alpha channel to prove and refuses.
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            configure?.Invoke(importer);
+            importer.SaveAndReimport();
+
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
+            return loaded;
+        }
+
+        /// <summary>The mip count the importer actually produced.</summary>
+        protected static int MipCount(Texture2D texture)
+        {
+            return texture.mipmapCount;
+        }
+
+        /// <summary>
+        /// Reads one mip level of a loaded texture as RGBA32 texels,
+        /// bottom-to-top, for chain-shape assertions.
+        /// </summary>
+        protected static Color32[] ReadMipLevel(Texture2D texture, int mipLevel)
+        {
+            return texture.GetPixels32(mipLevel);
         }
 
         protected Texture2D ImportNormalMap(string name)
