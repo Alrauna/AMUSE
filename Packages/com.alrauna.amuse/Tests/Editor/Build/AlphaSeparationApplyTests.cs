@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -253,14 +257,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishPass.Execute(
                 context,
                 SupportedFacts(),
-                VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest,
-                VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials,
-                VerifiedPoiyomiTestSeams.VerifiedAlphaOnly,
+                VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest,
+                VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials,
+                VerifiedLilToonTestSeams.VerifiedAlphaOnly,
                 ConversionOverride ??
-                    VerifiedPoiyomiTestSeams.VerifiedConversion);
+                    VerifiedPoiyomiTestSeams.VerifiedConversion,
+                VerifiedLilToonTestSeams.VerifiedConversion);
         }
 
-        private static VerifiedOpaqueConversion ConversionOverride
+        private static VerifiedPoiyomiConversion ConversionOverride
         {
             get;
             set;
@@ -268,10 +273,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private sealed class ConversionOverrideScope : IDisposable
         {
-            private readonly VerifiedOpaqueConversion previous;
+            private readonly VerifiedPoiyomiConversion previous;
 
             internal ConversionOverrideScope(
-                VerifiedOpaqueConversion conversion)
+                VerifiedPoiyomiConversion conversion)
             {
                 previous = ConversionOverride;
                 ConversionOverride = conversion;
@@ -1617,6 +1622,701 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
+        }
+
+        // --- Task 5 integration coverage: the cutout family end to end ------
+
+        /// <summary>
+        /// Full-artifact end to end (coverage 21): one real NDMF build over
+        /// a renderer carrying a wholly-opaque cutout slot over a fully
+        /// opaque mipmap chain and a splitting cutout slot over a mip-free
+        /// split-alpha texture. The build result must carry the converted
+        /// clones with the canonical recipe read back and retention naming,
+        /// the split mesh with the appended submesh assigned the clone, the
+        /// proven triangle moved, the remaining triangle on the source
+        /// material, unchanged sources, persistent generated objects, and
+        /// no orphaned clones.
+        /// <para>
+        /// Falsifies: an apply boundary that prepares but never writes the
+        /// cutout family, a clone recipe that skips read-back or retention
+        /// naming, an appended submesh assigned the source material, a sweep
+        /// that destroys referenced clones or spares orphans, generated
+        /// objects that never persist through serialization, and a
+        /// conversion that mutates its source. The clone's pre-naming
+        /// emptiness is the conversion unit tests' assertion; the retention
+        /// name is the observable here.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutBuildCarriesTheFullArtifactEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                ApplyCutoutPersistenceFolder);
+            var root = new GameObject("AMUSE cutout full artifact");
+            AmusePlatformFinishState state = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                        "cutout_full_artifact");
+                    var splitTexture =
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "cutout_full_artifact_split");
+                    var wholeMaterial = Track(
+                        NewCutoutConversionMaterial(mipTexture));
+                    var splitMaterial = Track(
+                        NewCutoutSplitMaterial(splitTexture));
+                    var sourceMesh = Track(
+                        AlphaSeparationSplitTests
+                            .CreateOpaqueAndSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "body", sourceMesh,
+                        wholeMaterial, splitMaterial);
+
+                    var wholeDigestBefore = DigestMaterial(wholeMaterial);
+                    var splitDigestBefore = DigestMaterial(splitMaterial);
+                    var meshDigestBefore = DigestMesh(sourceMesh);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(context.Successful, Is.True,
+                        "fixture precondition: the build must complete");
+                    Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                        "fixture precondition: the renderer must analyze");
+                    Assert.That(state.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(2),
+                        "fixture precondition: one wholly opaque triangle " +
+                        "and one split opaque triangle must be candidates");
+                    AssertNoFeatureRefusals(state);
+                    Assert.That(state.Separation, Is.Not.Null);
+
+                    var prepared = state.Separation.Renderers.Single();
+                    var wholeSlot = prepared.CandidateSlots.Single(
+                        slot => slot.Plan.SourceMaterialBindingIndex == 0);
+                    var splitSlot = prepared.CandidateSlots.Single(
+                        slot => slot.Plan.SourceMaterialBindingIndex == 1);
+                    Assert.That(wholeSlot.Plan.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition
+                            .WhollyOpaqueCandidate),
+                        "fixture precondition: the fully opaque slot must " +
+                        "convert in place");
+                    Assert.That(splitSlot.Plan.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "fixture precondition: the mixed slot must split, " +
+                        "or the appended submesh proves nothing");
+
+                    // The generated clones: canonical recipe read back and
+                    // retention naming.
+                    Assert.That(state.Separation.CreatedClones,
+                        Has.Count.EqualTo(2));
+                    var wholeClone =
+                        state.Separation.OpaqueBySource[wholeMaterial];
+                    var splitClone =
+                        state.Separation.OpaqueBySource[splitMaterial];
+                    Assert.That(wholeClone, Is.Not.SameAs(splitClone),
+                        "two sources convert to two distinct clones");
+                    AssertCanonicalOpaqueRecipe(wholeClone);
+                    AssertCanonicalOpaqueRecipe(splitClone);
+                    Assert.That(wholeClone.name,
+                        Is.EqualTo(wholeMaterial.name + " (AMUSE Opaque 0)"),
+                        "the first registered clone must carry the " +
+                        "retention name");
+                    Assert.That(splitClone.name,
+                        Is.EqualTo(splitMaterial.name + " (AMUSE Opaque 1)"));
+
+                    // The split mesh: proven triangle moved to the appended
+                    // submesh, remaining triangle kept with the source.
+                    var builtMesh = renderer.sharedMesh;
+                    Assert.That(builtMesh, Is.EqualTo(prepared.MeshClone),
+                        "fixture precondition: the renderer must carry the " +
+                        "finalized mesh clone");
+                    Assert.That(builtMesh, Is.Not.EqualTo(sourceMesh),
+                        "fixture precondition: the assigned mesh must be " +
+                        "generated, not the source");
+                    Assert.That(builtMesh.name,
+                        Is.EqualTo(sourceMesh.name + " (AMUSE Separated 0)"));
+                    Assert.That(builtMesh.subMeshCount, Is.EqualTo(3));
+                    CollectionAssert.AreEqual(
+                        new[] { 0, 1, 2 }, builtMesh.GetIndices(0),
+                        "the wholly opaque slot's submesh must stay " +
+                        "untouched");
+                    CollectionAssert.AreEqual(
+                        AlphaSeparationSplitTests
+                            .SplitTransparentEffectiveIndicesFor(4),
+                        builtMesh.GetIndices(1),
+                        "the split submesh must retain exactly the " +
+                        "unproven triangle");
+                    CollectionAssert.AreEqual(
+                        AlphaSeparationSplitTests
+                            .SplitOpaqueEffectiveIndicesFor(4),
+                        builtMesh.GetIndices(2),
+                        "the appended submesh must carry exactly the " +
+                        "proven triangle");
+
+                    // The material arrays.
+                    Assert.That(renderer.sharedMaterials,
+                        Has.Length.EqualTo(3));
+                    Assert.That(renderer.sharedMaterials[0],
+                        Is.EqualTo(wholeClone),
+                        "the wholly opaque slot carries its opaque result " +
+                        "in place");
+                    Assert.That(renderer.sharedMaterials[1],
+                        Is.EqualTo(splitMaterial),
+                        "the split submesh's remaining triangle must stay " +
+                        "on the source material");
+                    Assert.That(renderer.sharedMaterials[2],
+                        Is.EqualTo(splitClone),
+                        "the appended submesh must be assigned the clone");
+
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                    Assert.That(state.AppliedOpaqueTriangleCount,
+                        Is.EqualTo(2),
+                        "the wholly opaque slot's triangle and the moved " +
+                        "split triangle must both count as applied opaque");
+
+                    // The sources are evidence, never mutation targets.
+                    Assert.That(DigestMaterial(wholeMaterial),
+                        Is.EqualTo(wholeDigestBefore),
+                        "the source material must be unchanged");
+                    Assert.That(DigestMaterial(splitMaterial),
+                        Is.EqualTo(splitDigestBefore),
+                        "the source material must be unchanged");
+                    Assert.That(DigestMesh(sourceMesh),
+                        Is.EqualTo(meshDigestBefore),
+                        "the source mesh must be unchanged");
+
+                    // Persistence through serialization.
+                    foreach (var generated in new UnityEngine.Object[]
+                             {
+                                 wholeClone,
+                                 splitClone,
+                                 builtMesh,
+                             })
+                    {
+                        Assert.That(EditorUtility.IsPersistent(generated),
+                            Is.True,
+                            generated.name +
+                            " must persist through serialization");
+                        Assert.That(AssetDatabase.Contains(generated),
+                            Is.True,
+                            generated.name + " must live in the asset " +
+                            "database after the build");
+                        var path = AssetDatabase
+                            .GetAssetPath(generated)
+                            .Replace('\\', '/');
+                        Assert.That(path,
+                            Does.StartWith(ApplyCutoutPersistenceFolder +
+                                           "/"),
+                            generated.name + " must be saved inside the " +
+                            "test-owned persistence directory, not " + path);
+                        Assert.That(path, Does.EndWith(".asset"),
+                            generated.name + " must be a serialized asset");
+                    }
+
+                    // The sweep leaves no orphans: every created clone is
+                    // alive and referenced by the build copy.
+                    foreach (var clone in state.Separation.CreatedClones)
+                    {
+                        Assert.That(clone, Is.Not.Null,
+                            "the sweep must leave no orphan clones");
+                    }
+
+                    CollectionAssert.Contains(
+                        renderer.sharedMaterials, wholeClone,
+                        "the surviving clone must stay referenced");
+                    CollectionAssert.Contains(
+                        renderer.sharedMaterials, splitClone,
+                        "the surviving clone must stay referenced");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                AssetDatabase.DeleteAsset(ApplyCutoutPersistenceFolder);
+                Assert.That(
+                    AssetDatabase.IsValidFolder(ApplyCutoutPersistenceFolder),
+                    Is.False,
+                    "the test-owned persistence directory must be deleted " +
+                    "even when an assertion fails");
+                DestroyGenerated(state);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Curve rewrite and appended-slot indexing through a real build
+        /// (coverage 21): a material-swap clip alternating the cutout source
+        /// with a second admitted value over a Split slot. The slot's own
+        /// curve stays authored; the appended binding carries identical
+        /// times with every keyframe mapped, the clone for the cutout value
+        /// and the value itself where conversion maps to itself.
+        /// <para>
+        /// Falsifies: an appended-curve writer that maps only the current
+        /// value (every admitted keyframe must map), an appended index
+        /// computed from the slot count instead of the live array length,
+        /// and a rewrite that touches the Split slot's own authored curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutSplitSlotRewritesCurvesOntoTheAppendedSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE cutout appended slot");
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var splitTexture =
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "cutout_appended");
+                    var cutout = Track(
+                        NewCutoutSplitMaterial(splitTexture));
+                    var swap = Track(
+                        LilToonFixtureTestBase.CreateVerifiedMaterial());
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var sourceMesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "split", sourceMesh, cutout, transparent);
+
+                    var clip = Track(NewSwapClip(
+                        "AMUSE cutout appended swap", "split", 0,
+                        (0f, cutout), (1f, swap)));
+                    controller = NewController(
+                        root, "AMUSE cutout appended graph", clip);
+                    var authoredOwn = DescribeAuthoredCurve(
+                        clip, "split", "m_Materials.Array.data[0]");
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                        "fixture precondition: the renderer must analyze");
+                    Assert.That(state.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: exactly one opaque triangle " +
+                        "must be a candidate");
+                    AssertNoFeatureRefusals(state);
+                    Assert.That(state.Separation, Is.Not.Null);
+
+                    var slot = state.Separation.Renderers[0]
+                        .CandidateSlots.Single();
+                    Assert.That(slot.Plan.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "fixture precondition: the slot must split, or " +
+                        "the appended binding proves nothing");
+                    Assert.That(slot.OpaqueOfAdmitted, Has.Count.EqualTo(2),
+                        "fixture precondition: both admitted values must " +
+                        "map, or the rewritten curve proves nothing");
+                    Assert.That(state.Separation.CreatedClones,
+                        Has.Count.EqualTo(1),
+                        "only the cutout source may clone; the attested " +
+                        "opaque swap value maps to itself");
+
+                    var clone = state.Separation.OpaqueBySource[cutout];
+
+                    // The Split slot's own binding stays authored.
+                    var committedOwn = CommittedClipWithObjectBinding(
+                        root, "split", "m_Materials.Array.data[0]");
+                    Assert.That(committedOwn, Is.Not.Null,
+                        "fixture precondition: the committed clip must " +
+                        "carry the slot's own binding");
+                    Assert.That(
+                        DescribeAuthoredCurve(
+                            committedOwn, "split",
+                            "m_Materials.Array.data[0]"),
+                        Is.EqualTo(authoredOwn),
+                        "a Split slot's own curve stays authored; only " +
+                        "the appended opaque slot receives the mapped " +
+                        "curve");
+
+                    // The appended binding: identical times, every value
+                    // mapped.
+                    var appendedClip = CommittedClipWithObjectBinding(
+                        root, "split", "m_Materials.Array.data[2]");
+                    Assert.That(appendedClip, Is.Not.Null,
+                        "two live slots means the appended opaque slot is " +
+                        "index 2");
+                    var appendedCurve = AnimationUtility
+                        .GetObjectReferenceCurve(
+                            appendedClip,
+                            EditorCurveBinding.PPtrCurve(
+                                "split", typeof(SkinnedMeshRenderer),
+                                "m_Materials.Array.data[2]"));
+                    Assert.That(appendedCurve, Has.Length.EqualTo(2));
+                    Assert.That(
+                        new[]
+                        {
+                            appendedCurve[0].time.ToString("R"),
+                            appendedCurve[1].time.ToString("R"),
+                        },
+                        Is.EqualTo(new[]
+                        {
+                            0f.ToString("R"),
+                            1f.ToString("R"),
+                        }),
+                        "the appended curve must carry the authored " +
+                        "keyframe times exactly");
+                    Assert.That(appendedCurve[0].value, Is.SameAs(clone),
+                        "the cutout value maps to the generated clone");
+                    Assert.That(appendedCurve[1].value, Is.SameAs(swap),
+                        "the attested opaque value maps to itself");
+
+                    // The source clip asset is unchanged.
+                    Assert.That(
+                        DescribeAuthoredCurve(
+                            clip, "split", "m_Materials.Array.data[0]"),
+                        Is.EqualTo(authoredOwn),
+                        "the source clip must be unchanged");
+
+                    // The build copy: mesh split, appended slot assigned
+                    // the clone.
+                    Assert.That(renderer.sharedMesh,
+                        Is.Not.EqualTo(sourceMesh));
+                    Assert.That(renderer.sharedMesh.subMeshCount,
+                        Is.EqualTo(3));
+                    CollectionAssert.AreEqual(
+                        AlphaSeparationSplitTests
+                            .SplitTransparentEffectiveIndicesFor(4),
+                        renderer.sharedMesh.GetIndices(0),
+                        "the split submesh must retain exactly the " +
+                        "unproven triangle");
+                    CollectionAssert.AreEqual(
+                        AlphaSeparationSplitTests
+                            .SplitOpaqueEffectiveIndicesFor(4),
+                        renderer.sharedMesh.GetIndices(2),
+                        "the appended submesh must carry exactly the " +
+                        "proven triangle");
+                    Assert.That(renderer.sharedMaterials,
+                        Has.Length.EqualTo(3));
+                    Assert.That(renderer.sharedMaterials[0],
+                        Is.SameAs(cutout),
+                        "the split slot's source material stays on its " +
+                        "submesh");
+                    Assert.That(renderer.sharedMaterials[1],
+                        Is.SameAs(transparent));
+                    Assert.That(renderer.sharedMaterials[2],
+                        Is.SameAs(clone),
+                        "the appended slot must carry the clone");
+
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                    Assert.That(state.AppliedOpaqueTriangleCount,
+                        Is.EqualTo(1));
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Attested-opaque map-to-self at pipeline level (coverage 2): a
+        /// cutout slot whose swap set reaches the opaque lilToon stand-in
+        /// maps that value to itself with no clone, through a real build
+        /// with the apply pass.
+        /// <para>
+        /// Falsifies a pipeline-level routing that clones the attested
+        /// opaque admitted value instead of mapping it to itself, or that
+        /// drops the self-mapped value from the rewritten curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void CutoutSwapToAttestedOpaqueMapsToItselfWithoutAClone()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE cutout map to self");
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_map_to_self");
+                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
+                var swap = Track(
+                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                var mesh = Track(SingleTriangleMesh());
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                var renderer = AddRenderer(root, "body", mesh, cutout);
+
+                var clip = Track(NewSwapClip(
+                    "AMUSE cutout map to self swap", "body", 0,
+                    (0f, cutout), (1f, swap)));
+                controller = NewController(
+                    root, "AMUSE cutout map to self graph", clip);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ApplyTestPlatform.Instance);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: both admitted values prove the " +
+                    "triangle opaque");
+                AssertNoFeatureRefusals(state);
+                Assert.That(state.Separation, Is.Not.Null);
+
+                var slot = state.Separation.Renderers[0]
+                    .CandidateSlots.Single();
+                Assert.That(slot.Plan.Disposition,
+                    Is.EqualTo(SubmeshSeparationDisposition
+                        .WhollyOpaqueCandidate));
+                Assert.That(slot.OpaqueOfAdmitted, Has.Count.EqualTo(2),
+                    "fixture precondition: both swap values must map");
+                Assert.That(state.Separation.CreatedClones,
+                    Has.Count.EqualTo(1),
+                    "the attested opaque admitted value must map to " +
+                    "itself with no clone; only the cutout source clones");
+
+                var clone = state.Separation.OpaqueBySource[cutout];
+                Assert.That(state.Separation.OpaqueBySource[swap],
+                    Is.SameAs(swap),
+                    "the avatar-wide mapping must carry the identity for " +
+                    "the attested opaque value");
+
+                var committed = CommittedClipWithObjectBinding(
+                    root, "body", "m_Materials.Array.data[0]");
+                Assert.That(committed, Is.Not.Null,
+                    "fixture precondition: the committed clip must carry " +
+                    "the rewritten binding");
+                var committedCurve = AnimationUtility
+                    .GetObjectReferenceCurve(
+                        committed,
+                        EditorCurveBinding.PPtrCurve(
+                            "body", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[0]"));
+                Assert.That(committedCurve, Has.Length.EqualTo(2));
+                Assert.That(committedCurve[0].value, Is.SameAs(clone),
+                    "the cutout value maps to the generated clone");
+                Assert.That(committedCurve[1].value, Is.SameAs(swap),
+                    "the self-mapped value must survive the rewrite " +
+                    "unchanged");
+                Assert.That(renderer.sharedMaterials[0],
+                    Is.SameAs(clone),
+                    "the current assignment maps through the same opaque " +
+                    "result");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                Assert.That(state.AppliedOpaqueTriangleCount,
+                    Is.EqualTo(1));
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        // --- Cutout conversion fixture helpers -------------------------------
+
+        /// <summary>
+        /// The one test-owned directory NDMF's persistence scope is pointed
+        /// at for the full-artifact scenario; deleted unconditionally in
+        /// that test's finally.
+        /// </summary>
+        private const string ApplyCutoutPersistenceFolder =
+            "Assets/AmuseTests_AlphaApplyCutout";
+
+        /// <summary>
+        /// Imports the fully-opaque mipmap texture the cutout conversion
+        /// fixture assigns to <c>_MainTex</c>. The base's SetUp/TearDown are
+        /// driven manually: NUnit never instantiates this helper.
+        /// </summary>
+        private sealed class LilToonCutoutConversionFixtures
+            : LilToonFixtureTestBase
+        {
+            internal Texture2D ImportFullyOpaqueMipmap(string name)
+            {
+                var pixels = new Color32[4 * 4];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                return ImportMipmapTexture(name, 4, 4, pixels);
+            }
+        }
+
+        private sealed class LilToonConversionShaderNames
+            : LilToonFixtureTestBase
+        {
+            /// <summary>The tuple-carrying attested opaque stand-in.</summary>
+            internal const string OpaqueTarget = OpaqueConversionShaderName;
+        }
+
+        /// <summary>
+        /// The convertible cutout fixture material over a fully-opaque
+        /// mipmap chain: cutout schema plus the full canonical tuple at
+        /// canonical defaults.
+        /// </summary>
+        private static Material NewCutoutConversionMaterial(
+            Texture2D mipTexture)
+        {
+            var material =
+                LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+            material.SetTexture("_MainTex", mipTexture);
+            return material;
+        }
+
+        /// <summary>
+        /// The convertible cutout fixture material over the mip-free split
+        /// alpha texture, so one submesh can carry one proven-opaque and one
+        /// unproven triangle — a Split.
+        /// </summary>
+        private static Material NewCutoutSplitMaterial(
+            Texture2D splitTexture)
+        {
+            var material =
+                LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+            material.SetTexture("_MainTex", splitTexture);
+            return material;
+        }
+
+        /// <summary>
+        /// Reads back every canonical opaque fact on a generated cutout
+        /// clone: the eighteen recipe scalars, the render queue, the
+        /// RenderType tag, the whole-fact comparison, and the attested
+        /// opaque stand-in target.
+        /// </summary>
+        private static void AssertCanonicalOpaqueRecipe(Material clone)
+        {
+            foreach (var (property, value) in
+                         LilToonOpaqueConversion.CanonicalOpaqueProperties)
+            {
+                Assert.That(clone.GetFloat(property), Is.EqualTo(value),
+                    "canonical recipe '" + property + "'");
+            }
+
+            Assert.That(clone.renderQueue,
+                Is.EqualTo(
+                    LilToonOpaqueConversion.CanonicalOpaqueRenderQueue));
+            Assert.That(
+                clone.GetTag(
+                    LilToonOpaqueConversion.RenderTypeTagName, false),
+                Is.EqualTo(
+                    LilToonOpaqueConversion.CanonicalOpaqueRenderType));
+            Assert.That(
+                LilToonOpaqueConversion.TryFindNonCanonicalFact(
+                    clone, out _),
+                Is.False,
+                "every canonical fact must read back on the clone");
+            Assert.That(clone.shader,
+                Is.SameAs(Shader.Find(
+                    LilToonConversionShaderNames.OpaqueTarget)),
+                "the clone must carry the attested opaque stand-in " +
+                "target");
+        }
+
+        /// <summary>
+        /// The source-material facts a plausible conversion could falsify:
+        /// name, shader, queue, RenderType tag, main texture, tint, cutoff
+        /// and every canonical recipe scalar.
+        /// </summary>
+        private static string DigestMaterial(Material material)
+        {
+            var parts = new List<string>
+            {
+                material.name,
+                material.shader.name,
+                material.renderQueue
+                    .ToString(CultureInfo.InvariantCulture),
+                material.GetTag("RenderType", false),
+                material.mainTexture == null
+                    ? "<none>"
+                    : material.mainTexture.GetInstanceID()
+                        .ToString(CultureInfo.InvariantCulture),
+                string.Join(
+                    ",",
+                    material.GetColor("_Color").r
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    material.GetColor("_Color").g
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    material.GetColor("_Color").b
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    material.GetColor("_Color").a
+                        .ToString("R", CultureInfo.InvariantCulture)),
+                material.GetFloat("_Cutoff")
+                    .ToString("R", CultureInfo.InvariantCulture),
+            };
+            foreach (var (property, _) in
+                         LilToonOpaqueConversion.CanonicalOpaqueProperties)
+            {
+                parts.Add(
+                    material.GetFloat(property)
+                        .ToString("R", CultureInfo.InvariantCulture));
+            }
+
+            return string.Join("|", parts);
+        }
+
+        /// <summary>
+        /// The source-mesh facts a plausible finalization could falsify:
+        /// name, vertex count, submesh count, bounds and every submesh's
+        /// index buffer.
+        /// </summary>
+        private static string DigestMesh(Mesh mesh)
+        {
+            var parts = new List<string>
+            {
+                mesh.name,
+                mesh.vertexCount.ToString(CultureInfo.InvariantCulture),
+                mesh.subMeshCount.ToString(CultureInfo.InvariantCulture),
+                string.Join(
+                    ",",
+                    mesh.bounds.center.x
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    mesh.bounds.center.y
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    mesh.bounds.center.z
+                        .ToString("R", CultureInfo.InvariantCulture)),
+                string.Join(
+                    ",",
+                    mesh.bounds.extents.x
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    mesh.bounds.extents.y
+                        .ToString("R", CultureInfo.InvariantCulture),
+                    mesh.bounds.extents.z
+                        .ToString("R", CultureInfo.InvariantCulture)),
+            };
+            for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
+            {
+                parts.Add(string.Join(",", mesh.GetIndices(submesh)));
+            }
+
+            return string.Join("|", parts);
         }
     }
 }
