@@ -343,8 +343,81 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string IncludeTreeDigest =
             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
 
+        // Cutout source identity (spec §6 R3). Measured by the merged B1
+        // characterization on 2026-08-30 from an installed
+        // jp.lilxyzw.liltoon@2.3.4 and cross-checked against default shader
+        // settings. Never re-derive these from the lilToon repository, whose
+        // committed generated shaders are stale relative to their own tag's
+        // generator.
+        internal const string CutoutShaderName = "Hidden/lilToonCutout";
+        internal const string CutoutShaderGuid =
+            "85d6126cae43b6847aff4b13f4adb8ec";
+        internal const string CutoutPassShaderName = "Hidden/ltspass_cutout";
+        internal const string CutoutPassShaderGuid =
+            "ad219df2a46e841488aee6a013e84e36";
+        internal const int CutoutRenderMode = 1;
+        internal const string CutoutShaderCanonicalDigest =
+            "c83d73a26ab86e933f8cacb8c71307d8715fcc1693cdc08d209011bb0f836178";
+        internal const string CutoutPassCanonicalDigest =
+            "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92";
+
         internal const string ShaderFormatVersionProperty = "_lilToonVersion";
         private const string IncludeFolderName = "Includes";
+
+        /// <summary>
+        /// The one pinned identity a profile attests (spec §6 R3). Package
+        /// name/version, the shader-format stamp, and the include-tree digest
+        /// are deliberately not profile fields: one lilToon 2.3.4 frontend,
+        /// one <c>Shader/Includes</c> tree, shared by every profile.
+        /// </summary>
+        private sealed class LilToonSourceProfile
+        {
+            internal LilToonSourceProfile(
+                string shaderName,
+                string shaderGuid,
+                string passShaderName,
+                string passShaderGuid,
+                int renderMode,
+                string shaderCanonicalDigest,
+                string passCanonicalDigest)
+            {
+                ShaderName = shaderName;
+                ShaderGuid = shaderGuid;
+                PassShaderName = passShaderName;
+                PassShaderGuid = passShaderGuid;
+                RenderMode = renderMode;
+                ShaderCanonicalDigest = shaderCanonicalDigest;
+                PassCanonicalDigest = passCanonicalDigest;
+            }
+
+            internal string ShaderName { get; }
+            internal string ShaderGuid { get; }
+            internal string PassShaderName { get; }
+            internal string PassShaderGuid { get; }
+            internal int RenderMode { get; }
+            internal string ShaderCanonicalDigest { get; }
+            internal string PassCanonicalDigest { get; }
+        }
+
+        private static readonly LilToonSourceProfile OpaqueProfile =
+            new LilToonSourceProfile(
+                SupportedShaderName,
+                SupportedShaderGuid,
+                PassShaderName,
+                PassShaderGuid,
+                OpaqueRenderMode,
+                ShaderCanonicalDigest,
+                PassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile CutoutProfile =
+            new LilToonSourceProfile(
+                CutoutShaderName,
+                CutoutShaderGuid,
+                CutoutPassShaderName,
+                CutoutPassShaderGuid,
+                CutoutRenderMode,
+                CutoutShaderCanonicalDigest,
+                CutoutPassCanonicalDigest);
 
         // D1: a valueless define the *LIL_SHADER_SETTING* substitution can emit.
         // A define with a value, such as LIL_RENDER 0, never matches.
@@ -895,13 +968,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static bool TryVerifyStandaloneCanonicalizationProvenance(
             LilToonCanonicalizationAnalysis shader,
             LilToonCanonicalizationAnalysis pass,
+            LilToonSourceProfile profile,
             out LilToonSemanticDiagnostic diagnostic)
         {
             if (shader == null || pass == null)
             {
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.MissingSourceEvidence,
-                    (shader == null ? SupportedShaderName : PassShaderName) +
+                    (shader == null
+                        ? profile.ShaderName
+                        : profile.PassShaderName) +
                     " canonicalization provenance");
                 return false;
             }
@@ -924,8 +1000,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.ModifiedShaderSource,
                     (shader.RemovedRegions.Count != 0
-                        ? SupportedShaderName
-                        : PassShaderName) + " canonicalization provenance");
+                        ? profile.ShaderName
+                        : profile.PassShaderName) + " canonicalization provenance");
                 return false;
             }
 
@@ -1079,6 +1155,34 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             LilToonSourceEvidence evidence,
             out LilToonSemanticDiagnostic diagnostic)
         {
+            return Verify(evidence, OpaqueProfile, out diagnostic);
+        }
+
+        /// <summary>
+        /// Verifies the pinned cutout identity (spec §6 R3): the cutout
+        /// shader, its pass, <c>LIL_RENDER 1</c>, and the cutout canonical
+        /// digests, under the shared package/format/include-tree pins.
+        /// Mismatch fails closed with a diagnostic; there is no name-only
+        /// fallback.
+        /// </summary>
+        internal static bool TryVerifyLilToonCutoutIdentity(
+            LilToonSourceEvidence evidence,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            return Verify(evidence, CutoutProfile, out diagnostic);
+        }
+
+        /// <summary>
+        /// The identity conjunction, parameterized by profile. Purely
+        /// mechanical: the check order, every diagnostic code and detail
+        /// string, and the verdicts are exactly the ones the opaque path has
+        /// always produced.
+        /// </summary>
+        private static bool Verify(
+            LilToonSourceEvidence evidence,
+            LilToonSourceProfile profile,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
@@ -1088,7 +1192,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    shader, everything else refused.
             if (!string.Equals(
                     evidence.ShaderName,
-                    SupportedShaderName,
+                    profile.ShaderName,
                     StringComparison.Ordinal))
             {
                 diagnostic = MaterialDiagnostic(
@@ -1099,7 +1203,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             if (!string.Equals(
                     evidence.AssetGuid,
-                    SupportedShaderGuid,
+                    profile.ShaderGuid,
                     StringComparison.Ordinal))
             {
                 diagnostic = MaterialDiagnostic(
@@ -1148,18 +1252,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 4. Resolved pass asset.
             if (!string.Equals(
                     evidence.PassShaderGuid,
-                    PassShaderGuid,
+                    profile.PassShaderGuid,
                     StringComparison.Ordinal))
             {
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.MissingSourceEvidence,
-                    PassShaderName);
+                    profile.PassShaderName);
                 return false;
             }
 
             if (!TryVerifyStandaloneCanonicalizationProvenance(
                     evidence.ShaderCanonicalization,
                     evidence.PassCanonicalization,
+                    profile,
                     out diagnostic))
             {
                 return false;
@@ -1173,13 +1278,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     out diagnostic) ||
                 !TryMatchDigest(
                     evidence.ShaderCanonicalDigest,
-                    ShaderCanonicalDigest,
-                    SupportedShaderName,
+                    profile.ShaderCanonicalDigest,
+                    profile.ShaderName,
                     out diagnostic) ||
                 !TryMatchDigest(
                     evidence.PassCanonicalDigest,
-                    PassCanonicalDigest,
-                    PassShaderName,
+                    profile.PassCanonicalDigest,
+                    profile.PassShaderName,
                     out diagnostic))
             {
                 return false;
@@ -1187,7 +1292,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // 6. Render mode as the current pass declares it, not as the pass
             //    asset's historical name implies.
-            if (!evidence.HasRenderMode || evidence.RenderMode != OpaqueRenderMode)
+            if (!evidence.HasRenderMode ||
+                evidence.RenderMode != profile.RenderMode)
             {
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.UnsupportedShaderVariant,
@@ -1239,6 +1345,49 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             Shader shader,
             CapturedMaterialEvidence evidence)
         {
+            return Gather(shader, evidence, OpaqueProfile);
+        }
+
+        /// <summary>
+        /// Gathers identity evidence for the pinned cutout identity: the
+        /// material shader is read directly and only the pass the cutout
+        /// profile names (<c>Hidden/ltspass_cutout</c>) is resolved. A pass
+        /// that does not resolve is omitted rather than guessed, so
+        /// verification fails closed.
+        /// </summary>
+        internal static LilToonSourceEvidence GatherCutoutSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            return Gather(shader, evidence, CutoutProfile);
+        }
+
+        /// <summary>
+        /// Gathers the pinned opaque target profile using the target shader's
+        /// own live name rather than the cutout source name stored in the
+        /// material evidence. The captured evidence supplies only the pinned
+        /// shader-format version scalar.
+        /// </summary>
+        internal static LilToonSourceEvidence GatherOpaqueTargetSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            if (shader == null) throw new ArgumentNullException(nameof(shader));
+            return Gather(shader, evidence, OpaqueProfile, shader.name);
+        }
+
+        /// <summary>
+        /// The gather, parameterized by profile: only the pass asset the
+        /// profile names is resolved. Purely mechanical; every read, fallback,
+        /// and omission rule is exactly the one the opaque path has always
+        /// applied.
+        /// </summary>
+        private static LilToonSourceEvidence Gather(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            LilToonSourceProfile profile,
+            string shaderNameOverride = null)
+        {
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
 
@@ -1280,7 +1429,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 ? null
                 : Sha256(shaderAnalysis.CanonicalSource);
 
-            var passShader = Shader.Find(PassShaderName);
+            var passShader = Shader.Find(profile.PassShaderName);
             string passGuid = null;
             string passDigest = null;
             string passText = null;
@@ -1309,7 +1458,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var hasRenderMode = TryScanRenderMode(passText, out var renderMode);
 
             return new LilToonSourceEvidence(
-                evidence.HasShaderName ? evidence.ShaderName : null,
+                shaderNameOverride ??
+                    (evidence.HasShaderName ? evidence.ShaderName : null),
                 assetGuid?.ToLowerInvariant(),
                 hasVersion,
                 version,

@@ -300,6 +300,321 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
         }
 
+        /// <summary>
+        /// Selection identifies the cutout family from the exact shader name
+        /// and hands back the cutout alpha request itself. As for every
+        /// family, selection does not attest the source: this material
+        /// carries the cutout shader name over a stand-in source no
+        /// attestation can verify, and selection still succeeds.
+        /// </summary>
+        [Test]
+        public void SelectionIdentifiesLilToonCutoutWithoutAttestingSource()
+        {
+            var material = NewMaterial(
+                "selected-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out var family, out var request, out _);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(
+                request,
+                Is.SameAs(LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                "selection must hand back the cutout family's existing " +
+                "request");
+        }
+
+        /// <summary>
+        /// The cutout frontend answers selection's two questions the way
+        /// Poiyomi does: its capture schema is its alpha request combined
+        /// with the lilToon conversion request, so one capture serves both
+        /// the cutout alpha proof and the conversion. The combination must
+        /// widen in exactly one direction: conversion render state enters
+        /// the schema, and neither Poiyomi's conversion-only state nor any
+        /// new texture acquisition does.
+        /// </summary>
+        [Test]
+        public void CutoutCaptureSchemaCarriesConversionEvidenceAlphaRelevanceDoesNot()
+        {
+            var material = NewMaterial(
+                "schema-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material,
+                out _,
+                out var alphaRelevance,
+                out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                "alpha relevance must remain the cutout request itself");
+
+            // Representative conversion render state. _ZWrite is
+            // conversion-only outright; _Cutoff is already a cutout theorem
+            // scalar, so only its presence dimension shows the widening.
+            foreach (var conversionOnly in new[] { "_ZWrite", "_Cutoff" })
+            {
+                CollectionAssert.Contains(
+                    captureSchema.ScalarProperties,
+                    conversionOnly,
+                    "the capture schema must gather conversion evidence: " +
+                    conversionOnly);
+                CollectionAssert.Contains(
+                    captureSchema.PresenceProperties,
+                    conversionOnly,
+                    "the capture schema must gather conversion presence: " +
+                    conversionOnly);
+            }
+
+            CollectionAssert.DoesNotContain(
+                alphaRelevance.ScalarProperties,
+                "_ZWrite",
+                "conversion-only render state widened alpha relevance: " +
+                "_ZWrite");
+            CollectionAssert.DoesNotContain(
+                alphaRelevance.PresenceProperties,
+                "_ZWrite",
+                "conversion-only render state widened alpha relevance: " +
+                "_ZWrite");
+
+            CollectionAssert.AreEquivalent(
+                LilToonOpaqueConversion.ConversionRequiredSchemaProperties,
+                captureSchema.PresenceProperties,
+                "the cutout schema's presence dimension must be exactly " +
+                "the conversion schema");
+            CollectionAssert.IsSubsetOf(
+                alphaRelevance.ScalarProperties,
+                captureSchema.ScalarProperties,
+                "the capture schema must still gather everything alpha " +
+                "needs");
+
+            foreach (var poiyomiOnly in new[] { "_EnableOutlines" })
+            {
+                CollectionAssert.DoesNotContain(
+                    captureSchema.ScalarProperties,
+                    poiyomiOnly,
+                    "Poiyomi's conversion state entered the cutout schema: " +
+                    poiyomiOnly);
+                CollectionAssert.DoesNotContain(
+                    captureSchema.PresenceProperties,
+                    poiyomiOnly,
+                    "Poiyomi's conversion state entered the cutout schema: " +
+                    poiyomiOnly);
+            }
+
+            CollectionAssert.AreEqual(
+                alphaRelevance.TextureProperties
+                    .Select(value => value.PropertyName).ToArray(),
+                captureSchema.TextureProperties
+                    .Select(value => value.PropertyName).ToArray(),
+                "conversion capture introduced a new texture acquisition");
+        }
+
+        /// <summary>
+        /// Only the exact cutout name is the cutout frontend. Near-miss
+        /// vendor shader names stay unsupported and yield no request and no
+        /// capture schema.
+        /// </summary>
+        [Test]
+        public void SelectionRefusesNearCutoutLilToonShaderNames()
+        {
+            foreach (var shaderName in new[]
+                     {
+                         "Hidden/lilToonCutoutOutline",
+                         "Hidden/lilToonTransparent",
+                         "Hidden/lilToonOnePassTransparent",
+                         "Hidden/lilToonTwoPassTransparent",
+                         "Hidden/lilToonTransparentOutline",
+                         "Hidden/lilToonOnePassTransparentOutline",
+                         "Hidden/lilToonTwoPassTransparentOutline",
+                         "_lil/[Optional] lilToonOutlineOnly",
+                         "_lil/[Optional] lilToonOutlineOnlyCutout",
+                         "_lil/[Optional] lilToonOutlineOnlyTransparent",
+                         "Hidden/lilToonLite",
+                         "Hidden/lilToonLiteCutout",
+                         "_lil/[Optional] lilToonLiteOverlay",
+                         "_lil/[Optional] lilToonLiteOverlayOnePass",
+                         "Hidden/lilToonTessellation",
+                         "Hidden/lilToonTessellationCutout",
+                         "Hidden/lilToonRefraction",
+                         "Hidden/lilToonRefractionBlur",
+                         "Hidden/lilToonFur",
+                         "Hidden/lilToonFurCutout",
+                         "Hidden/lilToonFurTwoPass",
+                         "_lil/[Optional] lilToonFurOnlyTransparent",
+                         "_lil/[Optional] lilToonFurOnlyCutout",
+                         "_lil/[Optional] lilToonFurOnlyTwoPass",
+                         "Hidden/lilToonGem",
+                         "_lil/[Optional] lilToonFakeShadow",
+                         "_lil/[Optional] lilToonOverlay",
+                         "_lil/[Optional] lilToonOverlayOnePass",
+                         "_lil/lilToonMulti",
+                         "Hidden/lilToonMultiOutline",
+                         "Hidden/lilToonMultiRefraction",
+                         "Hidden/lilToonMultiFur",
+                         "Hidden/lilToonMultiGem",
+                         "Custom/GeneratedLilToonContainer",
+                     })
+            {
+                var material = NewMaterial(
+                    "refused-" + shaderName.Replace('/', '-') + ".shader",
+                    shaderName,
+                    CutoutProperties());
+
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out var request,
+                        out var captureSchema);
+
+                Assert.That(selected, Is.False, shaderName);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported),
+                    shaderName);
+                Assert.That(request, Is.Null, shaderName);
+                Assert.That(captureSchema, Is.Null, shaderName);
+            }
+        }
+
+        /// <summary>
+        /// Fresh invariance row beside
+        /// <see cref="LilToonCaptureSchemaIsExactlyItsAlphaRelevance"/>:
+        /// adding the cutout family to the selection map must not disturb
+        /// the opaque lilToon answers — both questions still return the
+        /// existing reference-equal request objects.
+        /// </summary>
+        [Test]
+        public void OpaqueLilToonSelectionStaysReferenceStableBesideCutout()
+        {
+            var material = NewMaterial(
+                "stable-opaque-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material,
+                out var family,
+                out var alphaRelevance,
+                out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(LilToonMaterialSemantics.AlphaEvidenceRequest));
+            Assert.That(
+                captureSchema,
+                Is.SameAs(LilToonMaterialSemantics.AlphaEvidenceRequest));
+        }
+
+        /// <summary>
+        /// Routing (R4): once captured as cutout-family evidence, the alpha
+        /// verdict is the cutout interpreter's verdict on the same evidence —
+        /// never the opaque lilToon or Poiyomi verdict, which would collapse
+        /// gate-off cutout coverage to a complete constant 1. Both rows
+        /// discriminate: a gate-active material and a gate-off one whose
+        /// main texture carries no resolvable source identity on this
+        /// scaffold. AnalyzeAlphaMaterial re-verifies source attestation,
+        /// which no stand-in passes, so the observable surface is
+        /// all-Unknown both before and after the cutout arm exists; the
+        /// equality assertion is the shape discriminator that keeps holding
+        /// when the arm completes.
+        /// </summary>
+        [Test]
+        public void RoutedCutoutFamilyAlphaNeverCollapsesToConstantOne()
+        {
+            var gateActive = NewMaterial(
+                "routed-cutout-gate-active.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+            gateActive.SetFloat("_UseDither", 1f);
+            var gateOff = NewMaterial(
+                "routed-cutout-gate-off.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { gateActive, gateOff });
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(
+                captured[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+
+            foreach (var material in captured)
+            {
+                var routed = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    material);
+                var cutout = LilToonCutoutMaterialSemantics
+                    .InterpretVerifiedCutoutAlpha(material.Evidence);
+
+                Assert.That(
+                    routed.Alpha.IsComplete &&
+                        routed.Alpha.GetCompleteValue().Kind ==
+                        ScalarSemanticValueKind.Constant,
+                    Is.False,
+                    "routed cutout alpha must never complete as a constant");
+                Assert.That(
+                    routed.Alpha,
+                    Is.EqualTo(cutout),
+                    "the routed alpha must be the cutout interpreter's " +
+                    "verdict on the same evidence");
+            }
+        }
+
+        /// <summary>
+        /// Batch capture classifies the cutout name identically to
+        /// selection — same family, and a combined capture schema whose
+        /// every scalar the selection handback also names. The last
+        /// assertion fails while the name map is duplicated between the two
+        /// consumers, which is why the map is one function.
+        /// </summary>
+        [Test]
+        public void CaptureAlphaMaterialsClassifiesCutoutLikeSelection()
+        {
+            var material = NewMaterial(
+                "captured-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out var family, out var alphaRelevance, out _);
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { material });
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(family),
+                "batch capture must classify the cutout name identically " +
+                "to selection");
+            foreach (var name in alphaRelevance.ScalarProperties)
+            {
+                Assert.DoesNotThrow(
+                    () => captured[0].Evidence.TryGetScalar(name, out _),
+                    name + " must be captured under the alpha relevance");
+            }
+
+            Assert.Throws<ArgumentException>(
+                () => captured[0].Evidence.TryGetScalar(
+                    "_EnableOutlines", out _),
+                "batch capture must not widen toward Poiyomi's request");
+        }
+
         [Test]
         public void SelectionRejectsAnUnsupportedShaderFamily()
         {
@@ -417,6 +732,58 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [HideInInspector] _lilToonVersion (""Version"", Int) = 45
         _Invisible (""Invisible"", Int) = 0
         _UDIMDiscardCompile (""UDIM"", Int) = 0";
+        }
+
+        /// <summary>
+        /// The cutout stand-in property block: every property the cutout
+        /// alpha request and the lilToon conversion request name, at
+        /// gate-off defaults.
+        /// </summary>
+        private static string CutoutProperties()
+        {
+            return @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _UDIMDiscardMode (""UDIMDiscardMode"", Int) = 0
+        _ShiftBackfaceUV (""ShiftBackfaceUV"", Int) = 0
+        _UseParallax (""UseParallax"", Int) = 0
+        _UseMain2ndTex (""UseMain2ndTex"", Int) = 0
+        _UseMain3rdTex (""UseMain3rdTex"", Int) = 0
+        _AlphaMaskMode (""AlphaMaskMode"", Int) = 0
+        _UseDither (""UseDither"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _Color (""Color"", Color) = (1,1,1,1)
+        _MainTex (""Texture"", 2D) = ""white"" {}
+        _DissolveParams (""DissolveParams"", Vector) = (0,0,0.5,0.1)
+        _MainTex_ScrollRotate (""ScrollRotate"", Vector) = (0,0,0,0)
+        _SrcBlend (""SrcBlend"", Float) = 1
+        _DstBlend (""DstBlend"", Float) = 0
+        _AlphaToMask (""AlphaToMask"", Float) = 0
+        _ZWrite (""ZWrite"", Float) = 1
+        _ZTest (""ZTest"", Float) = 4
+        _OffsetFactor (""OffsetFactor"", Float) = 0
+        _OffsetUnits (""OffsetUnits"", Float) = 0
+        _ColorMask (""ColorMask"", Float) = 15
+        _SrcBlendAlpha (""SrcBlendAlpha"", Float) = 1
+        _DstBlendAlpha (""DstBlendAlpha"", Float) = 10
+        _BlendOp (""BlendOp"", Float) = 0
+        _BlendOpAlpha (""BlendOpAlpha"", Float) = 0
+        _SrcBlendFA (""SrcBlendFA"", Float) = 1
+        _DstBlendFA (""DstBlendFA"", Float) = 1
+        _SrcBlendAlphaFA (""SrcBlendAlphaFA"", Float) = 0
+        _DstBlendAlphaFA (""DstBlendAlphaFA"", Float) = 1
+        _BlendOpFA (""BlendOpFA"", Float) = 4
+        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4";
         }
 
         private static string PoiyomiProperties()
