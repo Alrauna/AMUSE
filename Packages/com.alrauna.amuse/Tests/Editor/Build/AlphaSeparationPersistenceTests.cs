@@ -438,13 +438,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static readonly (string File, string Anchor)[]
             AuditedProductionFiles =
             {
-                ("AlphaSeparationRecords.cs",
+                ("Build/AlphaSeparationRecords.cs",
                     "enum AlphaSeparationSlotRefusal"),
-                ("AlphaSeparationPreparation.cs",
+                ("Build/AlphaSeparationPreparation.cs",
                     "class AlphaSeparationPreparation"),
-                ("AlphaSeparationApply.cs", "class AlphaSeparationApply"),
-                ("AmusePlatformFinishPlugin.cs",
+                ("Build/AlphaSeparationApply.cs",
+                    "class AlphaSeparationApply"),
+                ("Build/AmusePlatformFinishPlugin.cs",
                     "class AmusePlatformFinishPlugin"),
+                ("Semantics/LilToon/LilToonCutoutMaterialSemantics.cs",
+                    "class LilToonCutoutMaterialSemantics"),
+                ("Semantics/LilToon/LilToonOpaqueConversion.cs",
+                    "class LilToonOpaqueConversion"),
             };
 
         /// <summary>
@@ -469,7 +474,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // Package-relative, portable: no machine-specific path may
                 // enter this audit.
                 var path = Path.GetFullPath(
-                    "Packages/com.alrauna.amuse/Editor/Build/" + file);
+                    "Packages/com.alrauna.amuse/Editor/" + file);
                 Assert.That(File.Exists(path), Is.True,
                     "audited production source not found: " + path);
                 var text = File.ReadAllText(path);

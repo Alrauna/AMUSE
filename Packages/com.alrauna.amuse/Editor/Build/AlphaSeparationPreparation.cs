@@ -4,26 +4,28 @@ using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// Substitutes only the shader-family opaque-conversion step for one
+    /// Substitutes only one family's shader-opaque-conversion step for one
     /// admitted material — attestation, eligibility and clone preparation —
-    /// returning either a mapped opaque <see cref="Material"/> or a conversion
-    /// refusal. It exists so public-package fixtures whose stand-in shader
-    /// deliberately fails source attestation can still drive the feature: the
-    /// internal barrier overload takes it as an optional final parameter, and
-    /// production passes nothing and runs the real
-    /// <see cref="PoiyomiOpaqueConversion"/> path.
+    /// returning either a mapped opaque <see cref="Material"/> or a
+    /// conversion refusal. They exist so public-package fixtures whose
+    /// stand-in shaders deliberately fail source attestation can still drive
+    /// the feature: the internal barrier overload takes them as optional
+    /// final parameters, and production passes nothing and runs the real
+    /// <see cref="PoiyomiOpaqueConversion"/> and
+    /// <see cref="LilToonOpaqueConversion"/> paths.
     /// <para>
-    /// A delegate on an existing overload, not an interface, registry, adapter
-    /// hierarchy, result framework, or a test fixture framework.
+    /// Delegates on an existing overload, not an interface, registry,
+    /// adapter hierarchy, result framework, or a test fixture framework.
     /// </para>
     /// </summary>
-    internal delegate bool VerifiedOpaqueConversion(
+    internal delegate bool VerifiedPoiyomiConversion(
         Material live,
         CapturedMaterialEvidence derived,
         Material preparedOpaque,
@@ -31,17 +33,31 @@ namespace Alrauna.Amuse.Editor.Build
         out PoiyomiOpaqueConversionRefusal refusal);
 
     /// <summary>
+    /// The verified-fixture seam for the cutout conversion family — the
+    /// exact shape of <see cref="VerifiedPoiyomiConversion"/> with the
+    /// lilToon refusal vocabulary.
+    /// </summary>
+    internal delegate bool VerifiedLilToonConversion(
+        Material live,
+        CapturedMaterialEvidence derived,
+        Material preparedOpaque,
+        out Material opaque,
+        out LilToonOpaqueConversionRefusal refusal);
+
+    /// <summary>
     /// Barrier-side alpha-separation preparation: conversion-relevance
-    /// resolution, per-slot conversion admission, the single shader-family
-    /// branch, the opaque mapping, material clone creation and naming, and
+    /// resolution, per-slot conversion admission, the shader-family branch,
+    /// the opaque mapping, material clone creation and naming, and
     /// mesh clone creation. It runs inside the extension-free semantic barrier
     /// and mutates nothing but AMUSE-owned transient objects — no renderer, no
     /// clip, no source asset, and no asset saving.
     /// <para>
-    /// The single shader-family branch lives here and nowhere else: Poiyomi
-    /// converts, every other family is refused with
+    /// The shader-family branch lives here and nowhere else: Poiyomi and the
+    /// cutout lilToon frontend convert, the opaque lilToon frontend is
+    /// already the canonical opaque answer and maps to itself, and every
+    /// other family is refused with
     /// <see cref="AlphaSeparationSlotRefusal.OpaqueConversionUnsupportedFamily"/>.
-    /// Adding a second conversion family later means adding one case here and
+    /// Adding a third conversion family later means adding one case here and
     /// nothing else in the feature.
     /// </para>
     /// </summary>
@@ -69,7 +85,8 @@ namespace Alrauna.Amuse.Editor.Build
             MeshSeparationPlan plan,
             CapturedAnimationEvidence evidence,
             IReadOnlyList<Material> admittedLiveMaterials,
-            VerifiedOpaqueConversion conversion)
+            VerifiedPoiyomiConversion poiyomiConversion,
+            VerifiedLilToonConversion lilToonConversion)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -86,73 +103,125 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             // Conversion relevance is re-resolved only for renderers that
-            // produced opaque candidates, and only against conversion's own
-            // request: the alpha resolution that ran above is bit-for-bit
-            // untouched, and the same captured bindings are judged a second
-            // time under a different relevance.
-            var conversionBindings = new List<(
-                CapturedFloatBinding Binding,
-                AnimatedPropertyRef Reference)>();
-            foreach (var clipEvidence in evidence.Clips)
+            // produced opaque candidates AND carry a conversion-capable
+            // family, and only against the union of those families' own
+            // conversion requests: the alpha resolution that ran above is
+            // bit-for-bit untouched, and the same captured bindings are
+            // judged a second time under a different relevance. A renderer
+            // with no conversion-capable family has no conversion that
+            // could read animated state, so the whole relevance pass is
+            // skipped rather than run against a foreign family's request.
+            var conversionCapableFamilies = new List<
+                CapturedAlphaMaterialFamily>();
+            foreach (var admitted in evidence.AdmittedMaterials)
             {
-                foreach (var binding in clipEvidence.FloatBindings)
+                if (ConversionRequestForFamily(admitted.Family) != null &&
+                    !conversionCapableFamilies.Contains(admitted.Family))
                 {
-                    var resolution =
-                        UnityAnimationEvidenceCapture.ResolveProofRelevant(
-                            binding,
-                            rendererPath,
-                            PoiyomiOpaqueConversion.ConversionEvidenceRequest,
-                            out var reference);
-                    if (resolution ==
-                        ProofRelevantBindingResolution
-                            .UnrecognizedMaterialBinding)
-                    {
-                        return RefuseEveryCandidateSlot(
-                            state,
-                            plan,
-                            AlphaSeparationSlotRefusal
-                                .ConversionBindingUnrecognized);
-                    }
-
-                    if (resolution ==
-                        ProofRelevantBindingResolution.RendererWide)
-                    {
-                        conversionBindings.Add((binding, reference));
-                    }
+                    conversionCapableFamilies.Add(admitted.Family);
                 }
             }
 
-            // Conversion-relevant animated material state is renderer-wide by
-            // binding scope — a material.<Property> curve addresses no slot —
-            // so these two conditions invalidate every candidate slot of this
-            // renderer and nothing else: never the renderer's alpha analysis,
-            // never another renderer.
-            if (conversionBindings.Count > 0 && evidence.HasAdditiveLayer)
+            // Per-family buckets of the renderer-wide conversion bindings:
+            // each recognized binding is re-resolved against every capable
+            // family's own request, because relevance is a per-family fact
+            // and the union only decides recognition and the renderer-wide
+            // refusals below.
+            var conversionBuckets = new Dictionary<
+                CapturedAlphaMaterialFamily,
+                List<(CapturedFloatBinding Binding,
+                      AnimatedPropertyRef Reference)>>();
+            var conversionPropertyNamesByFamily = new Dictionary<
+                CapturedAlphaMaterialFamily,
+                HashSet<string>>();
+            if (conversionCapableFamilies.Count > 0)
             {
-                return RefuseEveryCandidateSlot(
-                    state,
-                    plan,
-                    AlphaSeparationSlotRefusal
-                        .ConversionStateUnderAdditiveLayer);
-            }
+                var unionRequest = MaterialEvidenceRequest.Combine(
+                    conversionCapableFamilies
+                        .Select(ConversionRequestForFamily)
+                        .ToArray());
+                var conversionBindings = new List<(
+                    CapturedFloatBinding Binding,
+                    AnimatedPropertyRef Reference)>();
+                foreach (var clipEvidence in evidence.Clips)
+                {
+                    foreach (var binding in clipEvidence.FloatBindings)
+                    {
+                        var resolution =
+                            UnityAnimationEvidenceCapture
+                                .ResolveProofRelevant(
+                                    binding,
+                                    rendererPath,
+                                    unionRequest,
+                                    out var reference);
+                        if (resolution ==
+                            ProofRelevantBindingResolution
+                                .UnrecognizedMaterialBinding)
+                        {
+                            return RefuseEveryCandidateSlot(
+                                state,
+                                plan,
+                                AlphaSeparationSlotRefusal
+                                    .ConversionBindingUnrecognized);
+                        }
 
-            if (conversionBindings.Count > 0 &&
-                evidence.HasUnnormalizedDirectBlendTree)
-            {
-                return RefuseEveryCandidateSlot(
-                    state,
-                    plan,
-                    AlphaSeparationSlotRefusal
-                        .ConversionStateUnderUnnormalizedDirectBlendTree);
-            }
+                        if (resolution ==
+                            ProofRelevantBindingResolution.RendererWide)
+                        {
+                            conversionBindings.Add((binding, reference));
+                        }
+                    }
+                }
 
-            // The canonical recipe properties an admitted conversion binding
-            // drives at this renderer path; the runtime-overwrite rule checks
-            // exactly these against their canonical values.
-            var conversionPropertyNames = new HashSet<string>();
-            foreach (var (_, reference) in conversionBindings)
-            {
-                conversionPropertyNames.Add(reference.PropertyName);
+                // Conversion-relevant animated material state is
+                // renderer-wide by binding scope — a material.<Property>
+                // curve addresses no slot — so these two conditions
+                // invalidate every candidate slot of this renderer and
+                // nothing else: never the renderer's alpha analysis, never
+                // another renderer.
+                if (conversionBindings.Count > 0 && evidence.HasAdditiveLayer)
+                {
+                    return RefuseEveryCandidateSlot(
+                        state,
+                        plan,
+                        AlphaSeparationSlotRefusal
+                            .ConversionStateUnderAdditiveLayer);
+                }
+
+                if (conversionBindings.Count > 0 &&
+                    evidence.HasUnnormalizedDirectBlendTree)
+                {
+                    return RefuseEveryCandidateSlot(
+                        state,
+                        plan,
+                        AlphaSeparationSlotRefusal
+                            .ConversionStateUnderUnnormalizedDirectBlendTree);
+                }
+
+                foreach (var family in conversionCapableFamilies)
+                {
+                    var bucket = new List<(
+                        CapturedFloatBinding Binding,
+                        AnimatedPropertyRef Reference)>();
+                    var names = new HashSet<string>();
+                    foreach (var (binding, _) in conversionBindings)
+                    {
+                        if (UnityAnimationEvidenceCapture
+                                .ResolveProofRelevant(
+                                    binding,
+                                    rendererPath,
+                                    ConversionRequestForFamily(family),
+                                    out var familyReference) ==
+                            ProofRelevantBindingResolution.RendererWide)
+                        {
+                            bucket.Add((binding, familyReference));
+                            names.Add(familyReference.PropertyName);
+                        }
+                    }
+
+                    conversionBuckets.Add(family, bucket);
+                    conversionPropertyNamesByFamily.Add(family, names);
+                }
             }
 
             var slots = AmusePlatformFinishPass.MaterialSlotsFor(
@@ -252,13 +321,22 @@ namespace Alrauna.Amuse.Editor.Build
                         preparedOpaque = registered;
                     }
 
+                    // Only conversion-capable families read their bucket:
+                    // the opaque lilToon arm maps to itself before
+                    // admission and the unsupported arm refuses before it,
+                    // so a null bucket never reaches an admission.
+                    conversionBuckets.TryGetValue(
+                        captured.Family, out var familyBindings);
+                    conversionPropertyNamesByFamily.TryGetValue(
+                        captured.Family, out var familyPropertyNames);
                     slotRefusal = ConvertAdmittedMaterial(
                         captured,
                         live,
-                        conversionBindings,
-                        conversionPropertyNames,
+                        familyBindings,
+                        familyPropertyNames,
                         preparedOpaque,
-                        conversion,
+                        poiyomiConversion,
+                        lilToonConversion,
                         out var opaque);
                     if (slotRefusal != AlphaSeparationSlotRefusal.None)
                     {
@@ -354,128 +432,307 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Runs the shader-family conversion boundary for one admitted
-        /// material: the single family branch, derived conversion evidence
-        /// admitted against this material's own captured defaults, the
-        /// conversion step (the real Poiyomi route, or the verified-fixture
-        /// seam), and the renderer-wide runtime-overwrite rule. Returns the
-        /// mapped opaque result, or the slot-local refusal.
+        /// material: the per-family branch, derived conversion evidence
+        /// admitted against this material's own captured defaults under its
+        /// family's own conversion request, the conversion step (the real
+        /// family route, or the verified-fixture seam), and the renderer-wide
+        /// runtime-overwrite rule against the family's own recipe. Returns
+        /// the mapped opaque result, or the slot-local refusal.
         /// </summary>
         private static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
             CapturedAlphaMaterial captured,
             Material live,
-            List<(CapturedFloatBinding Binding,
-                  AnimatedPropertyRef Reference)> conversionBindings,
-            HashSet<string> conversionPropertyNames,
+            IReadOnlyList<(CapturedFloatBinding Binding,
+                           AnimatedPropertyRef Reference)> conversionBindings,
+            IReadOnlyCollection<string> conversionPropertyNames,
             Material preparedOpaque,
-            VerifiedOpaqueConversion conversion,
+            VerifiedPoiyomiConversion poiyomiConversion,
+            VerifiedLilToonConversion lilToonConversion,
             out Material opaque)
         {
             opaque = null;
-
-            // The single shader-family branch: Poiyomi converts, every other
-            // family — including every mixed-family slot — is refused, since
-            // not every admitted runtime value could be mapped.
-            if (captured.Family != CapturedAlphaMaterialFamily.Poiyomi)
+            switch (captured.Family)
             {
-                return AlphaSeparationSlotRefusal
-                    .OpaqueConversionUnsupportedFamily;
-            }
-
-            // Derived conversion evidence: the same group-and-admit loop the
-            // alpha resolution uses, re-run against conversion's own request,
-            // so conversion shares one admission implementation rather than
-            // duplicating it. A conversion-relevant animated property that is
-            // not an exact singleton equal to this material's own serialized
-            // default refuses here.
-            if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
-                    captured,
-                    conversionBindings,
-                    PoiyomiOpaqueConversion.ConversionEvidenceRequest,
-                    out var derived,
-                    out _))
-            {
-                return AlphaSeparationSlotRefusal.ConversionStateNotAdmitted;
-            }
-
-            // The renderer-wide runtime-overwrite rule runs BEFORE the
-            // conversion step: a canonical recipe property that an admitted
-            // conversion binding drives must already hold its canonical value,
-            // because admission is exact-singleton against the material's own
-            // serialized default. Failing it is a slot-local refusal, not a
-            // defect — and no material may be created for a slot already
-            // known to violate the rule the recipe depends on.
-            foreach (var (property, canonicalValue) in
-                         PoiyomiOpaqueConversion.CanonicalOpaqueProperties)
-            {
-                if (!conversionPropertyNames.Contains(property))
+                case CapturedAlphaMaterialFamily.LilToon:
+                    // The opaque lilToon frontend is already the canonical
+                    // opaque answer — alpha is forced to one — so there is
+                    // nothing to convert and no admission to run. The
+                    // identity mapping keeps a runtime material swap on this
+                    // slot valid without a clone.
+                    opaque = live;
+                    return AlphaSeparationSlotRefusal.None;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
                 {
-                    continue;
-                }
+                    // Derived conversion evidence: the same group-and-admit
+                    // loop the alpha resolution uses, re-run against this
+                    // family's own conversion request, so conversion shares
+                    // one admission implementation rather than duplicating
+                    // it. A conversion-relevant animated property that is
+                    // not an exact singleton equal to this material's own
+                    // serialized default refuses here.
+                    if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+                            captured,
+                            conversionBindings,
+                            LilToonOpaqueConversion
+                                .ConversionEvidenceRequest,
+                            out var derived,
+                            out _))
+                    {
+                        return AlphaSeparationSlotRefusal
+                            .ConversionStateNotAdmitted;
+                    }
 
-                if (!derived.TryGetScalar(property, out var admitted) ||
-                    admitted != canonicalValue)
-                {
-                    return AlphaSeparationSlotRefusal
-                        .ConversionPropertyOverwrittenAtRuntime;
-                }
-            }
+                    // The renderer-wide runtime-overwrite rule runs BEFORE
+                    // the conversion step, against this family's own recipe:
+                    // a canonical recipe property that an admitted
+                    // conversion binding drives must already hold its
+                    // canonical value, because admission is exact-singleton
+                    // against the material's own serialized default. Failing
+                    // it is a slot-local refusal, not a defect — and no
+                    // material may be created for a slot already known to
+                    foreach (var (property, canonicalValue) in
+                                 CanonicalPropertiesForFamily(
+                                     captured.Family))
+                    {
+                        if (!conversionPropertyNames.Contains(property))
+                        {
+                            continue;
+                        }
 
-            if (conversion != null)
-            {
-                // The verified-fixture seam substitutes the shader-family
-                // conversion step — effective render state, real eligibility
-                // and the real canonical clone recipe — and deliberately
-                // skips the source-identity check no stand-in shader can
-                if (!conversion(
-                        live, derived, preparedOpaque, out opaque, out _))
-                {
-                    return AlphaSeparationSlotRefusal.OpaqueConversionRefused;
-                }
-            }
-            else
-            {
-                // Effective non-property facts, read in the barrier beside
-                // the evidence: neither fact is animation-reachable, so
-                // reading them here is not a late live read of
-                // animation-relevant state.
-                PoiyomiOpaqueConversion.ReadEffectiveRenderState(
-                    live, out var queue, out var renderType);
+                        if (!derived.TryGetScalar(
+                                property, out var admitted) ||
+                            admitted != canonicalValue)
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .ConversionPropertyOverwrittenAtRuntime;
+                        }
+                    }
 
-                // Conversion attestation of the pinned source, per the merged
-                // conversion design: a locked Poiyomi material fails here.
-                var sourceEvidence =
-                    PoiyomiOpaqueConversion.GatherConversionSourceEvidence(
-                        live.shader, derived);
-                if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
-                        sourceEvidence, out _))
-                {
-                    return AlphaSeparationSlotRefusal
-                        .OpaqueConversionRefused;
-                }
+                    if (lilToonConversion != null)
+                    {
+                        // The verified-fixture seam substitutes the
+                        // cutout-family conversion step — effective render
+                        // state, real eligibility and the real canonical
+                        // clone recipe — and deliberately skips the
+                        // source-identity check no stand-in shader can pass.
+                        if (!lilToonConversion(
+                                live,
+                                derived,
+                                preparedOpaque,
+                                out opaque,
+                                out _))
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+                    }
+                    else
+                    {
+                        // Effective non-property facts, read in the barrier
+                        // beside the evidence: neither fact is
+                        // animation-reachable, so reading them here is not a
+                        // late live read of animation-relevant state.
+                        LilToonOpaqueConversion.ReadEffectiveRenderState(
+                            live, out var queue, out var renderType);
 
-                var eligibility =
-                    PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
-                        derived, queue, renderType);
-                switch (eligibility.Outcome)
-                {
-                    case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
-                        opaque = live;
-                        break;
-                    case PoiyomiOpaqueConversionOutcome.Convertible:
+                        // Conversion attestation of the pinned cutout
+                        // source, per the merged conversion design.
+                        var sourceEvidence =
+                            LilToonSourceAttestation
+                                .GatherCutoutSourceEvidence(
+                                    live.shader, derived);
+                        if (!LilToonSourceAttestation
+                                .TryVerifyLilToonCutoutIdentity(
+                                    sourceEvidence, out _))
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+
+                        var eligibility =
+                            LilToonOpaqueConversion
+                                .EvaluateVerifiedEligibility(
+                                    derived, queue, renderType);
+                        if (eligibility.Outcome !=
+                            LilToonOpaqueConversionOutcome.Convertible)
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+
                         // An already-prepared artifact for this source is
                         // reused here; only a first conversion creates the
                         // canonical clone.
                         opaque = preparedOpaque ??
-                            PoiyomiOpaqueConversion
-                                .PrepareCanonicalOpaqueClone(live);
-                        break;
-                    default:
-                        return AlphaSeparationSlotRefusal
-                            .OpaqueConversionRefused;
-                }
-            }
+                            LilToonOpaqueConversion
+                                .PrepareCanonicalOpaqueClone(live, derived);
+                    }
 
-            return AlphaSeparationSlotRefusal.None;
+                    return AlphaSeparationSlotRefusal.None;
+                }
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                {
+                    // Derived conversion evidence: the same group-and-admit
+                    // loop the alpha resolution uses, re-run against this
+                    // family's own conversion request, so conversion shares
+                    // one admission implementation rather than duplicating
+                    // it. A conversion-relevant animated property that is
+                    // not an exact singleton equal to this material's own
+                    // serialized default refuses here.
+                    if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+                            captured,
+                            conversionBindings,
+                            PoiyomiOpaqueConversion
+                                .ConversionEvidenceRequest,
+                            out var derived,
+                            out _))
+                    {
+                        return AlphaSeparationSlotRefusal
+                            .ConversionStateNotAdmitted;
+                    }
+
+                    // The renderer-wide runtime-overwrite rule runs BEFORE
+                    // the conversion step, against this family's own recipe:
+                    // a canonical recipe property that an admitted
+                    // conversion binding drives must already hold its
+                    // canonical value, because admission is exact-singleton
+                    // against the material's own serialized default. Failing
+                    // it is a slot-local refusal, not a defect — and no
+                    // material may be created for a slot already known to
+                    // violate the rule the recipe depends on.
+                    foreach (var (property, canonicalValue) in
+                                 CanonicalPropertiesForFamily(
+                                     captured.Family))
+                    {
+                        if (!conversionPropertyNames.Contains(property))
+                        {
+                            continue;
+                        }
+
+                        if (!derived.TryGetScalar(
+                                property, out var admitted) ||
+                            admitted != canonicalValue)
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .ConversionPropertyOverwrittenAtRuntime;
+                        }
+                    }
+
+                    if (poiyomiConversion != null)
+                    {
+                        // The verified-fixture seam substitutes the
+                        // shader-family conversion step — effective render
+                        // state, real eligibility and the real canonical
+                        // clone recipe — and deliberately skips the
+                        // source-identity check no stand-in shader can pass.
+                        if (!poiyomiConversion(
+                                live,
+                                derived,
+                                preparedOpaque,
+                                out opaque,
+                                out _))
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+                    }
+                    else
+                    {
+                        // Effective non-property facts, read in the barrier
+                        // beside the evidence: neither fact is
+                        // animation-reachable, so reading them here is not a
+                        // late live read of animation-relevant state.
+                        PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+                            live, out var queue, out var renderType);
+
+                        // Conversion attestation of the pinned source, per
+                        // the merged conversion design: a locked Poiyomi
+                        // material fails here.
+                        var sourceEvidence =
+                            PoiyomiOpaqueConversion
+                                .GatherConversionSourceEvidence(
+                                    live.shader, derived);
+                        if (!PoiyomiMaterialSemantics
+                                .TryVerifyPoiyomiIdentity(
+                                    sourceEvidence, out _))
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+
+                        var eligibility =
+                            PoiyomiOpaqueConversion
+                                .EvaluateVerifiedEligibility(
+                                    derived, queue, renderType);
+                        switch (eligibility.Outcome)
+                        {
+                            case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
+                                opaque = live;
+                                break;
+                            case PoiyomiOpaqueConversionOutcome.Convertible:
+                                // An already-prepared artifact for this
+                                // source is reused here; only a first
+                                // conversion creates the canonical clone.
+                                opaque = preparedOpaque ??
+                                    PoiyomiOpaqueConversion
+                                        .PrepareCanonicalOpaqueClone(live);
+                                break;
+                            default:
+                                return AlphaSeparationSlotRefusal
+                                    .OpaqueConversionRefused;
+                        }
+                    }
+
+                    return AlphaSeparationSlotRefusal.None;
+                }
+                default:
+                    // No conversion-capable family attests this material,
+                    // and not every admitted runtime value could be mapped.
+                    return AlphaSeparationSlotRefusal
+                        .OpaqueConversionUnsupportedFamily;
+            }
+        }
+
+        /// <summary>
+        /// The conversion request one family's conversion boundary reads, or
+        /// null for families with no conversion: the relevance pass unions
+        /// the requests of the renderer's conversion-capable families, and
+        /// per-material admission re-resolves against the material's own
+        /// family request.
+        /// </summary>
+        private static MaterialEvidenceRequest ConversionRequestForFamily(
+            CapturedAlphaMaterialFamily family)
+        {
+            switch (family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiOpaqueConversion.ConversionEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    return LilToonOpaqueConversion.ConversionEvidenceRequest;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// The canonical recipe one family's conversion writes, or null for
+        /// families with no conversion: the runtime-overwrite rule checks
+        /// exactly the family's own recipe properties against their
+        /// canonical values.
+        /// </summary>
+        private static IReadOnlyList<(string Property, float Value)>
+            CanonicalPropertiesForFamily(
+            CapturedAlphaMaterialFamily family)
+        {
+            switch (family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiOpaqueConversion.CanonicalOpaqueProperties;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    return LilToonOpaqueConversion.CanonicalOpaqueProperties;
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
