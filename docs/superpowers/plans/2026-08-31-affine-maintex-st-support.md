@@ -1,16 +1,22 @@
 # Affine `_MainTex_ST` support — implementation plan
 
 Implements `docs/superpowers/specs/2026-08-31-affine-maintex-st-support-design.md`
-(the accepted design; section references `§n` below point there). This plan does
-not reopen any design decision. Historical identity-ST records
+(the accepted design, revision 3; section references `§n` below point there).
+This plan does not reopen any design decision. Historical identity-ST records
 (`docs/superpowers/specs/2026-08-30-liltoon-cutout-opaque-conversion-design.md`,
 `docs/superpowers/plans/2026-08-30-liltoon-cutout-opaque-conversion.md`) are
 read-only context.
 
+Revision 3 of this plan tracks the design repair: `AlphaUvEnvelope` moves into
+Task 1 so every GREEN checkpoint compiles, the tier tests follow the
+path-independent Lemma P predicate, the family boundary adds one lilToon
+frontend gate, the identity assertion becomes field-level bit equality, and the
+falsifier set gains F25/F26.
+
 | Field | Value |
 |---|---|
-| Tech Stack | Unity 2022.3.22f1, NDMF (pinned, embedded), NUnit EditMode, pinned lilToon 2.3.4 facts (vendor package **absent** from this project) |
-| Production files | 3 changed, 1 added (+meta) — exact map in §FileMap |
+| Tech Stack | Unity 2022.3.22f1, NDMF (pinned, embedded), NUnit EditMode, pinned lilToon 2.3.4 and Poiyomi 9.3.64 facts (neither vendor package present in this project) |
+| Production files | 5 changed, 1 added (+meta) — exact map in §FileMap |
 | Test files | 6 changed, 2 added (+meta) — exact map in §FileMap |
 | Branch | created later, with explicit authorization (§Git) |
 | Commit/push | **never** assumed; nothing in this plan stages or commits |
@@ -32,58 +38,81 @@ read-only context.
    require an exact match to `<repo-root>/Assets` (no case-only match); pin the
    instance when more than one is reachable. No validation claim without an
    observed run.
+6. Re-verify the Poiyomi source facts the architecture rests on (design §3.2,
+   stop condition S2) before Task 4: fetch
+   `_PoiyomiShaders/Shaders/9.3/Toon/Poiyomi Toon.shader` at commit
+   `e125e1c33cbfb860f59330799dd4d10a1097242d`, confirm SHA-256
+   `31f2ff…b1755` equals `PoiyomiMaterialSemantics.CanonicalNormalizedSourceHash`,
+   and confirm the cited lines still read as §3.2 quotes them. Vendor bytes are
+   never added to the repository.
 
 ## File map (complete)
 
 **Production**
 
-| File | Change |
-|---|---|
-| `Packages/com.alrauna.amuse/Editor/Analysis/ExactUvGeometry.cs` | add: `HalfUlp(ExactDyadic)` (½ ulp of a float as dyadic), `EncodeToNearestFloat(ExactRational)` (returns `(float, ExactRational error)`), `IsExactlyRepresentable(ExactDyadic)` (binary32 fit incl. exponent range), `ConvexHull(IReadOnlyList<ExactUvPoint>)` (exact monotone chain with a **denominator-correct orientation test** — it cross-multiplies denominators; it must not reuse `Cross`, which differences numerators only and is correct solely for the unit-denominator vertices the current pipeline produces), `OutwardExpand(ExactUvDomain, ExactRational ex, ExactRational ey)` (hull of every vertex offset by `(±ex, ±ey)`; zero early-out returns the same domain); **and** `CreateTextureScaledDomain` (defined here, `:227`) gains the envelope parameter and inflates by `(X·width·T, Y·height·T)` with `T = domain.TexelScale` |
-| `Packages/com.alrauna.amuse/Editor/Analysis/AffineUvTransform.cs` **(+meta)** | new pure static helper: `bool TryTransform(UvMapping, TriangleAlphaInput, out TriangleAlphaInput transformed, out AlphaUvEnvelope envelope)` — returns `false` **iff** the §6.1 overflow guard trips (the caller then returns per-triangle `Unknown`); every axis lands in a tier, so no other failure mode exists; `AlphaUvEnvelope` is constructed inside. Implements §7 tiers E1/E2/E3/V per axis (E1/E3 normal-`s`, normal-`o`/result guards), corner encode, envelope terms `B_enc`/`B_st`/`B_daz`/`B_noise` (§6.2 constants as named dyadic constants with derivation comments), identity short-circuit |
-| `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs` | `Classify` gains a 4th parameter `AlphaUvEnvelope envelope` (new small readonly struct: `ExactRational X, Y; static Zero` — where it lives: this file) and threads it into the `ExactUvGeometry.CreateTextureScaledDomain` calls; the four mode paths keep their signatures and pass the inflated domain through unchanged |
-| `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs` | `IsSupportedMapping` narrows to `mapping.Channel == 0` (doc comment rewritten to cite the design; the "wider floating point is not such a proof" obligation text moves to the implemented tier predicate); `AlphaResolution` stores the `UvMapping`; `Classified(chain, sampling, mapping)` factory gains the parameter; `Classify` short-circuits identity, else calls `AffineUvTransform`, returns `Unknown` on `overflow`, and passes the envelope into the mip loop |
+| File | Task | Change |
+|---|---|---|
+| `Packages/com.alrauna.amuse/Editor/Analysis/ExactUvGeometry.cs` | 1 | add `AlphaUvEnvelope` (small readonly struct: `ExactRational X, Y`; `static Zero`; **declared here, in Task 1, because `AffineUvTransform` returns it in Task 2**) and six members: `HalfUlp(ExactDyadic)` (½ ulp of a binary32 value as dyadic), `EncodeToNearestFloat(ExactRational)` (returns `(float value, ExactRational error)`), `IsExactBinary32(ExactDyadic)` (24-bit significand fit **and** exponent in range), `IsNormalOrZeroBinary32(ExactDyadic)` (zero, or `2^-126 ≤ |v| ≤ (2−2^-23)·2^127`), `ConvexHull(IReadOnlyList<ExactUvPoint>)` (exact monotone chain with a **denominator-correct orientation test** — it cross-multiplies denominators; it must not reuse `Cross`, which differences numerators only and is correct solely for the unit-denominator vertices the current pipeline produces), `OutwardExpand(ExactUvDomain, AlphaUvEnvelope)` (hull of every vertex offset by `(±X, ±Y)`; zero early-out returns the same domain object) |
+| `Packages/com.alrauna.amuse/Editor/Analysis/ExactUvGeometry.cs` | 3 | `CreateTextureScaledDomain` gains an `AlphaUvEnvelope` parameter and inflates by `(X·width·T, Y·height·T)` with `T = domain.TexelScale`, strictly before `NormalizeRepeat` |
+| `Packages/com.alrauna.amuse/Editor/Analysis/AffineUvTransform.cs` **(+meta)** | 2 | new pure static helper: `bool TryTransform(UvMapping, TriangleAlphaInput, out TriangleAlphaInput transformed, out AlphaUvEnvelope envelope)` — returns `false` **iff** the §6.1 step 4 overflow guard trips (the caller then returns per-triangle `Unknown`); every axis lands in a tier, so no other failure mode exists. Implements §7 (Lemma P + E1/E2/E3/V per axis) using `IsExactBinary32`/`IsNormalOrZeroBinary32`, the corner encode, the envelope terms `B_enc`/`B_st`/`B_daz` (§6.2 constants as named dyadic constants with derivation comments, including the `2^-125` result-flush floor and the `+2^-126` offset-flush sub-term of `B_daz`), and the identity short-circuit (verbatim field copy). **No family-fragment term exists**: for every admitted consumer `F ≡ 0` by design §3.2, so the exact tier's envelope is exactly `AlphaUvEnvelope.Zero` |
+| `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs` | 3 | `Classify` gains a 4th parameter `AlphaUvEnvelope envelope` and threads it into the four `ExactUvGeometry.CreateTextureScaledDomain` call sites (`:238`, `:290`, `:355`, `:453`); the four mode paths keep their signatures and pass the inflated domain through unchanged |
+| `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs` | 4 | `IsSupportedMapping` narrows to `mapping.Channel == 0` (doc comment rewritten to cite the design: the "wider floating point is not such a proof" obligation text becomes a pointer to the implemented Lemma P predicate); `AlphaResolution` stores the `UvMapping`; `Classified(chain, sampling, mapping)` factory gains the parameter; `Classify` short-circuits identity **before** any tier work, else calls `AffineUvTransform`, returns `Unknown` when the guard trips, and passes the envelope into the mip loop |
+| `Packages/com.alrauna.amuse/Editor/Semantics/LilToon/LilToonCutoutMaterialSemantics.cs` | 4 | add `MainTexStProperty = "_MainTex_ST"` (diagnostic detail only) and one gate in `InterpretCutoutAlpha` immediately after the `HasScaleOffset` check (`:321-328`): a non-identity `assignment.Scale`/`assignment.Offset` records `LilToonSemanticDiagnosticCode.UnsupportedUv` with detail `_MainTex_ST` and returns `Unknown` (design §6.1 step 5, C4). Rewrite the `:284-291` comment, which currently delegates the refusal to the resolver. Scope: the cutout **alpha** interpretation only |
+| `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs` | 4 | doc-comment only: state the C4 emission invariant on `UvMapping` (a frontend may emit a non-identity mapping for an alpha-relevant sample only when its attested source proves the sampler coordinate is the binary32 affine image with no further unbounded fragment arithmetic). No code change |
 
-**No other production file changes.** Frontends, capture, admission,
-`MeshSeparationPlanner`, `UnityRendererAlphaAnalysis`, apply, conversion — all
-unchanged. If implementation reveals a need there, that is a stop condition
-(design §16).
+**No other production file changes.** Capture, admission,
+`MeshSeparationPlanner`, `UnityRendererAlphaAnalysis`, apply, conversion, the
+other lilToon mapping builders (`LilToonMaterialSemantics.cs:381, 831, 1004`),
+and every Poiyomi frontend gate — all unchanged. If implementation reveals a
+need there, that is stop condition S5 (design §16).
 
 **Tests** (all test paths below are relative to
 `Packages/com.alrauna.amuse/`)
 
-| File | Change |
-|---|---|
-| `Tests/Editor/Analysis/ExactUvEnvelopeTests.cs` **(+meta)** | new: geometry member tests (Task 1) |
-| `Tests/Editor/Analysis/AffineUvTransformTests.cs` **(+meta)** | new: tier-table and envelope-golden tests (Task 2) |
-| `Tests/Editor/Analysis/TriangleAlphaClassifierTests.cs` | migrate every `Classify(...)` call to the new signature (helpers at ~`:471,490,510,529` and direct sites) passing `AlphaUvEnvelope.Zero`; add envelope boundary fixtures (Task 3) |
-| `Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs` | rewrite `UnsupportedUvMappingRefuses` to the new boundary (channel-only) per F23 — assertions become: channel ≠ 0 refuses; scale/offset variants resolve; add identity-parity and non-identity classification tests; migrate the nine direct `AlphaResolution.Classified(chain, sampling)` call sites (`:735-876`) and the **three** three-argument `TriangleAlphaClassifier.Classify` oracle calls (`:316-317`, `:397-398`, `:477-478`) to the new shapes with `AlphaUvEnvelope.Zero` (touched by Task 3 *and* Task 4) |
-| `Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs` | migrate the `ClassifiedResolution` helper (`:1045-1047`, used by `ClassifiedResolutionsNeverMerge`) to the new factory shape; extend the ST-admission block: re-asserted non-identity ST resolves *and* the slot's resolution is now classified (not `UnsupportedUvMapping`) (Task 4) |
-| `Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs` | one consumer test: non-identity ST material → semantic value carries the material's mapping and the resolution classifies (Task 4) |
-| `Tests/Editor/Semantics/LilToon/LilToonCutoutAlphaTests.cs` | one consumer test: non-identity ST cutout material classifies; ScrollRotate nonzero still diagnostic-refuses (Task 4) |
-| `Tests/Editor/Build/AlphaSeparationPreparationTests.cs` | one full-path scenario + source-preservation assertions (Task 4) |
+| File | Task | Change |
+|---|---|---|
+| `Tests/Editor/Analysis/ExactUvEnvelopeTests.cs` **(+meta)** | 1 | new: geometry member and `AlphaUvEnvelope` tests |
+| `Tests/Editor/Analysis/AffineUvTransformTests.cs` **(+meta)** | 2 | new: tier-table, envelope-golden, identity-parity tests |
+| `Tests/Editor/Analysis/TriangleAlphaClassifierTests.cs` | 3 | migrate every `Classify(...)` call to the new signature (helpers at ~`:471, :490, :510, :529` and direct sites) passing `AlphaUvEnvelope.Zero`; add the envelope boundary fixtures |
+| `Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs` | 3, 4 | Task 3 migrates the **three** three-argument `TriangleAlphaClassifier.Classify` oracle calls (`:316-317`, `:397-398`, `:477-478`) to pass `AlphaUvEnvelope.Zero`. Task 4 rewrites `UnsupportedUvMappingRefuses` to the channel-only boundary (F23), adds identity-parity and non-identity classification tests, and migrates the nine direct `AlphaResolution.Classified(chain, sampling)` sites (`:735-876`) |
+| `Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs` | 4 | migrate the `ClassifiedResolution` helper (`:1045-1047`, used by `ClassifiedResolutionsNeverMerge`) to the new factory shape. Extend the ST-admission block **within the fixture's reality**: `ForcedOpaqueMaterialWithScaleOffset` (`:859`) is a forced-opaque Poiyomi material, so its alpha is a *constant* and its resolution is uniform — the re-assertion tests keep asserting admission only (unchanged expectations, now exercised through the widened resolver). Add one texture-backed non-identity-ST Poiyomi case asserting the slot resolution `IsResolved` and is not uniform, using the same texture-import helper `PoiyomiBaseColorAlphaTests` uses; if that harness cannot import textures, cover the classification claim in `AlphaSemanticsResolverTests`/`PoiyomiBaseColorAlphaTests` only and record the reduction in the report |
+| `Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs` | 4 | one consumer test: non-identity ST material → alpha value complete, mapping equals the material's ST, resolution classifies a triangle that is opaque only under the true transform |
+| `Tests/Editor/Semantics/LilToon/LilToonCutoutAlphaTests.cs` | 4 | two tests: non-identity `_MainTex` scale/offset → alpha `Unknown` with one `UnsupportedUv` diagnostic naming `_MainTex_ST` (the new C4 gate, F15); identity ST fixture unchanged (parity). The existing `ScrollRotate` refusal test stays as-is |
+| `Tests/Editor/Build/AlphaSeparationPreparationTests.cs` | 4 | one full-path **Poiyomi** scenario + one lilToon non-identity boundary scenario + source-preservation assertions |
 
-Verified unaffected (grep-audited): `Tests/Editor/Host/AlphaEvidenceClassifierIntegrationTests.cs` — uses only `AlphaSemanticsResolver.Resolve(alpha, …)` (`:111`) and the unchanged instance `resolution.Classify(triangle)` (`:150, :166, :182, :185, :301`); no changed signature reaches it, no edit required.
+Verified unaffected (grep-audited): `Tests/Editor/Host/AlphaEvidenceClassifierIntegrationTests.cs`
+— uses only `AlphaSemanticsResolver.Resolve(alpha, …)` (`:111`) and the
+unchanged instance `resolution.Classify(triangle)` (`:150, :166, :182, :185,
+:301`); no changed signature reaches it, no edit required.
 
 New-file metas are created together with the files (one logical unit); no
 other `.meta`, asset, manifest, or lockfile change.
 
 ## Task decomposition
 
-### Task 1 — exact geometry members (RED → GREEN)
+Dependency order is chosen so that **every GREEN checkpoint compiles**:
+`AlphaUvEnvelope` (Task 1) precedes `AffineUvTransform`, which returns it
+(Task 2); the classifier parameter (Task 3) precedes the resolver call that
+supplies it (Task 4).
+
+### Task 1 — `AlphaUvEnvelope` and exact geometry members (RED → GREEN)
 
 1. **RED.** Write `ExactUvEnvelopeTests`: golden cases for `HalfUlp` (normal,
    subnormal-adjacent, power-of-two boundaries — dyadic expectations computed
    by hand from the binary32 definition), `EncodeToNearestFloat` (ties-to-even
-   cases; error magnitude ≤ ½ ulp and exact), `IsExactlyRepresentable`
-   (24-bit fit, overflow past 2^128, subnormal edge), `ConvexHull` (collinear
-   → 2 points, CCW ordering, duplicates removed, **and a mixed
-   non-unit-denominator case** — vertices with differing reduced
-   denominators — proving the orientation test is denominator-correct),
-   `OutwardExpand` (zero early-out returns the identical reference; rectangle
-   output for a degenerate 1–2 vertex domain; inflation monotone: every
-   original vertex inside the expanded hull). Run → all fail (members absent).
-2. **GREEN.** Implement the five members in `ExactUvGeometry`. Rerun → pass.
+   cases; error magnitude ≤ ½ ulp and exact), `IsExactBinary32` (24-bit fit,
+   25-bit miss, overflow past the binary32 maximum finite value, subnormal
+   edge), `IsNormalOrZeroBinary32` (zero true, `2^-126` true, `2^-127` false,
+   maximum finite true, above it false), `ConvexHull` (collinear → 2 points,
+   CCW ordering, duplicates removed, **and a mixed non-unit-denominator case** —
+   vertices with differing reduced denominators — proving the orientation test
+   is denominator-correct), `AlphaUvEnvelope.Zero` (both components exactly
+   zero), and `OutwardExpand` (zero envelope returns the identical domain
+   reference; rectangle output for a degenerate 1–2 vertex domain; inflation
+   monotone: every original vertex inside the expanded hull). Run → all fail
+   (type and members absent).
+2. **GREEN.** Implement `AlphaUvEnvelope` and the six members in
+   `ExactUvGeometry`. Rerun → pass.
 3. Run `TriangleAlphaClassifierTests` → unchanged (no production behavior
    touched yet).
 
@@ -91,51 +120,71 @@ other `.meta`, asset, manifest, or lockfile change.
 
 1. **RED.** Write `AffineUvTransformTests` (type absent; compile-level RED is
    expected and acceptable for a new type):
-   - Tier table (§7) per axis: E1 positive/negative power-of-two scales,
-     zero offset, all-normal hulls; E1 boundary refusals into V — hull
-     touching `2^-126`, straddling zero, input-subnormal with large scale;
-     E2 zero scale both axes and one axis, **with subnormal nonzero `o`
-     falling to V**; E3 degenerate axis pointwise exact (and pointwise
-     *inexact* → V), **with subnormal `c`/`s`/`o` or subnormal `c·s`
-     product falling to V**; E1 normal-`s` guard — the subnormal
-     power-of-two scale `s = 2^-127` over an all-normal hull must fall to V
-     (F24); V fractional scale, fractional and negative offsets.
+   - Tier table (§7) per axis: E1 positive/negative power-of-two scales with
+     zero offset over all-normal hulls; E1 boundary refusals into V — hull
+     touching `2^-126`, hull straddling zero, hull containing a subnormal with
+     a large scale, image leaving the normal range; E1 normal-`s` guard — the
+     subnormal power-of-two scale `s = 2^-127` over an all-normal hull must
+     fall to V (F24); E2 zero scale on both axes and on one axis, **with a
+     subnormal nonzero `o` falling to V** (F24); E3 degenerate axis satisfying
+     Lemma P (e.g. `c = 0.25`, `s = 3`, `o = 0.5`) exact, and the three E3
+     refusals into V: non-representable `c·s`, non-representable `c·s + o`,
+     subnormal `c`/`s`/`o` or subnormal `c·s`; V fractional scale, fractional
+     and negative offsets on non-degenerate axes.
+   - **F26** compensating-rounding degenerate axis, design §15 F26's
+     constructed case: `c = 1 + 2^-12`, `s = 1 + 2^-12`, `o = 3·2^-24`. The
+     exact `c·s = 1 + 2^-11 + 2^-24` needs 25 significand bits, so the axis
+     must be **V** with a non-zero envelope, even though the round-to-nearest
+     serial evaluation returns the exact `c·s + o = 1 + 2^-11 + 2^-22`.
    - Asymmetric per-axis crossing golden (F19): scale `(2, 3)`, offset
      `(0.5, 0.25)` with per-axis-distinct expected transformed corners and
      per-axis-distinct envelopes — fails any component swap.
-   - Overflow guard: corner product ≥ 2^127 → `overflow == true`.
-   - Envelope golden values (envelope tier): one fully worked fixture per
-     term — `B_enc`, `B_st` (including the `2^-125` floor), `B_daz`
-     `2^-126·(|s| + max|u|)` (with a subnormal-`s` and a subnormal-`u`
-     amplification case), `B_noise`
-     `2^-9·(1+|tx|+|ty|)` — asserted as exact rationals computed by hand;
-     identity mapping → zero envelope, original triangle reference.
-   - Non-identity exact tier → envelope exactly `B_noise` (and nothing else).
-2. **GREEN.** Implement `AffineUvTransform` as a pure function. No
-   production callers yet (compile-safe; full suite stays at baseline). Rerun
-   → pass.
+   - Overflow guard: exact corner product or sum ≥ 2^127 → `TryTransform`
+     returns false.
+   - Envelope golden values (envelope tier), asserted as exact rationals
+     computed by hand: one fully worked fixture per term — `B_enc`; `B_st`
+     including a case that exercises the `2^-125` result-flush floor; `B_daz`
+     `2^-126·(|s| + max|u| + 1)` with a subnormal-`s` case, a subnormal-`u`
+     case, and a subnormal-`o` case.
+   - **F25** cancellation goldens (design §15 F25): the adjacent-float hull
+     `u ∈ {1, 1+2^-23}` with `s = 2^20, o = −2^20` (fixture A: `M_exact =
+     2^-3`, `P = 2^20 + 2^-3`, `B_st ≈ 2^-2` UV) and with `s = 2^40,
+     o = −2^40` (fixture B: `M_exact = 2^17`, `P = 2^40 + 2^17`,
+     `B_st ≈ 2^18` UV). Assert the envelope equals `B_enc + B_st + B_daz` with
+     `B_st = 2^-22·(P + M_exact) + 2^-125`, `P = max|u·s|` — an implementation
+     using `M_exact` alone yields ≈ `2^-24` UV on fixture A and fails by a
+     factor of ≈ 2^22.
+   - Exact tier → envelope exactly `AlphaUvEnvelope.Zero` (no family-fragment
+     term exists).
+   - Identity parity (F13): identity mapping returns `AlphaUvEnvelope.Zero`
+     and a `TriangleAlphaInput` whose `HasUv0` matches and whose fifteen float
+     fields are **bit-identical** under `BitConverter.SingleToInt32Bits`, for
+     two fixtures — one whose hull contains exactly `0.0f` (which would fall to
+     V through the general path) and one containing `−0.0f` (which the general
+     path re-encodes to `+0.0f`). Reference identity is deliberately **not**
+     asserted: `TriangleAlphaInput` is a readonly struct.
+2. **GREEN.** Implement `AffineUvTransform` as a pure function. No production
+   callers yet (compile-safe; full suite stays at baseline). Rerun → pass.
 
 ### Task 3 — classifier envelope plumbing (scaffold → RED → GREEN)
-1. **Scaffold (behavior-neutral, genuinely necessary):** add the
-   `AlphaUvEnvelope` struct and the 4th parameter to
-   `TriangleAlphaClassifier.Classify` and to
-   `ExactUvGeometry.CreateTextureScaledDomain`; migrate
-   every caller (resolver's one call site; `TriangleAlphaClassifierTests`
-   helpers and direct sites; the three three-argument oracle calls in
-   `AlphaSemanticsResolverTests` at `:316-317`, `:397-398`, `:477-478` —
-   that file is therefore touched by Task 3 as well as Task 4) passing
-   `AlphaUvEnvelope.Zero`; `CreateTextureScaledDomain` accepts
-   and ignores the envelope until step 3 (marked with a single-line comment
-   naming Task 3 step 3 — no dead code beyond the task boundary). Full suite
-   → baseline green (identity behavior unchanged through the zero envelope).
-2. **RED.** Add envelope fixtures to `TriangleAlphaClassifierTests`
-   (envelope non-zero, texture 8×8 with one non-opaque texel unless noted;
-   expected outcomes computed by hand from the design's inflated-domain
-   semantics):
-   - Unit sanity: a fixture whose corners have a known exponent (hence a
-     known `TexelScale`, e.g. `T = 4`) with an envelope of exactly half a
-     UV texel must reach exactly the boundary cell — this pins the
-     `X·width·T` unit conversion (fails under a `X·width` displacement).
+
+1. **Scaffold (behavior-neutral, genuinely necessary):** add the 4th parameter
+   to `TriangleAlphaClassifier.Classify` and the envelope parameter to
+   `ExactUvGeometry.CreateTextureScaledDomain`; migrate every caller (the
+   resolver's one call site; `TriangleAlphaClassifierTests` helpers and direct
+   sites; the three three-argument oracle calls in `AlphaSemanticsResolverTests`
+   at `:316-317`, `:397-398`, `:477-478`) passing `AlphaUvEnvelope.Zero`;
+   `CreateTextureScaledDomain` accepts and ignores the envelope until step 3
+   (marked with a single-line comment naming Task 3 step 3 — no dead code
+   beyond the task boundary). Full suite → baseline green (identity behavior
+   unchanged through the zero envelope).
+2. **RED.** Add envelope fixtures to `TriangleAlphaClassifierTests` (envelope
+   non-zero, texture 8×8 with one non-opaque texel unless noted; expected
+   outcomes computed by hand from the design's inflated-domain semantics):
+   - Unit sanity: a fixture whose corners have a known exponent (hence a known
+     `TexelScale`, e.g. `T = 4`) with an envelope of exactly half a UV texel
+     must reach exactly the boundary cell — this pins the `X·width·T` unit
+     conversion (fails under an `X·width` displacement).
    - Point/Clamp: envelope pulls a bordering non-opaque cell into range that
      the un-inflated hull misses → `MustRemainTransparent` (fails: inflation
      not implemented → returns `ProvenOpaque`).
@@ -151,68 +200,83 @@ other `.meta`, asset, manifest, or lockfile change.
      degenerate *mesh* still returns `Unknown` first (F18).
    Expected pre-fix failures: every non-zero-envelope case above returns the
    un-inflated outcome.
-3. **GREEN.** Implement inflation in
-   `ExactUvGeometry.CreateTextureScaledDomain` via
-   `OutwardExpand` (zero early-out preserves identity parity structurally).
+3. **GREEN.** Implement inflation in `ExactUvGeometry.CreateTextureScaledDomain`
+   via `OutwardExpand` (zero early-out preserves identity parity structurally).
    All four mode paths then consume the inflated domain unchanged. Rerun →
    pass, full suite green.
 
-### Task 4 — resolver widening, families, animation, preparation (RED → GREEN)
+### Task 4 — resolver widening, family boundary, animation, preparation (RED → GREEN)
 
 1. **RED batch** (write all before any production edit; each fails for the
    named reason):
-   - `AlphaSemanticsResolverTests`: non-identity mappings resolve and
-     classify — scale `(2,2)`/offset `0` (exact tier), scale `(2,2)` +
-     offset `(0.5,0.25)` (envelope tier), negative scale `(−2,2)`, zero scale
+   - `AlphaSemanticsResolverTests`: non-identity mappings resolve and classify
+     — scale `(2,2)`/offset `0` (exact tier), scale `(2,2)` + offset
+     `(0.5,0.25)` (envelope tier), negative scale `(−2,2)`, zero scale
      `(0,0.5)`, per-mode × wrap matrix reusing the existing
-     `Sample(filter, wrap, ...)` helper (F1/F2/F3/F17; all four
-     Point/Bilinear × Clamp/Repeat). **Fails:** current gate returns
+     `Sample(filter, wrap, …)` helper (F1/F2/F3/F17; all four
+     Point/Bilinear × Clamp/Repeat). **Fails:** the current gate returns
      `UnsupportedUvMapping` for every non-identity case.
-   - `AlphaSemanticsResolverTests`: identity parity — for a fixed mixed
-     field and triangle set, identity resolution classifies identically to
-     the pre-change oracle values already asserted by
-     `SampledAlphaDelegatesToTheClassifier` (F13). **Fails:** only if the
-     rewrite disturbs identity (expected to pass only after GREEN; recorded
-     as a pinned invariant, verified in the mutation phase).
+   - `AlphaSemanticsResolverTests`: identity parity — for a fixed mixed field
+     and triangle set, including a triangle whose hull contains `0.0f`,
+     identity resolution classifies identically to the pre-change oracle values
+     already asserted by `SampledAlphaDelegatesToTheClassifier` (F13).
    - `AlphaSemanticsResolverTests`: `UnsupportedUvMappingRefuses` rewritten —
      channel 1 refuses; scale/offset variants now expected `IsResolved`
      (F23). **Fails:** they refuse today.
-   - `AlphaSemanticsResolverTests`: overflow fixture — mapping whose corner
-     product ≥ 2^127 → resolved but `Classify` → `Unknown`, never
+   - `AlphaSemanticsResolverTests`: overflow fixture — mapping whose exact
+     corner product ≥ 2^127 → resolved but `Classify` → `Unknown`, never
      `ProvenOpaque` (F11/F12).
+   - `AlphaSemanticsResolverTests`: **F25** end-to-end cancellation — the
+     adjacent-float hull `u ∈ {1, 1+2^-23}`, `s = 2^20`, `o = −2^20` over a
+     texture whose non-opaque texel lies inside the correct `≈2^-2` UV envelope
+     and outside an `M_exact`-derived one → `MustRemainTransparent`; the
+     `s = 2^40` variant → never `ProvenOpaque` (`Unknown` via the region budget
+     is acceptable).
    - `PoiyomiBaseColorAlphaTests`: material with `_MainTex` ST
-     `(2,2,0.5,0.25)`, pan zero, channel 0 → alpha value complete, mapping
-     equals the material's ST, resolution classifies a triangle that is
-     opaque only under the true transform (F1/F2, one Poiyomi consumer).
-     **Fails:** resolver refuses.
-   - `LilToonCutoutAlphaTests`: cutout fixture with `_MainTex` ST
-     `(2,1,0,0)`, all gates default → alpha complete and classified;
-     ScrollRotate `(0,0.1,0,0)` variant still diagnostic-refuses. **Fails:**
-     resolver refuses (one lilToon consumer).
-   - `AdmittedMaterialStatesTests`: re-asserted non-identity ST `(2,3)`
-     (existing fixture scale) resolves and the slot's `AlphaResolution` is
-     classified — singleton animation (Task's required singleton case).
-     **Fails:** resolution is refused today.
-   - `AlphaSeparationPreparationTests`: full-path scenario — cutout fixture
-     material with non-identity ST such that (a) a triangle transparent at
-     identity is proven opaque under the transform and migrates in the plan,
-     (b) an ST-animated-at-serialized-default variant prepares, (c) a
-     non-singleton `_MainTex_ST` clip refuses (`AnimatedMaterialPropertyNotSingleton`),
-     and (d) source material/texture/mesh assets are bit-unchanged afterward
-     (structural audit, mirroring the existing no-mutation tests). **Fails:**
-     (a) yields no opaque triangles (all `Unknown` through the refused
-     resolution); (b) refuses outright.
+     `(2,2,0.5,0.25)`, pan zero, channel 0, sampling-mode gates and parallax
+     off → alpha value complete, mapping equals the material's ST, resolution
+     classifies a triangle that is opaque only under the true transform
+     (F1/F2). **Fails:** the resolver refuses.
+   - `LilToonCutoutAlphaTests`: cutout fixture with `_MainTex` ST `(2,1,0,0)`,
+     all other gates default → alpha `Unknown` with exactly one
+     `UnsupportedUv` diagnostic naming `_MainTex_ST` (F15). **Fails:** today
+     the alpha value is *complete* and the refusal happens later in the
+     resolver, so both the completeness and the diagnostic assertions fail.
+     Second test: the identity cutout fixture is unchanged.
+   - `AdmittedMaterialStatesTests`: the re-asserted non-identity ST `(2,3,4,5)`
+     singleton case still admits through the widened resolver, plus the
+     texture-backed non-identity Poiyomi case from the file map (resolution
+     resolved and not uniform). **Fails:** the texture-backed case's resolution
+     is refused today.
+   - `AlphaSeparationPreparationTests`: full-path **Poiyomi** scenario — a
+     texture-backed Poiyomi slot over a fully-opaque mipmap chain with
+     non-identity ST such that (a) a triangle transparent at identity is proven
+     opaque under the transform and migrates in the plan, (b) an
+     ST-animated-at-serialized-default variant prepares, (c) a non-singleton
+     `_MainTex_ST` clip refuses (`AnimatedMaterialPropertyNotSingleton`), and
+     (d) source material/texture/mesh assets are bit-unchanged afterward
+     (structural audit, mirroring the existing no-mutation tests). Plus the
+     boundary scenario: the same shape on a lilToon cutout slot with
+     non-identity ST prepares **zero** opaque candidates. **Fails:** (a) yields
+     no opaque triangles (all `Unknown` through the refused resolution);
+     (b) refuses outright. If the harness cannot express a texture-backed
+     Poiyomi alpha slot with an imported mipmap chain, stop and report
+     (design §16 S6) — do not invent host seams.
 2. **GREEN (single atomic increment):**
    - `IsSupportedMapping` → channel-only; rewrite its doc comment to the
-     implemented §7 predicate with the design reference.
+     implemented Lemma P predicate with the design reference.
    - `AlphaResolution` stores the mapping; `Classified` gains the parameter;
      `ResolveSampled` passes it.
-   - `AlphaResolution.Classify`: identity short-circuit → original triangle +
-     zero envelope; else `AffineUvTransform` → `overflow` → per-triangle
-     `Unknown`; else loop mips with the envelope.
-   - Update the resolver-file obligation comment (identity-only wording) to
-     the two-tier contract; no comment elsewhere references identity-ST as a
-     gate (grep-verified in Task 6 review).
+   - `AlphaResolution.Classify`: identity short-circuit first (original
+     triangle + `AlphaUvEnvelope.Zero`); else `AffineUvTransform` → guard trip
+     → per-triangle `Unknown`; else loop mips with the envelope.
+   - `LilToonCutoutMaterialSemantics`: add the C4 non-identity-ST gate and
+     rewrite the `:284-291` comment that delegates the refusal to the resolver.
+   - `MaterialSemantics`: add the C4 emission-invariant doc comment on
+     `UvMapping`.
+   - Update the resolver-file obligation comment (identity-only wording) to the
+     two-tier contract; no comment elsewhere may still describe identity ST as
+     the resolver's gate (grep-verified in Task 6).
 3. Run the RED batch → all green. Full product suite → green.
 
 ### Task 5 — mutation checks (prove the tests bite)
@@ -225,26 +289,32 @@ mapped test, observe failure, revert. No commits at any point:
 | F1 scale ignored | `AffineUvTransform` passes `s = 1` | resolver scale test |
 | F2 offset ignored | passes `o = 0` | resolver offset test |
 | F3 abs scale | `s = |s|` in transform | negative-scale test |
-| F4 mip-0-only | resolver applies transform only for `index == 0` | all-mip test |
-| F5 wrap-after | normalize domain then inflate after `NormalizeRepeat` | Point/Repeat boundary test |
-| F6 untransformed footprint | classifier computes footprint from un-inflated hull | Bilinear envelope tests |
+| F4 mip-0-only | resolver applies the transform only for `index == 0` | all-mip test |
+| F5 wrap-after | inflate after `NormalizeRepeat` | Point/Repeat boundary test |
+| F6 untransformed footprint | classifier computes the footprint from the un-inflated hull | Bilinear envelope tests |
 | F7 boundary cell loss | `NormalizeRepeat` uses `FloorDiv` on un-inflated minima | Point/Repeat boundary test |
 | F8/F10 exact-real-for-runtime | skip inflation when tier == envelope | envelope boundary tests |
-| F9 double-as-exact | compute envelope with `double` rounding | `AffineUvTransformTests` golden values |
-| F11 overflow usable | remove 2^127 guard | overflow test |
+| F9 double-as-exact | compute the envelope with `double` rounding | `AffineUvTransformTests` goldens |
+| F11 overflow usable | remove the 2^127 guard | overflow test |
 | F12 failure promoted | map budget overflow to `ProvenOpaque` | budget test |
-| F13 identity changed | apply `B_noise` to identity | identity parity test |
-| F14 non-singleton admitted | loosen `AdmitVector` equality for `_ST` | existing non-singleton refusal test (must still fail-open) |
-| F15 family divergence | discharged structurally, not by mutation: `AlphaSemanticsResolver.Resolve` takes no family input (`AlphaSemanticsResolver.cs:216-218`), so family-special-casing requires a signature change the file map forbids; Task 6's signature audit pins this, and the two consumer tests pin equal treatment on real fixtures | Task 6 signature audit + both consumer tests |
-| F16 complexity-as-empty | budget overflow → skip loop (vacuous) | budget test |
+| F13 identity changed | delete the identity short-circuit (let identity fall through to tier selection) | identity parity tests (the `0.0f`-hull fixture falls to V and inflates; the `−0.0f` fixture loses bit equality) |
+| F14 non-singleton admitted | loosen `AdmitVector` equality for `_ST` | existing non-singleton refusal test |
+| F15 family boundary erased | delete the lilToon cutout non-identity-ST gate | `LilToonCutoutAlphaTests` non-identity test (alpha becomes complete and classifies) and the preparation boundary scenario (non-zero opaque candidates) |
+| F16 complexity-as-empty | budget overflow → skip the loop (vacuous) | budget test |
 | F17 zero-scale-as-missing-UV | return `Unknown` for E2 axes | zero-scale test |
-| F18 degenerate confusion | treat degenerate UV hull as geometry-degenerate | degenerate tests |
-| F19 component swap | transpose scale/offset application in `AffineUvTransform` | the `AffineUvTransformTests` asymmetric golden with scale `(2, 3)` and offset `(0.5, 0.25)` (per-axis crossing), plus the resolver offset test |
+| F18 degenerate confusion | treat a degenerate UV hull as geometry-degenerate | degenerate tests |
+| F19 component swap | transpose scale/offset application in `AffineUvTransform` | asymmetric golden `(2,3)`/`(0.5,0.25)` + resolver offset test |
 | F20 scaled footprint | multiply footprint width by `|s|` | Bilinear one-texel-reach test |
 | F21 inflate-after-normalize | reorder in `ClassifyPointRepeat` | Point/Repeat boundary test |
 | F22 wider-type | `double` transform in `EncodeToNearestFloat` | geometry encode tests |
-| F23 hollowed tests | delete rewritten refusal tests | review check: file map diff shows rewrites, not deletions |
-| F24 subnormal DAZ amplification | drop the E1/E3 normal-`s`/normal-`o`/normal-result guards | the `s = 2^-127` tier test (must fall to V with `B_daz`), its `B_daz` golden, and the E2/E3 subnormal-`o` tier tests |
+| F23 hollowed tests | delete the rewritten refusal tests | review check: file map diff shows rewrites, not deletions |
+| F24 subnormal DAZ amplification | drop the E1/E3 normality guards and the `B_daz` offset sub-term | the `s = 2^-127` tier test, the subnormal-`o` E2/E3 tier tests, and the `B_daz` goldens |
+| F25 ideal-domain envelope | compute `B_st` as `2^-22·2·M_exact` (drop `P`) | the two cancellation goldens and the resolver cancellation outcome test |
+| F26 path-dependent exactness | restore the serial `fl(fl(c·s)+o) == c·s+o` check as E3's predicate | the compensating-rounding tier test (admitted as E3 with a zero envelope) |
+
+Structural checks with no executable mutation: the resolver's family-blind
+signature (design F15 second half) and F23's rewrite-not-delete rule — report
+Task 6's audit evidence for both.
 
 ### Task 6 — full validation, diff review, cleanup
 
@@ -253,17 +323,21 @@ mapped test, observe failure, revert. No commits at any point:
 2. Full: `run_tests` EditMode `assembly_names:["Alrauna.Amuse.Tests.Editor"]`
    then `["Alrauna.Amuse.Research.Tests.Editor"]`; both 0 failed; console
    clean of new errors/warnings (`read_console get types:[error,warning]`).
-3. Source preservation: the Task 4 preparation test's structural audit;
+3. Source preservation: the Task 4 preparation scenario's structural audit;
    additionally confirm no asset/`.meta` diff outside the two new-file pairs.
 4. Diff review: `git diff` (unstaged only — nothing staged), `git diff --check`,
    `git status --short --branch`; confirm exactly the file map, plus the
    preserved package-file churn; confirm nothing staged.
-5. Signature audit (F15): `grep -n "Resolve(" Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs`
-   shows no family/material parameter on `AlphaSemanticsResolver.Resolve`;
-   the family-blindness invariant holds at the signature level.
-6. Documentation: this plan and the spec need no update unless a stop
-   condition fired; if implementation revealed a spec error, stop and report
-   instead of editing silently.
+5. Signature audit: `grep -n "Resolve(" Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs`
+   shows no family/material parameter on `AlphaSemanticsResolver.Resolve`; the
+   family-blindness invariant holds at the signature level, so the compatibility
+   boundary lives only in the frontends (design §11).
+6. Comment audit: grep the analysis and semantics folders for stale text
+   describing identity ST as the resolver's gate; the only remaining
+   non-identity refusal text must be the new lilToon gate.
+7. Documentation: this plan and the spec need no update unless a stop condition
+   fired; if implementation revealed a spec error, stop and report instead of
+   editing silently.
 
 ## Test execution protocol
 
@@ -281,14 +355,16 @@ reports; no validation may be claimed without an observed run.
 
 ## Expected pre-fix failures (summary)
 
-- Task 1 RED: geometry member tests fail to compile (members absent) —
-  accepted RED for new members.
-- Task 2 RED: `AffineUvTransformTests` fail to compile (type absent).
-- Task 3 RED: every non-zero-envelope fixture returns the un-inflated
-  outcome (concrete wrong outcomes listed per fixture).
-- Task 4 RED: resolver non-identity/classify tests fail with
-  `UnsupportedUvMapping` refusals; consumer tests fail with Unknown alpha or
-  refusal diagnostics; preparation scenario fails with no opaque migration;
+- Task 1 RED: `AlphaUvEnvelope` and the geometry member tests fail to compile
+  (type and members absent) — accepted RED for new members.
+- Task 2 RED: `AffineUvTransformTests` fails to compile (type absent).
+- Task 3 RED: every non-zero-envelope fixture returns the un-inflated outcome
+  (concrete wrong outcomes listed per fixture).
+- Task 4 RED: resolver non-identity/classify/cancellation tests fail with
+  `UnsupportedUvMapping` refusals; the Poiyomi consumer test fails with a
+  refused resolution; the lilToon non-identity test fails because the alpha
+  value is still complete and carries no `UnsupportedUv` diagnostic; the
+  preparation Poiyomi scenario fails with no opaque migration; the
   animation-at-serialized variant refuses.
 
 ## Git authorization boundary
@@ -301,15 +377,16 @@ reports; no validation may be claimed without an observed run.
 
 ## Expected implementation report
 
-1. Branch name and base commit; Unity instance identity used.
+1. Branch name and base commit; Unity instance identity used; the Poiyomi
+   source re-verification result (precondition 6).
 2. Files changed/added vs. the file map; any deviation and why.
 3. RED evidence: observed pre-fix failures per task (test names + failure
-   modes), GREEN evidence: observed passing runs with counts.
-4. Mutation-check table: mutation applied → test failed → reverted (F1–F24;
-   F15/F23 are the two structural checks with no executable mutation —
-   report their audit evidence instead).
+   modes); GREEN evidence: observed passing runs with counts.
+4. Mutation-check table: mutation applied → test failed → reverted (F1–F26;
+   the two structural checks have no executable mutation — report their audit
+   evidence instead).
 5. Full-suite results (both assemblies, counts), console state.
 6. Diff summary: `git status --short --branch`, `git diff --check` output;
    confirmation that `Packages/manifest.json`/`packages-lock.json` carry only
    the pre-existing churn and nothing is staged.
-7. Any stop condition hit, with evidence, or an explicit "none".
+7. Any stop condition hit (S1–S6), with evidence, or an explicit "none".
