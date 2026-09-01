@@ -327,8 +327,12 @@ carries the same family-fragment allowance as every other admitted transform,
      original triangle with zero envelope and skips the helper entirely.
 3. `TriangleAlphaClassifier.Classify` gains a fourth parameter: the
    per-axis UV-space envelope as an exact rational pair (zero for the identity
-   mapping). `CreateTextureScaledDomain` inflates the hull by
-   `(ex·width, ey·height)` in texel units after construction — implemented as
+   mapping). `ExactUvGeometry.CreateTextureScaledDomain` gains the same
+   parameter and inflates the hull after construction by
+   `(ex·width·T, ey·height·T)` where `T = domain.TexelScale` is the domain's
+   common power-of-two texel denominator (cell `i` occupies
+   `[i·T, (i+1)·T)`, so the domain displacement of a UV displacement `ex` is
+   `ex·width·T`, not `ex·width`) — implemented as
    the convex hull of every domain vertex offset by `(±ex, ±ey)` (a small
    exact monotone-chain hull added to `ExactUvGeometry`, which also turns a
    degenerate 1–2-vertex domain into its rectangle), with a zero-envelope
@@ -357,11 +361,21 @@ values (corner index `i`, axis coordinate `u_i`, scale `s`, offset `o`):
   or unfused contraction all fit — gives
   `|rt − t| ≤ ulp(|u·s|) + ulp(|t + e₁|)` where `|e₁| ≤ 2^-23|u·s|`;
   with `ulp(x) ≤ 2^-23·|x|` this is `≤ 2^-23|u·s| + 2^-23(|t| + 2^-23|u·s|)
-  ≤ 2^-22(|u·s| + |t|)`; the fixed `2^-125` floor covers subnormal-result
-  granularity (subnormal ulp is 2^-149 ≤ 2^-23·2^-126 for normal-bounded
-  terms) and FTZ/DAZ displacement (both bounded by the subnormal magnitude
-  < 2^-126 < 2^-125). Corner-max suffices because `|u·s|` and `|u·s + o|` are
-  convex in `u`, so their maxima over the triangle are attained at corners.
+  ≤ 2^-22(|u·s| + |t|)`; the fixed `2^-125` floor covers subnormal-RESULT
+  granularity (subnormal ulp 2^-149), FTZ of a subnormal result, and DAZ of a
+  subnormal offset — every displacement whose magnitude is bounded by the
+  largest subnormal < 2^-126 < 2^-125. Corner-max suffices because `|u·s|`
+  and `|u·s + o|` are convex in `u`, so their maxima over the triangle are
+  attained at corners.
+- `B_daz = 2^-126 · (|s| + max_i |u_i|)` — input-operand DAZ amplification.
+  DAZ replaces a subnormal *input* with zero and the other operand amplifies
+  the omitted value: a flushed subnormal `u` displaces the result by
+  `|u·s| ≤ 2^-126·|s|`; a flushed subnormal `s` (e.g. the power-of-two value
+  `2^-127`) displaces it by `|u·s| ≤ 2^-126·max|u|`. Neither the relative
+  bound nor the floor covers this (a subnormal `u` with `|s| ≈ 2^127`
+  displaces by ≈ 2). The term is unconditional and negligible for sane
+  scales; the exact tier never needs it because E1/E3 require normal `s`
+  and normal hull values there.
 - `B_noise = 2^-9 · (1 + max_i|t_x,i| + max_i|t_y,i|)` (both axes, added to
   each axis's envelope). Coverage: the family fragment of C3 — today only the
   lilToon rotate-at-zero round trip: `|si| ≤ 2^-10` and `|co − 1| ≤ 2^-10`
@@ -373,13 +387,14 @@ values (corner index `i`, axis coordinate `u_i`, scale `s`, offset `o`):
   assumption — the D3D11.3 number is the only anchor any vendor pins.
   `[INFERENCE]` — every numeric constant above is dyadic and conservative;
   the derivation is repeated as code comments and pinned by boundary tests.
-- Per-axis envelope `E_axis = [tier == envelope ? B_enc + B_st : 0]
+- Per-axis envelope `E_axis = [tier == envelope ? B_enc + B_st + B_daz : 0]
   + [mapping == identity ? 0 : B_noise]`. The noise term applies to the
   exact tier as well (zero only for identity): the fragment executes for
   every mapping, and its absolute deviation scales with the mapped
   magnitude `|t|` — an unpadded large-magnitude exact-tier proof (e.g.
-  `s = 2^20`) would be unsound. The expression terms `B_enc`/`B_st` are
-  exact-tier-zero because the expression is proven exact there.
+  `s = 2^20`) would be unsound. The expression terms `B_enc`/`B_st`/`B_daz`
+  are exact-tier-zero because the expression is proven exact there and no
+  subnormal operand exists in an exact tier.
 
 ### 6.3 Soundness statement (the required proof)
 
@@ -438,10 +453,10 @@ binary32 mapping values:
 
 | # | Condition (per axis) | Tier | Modeled axis domain |
 |---|---|---|---|
-| E1 | `s ∈ ±2^k` (any k), `o = ±0`, and both the hull interval and the mapped hull interval each lie entirely in `[2^-126, 2^127)` or entirely in `(−2^127, −2^-126]` (all-normal on the input side too — a subnormal input can be DAZ-flushed even when its scaled product is normal) | Exact | exact scaled hull (+ `B_noise` unless identity) |
+| E1 | `s ∈ ±2^k` **with `|s|` normal** (`2^-126 ≤ |s| < 2^128` — a subnormal power-of-two scale such as `2^-127` is DAZ-flushed wholesale and must fall to V), `o = ±0`, and both the hull interval and the mapped hull interval each lie entirely in `[2^-126, 2^127)` or entirely in `(−2^127, −2^-126]` (all-normal on the input side too — a subnormal input can be DAZ-flushed even when its scaled product is normal) | Exact | exact scaled hull (+ `B_noise` unless identity) |
 | E2 | `s = ±0` (any `o`) | Exact | the single point `o` (`fl(±0 + o) = o` exactly; `fl(±0 ± 0) = ±0`), + `B_noise` unless identity |
-| E3 | axis degenerate (`min == max`) and `fl(fl(c·s)+o) == c·s + o` verified exactly in dyadics for the single value `c` | Exact | the point `c·s + o`, + `B_noise` unless identity |
-| V | anything else (fractional scales, offsets on non-degenerate axes, subnormal-adjacent or zero-crossing mapped ranges) | Envelope | inflated exact image |
+| E3 | axis degenerate (`min == max`) with **normal `s` and normal `c`** (subnormal operands are DAZ-flushed and their amplification is unbounded by a pointwise check), and `fl(fl(c·s)+o) == c·s + o` verified exactly in dyadics for the single value `c` | Exact | the point `c·s + o`, + `B_noise` unless identity |
+| V | anything else (fractional scales, subnormal scales, offsets on non-degenerate axes, subnormal or zero-crossing hull values on degenerate axes) | Envelope | inflated exact image (`B_enc + B_st + B_daz`) |
 
 The material is admitted when `Channel == 0` (§8); the tier decision is
 per-triangle because E1/E3 depend on the hull. A mapping with `s = (4,0.5)`,
@@ -481,7 +496,7 @@ Every required boundary, with its outcome:
 | Negative offset | supported — classified (envelope tier) |
 | Very large finite ST values | supported while the mapped hull stays finite; per-triangle `Unknown` at the 2^127 guard |
 | Normal ST/UV values | supported (E1 exact or envelope) |
-| Subnormal ST or UV values | supported — classified (envelope tier; floors cover FTZ/DAZ); E1 refuses subnormal ranges into the envelope tier |
+| Subnormal ST or UV values | supported — classified (envelope tier; `B_daz` covers input-operand flush amplification, the floor covers result flush); subnormal scale never exact-tier (E1/E3 normality guards) |
 | Exact product (`u·s` representable) | part of tier logic (E1) — no expression padding (`B_noise` still applies unless identity) |
 | Inexact product | envelope tier — padded |
 | Exact addition (`u·s + o` representable on the hull) | only pointwise decidable (E3 degenerate axes); non-degenerate offsets always envelope |
@@ -580,8 +595,10 @@ files, treated as one unit). No manifest or lockfile change.
    case a runtime rounding could cross is inside the tested domain (boundary
    fixtures below).
 3. Transform: E1–E3 tier decisions match the §7 table on boundary fixtures
-   (power-of-two, fractional, negative, zero, subnormal-adjacent, degenerate,
-   overflow guard).
+   (power-of-two, fractional, negative, zero, subnormal scale, subnormal or
+   zero-crossing hulls, degenerate, overflow guard), the envelope goldens
+   cover `B_enc`/`B_st`/`B_daz`/`B_noise`, and the domain inflation matches
+   UV displacements in cells for a known `TexelScale`.
 4. Families: one Poiyomi and one lilToon cutout material with non-identity ST
    classify instead of refusing; ScrollRotate/pan gates still refuse.
 5. Animation: singleton non-identity ST re-assertion resolves; non-singleton
@@ -647,6 +664,11 @@ wrong implementation (full map in the implementation plan):
   (`AlphaSemanticsResolverTests.UnsupportedUvMappingRefuses`) encode the
   product decision this design revises; they are rewritten to the new
   boundary (channel refusal only), never deleted or hollowed.
+- F24 subnormal-operand DAZ amplification admitted as exact: `s = 2^-127`
+  (subnormal power of two) over an all-normal hull must fall to the envelope
+  tier (`B_daz`) and classify — never E1; likewise a subnormal UV corner with
+  large `|s|`. A texture opaque over the mapped hull but transparent at the
+  flushed-to-zero coordinate must not prove.
 
 ## 16. Stop conditions
 
