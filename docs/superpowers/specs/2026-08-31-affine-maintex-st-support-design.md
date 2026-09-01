@@ -214,7 +214,7 @@ the affine expression `t = uv·s + o` per axis (validated per family by the
 frontend's attested source pin), optionally followed by bounded
 identity-value arithmetic specific to the family fragment (today: only the
 lilToon rotate-at-zero round trip, bounded by the D3D11.3 `sincos` absolute
-error 0.0008 < 2^-10 plus three ulp-bounded roundings).
+error 0.0008 < 2^-10 plus five ulp-bounded roundings).
 
 C4. **Two-tier modeling (new clause).** For a non-identity mapping the
 resolver classifies either:
@@ -362,11 +362,17 @@ values (corner index `i`, axis coordinate `u_i`, scale `s`, offset `o`):
   `|rt − t| ≤ ulp(|u·s|) + ulp(|t + e₁|)` where `|e₁| ≤ 2^-23|u·s|`;
   with `ulp(x) ≤ 2^-23·|x|` this is `≤ 2^-23|u·s| + 2^-23(|t| + 2^-23|u·s|)
   ≤ 2^-22(|u·s| + |t|)`; the fixed `2^-125` floor covers subnormal-RESULT
-  granularity (subnormal ulp 2^-149), FTZ of a subnormal result, and DAZ of a
-  subnormal offset — every displacement whose magnitude is bounded by the
-  largest subnormal < 2^-126 < 2^-125. Corner-max suffices because `|u·s|`
-  and `|u·s + o|` are convex in `u`, so their maxima over the triangle are
-  attained at corners.
+  granularity (subnormal ulp 2^-149) and the flush compositions: the binding
+  case is **two** simultaneous flushes (an `fl(u·s)` underflow flushed to zero
+  and the sum flushed as well, or a DAZ-flushed subnormal `o` combined with an
+  FTZ-flushed result), each ≤ 2^-126, so the displacement is < 2·2^-126 =
+  2^-125 exactly — the constant is deliberate with zero margin, chosen
+  because the apparent triple-flush case collapses: when `u·s` and `o` are
+  both subnormal, the true `t` is itself below 2^-125 and the displacement
+  equals `|t| < 2^-125`. Input-operand flush *amplification* is not a floor
+  case — it is the separate `B_daz` term. Corner-max suffices because
+  `|u·s|` and `|u·s + o|` are convex in `u`, so their maxima over the
+  triangle are attained at corners.
 - `B_daz = 2^-126 · (|s| + max_i |u_i|)` — input-operand DAZ amplification.
   DAZ replaces a subnormal *input* with zero and the other operand amplifies
   the omitted value: a flushed subnormal `u` displaces the result by
@@ -378,15 +384,20 @@ values (corner index `i`, axis coordinate `u_i`, scale `s`, offset `o`):
   and normal hull values there.
 - `B_noise = 2^-9 · (1 + max_i|t_x,i| + max_i|t_y,i|)` (both axes, added to
   each axis's envelope). Coverage: the family fragment of C3 — today only the
-  lilToon rotate-at-zero round trip: `|si| ≤ 2^-10` and `|co − 1| ≤ 2^-10`
-  (D3D11.3 `sincos` absolute error 0.0008 < 2^-10 = 0.000977), applied to
-  `|t − 0.5| ≤ |t| + 0.5`, plus three ≤ 1-ulp roundings of operands ≤
-  `|t| + 1`; the sum is dominated by `2^-9·(1 + |t_x| + |t_y|)`. Poiyomi
-  carries this term as pure slack. APIs without a citable `sincos` error
-  bound (Metal, GLSL) adopt the same constant as a declared conservative
-  assumption — the D3D11.3 number is the only anchor any vendor pins.
-  `[INFERENCE]` — every numeric constant above is dyadic and conservative;
-  the derivation is repeated as code comments and pinned by boundary tests.
+  lilToon rotate-at-zero round trip: the leading terms are the `sincos`
+  deviations `|si| ≤ 2^-10` and `|co − 1| ≤ 2^-10` (D3D11.3 `sincos` absolute
+  error 0.0008 < 2^-10 = 0.000977) applied to `|t − 0.5| ≤ |t| + 0.5`, giving
+  ≤ `2^-10·(1 + |t_x| + |t_y|)`; the fragment then executes **five** rounded
+  operations per output axis (`fl(t−0.5)`, `fl(··co)`, `fl(··si)`, the rounded
+  subtraction, `fl(·+0.5)`), each ≤ 1 ulp of operands ≤ `|t| + 1`, a residue
+  ≤ `5·2^-23·(|t_x| + |t_y| + 1)` — an order of magnitude under the leading
+  term. The sum is dominated by `2^-9·(1 + |t_x| + |t_y|)` with roughly a
+  factor of two to spare. Poiyomi carries this term as pure slack. APIs
+  without a citable `sincos` error bound (Metal, GLSL) adopt the same
+  constant as a declared conservative assumption — the D3D11.3 number is the
+  only anchor any vendor pins. `[INFERENCE]` — every numeric constant above
+  is dyadic and conservative; the derivation is repeated as code comments and
+  pinned by boundary tests.
 - Per-axis envelope `E_axis = [tier == envelope ? B_enc + B_st + B_daz : 0]
   + [mapping == identity ? 0 : B_noise]`. The noise term applies to the
   exact tier as well (zero only for identity): the fragment executes for
@@ -406,10 +417,11 @@ coordinate lies inside the domain the classifier tests.
    corner hull (C2; convexity of perspective-correct interpolation, §3.3).
 2. Exact tier: the binary32 expression maps every binary32 hull value to its
    exact affine image (§7 conditions are chosen to make exactly this true —
-   power-of-two scaling preserves significands and normal-range guards exclude
-   rounding; zero-scale and degenerate-axis cases are pointwise exact by
-   direct check), and `B_noise` bounds the family fragment; hence
-   `rt ∈ hull(t̃_i) ⊕ box(E)` with `E = box(B_noise)`.
+   power-of-two scaling preserves significands, the normal-range and
+   normal-operands guards exclude both rounding and flush displacement, and
+   the zero-scale and degenerate-axis cases are pointwise exact by direct
+   dyadic check under those same operand guards), and `B_noise` bounds the
+   family fragment; hence `rt ∈ hull(t̃_i) ⊕ box(E)` with `E = box(B_noise)`.
 3. Envelope tier: `|rt − t| ≤ B_enc + B_st` by §6.2 (encode, then two
    ulp-bounded operations), and `B_noise` covers the family
    fragment; hence `rt ∈ hull(t̃_i) ⊕ box(E)`, which is precisely the inflated
@@ -454,9 +466,9 @@ binary32 mapping values:
 | # | Condition (per axis) | Tier | Modeled axis domain |
 |---|---|---|---|
 | E1 | `s ∈ ±2^k` **with `|s|` normal** (`2^-126 ≤ |s| < 2^128` — a subnormal power-of-two scale such as `2^-127` is DAZ-flushed wholesale and must fall to V), `o = ±0`, and both the hull interval and the mapped hull interval each lie entirely in `[2^-126, 2^127)` or entirely in `(−2^127, −2^-126]` (all-normal on the input side too — a subnormal input can be DAZ-flushed even when its scaled product is normal) | Exact | exact scaled hull (+ `B_noise` unless identity) |
-| E2 | `s = ±0` (any `o`) | Exact | the single point `o` (`fl(±0 + o) = o` exactly; `fl(±0 ± 0) = ±0`), + `B_noise` unless identity |
-| E3 | axis degenerate (`min == max`) with **normal `s` and normal `c`** (subnormal operands are DAZ-flushed and their amplification is unbounded by a pointwise check), and `fl(fl(c·s)+o) == c·s + o` verified exactly in dyadics for the single value `c` | Exact | the point `c·s + o`, + `B_noise` unless identity |
-| V | anything else (fractional scales, subnormal scales, offsets on non-degenerate axes, subnormal or zero-crossing hull values on degenerate axes) | Envelope | inflated exact image (`B_enc + B_st + B_daz`) |
+| E2 | `s = ±0` **with `o = ±0` or `|o|` normal** (a subnormal nonzero `o` is DAZ-flushed — displacement `|o|` — and falls to V) | Exact | the single point `o` (`fl(±0 + o) = o` exactly under any rounding; `fl(±0 ± 0) = ±0`), + `B_noise` unless identity |
+| E3 | axis degenerate (`min == max`) with **normal `s`, normal `c`, `o = ±0` or `|o|` normal, and `|c·s| ≥ 2^-126`** (subnormal-free evaluation: every rounded operation sees normal operands, so DAZ/FTZ cannot displace it), and `fl(fl(c·s)+o) == c·s + o` verified exactly in dyadics for the single value `c` | Exact | the point `c·s + o`, + `B_noise` unless identity |
+| V | anything else (fractional scales, subnormal scales, offsets on non-degenerate axes, subnormal or zero-crossing hull values on degenerate axes, subnormal offsets on point axes) | Envelope | inflated exact image (`B_enc + B_st + B_daz`) |
 
 The material is admitted when `Channel == 0` (§8); the tier decision is
 per-triangle because E1/E3 depend on the hull. A mapping with `s = (4,0.5)`,
@@ -500,8 +512,7 @@ Every required boundary, with its outcome:
 | Exact product (`u·s` representable) | part of tier logic (E1) — no expression padding (`B_noise` still applies unless identity) |
 | Inexact product | envelope tier — padded |
 | Exact addition (`u·s + o` representable on the hull) | only pointwise decidable (E3 degenerate axes); non-degenerate offsets always envelope |
-| Overflow (runtime ±∞ reachable) | per-triangle `Unknown` (guard) |
-| Underflow (subnormal results) | envelope tier — classified (floor term) |
+| Underflow (subnormal results) | envelope tier — classified (floor term); the exact tier never produces a subnormal result (E3 requires `|c·s| ≥ 2^-126`) |
 | Signed zero (`o = −0`, `s = −0`) | `−0 == 0` numerically; E1/E2 arms handle; coordinates ±0 sample identically — classified |
 | Nonzero UV channel | material-level refusal (`UnsupportedUvMapping`) — unchanged |
 | Degenerate mesh geometry | per-triangle `Unknown` — unchanged |
@@ -637,8 +648,12 @@ wrong implementation (full map in the implementation plan):
   guard must yield `Unknown`, never material support or opacity.
 - F13 identity changed: the identity parity suite (§6.4).
 - F14 non-singleton ST admitted: existing refusal pinned through the new path.
-- F15 family divergence: the same (mapping, triangle, texture, sampling) must
-  classify identically through both frontends' values.
+- F15 family divergence: discharged structurally —
+  `AlphaSemanticsResolver.Resolve` takes no family input
+  (`AlphaSemanticsResolver.cs:216-218`, audit-pinned in the plan), so no
+  implementation can branch on family without a signature change that the
+  file map forbids; the two consumer tests additionally pin equal treatment
+  of non-identity mappings on real Poiyomi and lilToon fixtures.
 - F16 complexity-as-empty: budget overflow returns `Unknown` outcomes that
   reach the planner as transparency, never as "no candidate, prove all".
 - F17 zero-scale-as-missing-UV: E2 point domains classify; they are distinct
