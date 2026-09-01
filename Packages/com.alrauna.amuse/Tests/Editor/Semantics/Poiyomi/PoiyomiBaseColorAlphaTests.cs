@@ -1,4 +1,5 @@
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
 using UnityEditor;
@@ -159,6 +160,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 TextureColorInterpretation.Srgb,
                 new Vector3(tint.linear.r, tint.linear.g, tint.linear.b));
             Assert.That(value, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void NearOneTintStaysAnExactTextureMultiplier()
+        {
+            var material = NewFixtureMaterial();
+            material.SetTexture("_MainTex", ImportTexture("basecolor_near_one"));
+            // 0.999999 sRGB decodes to 0.9999979 linear: not exactly one, but
+            // well inside Unity's Vector3 approximate-equality ball around one.
+            material.SetColor("_Color", new Color(0.999999f, 1f, 1f, 1f));
+
+            var linear = material.GetColor("_Color").linear;
+            var tint = new Vector3(linear.r, linear.g, linear.b);
+            Assert.That(
+                tint.x == 1f && tint.y == 1f && tint.z == 1f,
+                Is.False,
+                "the derived tint must differ from one under exact comparison");
+            Assert.That(
+                tint == Vector3.one,
+                Is.True,
+                "the derived tint must sit inside Unity's approximate-equality " +
+                "ball around one");
+
+            var value = BaseColor(Interpret(material));
+
+            // Falsifies: collapsing a near-one tint to the unscaled texture
+            // through Unity's epsilon-based Vector3 equality, which drops a
+            // real multiplier from the modeled color.
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
+            var multiplier = value.GetMultiplier();
+            Assert.That(multiplier.x == tint.x, Is.True, "exact red multiplier");
+            Assert.That(multiplier.y == tint.y, Is.True, "exact green multiplier");
+            Assert.That(multiplier.z == tint.z, Is.True, "exact blue multiplier");
         }
 
         [Test]
@@ -507,6 +543,63 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 value,
                 Is.EqualTo(ScalarSemanticValue.Texture(
                     MainSample(texture), TextureChannel.Alpha)));
+        }
+
+        [Test]
+        public void NonForcedMainTexNonIdentityStPreservesMappingAndClassifies()
+        {
+            var material = NonForcedMaterial();
+            var texture = ImportTexture("alpha_nonidentity_st");
+            material.SetTexture("_MainTex", texture);
+            material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
+            material.SetTextureOffset("_MainTex", new Vector2(0.5f, 0.25f));
+            material.SetVector("_MainTexPan", Vector4.zero);
+            material.SetFloat("_MainTexUV", 0f);
+            material.SetFloat("_MainPixelMode", 0f);
+            material.SetFloat("_MainTexStochastic", 0f);
+            material.SetFloat("_PoiParallax", 0f);
+            material.SetFloat("_PoiInternalParallax", 0f);
+            var value = Alpha(Interpret(material));
+            var sample = value.GetTextureSample();
+            AlphaFieldProvider provider = (TextureSourceId source,
+                TextureChannel channel, out AlphaMipChain chain) =>
+            {
+                var alpha = new byte[8 * 8];
+                for (var index = 0; index < alpha.Length; index++)
+                {
+                    alpha[index] = 255;
+                }
+                for (var y = 0; y < 8; y++)
+                {
+                    alpha[y * 8] = 0;
+                    alpha[y * 8 + 1] = 0;
+                    alpha[y * 8 + 7] = 0;
+                }
+                chain = new AlphaMipChain(new[]
+                {
+                    new AlphaTextureData(8, 8, alpha),
+                });
+                return true;
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.05f, 0.15f),
+                new Vector2(0.1f, 0.15f),
+                new Vector2(0.05f, 0.2f));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value), provider);
+
+            // Falsifies: dropping _MainTex ST after the attested Poiyomi gates.
+            Assert.That(sample.Coordinates.Channel, Is.Zero);
+            Assert.That(sample.Coordinates.Scale, Is.EqualTo(new Vector2(2f, 2f)));
+            Assert.That(
+                sample.Coordinates.Offset, Is.EqualTo(new Vector2(0.5f, 0.25f)));
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(triangle),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]

@@ -130,6 +130,129 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void EveryNearIdentityMainTexHsvgComponentIsRefusedExactly()
+        {
+            var identity = new Vector4(0f, 1f, 1f, 1f);
+
+            for (var index = 0; index < 4; index++)
+            {
+                var hsvg = identity;
+                hsvg[index] = identity[index] + 0.000005f;
+                var label = "component " + index + " = " + hsvg;
+
+                // Fixture precondition: exactly one binary32 component departs
+                // from the identity, yet Unity's epsilon-based Vector4
+                // equality still reports the two vectors equal.
+                Assert.That(
+                    hsvg[index] == identity[index],
+                    Is.False,
+                    "the fixture must differ under exact comparison: " + label);
+                Assert.That(
+                    hsvg == identity,
+                    Is.True,
+                    "the fixture must sit inside Unity's approximate-equality " +
+                    "ball: " + label);
+
+                var material = NewFixtureMaterial();
+                material.SetVector("_MainTexHSVG", hsvg);
+
+                var result = Interpret(material);
+
+                // Falsifies: proving lilToneCorrection inert with Unity's
+                // epsilon-based Vector4 equality. The correction runs
+                // unconditionally, so any departure from (0,1,1,1) changes the
+                // emitted color however small it is.
+                Assert.That(
+                    result.Semantics.BaseColor.IsComplete,
+                    Is.False,
+                    "near-identity HSVG must refuse: " + label);
+                AssertSingleDiagnostic(
+                    result,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    "_MainTexHSVG");
+            }
+        }
+
+        [Test]
+        public void EveryNearZeroMainTexScrollRotateComponentIsRefusedExactly()
+        {
+            for (var index = 0; index < 4; index++)
+            {
+                var scrollRotate = Vector4.zero;
+                scrollRotate[index] = 0.000005f;
+                var label = "component " + index + " = " + scrollRotate;
+
+                Assert.That(
+                    scrollRotate.x == 0f && scrollRotate.y == 0f &&
+                    scrollRotate.z == 0f && scrollRotate.w == 0f,
+                    Is.False,
+                    "the fixture must be nonzero under exact comparison: " +
+                    label);
+                Assert.That(
+                    scrollRotate == Vector4.zero,
+                    Is.True,
+                    "the fixture must sit inside Unity's approximate-equality " +
+                    "ball: " + label);
+
+                var material = NewFixtureMaterial();
+                material.SetTexture(
+                    "_MainTex", ImportTexture("near_zero_scroll_" + index));
+                material.SetVector("_MainTex_ScrollRotate", scrollRotate);
+
+                var result = Interpret(material);
+
+                // Falsifies: an epsilon-based zero test for the runtime
+                // scroll/rotate path, which lilToon evaluates as
+                // lilRotateUV(uv, z + w * LIL_TIME) + frac(xy * LIL_TIME).
+                Assert.That(
+                    result.Semantics.BaseColor.IsComplete,
+                    Is.False,
+                    "near-zero scroll/rotate must refuse: " + label);
+                AssertSingleDiagnostic(
+                    result,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedUv,
+                    "_MainTex_ScrollRotate");
+            }
+        }
+
+        [Test]
+        public void NearOneMainTexTintStaysAnExactTextureMultiplier()
+        {
+            var material = NewFixtureMaterial();
+            material.SetTexture("_MainTex", ImportTexture("near_one_tint"));
+            // 0.999999 sRGB decodes to 0.9999979 linear: not exactly one, but
+            // well inside Unity's Vector3 approximate-equality ball around one.
+            material.SetColor("_Color", new Color(0.999999f, 1f, 1f, 1f));
+
+            var linear = material.GetColor("_Color").linear;
+            var tint = new Vector3(linear.r, linear.g, linear.b);
+            Assert.That(
+                tint.x == 1f && tint.y == 1f && tint.z == 1f,
+                Is.False,
+                "the derived tint must differ from one under exact comparison");
+            Assert.That(
+                tint == Vector3.one,
+                Is.True,
+                "the derived tint must sit inside Unity's approximate-equality " +
+                "ball around one");
+
+            var value = Interpret(material).Semantics.BaseColor.GetCompleteValue();
+
+            // Falsifies: collapsing a near-one tint to the unscaled texture
+            // through Unity's epsilon-based Vector3 equality, which drops a
+            // real multiplier from the modeled color.
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
+            var multiplier = value.GetMultiplier();
+            Assert.That(multiplier.x == tint.x, Is.True, "exact red multiplier");
+            Assert.That(multiplier.y == tint.y, Is.True, "exact green multiplier");
+            Assert.That(multiplier.z == tint.z, Is.True, "exact blue multiplier");
+        }
+
+        [Test]
         public void AssignedColorAdjustMask_IsUnknown()
         {
             var material = NewFixtureMaterial();
