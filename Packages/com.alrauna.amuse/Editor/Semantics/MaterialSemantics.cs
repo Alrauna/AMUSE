@@ -38,6 +38,12 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
     }
 
+    /// <summary>
+    /// UV channel plus binary32 affine scale and offset. C4: a frontend may emit
+    /// a non-identity mapping for an alpha-relevant sample only when its attested
+    /// source proves the sampler coordinate is that binary32 affine image with no
+    /// further unbounded fragment arithmetic.
+    /// </summary>
     internal readonly struct UvMapping : IEquatable<UvMapping>
     {
         internal int Channel { get; }

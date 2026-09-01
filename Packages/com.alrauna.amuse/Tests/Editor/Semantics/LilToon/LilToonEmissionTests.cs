@@ -287,6 +287,92 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void EveryNearZeroEmissionMapScrollRotateComponentIsRefusedExactly()
+        {
+            for (var index = 0; index < 4; index++)
+            {
+                var scrollRotate = Vector4.zero;
+                scrollRotate[index] = 0.000005f;
+                var label = "component " + index + " = " + scrollRotate;
+
+                // Fixture precondition: exactly one binary32 component is
+                // nonzero, yet Unity's epsilon-based Vector4 equality still
+                // reports the vector equal to zero.
+                Assert.That(
+                    scrollRotate.x == 0f && scrollRotate.y == 0f &&
+                    scrollRotate.z == 0f && scrollRotate.w == 0f,
+                    Is.False,
+                    "the fixture must be nonzero under exact comparison: " +
+                    label);
+                Assert.That(
+                    scrollRotate == Vector4.zero,
+                    Is.True,
+                    "the fixture must sit inside Unity's approximate-equality " +
+                    "ball: " + label);
+
+                var material = NewFixtureMaterial();
+                material.SetFloat("_UseEmission", 1f);
+                material.SetTexture(
+                    "_EmissionMap",
+                    ImportOpaqueColorMap("near_zero_emi_scroll_" + index));
+                material.SetVector("_EmissionMap_ScrollRotate", scrollRotate);
+
+                var result = Interpret(material);
+
+                // Falsifies: an epsilon-based zero test for the emission map's
+                // own runtime scroll/rotate, which moves the sampled
+                // coordinate for any nonzero component.
+                Assert.That(
+                    result.Semantics.Emission.IsComplete,
+                    Is.False,
+                    "near-zero emission scroll/rotate must refuse: " + label);
+                AssertSingleDiagnostic(
+                    result,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedUv,
+                    "_EmissionMap_UVMode");
+            }
+        }
+
+        [Test]
+        public void NearOneEmissionTintStaysAnExactTextureMultiplier()
+        {
+            var material = NewFixtureMaterial();
+            material.SetFloat("_UseEmission", 1f);
+            material.SetFloat("_EmissionBlend", 1f);
+            // 0.999999 sRGB decodes to 0.9999979 linear: not exactly one, but
+            // well inside Unity's Vector3 approximate-equality ball around one.
+            material.SetColor("_EmissionColor", new Color(0.999999f, 1f, 1f, 1f));
+            material.SetTexture(
+                "_EmissionMap", ImportOpaqueColorMap("near_one_emissive"));
+
+            var stored = material.GetColor("_EmissionColor");
+            var linear = stored.linear;
+            var tint = new Vector3(linear.r, linear.g, linear.b) * (1f * stored.a);
+            Assert.That(
+                tint.x == 1f && tint.y == 1f && tint.z == 1f,
+                Is.False,
+                "the derived tint must differ from one under exact comparison");
+            Assert.That(
+                tint == Vector3.one,
+                Is.True,
+                "the derived tint must sit inside Unity's approximate-equality " +
+                "ball around one");
+
+            var value = Interpret(material).Semantics.Emission.GetCompleteValue();
+
+            // Falsifies: collapsing a near-one emission tint to the unscaled
+            // map through Unity's epsilon-based Vector3 equality.
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
+            var multiplier = value.GetMultiplier();
+            Assert.That(multiplier.x == tint.x, Is.True, "exact red multiplier");
+            Assert.That(multiplier.y == tint.y, Is.True, "exact green multiplier");
+            Assert.That(multiplier.z == tint.z, Is.True, "exact blue multiplier");
+        }
+
+        [Test]
         public void EmissionMapSampler_ComesFromEmissionMapNotMainTex()
         {
             var material = NewFixtureMaterial();
