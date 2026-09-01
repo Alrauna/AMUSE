@@ -177,6 +177,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
+        public void NearOneTintStaysAnExactTextureMultiplier()
+        {
+            var map = AlphaOneMap("em_near_one");
+            var material = Slot0MapMaterial(map);
+            material.SetColor("_EmissionColor", Color.white);
+            // White decodes to exactly one, so the strength alone carries the
+            // departure: 1.000003 is a real multiplier, yet Unity's Vector3
+            // equality still reports the tint equal to one.
+            material.SetFloat("_EmissionStrength", 1.000003f);
+
+            var tint = Vector3.one * material.GetFloat("_EmissionStrength");
+            Assert.That(
+                tint.x == 1f && tint.y == 1f && tint.z == 1f,
+                Is.False,
+                "the derived tint must differ from one under exact comparison");
+            Assert.That(
+                tint == Vector3.one,
+                Is.True,
+                "the derived tint must sit inside Unity's approximate-equality " +
+                "ball around one");
+
+            var value = Emission(Interpret(material));
+
+            // Falsifies: collapsing a near-one emission tint to the unscaled
+            // map through Unity's epsilon-based Vector3 equality.
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
+            var multiplier = value.GetMultiplier();
+            Assert.That(multiplier.x == tint.x, Is.True, "exact red multiplier");
+            Assert.That(multiplier.y == tint.y, Is.True, "exact green multiplier");
+            Assert.That(multiplier.z == tint.z, Is.True, "exact blue multiplier");
+        }
+
+        [Test]
         public void Slot0Map_UsesItsOwnUvChannelAndSt()
         {
             var map = AlphaOneMap("em_uv");

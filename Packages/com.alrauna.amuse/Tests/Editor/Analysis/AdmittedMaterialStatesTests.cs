@@ -1034,6 +1034,94 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
+        /// <summary>
+        /// A texture-backed, non-forced Poiyomi slot with a non-identity
+        /// <c>_MainTex</c> ST resolves through the widened resolver instead of
+        /// refusing, and its resolution is genuinely not uniform: it depends on
+        /// the sampled texel rather than being a single stored constant.
+        /// Falsifies the former identity-ST resolver refusal reaching this
+        /// admission layer as an unresolved (or spuriously uniform) slot.
+        /// Reuses the same texture-import helper
+        /// <see cref="PoiyomiFixtureTestBase.ImportTexture"/>
+        /// that <c>PoiyomiBaseColorAlphaTests</c> uses, via a thin fixture
+        /// subclass — the harness can import textures, so no reduction is
+        /// needed here.
+        /// </summary>
+        [Test]
+        public void TextureBackedNonIdentityStSlotResolvesAndIsNotUniform()
+        {
+            var fixture = new PoiyomiTextureImportFixture();
+            fixture.BaseSetUp();
+            try
+            {
+                var material = NewFixtureMaterial();
+                material.SetFloat("_AlphaForceOpaque", 0f);
+                material.SetFloat("_MainAlphaMaskMode", 0f);
+                material.SetColor("_Color", Color.white);
+                material.SetTexture(
+                    "_MainTex", fixture.CreateTexture("admitted_st"));
+                material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
+                material.SetTextureOffset("_MainTex", new Vector2(0.5f, 0.25f));
+                material.SetVector("_MainTexPan", Vector4.zero);
+                material.SetFloat("_MainTexUV", 0f);
+                material.SetFloat("_MainPixelMode", 0f);
+                material.SetFloat("_MainTexStochastic", 0f);
+                material.SetFloat("_PoiParallax", 0f);
+                material.SetFloat("_PoiInternalParallax", 0f);
+
+                var admitted = Admitted(material);
+                AlphaFieldProvider provider = (TextureSourceId source,
+                    TextureChannel channel, out AlphaMipChain chain) =>
+                {
+                    var alpha = new byte[8 * 8];
+                    for (var index = 0; index < alpha.Length; index++)
+                    {
+                        alpha[index] = 255;
+                    }
+                    alpha[0] = 0;
+                    chain = new AlphaMipChain(
+                        new[] { new AlphaTextureData(8, 8, alpha) });
+                    return true;
+                };
+
+                var result = AdmittedMaterialStates.ResolveSlot(
+                    new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                    admitted,
+                    Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                    Relevance,
+                    provider,
+                    VerifiedAlphaOnly);
+
+                Assert.That(result.IsResolved, Is.True);
+                var resolution = result.Resolutions.Single();
+                Assert.That(
+                    resolution.TryGetUniformOutcome(out _),
+                    Is.False,
+                    "a texture-backed alpha resolution must not report a " +
+                    "stored uniform outcome");
+            }
+            finally
+            {
+                fixture.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Exposes the shared Poiyomi fixture's protected texture importer to
+        /// this file, without subclassing the test base itself — the same
+        /// exposure pattern already used elsewhere for shader-name constants.
+        /// NUnit never instantiates this helper; its SetUp/TearDown are driven
+        /// manually.
+        /// </summary>
+        private sealed class PoiyomiTextureImportFixture
+            : PoiyomiFixtureTestBase
+        {
+            internal Texture2D CreateTexture(string name)
+            {
+                return ImportTexture(name);
+            }
+        }
+
         // ---- DistinctResolutions -------------------------------------------
         //
         // Deduplication is performance-only and its correctness theorem is
@@ -1045,9 +1133,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaResolution ClassifiedResolution(byte texel)
         {
             return AlphaResolution.Classified(
-                new AlphaMipChain(new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
+                new AlphaMipChain(
+                    new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero));
         }
 
         [Test]

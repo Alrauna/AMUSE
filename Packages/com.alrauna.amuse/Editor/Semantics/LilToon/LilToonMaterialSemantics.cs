@@ -258,9 +258,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // lilToneCorrection always runs when compiled in, so the identity
-            // must be proven from the parameter itself.
-            if (!material.HasProperty(MainTexHsvgProperty) ||
-                material.GetVector(MainTexHsvgProperty) != IdentityHsvg)
+            // must be proven from the parameter itself. Compared per binary32
+            // component: Unity's aggregate vector equality is epsilon-based
+            // and is intentionally excluded from semantic proof decisions,
+            // because a near-identity HSVG still tone-corrects the color.
+            var hasHsvg = material.HasProperty(MainTexHsvgProperty);
+            var hsvg = hasHsvg
+                ? material.GetVector(MainTexHsvgProperty)
+                : Vector4.zero;
+            if (!hasHsvg ||
+                hsvg.x != IdentityHsvg.x ||
+                hsvg.y != IdentityHsvg.y ||
+                hsvg.z != IdentityHsvg.z ||
+                hsvg.w != IdentityHsvg.w)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -342,7 +352,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var sample = new TextureSample(sourceId, mapping, sampling);
-            var value = tint == Vector3.one
+            // Unit-tint simplification is exact per binary32 component: a
+            // near-one tint is a real multiplier and must be retained.
+            var value = tint.x == 1f && tint.y == 1f && tint.z == 1f
                 ? ColorSemanticValue.Texture(sample, interpretation)
                 : ColorSemanticValue.TextureTimesConstant(
                     sample, interpretation, tint);
@@ -366,7 +378,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var scrollRotate = material.GetVector(MainTexScrollRotateProperty);
-            if (!IsFinite(scrollRotate) || scrollRotate != Vector4.zero)
+            if (!IsFinite(scrollRotate) ||
+                scrollRotate.x != 0f ||
+                scrollRotate.y != 0f ||
+                scrollRotate.z != 0f ||
+                scrollRotate.w != 0f)
             {
                 return false;
             }
@@ -781,7 +797,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var sample = new TextureSample(sourceId, mapping, sampling);
-            var value = tint == Vector3.one
+            var value = tint.x == 1f && tint.y == 1f && tint.z == 1f
                 ? ColorSemanticValue.Texture(sample, interpretation)
                 : ColorSemanticValue.TextureTimesConstant(
                     sample, interpretation, tint);
@@ -816,7 +832,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var scrollRotate = material.GetVector(EmissionMapScrollRotateProperty);
-            if (!IsFinite(scrollRotate) || scrollRotate != Vector4.zero)
+            if (!IsFinite(scrollRotate) ||
+                scrollRotate.x != 0f ||
+                scrollRotate.y != 0f ||
+                scrollRotate.z != 0f ||
+                scrollRotate.w != 0f)
             {
                 return false;
             }
