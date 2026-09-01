@@ -400,7 +400,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return SemanticOutput<ColorSemanticValue>.Unknown();
             }
 
-            var value = tint == Vector3.one
+            // Unit-tint simplification is exact per binary32 component:
+            // Unity's aggregate vector equality is epsilon-based and is
+            // intentionally excluded from semantic proof decisions, because a
+            // near-one tint is a real multiplier that must be retained.
+            var value = tint.x == 1f && tint.y == 1f && tint.z == 1f
                 ? ColorSemanticValue.Texture(sample, interpretation)
                 : ColorSemanticValue.TextureTimesConstant(
                     sample, interpretation, tint);
@@ -1114,7 +1118,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var sample = new TextureSample(sourceId, mapping, sampling);
-            var value = tint == Vector3.one
+            var value = tint.x == 1f && tint.y == 1f && tint.z == 1f
                 ? ColorSemanticValue.Texture(sample, interpretation)
                 : ColorSemanticValue.TextureTimesConstant(
                     sample, interpretation, tint);

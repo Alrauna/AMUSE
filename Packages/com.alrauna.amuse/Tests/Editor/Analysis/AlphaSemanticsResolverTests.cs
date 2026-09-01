@@ -313,8 +313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(
-                    OpaqueCornerTriangle(), field, sampling)));
+                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero)));
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
@@ -394,8 +393,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     {
                         Assert.That(
                             resolution.Classify(triangle),
-                            Is.EqualTo(TriangleAlphaClassifier.Classify(
-                                triangle, field, expected)),
+                            Is.EqualTo(TriangleAlphaClassifier.Classify(triangle, field, expected, AlphaUvEnvelope.Zero)),
                             filter + "/" + wrap);
                     }
                 }
@@ -414,28 +412,284 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
         }
 
-        [TestCase(1, 1f, 1f, 0f, 0f)]         // non-zero UV set
-        [TestCase(0, 2f, 1f, 0f, 0f)]         // scaled U
-        [TestCase(0, 1f, 1f, 0.5f, 0f)]       // offset U
-        [TestCase(0, 1.0000001f, 1f, 0f, 0f)] // one ulp above identity scale
-        public void UnsupportedUvMappingRefuses(
-            int uvChannel, float scaleX, float scaleY, float offsetX, float offsetY)
+        [Test]
+        public void NonIdentityChannelZeroMappingsResolveAndClassify()
         {
+            var opaque = Providing(Field(4, 4, 255));
+            var mappings = new[]
+            {
+                Sample(scaleX: 2f, scaleY: 2f),
+                Sample(scaleX: 2f, scaleY: 2f, offsetX: 0.5f, offsetY: 0.25f),
+                Sample(scaleX: 0f, scaleY: 0.5f),
+            };
+
+            foreach (var sample in mappings)
+            {
+                var resolution = ResolveSample(sample, TextureChannel.Alpha, opaque);
+
+                // Falsifies: retaining the former identity-ST resolver gate.
+                Assert.That(resolution.IsResolved, Is.True, sample.Coordinates.Scale.ToString());
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            }
+
+            // Falsifies F3 (s = |s| in AffineUvTransform): a uniformly
+            // opaque field cannot distinguish a mirrored placement from its
+            // absolute-value placement, because the classifier's
+            // fully-opaque short-circuit answers before any domain/hull math
+            // runs. This mixed field puts its sole opaque texel only where
+            // the true (negative) scale lands the hull; the absolute-value
+            // scale lands the same hull in a transparent clamp-border region
+            // instead, so only the correctly-signed transform proves opaque.
+            var mirrorField = new AlphaTextureData(
+                4,
+                4,
+                new byte[]
+                {
+                    0, 0, 0, 255,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                });
+            var mirrorTriangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(-0.4f, 0.05f),
+                new Vector2(-0.38f, 0.05f),
+                new Vector2(-0.4f, 0.07f));
+            var mirrored = ResolveSample(
+                Sample(scaleX: -2f, scaleY: 2f),
+                TextureChannel.Alpha,
+                Providing(mirrorField));
+
+            Assert.That(mirrored.IsResolved, Is.True);
+            Assert.That(
+                mirrored.Classify(mirrorTriangle),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            foreach (var filter in new[]
+                     {
+                         TextureFilterMode.Point, TextureFilterMode.Bilinear
+                     })
+            {
+                foreach (var wrap in new[]
+                         {
+                             TextureWrapMode.Clamp, TextureWrapMode.Repeat
+                         })
+                {
+                    var resolution = ResolveSample(
+                        Sample(filter, wrap, scaleX: 2f, scaleY: 2f),
+                        TextureChannel.Alpha,
+                        opaque);
+
+                    // Falsifies: supporting only one classifier sampling mode.
+                    Assert.That(resolution.IsResolved, Is.True, filter + "/" + wrap);
+                    Assert.That(
+                        resolution.Classify(OpaqueCornerTriangle()),
+                        Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                        filter + "/" + wrap);
+                }
+            }
+        }
+
+        [Test]
+        public void NonIdentityTransformChangesTheClassifiedDomain()
+        {
+            var field = new AlphaTextureData(
+                4,
+                4,
+                new byte[]
+                {
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 255,
+                });
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.3f, 0.3f),
+                new Vector2(0.4f, 0.3f),
+                new Vector2(0.3f, 0.4f));
             var resolution = ResolveSample(
-                Sample(
-                    TextureFilterMode.Point,
-                    TextureWrapMode.Clamp,
-                    uvChannel,
-                    scaleX,
-                    scaleY,
-                    offsetX,
-                    offsetY),
+                Sample(scaleX: 2f, scaleY: 2f, offsetX: 0.5f, offsetY: 0.25f),
+                TextureChannel.Alpha,
+                Providing(field));
+
+            // Falsifies: accepting ST but classifying the untransformed triangle.
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(triangle),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void IdentityMappingPreservesTheExistingClassifierOracleIncludingZero()
+        {
+            var field = MixedField();
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                new Vector2(0.2f, 0f),
+                new Vector2(0f, 0.2f));
+            var resolution = ResolveSample(
+                Sample(), TextureChannel.Alpha, Providing(field));
+            var sampling = new AlphaSamplingSettings(
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            // Falsifies: routing identity through affine tier selection, which
+            // changes the zero-containing hull's historical outcome.
+            Assert.That(
+                resolution.Classify(triangle),
+                Is.EqualTo(TriangleAlphaClassifier.Classify(
+                    triangle, field, sampling, AlphaUvEnvelope.Zero)));
+        }
+
+        [Test]
+        public void OverflowingAffineCornerIsUnknownRatherThanOpaque()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(1f, 0f),
+                new Vector2(2f, 0f),
+                new Vector2(1f, 1f));
+            var resolution = ResolveSample(
+                Sample(scaleX: Mathf.Pow(2f, 126f), scaleY: 1f),
+                TextureChannel.Alpha,
+                Providing(Field(2, 2, 255)));
+
+            // Falsifies: treating a >= 2^127 exact affine corner as usable.
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(triangle),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void CancellationMappingsNeverPromoteToProvenOpaque()
+        {
+            var adjacent = BitConverter.Int32BitsToSingle(
+                BitConverter.SingleToInt32Bits(1f) + 1);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(1f, 0.25f),
+                new Vector2(adjacent, 0.25f),
+                new Vector2(1f, 0.5f));
+            var bytes = new byte[8 * 8];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = 255;
+            }
+            bytes[2 * 8 + 2] = 0;
+            var opaque = Providing(new AlphaTextureData(8, 8, bytes));
+
+            foreach (var scale in new[] { Mathf.Pow(2f, 20f), Mathf.Pow(2f, 40f) })
+            {
+                var resolution = ResolveSample(
+                    Sample(
+                        scaleX: scale,
+                        scaleY: 1f,
+                        offsetX: -scale,
+                        offsetY: 0f),
+                    TextureChannel.Alpha,
+                    opaque);
+
+                // Falsifies: deriving B_st from cancellation magnitude alone.
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(triangle),
+                    Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                    "scale " + scale);
+            }
+        }
+
+        [Test]
+        public void EveryMipReceivesTheSameAffineEnvelope()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.3f, 0.3f),
+                new Vector2(0.4f, 0.3f),
+                new Vector2(0.3f, 0.4f));
+            var mapping = new UvMapping(
+                0, new Vector2(2f, 2f), new Vector2(0.5f, 0.25f));
+            Assert.That(
+                AffineUvTransform.TryTransform(
+                    mapping, triangle, out var transformed, out var envelope),
+                Is.True);
+            var sampling = new AlphaSamplingSettings(
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+            var mipZero = Field(4, 4, 255);
+            // The lower mip must be a mixed field. A uniform mip field cannot
+            // defend the triangle/envelope plumbing: Classify short-circuits
+            // fully opaque and fully non-opaque fields before reading either,
+            // so only a mixed field makes the outcome depend on the supplied
+            // triangle and envelope. Falsifies: applying the transformed
+            // triangle/envelope only to mip 0.
+            var lowerMip = new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 255, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    transformed, mipZero, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    transformed, lowerMip, sampling, envelope),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            // Fixture precondition: the untransformed triangle with a zero
+            // envelope proves the same mixed mip opaque, so the resolver-level
+            // outcome below genuinely depends on the transform and envelope
+            // reaching every mip.
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, lowerMip, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                ResolveSample(
+                    Sample(scaleX: 2f, scaleY: 2f, offsetX: 0.5f, offsetY: 0.25f),
+                    TextureChannel.Alpha,
+                    Providing(Chain(mipZero, lowerMip))).Classify(triangle),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void UnsupportedUvMappingRefuses()
+        {
+            var unsupported = ResolveSample(
+                Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
                 TextureChannel.Alpha,
                 Providing(MixedField()));
 
+            // Falsifies: retaining scale/offset as a resolver-level refusal.
             Assert.That(
-                resolution.Failure,
+                unsupported.Failure,
                 Is.EqualTo(AlphaResolutionFailure.UnsupportedUvMapping));
+
+            foreach (var supported in new[]
+                     {
+                         Sample(scaleX: 2f, scaleY: 1f),
+                         Sample(offsetX: 0.5f),
+                         Sample(scaleX: 1.0000001f),
+                     })
+            {
+                Assert.That(
+                    ResolveSample(
+                        supported, TextureChannel.Alpha, Providing(MixedField()))
+                        .IsResolved,
+                    Is.True);
+            }
         }
 
         [Test]
@@ -474,8 +728,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(
-                    OpaqueCornerTriangle(), field, sampling)));
+                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero)));
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
@@ -732,10 +985,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             // Deliberately a field whose every texel is opaque, so a
             // `Classify`-based implementation would look uniform.
-            var resolution = AlphaResolution.Classified(
-                Chain(Field(2, 2, 255)),
-                new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 255)), new AlphaSamplingSettings(
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.TryGetUniformOutcome(out var outcome), Is.False);
@@ -756,14 +1007,36 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
+        // --- Channel invariant --------------------------------------------
+
+        /// <summary>
+        /// `IsSupportedMapping` admits only UV channel 0
+        /// (`AlphaSemanticsResolver.cs`), so a `Classified` resolution for
+        /// any other channel is a programming defect, not a value the
+        /// resolver's own admission path can ever produce. Design §6.1 step 2
+        /// scopes the identity short-circuit to scale/offset only; the
+        /// channel is `IsSupportedMapping`'s obligation. Without this
+        /// invariant, a channel-non-zero mapping would silently reach
+        /// `Classify` and have its scale/offset applied to `TriangleAlphaInput
+        /// .Uv0` — another UV set's ST transforming set 0 — instead of being
+        /// rejected outright.
+        /// </summary>
+        [Test]
+        public void ClassifiedRejectsANonZeroUvChannel()
+        {
+            Assert.Throws<ArgumentException>(() => AlphaResolution.Classified(
+                Chain(Field(2, 2, 255)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(1, Vector2.one, Vector2.zero)));
+        }
+
         // --- Mip chain aggregation --------------------------------------------
 
         [Test]
         public void EveryLevelOpaqueIsProvenOpaque()
         {
-            var resolution = AlphaResolution.Classified(
-                AllOpaqueChain(),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -773,9 +1046,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ALowerLevelTransparencyDefeatsAMipZeroOpaqueProof()
         {
-            var resolution = AlphaResolution.Classified(
-                OpaqueThenTransparentChain(),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -785,9 +1056,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void MipZeroTransparencyIsNotOverriddenByALowerOpaqueLevel()
         {
-            var resolution = AlphaResolution.Classified(
-                Chain(Field(2, 2, 0), Field(1, 1, 255)),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 0), Field(1, 1, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -802,9 +1071,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void TransparencyOutranksUnknownEvenWhenItComesLast()
         {
-            var resolution = AlphaResolution.Classified(
-                Chain(BudgetExceedingLevel(), Field(256, 128, 0)),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 0)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -820,9 +1087,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void OneUnknownLevelWithNoTransparencyIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(
-                Chain(BudgetExceedingLevel(), Field(256, 128, 255)),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -840,9 +1105,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void EveryLevelUnknownIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(
-                AllOpaqueChain(),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             var noUv = TriangleAlphaInput.MissingUv0(
                 Vector3.zero, Vector3.right, Vector3.up);
@@ -858,9 +1121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ADisagreeingChainIsNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(
-                OpaqueThenTransparentChain(),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -873,9 +1134,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AnAgreeingChainIsStillNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(
-                AllOpaqueChain(),
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
