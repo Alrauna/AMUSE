@@ -26,10 +26,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector3.up);
             var texture = new AlphaTextureData(1, 1, new byte[] { 255 });
 
-            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(
-                triangle,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp)));
+            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero));
         }
 
         [TestCase(0, 0, 0)]
@@ -198,10 +195,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -244,10 +238,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(1, 2, new byte[] { 255, 0 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Clamp)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -282,10 +273,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(1, 1, new byte[] { 255 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
@@ -314,8 +302,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(reversed, texture, sampling),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(forward, texture, sampling)));
+                TriangleAlphaClassifier.Classify(reversed, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaClassifier.Classify(forward, texture, sampling, AlphaUvEnvelope.Zero)));
         }
 
         [Test]
@@ -329,10 +317,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.55f, 0.65f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -347,10 +332,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.1f, 0.5001f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -381,10 +363,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(-100000f, -100000f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat))
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat), AlphaUvEnvelope.Zero)
                     .ToString(),
                 Is.EqualTo(expected));
         }
@@ -403,10 +382,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(present, texture, sampling),
+                TriangleAlphaClassifier.Classify(present, texture, sampling, AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(missing, texture, sampling),
+                TriangleAlphaClassifier.Classify(missing, texture, sampling, AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -426,14 +405,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector3.zero, Vector3.right, Vector3.up,
                 new Vector2(float.PositiveInfinity, 0f), Vector2.right, Vector2.up);
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => TriangleAlphaClassifier.Classify(
-                finite,
-                texture,
-                new AlphaSamplingSettings((AlphaFilterMode)99, AlphaWrapMode.Clamp)));
-            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(
-                nonFiniteUv,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp)));
+            Assert.Throws<ArgumentOutOfRangeException>(() => TriangleAlphaClassifier.Classify(finite, texture, new AlphaSamplingSettings((AlphaFilterMode)99, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero));
+            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(nonFiniteUv, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero));
         }
 
         [TestCase("Point")]
@@ -446,13 +419,262 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector2.zero, Vector2.right, Vector2.up);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    new AlphaSamplingSettings(
-                        filterMode == "Point" ? AlphaFilterMode.Point : AlphaFilterMode.Bilinear,
-                        AlphaWrapMode.Clamp)),
+                TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(
+                    filterMode == "Point" ? AlphaFilterMode.Point : AlphaFilterMode.Bilinear,
+                    AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        // Task 3 envelope fixtures: each pairs an AlphaUvEnvelope.Zero control
+        // with a nonzero envelope against an 8x8 texture holding exactly one
+        // non-opaque texel. HalfUvTexel8x8 is half a UV texel per axis
+        // (1/16 UV); after the X*width*T conversion it inflates the exact
+        // hull by exactly half a domain texel (TexelScale/2).
+
+        private static readonly AlphaUvEnvelope HalfUvTexel8x8 =
+            new AlphaUvEnvelope(new ExactRational(1, 16), new ExactRational(1, 16));
+
+        [Test]
+        public void PointClampHalfTexelEnvelopeReachesExactlyTheBoundaryCell()
+        {
+            // TexelScale T = 16 (finest UV exponent -4). The domain spans
+            // x in [0, 2.5T] and the non-opaque texel (3, 0) starts at 3T.
+            // Only the X*width*T unit conversion moves the hull by T/2 so it
+            // touches the closed cell boundary. Falsifies a missing width or
+            // missing T factor: X*width moves the hull 0.5 domain units and
+            // X*T moves it 1 unit; both stay inside cell 2.
+            var texture = Opaque8x8Except(3, 0);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(0.3125f, 0f),
+                new Vector2(0f, 0.0625f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void PointClampNonZeroEnvelopePullsBorderingNonOpaqueCell()
+        {
+            // TexelScale T = 16. The domain tops out at y = 4.5T; texel
+            // (3, 5) begins at 5T. Zero envelope misses it; a T/2 y expansion
+            // touches the closed lower boundary of row 5. Falsifies
+            // classification that ignores or under-applies the envelope.
+            var texture = Opaque8x8Except(3, 5);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.375f, 0.5f),
+                new Vector2(0.4375f, 0.5f),
+                new Vector2(0.4375f, 0.5625f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void PointRepeatEnvelopeCrossesPeriodBoundaryToWrappedCell()
+        {
+            // TexelScale T = 16. The domain spans x in [7T, 7.5T]; the
+            // non-opaque texel (0, 3) sits one period away as unwrapped cell
+            // x = 8 whose interval [8T, 9T) starts at the boundary the T/2
+            // expansion exactly reaches. Falsifies a missing envelope, a
+            // missing candidate past the period, or Clamp-instead-of-Repeat
+            // ownership of the wrapped cell.
+            var texture = Opaque8x8Except(0, 3);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.875f, 0.375f),
+                new Vector2(0.9375f, 0.375f),
+                new Vector2(0.875f, 0.4375f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void BilinearClampInflatedHullReachesFootprintTexel()
+        {
+            // TexelScale T = 32. Domain x tops out at 2.25T; texel (3, 4)
+            // has the bilinear footprint interval [2.5T, 3.5T). Zero envelope
+            // stays half a quarter texel short of the footprint; the T/2
+            // x expansion reaches 2.75T inside it. Falsifies classification
+            // that lets the envelope shrink the one-texel footprint or
+            // ignores the envelope entirely.
+            var texture = Opaque8x8Except(3, 4);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.125f, 0.5f),
+                new Vector2(0.28125f, 0.5f),
+                new Vector2(0.125f, 0.5625f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void BilinearRepeatInflatedHullReachesFootprintAcrossNormalization()
+        {
+            // TexelScale T = 32. Domain x spans [7T, 7.25T]; texel (0, 2)
+            // is the wrapped cell x = 8 with footprint interval
+            // [7.5T, 9.5T). Zero envelope misses; the T/2 expansion reaches
+            // 7.75T after Repeat normalization. Falsifies classification
+            // that drops the wrapped footprint cell or skips inflation.
+            var texture = Opaque8x8Except(0, 2);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.875f, 0.25f),
+                new Vector2(0.90625f, 0.28125f),
+                new Vector2(0.875f, 0.28125f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void PointRepeatEnvelopeInflationExceedsSupportRegionBudget()
+        {
+            // TexelScale T = 16; the domain spans [0, 255.5T] per axis, so
+            // the un-inflated candidate region is exactly 256*256 =
+            // MaxSupportRegions and still classifies (the wrapped non-opaque
+            // texel (3, 3) lies under the triangle). Inflation by T/2 per
+            // side widens the range to 258*258 regions, over budget, and
+            // must degrade to Unknown rather than classify unproven.
+            var texture = Opaque8x8Except(3, 3);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(31.9375f, 0f),
+                new Vector2(0f, 31.9375f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void DegenerateAxisAlignedUvSegmentExpandsToRectangleBeforeClassification()
+        {
+            // Two distinct UVs leave a two-vertex domain: the horizontal
+            // segment from (2T, 4T) to (6T, 4T) with TexelScale T = 4. The
+            // T/2 per-corner expansion sweeps the exact rectangle
+            // [1.5T, 6.5T] x [3.5T, 4.5T]. Zero envelope classifies the
+            // segment alone: texel (1, 3) is missed both in x (the segment
+            // starts at its exclusive upper bound 2T) and in y (the segment
+            // rides the exclusive upper bound of row 3). Each axis of the
+            // expansion is load-bearing: inflating only x still misses the
+            // row, inflating only y still misses the column. Falsifies
+            // refusal of degenerate UV domains or single-axis expansion.
+            var texture = Opaque8x8Except(1, 3);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.25f, 0.5f),
+                new Vector2(0.75f, 0.5f),
+                new Vector2(0.75f, 0.5f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void DegenerateDiagonalUvSegmentStaysOutsideItsHexagonHull()
+        {
+            // Two distinct UVs on the diagonal leave the segment from
+            // (2T, 2T) to (6T, 6T) with TexelScale T = 4. The T/2
+            // per-corner expansion is the exact Minkowski hexagon with
+            // vertices (1.5T, 1.5T), (2.5T, 1.5T), (6.5T, 5.5T), (6.5T,
+            // 6.5T), (5.5T, 6.5T), (1.5T, 2.5T) — not the bounding
+            // rectangle [1.5T, 6.5T]^2. Texel (6, 1) overlaps that
+            // rectangle (in [6T, 6.5T] x [1.5T, 2T]) but lies entirely
+            // below the hexagon's cut corner, so an exact per-vertex
+            // expansion proves the triangle opaque while a bounding-box
+            // inflation would sample the texel and return
+            // MustRemainTransparent. Falsifies replacing OutwardExpand
+            // with bounding-box inflation.
+            var texture = Opaque8x8Except(6, 1);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.75f),
+                new Vector2(0.75f, 0.75f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DegenerateMeshStaysUnknownWithNonZeroEnvelope()
+        {
+            // A zero-area mesh returns Unknown before any UV-domain or
+            // envelope work; a nonzero envelope must not promote it.
+            var texture = Opaque8x8Except(3, 3);
+            var triangle = TriangleAlphaInput.WithUv0(
+                new Vector3(1f, 2f, 3f),
+                new Vector3(1f, 2f, 3f),
+                new Vector3(1f, 2f, 3f),
+                new Vector2(0f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 0.5f));
+            var sampling = new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         private static TriangleAlphaOutcome ClassifyBilinearRepeat(
@@ -468,10 +690,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, 0.5f),
                 new Vector2(u2, 0.5f));
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(
-                triangle,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat));
+            return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Repeat), AlphaUvEnvelope.Zero);
         }
 
         private static TriangleAlphaOutcome ClassifyBilinearClamp(
@@ -487,10 +706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, 0.5f),
                 new Vector2(u2, 0.5f));
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(
-                triangle,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Clamp));
+            return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Bilinear, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero);
         }
 
         private static TriangleAlphaOutcome ClassifyPointRepeat(
@@ -507,10 +723,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, v),
                 new Vector2(u2, v));
             var texture = new AlphaTextureData(4, 1, new byte[] { 255, 0, 255, 255 });
-            return TriangleAlphaClassifier.Classify(
-                triangle,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat));
+            return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Repeat), AlphaUvEnvelope.Zero);
         }
 
         private static TriangleAlphaOutcome ClassifyPointClamp(
@@ -526,10 +739,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 uv1,
                 uv2);
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(
-                triangle,
-                texture,
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp));
+            return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero);
         }
 
         private static TriangleAlphaOutcome[] ClassifyInputCase(
@@ -562,10 +772,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var i1 = meshRecord.triangleVertexIndices[offset + 1];
                 var i2 = meshRecord.triangleVertexIndices[offset + 2];
                 var triangle = CreateTriangleInput(meshRecord, i0, i1, i2);
-                results[triangleIndex] = TriangleAlphaClassifier.Classify(
-                    triangle,
-                    texture,
-                    sampling);
+                results[triangleIndex] = TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
             }
 
             return results;
@@ -625,6 +832,14 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return new Vector2(
                 mesh.uv0[index * 2],
                 mesh.uv0[index * 2 + 1]);
+        }
+
+        private static AlphaTextureData Opaque8x8Except(int x, int y)
+        {
+            var alpha = new byte[64];
+            Array.Fill(alpha, byte.MaxValue);
+            alpha[y * 8 + x] = 0;
+            return new AlphaTextureData(8, 8, alpha);
         }
     }
 }

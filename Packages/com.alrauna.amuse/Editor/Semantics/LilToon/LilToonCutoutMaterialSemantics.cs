@@ -43,6 +43,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string CutoffProperty = "_Cutoff";
         private const string ColorProperty = "_Color";
         private const string MainTextureProperty = "_MainTex";
+        private const string MainTexStProperty = "_MainTex_ST";
         private const string DissolveParamsProperty = "_DissolveParams";
         private const string MainTexScrollRotateProperty = "_MainTex_ScrollRotate";
 
@@ -240,10 +241,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // (3) Main UV scroll/rotate must be the exact identity; any
             // nonzero component scrolls or rotates the sampling coordinate.
+            // Compared per binary32 component: Unity's aggregate vector
+            // equality is epsilon-based and is intentionally excluded from
+            // semantic proof decisions, because lilRotateUV applies
+            // uv_sr.z + uv_sr.w * LIL_TIME and adds frac(uv_sr.xy * LIL_TIME),
+            // where no nonzero value is inert. -0.0f stays admitted:
+            // -0.0f != 0f is false.
             if (!evidence.TryGetVector(
                     MainTexScrollRotateProperty, out var scrollRotate) ||
                 !IsFinite(scrollRotate) ||
-                scrollRotate != Vector4.zero)
+                scrollRotate.x != 0f ||
+                scrollRotate.y != 0f ||
+                scrollRotate.z != 0f ||
+                scrollRotate.w != 0f)
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -279,16 +289,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
                     ColorProperty);
             }
-
             var colorAlpha = color.a;
+
             // Texture-backed arm (B2 basis): the cutout alpha is the plain
-            // _MainTex alpha sample at identity UV0, built from the captured
-            // ScaleOffset (lilToon's main UV has no channel selector and the
-            // ST rides the ScaleOffset kind per spec §8.2; the resolver's
-            // IsSupportedMapping refuses non-identity ST downstream), times
-            // the finite _Color.a. A refused sampler vocabulary (the capture
-            // cannot express trilinear or mismatched-wrap samplers) and an
-            // unstable texture identity stay Unknown — never proven.
+            // _MainTex alpha sample at UV0, built from the captured ScaleOffset.
+            // The cutout source executes a runtime rotation path even at zero
+            // scroll/rotate, so C4 keeps non-identity ST at this family boundary
+            // rather than delegating it to the family-blind resolver.
             if (!evidence.TryGetTexture(
                     MainTextureProperty, out var assignment) ||
                 !assignment.IsAssigned)
@@ -325,6 +332,25 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
                     MainTextureProperty);
+            }
+
+            // Identity is tested exactly, per binary32 component. Unity's
+            // Vector2 ==/!= is deliberately not used here: it is epsilon-based
+            // (equal when the difference magnitude is under 1e-5), so it would
+            // let near-identity ST past this C4 boundary and into the
+            // family-blind affine resolver, whose own identity test is exact.
+            // -0.0f stays admitted: -0.0f != 0f is false, and +-0 are
+            // equivalent for this coordinate model.
+            if (assignment.Scale.x != 1f ||
+                assignment.Scale.y != 1f ||
+                assignment.Offset.x != 0f ||
+                assignment.Offset.y != 0f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnsupportedUv,
+                    MainTexStProperty);
             }
 
             var mapping = new UvMapping(0, assignment.Scale, assignment.Offset);

@@ -971,6 +971,580 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Task 4: affine _MainTex_ST support (design 2026-08-31) --------
+
+        /// <summary>
+        /// Falsifier arm (a) (plan Task 4 item 1): a triangle whose raw
+        /// (identity) UV samples a transparent texel is proven opaque once
+        /// the material's real non-identity <c>_MainTex</c> ST is applied.
+        /// Three proofs, each covering a distinct claim:
+        /// <list type="bullet">
+        /// <item><description><b>Classifier control.</b> The geometric
+        /// transform contrast proven directly against
+        /// <see cref="TriangleAlphaClassifier"/> (the classifier the
+        /// resolver itself calls), isolated from capture/admission/planner
+        /// plumbing.
+        /// </description></item>
+        /// <item><description><b>Content-decided barrier proof.</b> The
+        /// same contrast driven through the real <c>RunBarrier</c> pipeline
+        /// — capture, admission, the planner, the resolver, the classifier
+        /// — against a real imported, single-level (non-mipmapped) RGBA32
+        /// texture whose alpha genuinely varies with UV position. This is
+        /// the claim the classifier control alone cannot make: an
+        /// implementation that resolved the barrier path with an identity
+        /// mapping instead of the captured ST — with capture and the
+        /// classifier both individually correct — would still fail here,
+        /// because the sampled content differs between the raw and the
+        /// transformed domain. Confirmed by mutating
+        /// <c>PoiyomiMaterialSemantics.TryGetSupportedUvMapping</c>'s
+        /// <c>UvMapping</c> construction to identity and observing this arm
+        /// fail; see the implementation report for the exact mutation.
+        /// </description></item>
+        /// <item><description><b>All-mip conjunction, migration proof.</b>
+        /// A real imported texture cannot carry the identity-vs-transform
+        /// content contrast <em>and</em> a genuine multi-level mip chain at
+        /// once: Unity's generated mip chain box-filters any
+        /// partial-opacity region down to the coarsest (1x1) level, whose
+        /// single texel then covers the whole UV domain and would refute
+        /// <c>ProvenOpaque</c> everywhere regardless of the sampled
+        /// position — one non-opaque level refutes the proof for every
+        /// triangle, not just the ones near it. This arm therefore uses
+        /// uniformly opaque real mip-chain content, where sampled position
+        /// is deliberately irrelevant to the content proof, to isolate the
+        /// all-mip conjunction and prove the slot prepares and migrates
+        /// through the Poiyomi conversion end to end.
+        /// </description></item>
+        /// </list>
+        /// </summary>
+        [Test]
+        public void PoiyomiNonIdentityStSlotProvesOpaqueAndMigrates()
+        {
+            var scale = new Vector2(2f, 2f);
+            var offset = new Vector2(0.5f, 0.25f);
+            var mapping = new UvMapping(0, scale, offset);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.3f, 0.3f),
+                new Vector2(0.4f, 0.3f),
+                new Vector2(0.3f, 0.4f));
+            var field = new AlphaTextureData(
+                4,
+                4,
+                new byte[]
+                {
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 255,
+                });
+            var sampling = new AlphaSamplingSettings(
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, field, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
+                "fixture precondition: the raw (identity) UV domain must " +
+                "sample the transparent interior, or the transform " +
+                "contrast proves nothing");
+            Assert.That(
+                AffineUvTransform.TryTransform(
+                    mapping, triangle, out var transformed, out var envelope),
+                Is.True);
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    transformed, field, sampling, envelope),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "the same triangle's ST-transformed domain must sample " +
+                "the opaque corner");
+
+            // --- Content-decided barrier proof: real single-level import --
+            {
+                using var assets = new OverrideTemporaryDirectoryScope(null);
+                var root = new GameObject(
+                    "AMUSE poiyomi nonidentity st content decided");
+                Material material = null;
+                Mesh mesh = null;
+                AmusePlatformFinishState amuse = null;
+                var fixtures = new PoiyomiTextureBackedFixtures();
+
+                try
+                {
+                    fixtures.BaseSetUp();
+                    // Columns 0, 1 and 7 transparent, the rest opaque —
+                    // the same 8x8 column mask
+                    // PoiyomiAlphaTests.NonForcedMainTexNonIdentityStPreservesMappingAndClassifies
+                    // uses. Raw UV in [0.05,0.1]x[0.15,0.2] sits in column 0
+                    // (transparent); scale (2,2)/offset (0.5,0.25) moves it
+                    // to [0.6,0.7]x[0.55,0.65], columns 4-5 (opaque).
+                    var alpha = new byte[8 * 8];
+                    for (var index = 0; index < alpha.Length; index++)
+                    {
+                        alpha[index] = 255;
+                    }
+                    for (var y = 0; y < 8; y++)
+                    {
+                        alpha[y * 8] = 0;
+                        alpha[y * 8 + 1] = 0;
+                        alpha[y * 8 + 7] = 0;
+                    }
+                    material = TextureBackedNonIdentityStMaterial(
+                        fixtures.ImportSingleLevelAlphaField(
+                            "poiyomi_nonidentity_st_content", 8, 8, alpha),
+                        scale,
+                        offset);
+                    var renderer =
+                        AddSingleTriangleRenderer(root, material, out mesh);
+                    mesh.uv = new[]
+                    {
+                        new Vector2(0.05f, 0.15f),
+                        new Vector2(0.1f, 0.15f),
+                        new Vector2(0.05f, 0.2f),
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        "the raw UV samples the transparent column mask; " +
+                        "only the captured ST transform can move the " +
+                        "sampled domain into the opaque columns and prove " +
+                        "the candidate through the full capture/admission" +
+                        "/planner/resolver/classifier path");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero);
+                    Assert.That(
+                        amuse.Separation, Is.Not.Null,
+                        "the slot must prepare and migrate");
+                    Assert.That(
+                        amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                    Assert.That(
+                        amuse.Separation.Renderers[0].Target.Renderer,
+                        Is.SameAs(renderer));
+                    var slot =
+                        amuse.Separation.Renderers[0].CandidateSlots.Single();
+                    Assert.That(
+                        slot.Plan.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition
+                            .WhollyOpaqueCandidate));
+                    Assert.That(
+                        slot.OpaqueOfAdmitted[material],
+                        Is.Not.SameAs(material),
+                        "the Poiyomi value converts to a generated clone");
+                    Assert.That(
+                        amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(1));
+                }
+                finally
+                {
+                    DestroyGenerated(amuse);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh);
+                    }
+                    UnityEngine.Object.DestroyImmediate(root);
+                    if (material != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(material);
+                    }
+
+                    fixtures.BaseTearDown();
+                }
+            }
+
+            // --- All-mip conjunction and migration: fully-opaque mip chain -
+            {
+                using var assets = new OverrideTemporaryDirectoryScope(null);
+                var root = new GameObject(
+                    "AMUSE poiyomi nonidentity st migrates");
+                Material material = null;
+                Mesh mesh = null;
+                AmusePlatformFinishState amuse = null;
+                var fixtures = new PoiyomiTextureBackedFixtures();
+
+                try
+                {
+                    fixtures.BaseSetUp();
+                    material = TextureBackedNonIdentityStMaterial(
+                        fixtures.ImportFullyOpaqueMipmap(
+                            "poiyomi_nonidentity_st"),
+                        scale,
+                        offset);
+                    var renderer =
+                        AddSingleTriangleRenderer(root, material, out mesh);
+                    mesh.uv = new[]
+                    {
+                        new Vector2(0.3f, 0.3f),
+                        new Vector2(0.4f, 0.3f),
+                        new Vector2(0.3f, 0.4f),
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        "the non-identity-ST slot over a fully-opaque mip " +
+                        "chain must prove one opaque candidate triangle");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero);
+                    Assert.That(
+                        amuse.Separation, Is.Not.Null,
+                        "the slot must prepare and migrate");
+                    Assert.That(
+                        amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                    Assert.That(
+                        amuse.Separation.Renderers[0].Target.Renderer,
+                        Is.SameAs(renderer));
+                    var slot =
+                        amuse.Separation.Renderers[0].CandidateSlots.Single();
+                    Assert.That(
+                        slot.Plan.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition
+                            .WhollyOpaqueCandidate));
+                    Assert.That(
+                        slot.OpaqueOfAdmitted[material],
+                        Is.Not.SameAs(material),
+                        "the Poiyomi value converts to a generated clone");
+                    Assert.That(
+                        amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(1));
+                }
+                finally
+                {
+                    DestroyGenerated(amuse);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh);
+                    }
+                    UnityEngine.Object.DestroyImmediate(root);
+                    if (material != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(material);
+                    }
+
+                    fixtures.BaseTearDown();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Falsifier arm (b): a <c>_MainTex_ST</c> component animated to
+        /// exactly its material's serialized default remains an admitted
+        /// singleton, so the slot prepares — mirroring the existing
+        /// conversion-only positive control
+        /// (<see cref="ConversionOnlyAnimationAwayFromDefaultRefusesAndToDefaultPrepares"/>)
+        /// for the alpha-relevant ST binding itself.
+        /// </summary>
+        [Test]
+        public void PoiyomiStAnimatedAtSerializedDefaultPrepares()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE poiyomi st animated default");
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportFullyOpaqueMipmap(
+                        "poiyomi_st_animated_default"),
+                    new Vector2(2f, 2f),
+                    new Vector2(0.5f, 0.25f));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.3f, 0.3f),
+                    new Vector2(0.4f, 0.3f),
+                    new Vector2(0.3f, 0.4f),
+                };
+                clip = NewFloatClip(
+                    "AMUSE poiyomi st default", string.Empty,
+                    "material._MainTex_ST.x", 2f);
+                controller = NewController(
+                    root, "AMUSE poiyomi st default graph", clip);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton),
+                    Is.Zero,
+                    "animation at the serialized default must remain a " +
+                    "singleton");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.Separation, Is.Not.Null,
+                    "the animated value equals the serialized default, " +
+                    "so the slot must prepare");
+                Assert.That(
+                    amuse.Separation.CreatedClones, Has.Count.EqualTo(1));
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Falsifier arm (c): a <c>_MainTex_ST</c> component animated away
+        /// from its material's serialized default refuses
+        /// (<c>AnimatedMaterialPropertyNotSingleton</c>) and prepares
+        /// nothing.
+        /// </summary>
+        [Test]
+        public void PoiyomiNonSingletonStAnimationRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE poiyomi st non singleton");
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportFullyOpaqueMipmap(
+                        "poiyomi_st_non_singleton"),
+                    new Vector2(2f, 2f),
+                    new Vector2(0.5f, 0.25f));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.3f, 0.3f),
+                    new Vector2(0.4f, 0.3f),
+                    new Vector2(0.3f, 0.4f),
+                };
+                clip = NewFloatClip(
+                    "AMUSE poiyomi st non singleton", string.Empty,
+                    "material._MainTex_ST.x", 3f);
+                controller = NewController(
+                    root, "AMUSE poiyomi st non singleton graph", clip);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AnimatedMaterialPropertyNotSingleton),
+                    Is.EqualTo(1),
+                    "a _MainTex_ST component animated away from its " +
+                    "serialized default must refuse at alpha admission");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+                Assert.That(
+                    amuse.Separation, Is.Null,
+                    "no non-singleton ST input may prepare");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Falsifier arm (d): a structural audit mirroring
+        /// <c>AnalysisLeavesEverySourceObjectUnchanged</c>
+        /// (<c>RendererAlphaAnalysisIntegrationTests</c>) at the preparation
+        /// layer — the source material, its imported texture asset, and the
+        /// source mesh are bit-for-bit unchanged after a non-identity-ST
+        /// slot prepares and migrates.
+        /// </summary>
+        [Test]
+        public void PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE poiyomi st source preserved");
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "poiyomi_st_source_preserved");
+                var texturePath = AssetDatabase.GetAssetPath(texture);
+                material = TextureBackedNonIdentityStMaterial(
+                    texture, new Vector2(2f, 2f), new Vector2(0.5f, 0.25f));
+                var renderer =
+                    AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.3f, 0.3f),
+                    new Vector2(0.4f, 0.3f),
+                    new Vector2(0.3f, 0.4f),
+                };
+
+                var beforeAssetHash =
+                    AssetDatabase.GetAssetDependencyHash(texturePath);
+                var beforeReadable = texture.isReadable;
+                var beforePixels = texture.GetPixels32(0);
+                var beforeVertices = mesh.vertices;
+                var beforeUv = mesh.uv;
+                var beforeIndices = mesh.GetIndices(0);
+                var beforeMaterials = renderer.sharedMaterials;
+                var beforeMainTex = material.GetTexture("_MainTex");
+                var beforeScale = material.GetTextureScale("_MainTex");
+                var beforeOffset = material.GetTextureOffset("_MainTex");
+
+                amuse = RunBarrier(root);
+
+                Assert.That(
+                    amuse.Separation, Is.Not.Null,
+                    "fixture precondition: the slot must prepare, or the " +
+                    "non-mutation proves nothing");
+                Assert.That(
+                    amuse.Separation.CreatedClones, Is.Not.Empty,
+                    "fixture precondition: the material must convert, or " +
+                    "the transient boundary proves nothing");
+
+                Assert.That(
+                    AssetDatabase.GetAssetDependencyHash(texturePath),
+                    Is.EqualTo(beforeAssetHash),
+                    "preparation must not re-import or rewrite the " +
+                    "texture asset");
+                Assert.That(texture.isReadable, Is.EqualTo(beforeReadable));
+                Assert.That(
+                    texture.GetPixels32(0), Is.EqualTo(beforePixels));
+                Assert.That(mesh.vertices, Is.EqualTo(beforeVertices));
+                Assert.That(mesh.uv, Is.EqualTo(beforeUv));
+                Assert.That(mesh.GetIndices(0), Is.EqualTo(beforeIndices));
+                Assert.That(
+                    renderer.sharedMaterials, Is.EqualTo(beforeMaterials));
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh));
+                Assert.That(
+                    material.GetTexture("_MainTex"), Is.SameAs(beforeMainTex));
+                Assert.That(
+                    material.GetTextureScale("_MainTex"),
+                    Is.EqualTo(beforeScale));
+                Assert.That(
+                    material.GetTextureOffset("_MainTex"),
+                    Is.EqualTo(beforeOffset));
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Boundary scenario (plan Task 4 item 1, second half): the same
+        /// non-identity <c>_MainTex</c> ST shape on a lilToon cutout slot
+        /// prepares zero opaque candidates — the C4 frontend gate refuses
+        /// the alpha claim itself rather than letting the widened
+        /// resolver's affine coverage reach it. Falsifies deleting the
+        /// lilToon cutout non-identity-ST gate (F15): with it gone, this
+        /// material's alpha would become complete and the slot would
+        /// classify and migrate exactly like the Poiyomi scenario above.
+        /// </summary>
+        [Test]
+        public void LilToonCutoutNonIdentityStSlotPreparesNoOpaqueCandidates()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_nonidentity_st_boundary");
+
+                using var arm = CutoutArmFixture.Create(
+                    texture,
+                    "AMUSE cutout nonidentity st boundary",
+                    boundaryMaterial =>
+                    {
+                        boundaryMaterial.SetTextureScale(
+                            "_MainTex", new Vector2(2f, 2f));
+                        boundaryMaterial.SetTextureOffset(
+                            "_MainTex", new Vector2(0.5f, 0.25f));
+                    },
+                    null,
+                    null);
+                var amuse = arm.Run();
+
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "a non-identity _MainTex ST must refuse at the " +
+                    "lilToon cutout frontend's own C4 gate, not reach the " +
+                    "resolver");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+                Assert.That(
+                    amuse.Separation, Is.Null,
+                    "zero opaque candidates leaves nothing to prepare");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
 
         // --- Task 5 integration coverage: the cutout family end to end -----
 
@@ -2381,6 +2955,146 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Imports a fully-opaque mipmap texture for the Poiyomi non-identity
+        /// ST scenario, mirroring
+        /// <see cref="LilToonCutoutConversionFixtures.ImportFullyOpaqueMipmap"/>
+        /// in shape (mipmap-enabled, uncompressed RGBA32, a separate temp
+        /// folder via <see cref="PoiyomiFixtureTestBase"/>) but not exactly:
+        /// <see cref="ImportMipmapTexture"/> additionally sets
+        /// <c>isReadable = true</c>, which the lilToon helper does not, so
+        /// <c>PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged</c>
+        /// can read the imported texture's pixels back directly via
+        /// <c>GetPixels32</c> for its structural audit. This changes no
+        /// production branch: <c>UnityAlphaFieldEvidence</c> captures alpha
+        /// evidence exclusively via <c>Graphics.Blit</c> +
+        /// <c>AsyncGPUReadback</c> (`:268,275`) and never reads
+        /// <c>isReadable</c>. The base's SetUp/TearDown are driven manually:
+        /// NUnit never instantiates this helper.
+        /// </summary>
+        private sealed class PoiyomiTextureBackedFixtures
+            : PoiyomiFixtureTestBase
+        {
+            internal Texture2D ImportFullyOpaqueMipmap(string name)
+            {
+                return ImportMipmapTexture(name, 4, 4, FullyOpaquePixels());
+            }
+
+            /// <summary>
+            /// Imports a real, single-level (<c>mipmapEnabled = false</c>),
+            /// uncompressed RGBA32 texture whose alpha content is supplied
+            /// verbatim (bottom-to-top, matching
+            /// <see cref="AlphaTextureData"/>'s convention) — unlike
+            /// <see cref="ImportFullyOpaqueMipmap"/>, this can carry a
+            /// position-dependent alpha contrast end to end, because with no
+            /// generated mip chain there is no coarser level for a
+            /// partial-opacity region to box-filter into. Point/Clamp
+            /// sampling, matching the classifier control's sampling settings
+            /// so both proofs describe the same sampled domain.
+            /// </summary>
+            internal Texture2D ImportSingleLevelAlphaField(
+                string name, int width, int height, byte[] alphaBottomToTop)
+            {
+                if (alphaBottomToTop.Length != width * height)
+                {
+                    throw new ArgumentException(
+                        "Alpha grid length must equal width times height.",
+                        nameof(alphaBottomToTop));
+                }
+
+                var path = TempFolder + "/" + name + ".png";
+                var staging = new Texture2D(
+                    width, height, TextureFormat.RGBA32, false);
+                var pixels = new Color32[alphaBottomToTop.Length];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(
+                        255, 255, 255, alphaBottomToTop[index]);
+                }
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = false;
+                importer.filterMode = FilterMode.Point;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                importer.textureCompression =
+                    TextureImporterCompression.Uncompressed;
+                importer.SaveAndReimport();
+
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Imported texture '{path}' must load.");
+                return loaded;
+            }
+
+            /// <summary>
+            /// Writes an explicit RGBA32 pixel grid as mip 0 and imports it
+            /// as a mipmap-enabled asset; the lower levels are the
+            /// importer's own downsample of the supplied base level. Mirrors
+            /// <see cref="LilToonFixtureTestBase.ImportMipmapTexture"/>.
+            /// </summary>
+            private Texture2D ImportMipmapTexture(
+                string name,
+                int width,
+                int height,
+                Color32[] baseLevelBottomToTop)
+            {
+                var path = TempFolder + "/" + name + ".png";
+                var staging = new Texture2D(
+                    width, height, TextureFormat.RGBA32, false);
+                staging.SetPixels32(baseLevelBottomToTop);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = true;
+                // Readable so the source-preservation audit
+                // (PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged)
+                // can read pixels back directly via GetPixels32; production's
+                // own host provider does not require this.
+                importer.isReadable = true;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                importer.streamingMipmaps = false;
+                // Uncompressed keeps the imported GPU format RGBA32: the
+                // alpha-evidence format allowlist admits RGBA32 exactly,
+                // while platform compression would collapse an all-opaque
+                // source to DXT1, which has no alpha channel to prove and
+                // refuses.
+                importer.textureCompression =
+                    TextureImporterCompression.Uncompressed;
+                importer.SaveAndReimport();
+
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Imported texture '{path}' must load.");
+                return loaded;
+            }
+
+            private static Color32[] FullyOpaquePixels()
+            {
+                var pixels = new Color32[4 * 4];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                return pixels;
+            }
+        }
+
+        /// <summary>
         /// One cutout conversion arm: a transient single-triangle renderer
         /// fixture over a caller-owned texture plus the barrier run over it,
         /// with everything the arm created destroyed on disposal. An arm
@@ -2807,6 +3521,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            return material;
+        }
+
+        /// <summary>
+        /// A non-forced Poiyomi material whose alpha proof is genuinely
+        /// texture-backed with a non-identity <c>_MainTex</c> ST: every gate
+        /// the attested source requires proven zero (design §3.2) is set
+        /// explicitly, mirroring
+        /// <c>PoiyomiAlphaTests.NonForcedMainTexNonIdentityStPreservesMappingAndClassifies</c>.
+        /// </summary>
+        private static Material TextureBackedNonIdentityStMaterial(
+            Texture texture, Vector2 scale, Vector2 offset)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", Color.white);
+            material.SetTexture("_MainTex", texture);
+            material.SetTextureScale("_MainTex", scale);
+            material.SetTextureOffset("_MainTex", offset);
+            material.SetVector("_MainTexPan", Vector4.zero);
+            material.SetFloat("_MainTexUV", 0f);
+            material.SetFloat("_MainPixelMode", 0f);
+            material.SetFloat("_MainTexStochastic", 0f);
+            material.SetFloat("_PoiParallax", 0f);
+            material.SetFloat("_PoiInternalParallax", 0f);
             return material;
         }
 

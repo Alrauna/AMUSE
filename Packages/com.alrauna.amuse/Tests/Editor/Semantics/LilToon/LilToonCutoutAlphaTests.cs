@@ -377,6 +377,75 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
+        [Test]
+        public void NonIdentityMainTexStIsRejectedAtTheCutoutAlphaBoundary()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("nonidentity_st");
+            material.SetTextureScale(MainTextureProperty, new Vector2(2f, 1f));
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+            var alphaDiagnostics = DiagnosticsFor(
+                result, LilToonSemanticOutput.Alpha)
+                .Where(d => d.Code == LilToonSemanticDiagnosticCode.UnsupportedUv)
+                .ToArray();
+
+            // Falsifies: delegating lilToon cutout's non-affine-runtime
+            // coordinate refusal to the family-blind resolver.
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            Assert.That(alphaDiagnostics, Has.Length.EqualTo(1));
+            Assert.That(alphaDiagnostics[0].Detail, Is.EqualTo("_MainTex_ST"));
+        }
+
+        [TestCase(1.000005f, 1f, 0f, 0f)]
+        [TestCase(1f, 1.000005f, 0f, 0f)]
+        [TestCase(1f, 1f, 0.000005f, 0f)]
+        [TestCase(1f, 1f, 0f, 0.000005f)]
+        public void EveryNearIdentityNonIdentityMainTexStComponentIsRejectedExactly(
+            float scaleX, float scaleY, float offsetX, float offsetY)
+        {
+            var scale = new Vector2(scaleX, scaleY);
+            var offset = new Vector2(offsetX, offsetY);
+            var material = NewGateOffMaterialWithOpaqueTexture(
+                $"near_identity_st_{scaleX}_{scaleY}_{offsetX}_{offsetY}");
+            material.SetTextureScale(MainTextureProperty, scale);
+            material.SetTextureOffset(MainTextureProperty, offset);
+
+            // Fixture precondition: exactly one binary32 component departs from
+            // identity, yet Unity's epsilon-based vector equality still reports
+            // both vectors equal. A gate written with == / != cannot see this.
+            Assert.That(
+                scaleX == 1f && scaleY == 1f && offsetX == 0f && offsetY == 0f,
+                Is.False,
+                "the fixture must be non-identity under exact comparison");
+            Assert.That(
+                scale == Vector2.one && offset == Vector2.zero,
+                Is.True,
+                "the fixture must sit inside Unity's approximate-equality ball");
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+            var alphaDiagnostics = DiagnosticsFor(
+                result, LilToonSemanticOutput.Alpha)
+                .Where(d => d.Code == LilToonSemanticDiagnosticCode.UnsupportedUv)
+                .ToArray();
+
+            // Falsifies: gating C4's _MainTex_ST boundary with Unity's
+            // epsilon-based Vector2 equality, which admits this unattested
+            // coordinate into the family-blind affine resolver.
+            Assert.That(
+                result.Semantics.Alpha.IsComplete,
+                Is.False,
+                "near-identity ST must refuse at the lilToon frontend");
+            Assert.That(
+                alphaDiagnostics,
+                Has.Length.EqualTo(1),
+                "exactly one UnsupportedUv alpha diagnostic is expected");
+            Assert.That(alphaDiagnostics[0].Detail, Is.EqualTo("_MainTex_ST"));
+        }
+
         // --- 2. the _Color.a multiplier ---------------------------------------
 
         [Test]
@@ -641,6 +710,64 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // Falsifies: treating scroll/rotate as an RGB-only effect — any
             // nonzero component, including w, moves the sampling coordinate.
             AssertAlphaGateUnknown(result, ScrollRotateProperty);
+        }
+
+        [Test]
+        public void EveryNearZeroMainTexScrollRotateComponentIsRejectedExactly()
+        {
+            for (var index = 0; index < 4; index++)
+            {
+                var scrollRotate = Vector4.zero;
+                scrollRotate[index] = 0.000005f;
+                var label = "component " + index + " = " + scrollRotate;
+
+                // Fixture precondition: exactly one binary32 component is
+                // nonzero, yet Unity's epsilon-based Vector4 equality still
+                // reports the vector equal to zero.
+                Assert.That(
+                    scrollRotate.x == 0f && scrollRotate.y == 0f &&
+                    scrollRotate.z == 0f && scrollRotate.w == 0f,
+                    Is.False,
+                    "the fixture must be nonzero under exact comparison: " +
+                    label);
+                Assert.That(
+                    scrollRotate == Vector4.zero,
+                    Is.True,
+                    "the fixture must sit inside Unity's approximate-equality " +
+                    "ball: " + label);
+
+                var material = NewGateOffMaterialWithOpaqueTexture(
+                    "near_zero_scroll_" + index);
+                material.SetVector(ScrollRotateProperty, scrollRotate);
+
+                var result =
+                    LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                        material, ColorSpace.Linear, AllFeatures);
+                var alphaDiagnostics = DiagnosticsFor(
+                        result, LilToonSemanticOutput.Alpha)
+                    .Where(d => d.Detail == ScrollRotateProperty)
+                    .ToArray();
+
+                // Falsifies: gating the runtime scroll/rotate path with Unity's
+                // epsilon-based Vector4 equality. lilRotateUV applies
+                // uv_sr.z + uv_sr.w * LIL_TIME and adds frac(uv_sr.xy *
+                // LIL_TIME), so no nonzero component is inert whatever its
+                // magnitude.
+                Assert.That(
+                    result.Semantics.Alpha.IsComplete,
+                    Is.False,
+                    "near-zero scroll/rotate must refuse: " + label);
+                Assert.That(
+                    alphaDiagnostics,
+                    Has.Length.EqualTo(1),
+                    "exactly one _MainTex_ScrollRotate alpha diagnostic: " +
+                    label);
+                Assert.That(
+                    alphaDiagnostics[0].Code,
+                    Is.EqualTo(
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature),
+                    label);
+            }
         }
 
         // --- 7. texture-evidence boundaries at the resolver seam ---------------
