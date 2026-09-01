@@ -55,6 +55,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly TriangleAlphaOutcome _uniformOutcome;
         private readonly AlphaMipChain _chain;
         private readonly AlphaSamplingSettings _sampling;
+        private readonly UvMapping _mapping;
 
         private AlphaResolution(
             bool isResolved,
@@ -62,7 +63,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             bool isUniform,
             TriangleAlphaOutcome uniformOutcome,
             AlphaMipChain chain,
-            AlphaSamplingSettings sampling)
+            AlphaSamplingSettings sampling,
+            UvMapping mapping)
         {
             // Invariants: a resolved value carries no failure, a refusal
             // carries one, and a classified value always has its field.
@@ -83,6 +85,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             _uniformOutcome = uniformOutcome;
             _chain = chain;
             _sampling = sampling;
+            _mapping = mapping;
         }
 
         internal bool IsResolved { get; }
@@ -91,7 +94,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static AlphaResolution Refused(AlphaResolutionFailure failure)
         {
             return new AlphaResolution(
-                false, failure, false, default, null, default);
+                false, failure, false, default, null, default, default);
         }
 
         internal static AlphaResolution Uniform(TriangleAlphaOutcome outcome)
@@ -102,20 +105,40 @@ namespace Alrauna.Amuse.Editor.Analysis
                 true,
                 outcome,
                 null,
+                default,
                 default);
         }
 
         internal static AlphaResolution Classified(
             AlphaMipChain chain,
-            AlphaSamplingSettings sampling)
+            AlphaSamplingSettings sampling,
+            UvMapping mapping)
         {
+            // Only `AlphaSemanticsResolver.IsSupportedMapping` decides which
+            // mappings ever reach this factory, and it admits channel 0
+            // only. Enforcing that here (rather than trusting the caller)
+            // means `Classify`'s identity test below can check scale/offset
+            // alone, per design §6.1 step 2: folding a channel test into
+            // that OR would otherwise let a channel-non-zero mapping fall
+            // through to the affine transform, which only ever reads
+            // `TriangleAlphaInput.Uv0` — silently applying another UV set's
+            // ST to UV0 instead of being rejected.
+            if (mapping.Channel != 0)
+            {
+                throw new ArgumentException(
+                    "A classified resolution's mapping must be for UV " +
+                    "channel 0.",
+                    nameof(mapping));
+            }
+
             return new AlphaResolution(
                 true,
                 AlphaResolutionFailure.None,
                 false,
                 default,
                 chain,
-                sampling);
+                sampling,
+                mapping);
         }
 
         /// <summary>
@@ -181,11 +204,37 @@ namespace Alrauna.Amuse.Editor.Analysis
             // MustRemainTransparent is absorbing, so returning on it cannot change
             // the result. Unknown must NOT exit early - a later level may be
             // MustRemainTransparent, which outranks it.
+            // Identity remains structurally on the historical classifier path;
+            // non-identity UV0 uses the affine helper's Lemma P exact result or
+            // conservative envelope before every mip is considered. The
+            // identity test below checks scale and offset only (design §6.1
+            // step 2): the channel is not part of it, because `Classified`'s
+            // constructor invariant already guarantees `_mapping.Channel == 0`
+            // for every resolution that reaches here — `IsSupportedMapping` is
+            // the only place that decides which channel is admitted. Folding a
+            // channel test into this predicate would be redundant at best and,
+            // for any future caller that relaxed the constructor invariant,
+            // would silently apply a channel-non-zero mapping's scale/offset to
+            // `TriangleAlphaInput.Uv0` instead of rejecting it.
+            var transformed = triangle;
+            var envelope = AlphaUvEnvelope.Zero;
+            if (_mapping.Scale.x != 1f ||
+                _mapping.Scale.y != 1f ||
+                _mapping.Offset.x != 0f ||
+                _mapping.Offset.y != 0f)
+            {
+                if (!AffineUvTransform.TryTransform(
+                        _mapping, triangle, out transformed, out envelope))
+                {
+                    return TriangleAlphaOutcome.Unknown;
+                }
+            }
+
             var sawUnknown = false;
             for (var index = 0; index < _chain.Count; index++)
             {
                 var outcome = TriangleAlphaClassifier.Classify(
-                    triangle, _chain[index], _sampling);
+                    transformed, _chain[index], _sampling, envelope);
                 if (outcome == TriangleAlphaOutcome.MustRemainTransparent)
                 {
                     return TriangleAlphaOutcome.MustRemainTransparent;
@@ -321,27 +370,19 @@ namespace Alrauna.Amuse.Editor.Analysis
                     AlphaResolutionFailure.MissingTextureEvidence);
             }
 
-            return AlphaResolution.Classified(chain, sampling);
+            return AlphaResolution.Classified(
+                chain, sampling, sample.Coordinates);
         }
 
         /// <summary>
-        /// The classifier's exact domain is the hull of the UV values it is
-        /// given; it has no transform input and takes one supplied UV set. Only
-        /// the identity mapping on UV set 0 can therefore be expressed without
-        /// either rounding the transform into float or handing a caller an
-        /// unenforceable obligation about which mesh UV set to supply. Anything
-        /// else fails closed. Supporting a transform later requires proving with
-        /// exact dyadic/rational arithmetic that the affine result is
-        /// representable by the supplied binary32 value; wider floating point is
-        /// not such a proof.
+        /// The resolver admits UV0 only. For a non-identity mapping, the
+        /// implemented Lemma P predicate in the affine MainTex ST design proves
+        /// the exact transformed domain or supplies the conservative envelope;
+        /// channel selection remains a frontend-owned coordinate-set boundary.
         /// </summary>
         private static bool IsSupportedMapping(UvMapping mapping)
         {
-            return mapping.Channel == 0 &&
-                   mapping.Scale.x == 1f &&
-                   mapping.Scale.y == 1f &&
-                   mapping.Offset.x == 0f &&
-                   mapping.Offset.y == 0f;
+            return mapping.Channel == 0;
         }
 
         /// <summary>

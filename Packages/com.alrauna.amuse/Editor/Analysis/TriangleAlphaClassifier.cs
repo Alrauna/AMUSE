@@ -175,7 +175,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaSamplingSettings sampling)
+            AlphaSamplingSettings sampling,
+            AlphaUvEnvelope envelope)
         {
             if (texture == null)
             {
@@ -210,22 +211,22 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (sampling.FilterMode == AlphaFilterMode.Point &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
-                return ClassifyPointClamp(triangle, texture);
+                return ClassifyPointClamp(triangle, texture, envelope);
             }
             if (sampling.FilterMode == AlphaFilterMode.Point &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
-                return ClassifyPointRepeat(triangle, texture);
+                return ClassifyPointRepeat(triangle, texture, envelope);
             }
             if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
-                return ClassifyBilinearClamp(triangle, texture);
+                return ClassifyBilinearClamp(triangle, texture, envelope);
             }
             if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
-                return ClassifyBilinearRepeat(triangle, texture);
+                return ClassifyBilinearRepeat(triangle, texture, envelope);
             }
 
             return TriangleAlphaOutcome.Unknown;
@@ -233,12 +234,10 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         private static TriangleAlphaOutcome ClassifyPointClamp(
             TriangleAlphaInput triangle,
-            AlphaTextureData texture)
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
         {
-            var domain = ExactUvGeometry.CreateTextureScaledDomain(
-                triangle,
-                texture.Width,
-                texture.Height);
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
             var minimumX = PointClampIndex(
                 ExactUvGeometry.Minimum(domain, true),
                 texture.Width,
@@ -284,13 +283,11 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         private static TriangleAlphaOutcome ClassifyBilinearRepeat(
             TriangleAlphaInput triangle,
-            AlphaTextureData texture)
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
         {
             var domain = ExactUvGeometry.NormalizeRepeat(
-                ExactUvGeometry.CreateTextureScaledDomain(
-                    triangle,
-                    texture.Width,
-                    texture.Height),
+                ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
                 texture.Width,
                 texture.Height);
             var minimumX = CellIndex(
@@ -350,12 +347,10 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         private static TriangleAlphaOutcome ClassifyBilinearClamp(
             TriangleAlphaInput triangle,
-            AlphaTextureData texture)
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
         {
-            var domain = ExactUvGeometry.CreateTextureScaledDomain(
-                triangle,
-                texture.Width,
-                texture.Height);
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
             var minimumX = Math.Max(0, PointClampIndex(
                 ExactUvGeometry.Minimum(domain, true),
                 texture.Width,
@@ -447,13 +442,11 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         private static TriangleAlphaOutcome ClassifyPointRepeat(
             TriangleAlphaInput triangle,
-            AlphaTextureData texture)
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
         {
             var domain = ExactUvGeometry.NormalizeRepeat(
-                ExactUvGeometry.CreateTextureScaledDomain(
-                    triangle,
-                    texture.Width,
-                    texture.Height),
+                ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
                 texture.Width,
                 texture.Height);
             var minimumX = CellIndex(ExactUvGeometry.Minimum(domain, true), domain.TexelScale);
