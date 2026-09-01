@@ -51,8 +51,11 @@ Four members are byte-identical across the two frontends and contain no shader
 knowledge: `RequireAnalyzableMaterial`, `FirstFailedZeroGate`, `TryReadBinary`, and
 `AllUnknown`. Structurally identical but not byte-identical: `ComputeNormalizedSourceHash`
 (same rule, different decomposition), `RecordUnknown<T>`, the result/diagnostic/output
-types, and the value-collapse idiom
-`tint == Vector3.one ? Texture(…) : TextureTimesConstant(…)`, which appears six times.
+types, and the value-collapse idiom (four color sites comparing the tint per
+binary32 component, `tint.x == 1f && tint.y == 1f && tint.z == 1f ? Texture(…)
+: TextureTimesConstant(…)`, plus two scalar-alpha sites on `colorAlpha == 1f`),
+which appears six times. Unity's aggregate `Vector3` equality is epsilon-based
+and is deliberately not used: a near-one tint is a real multiplier.
 
 Both consume **all five** `UnityTextureEvidence` facts.
 

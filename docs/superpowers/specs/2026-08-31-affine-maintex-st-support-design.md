@@ -124,8 +124,13 @@ Appendix A.
 - `lilCalcUV` (`lil_common_functions.hlsl:453-465`):
   `outuv = uv * uv_st.xy + uv_st.zw;` then
   `lilRotateUV(outuv, uv_sr.z + uv_sr.w * LIL_TIME) + frac(uv_sr.xy * LIL_TIME)`.
-  With `_MainTex_ScrollRotate == (0,0,0,0)` (a standing gate) both time terms
-  vanish and the angle is exactly `+0`.
+  With `_MainTex_ScrollRotate` exactly `(0,0,0,0)` (a standing gate) both time
+  terms vanish and the angle is exactly `+0`. The gate is checked **per
+  binary32 component** (`x != 0f || y != 0f || z != 0f || w != 0f`); Unity's
+  `Vector4 ==`/`!=` is epsilon-based (equal when the squared distance is under
+  `0.00001f * 0.00001f`) and is **prohibited** for this proof, because a
+  near-zero `z` is a real static rotation and a near-zero `x`/`y`/`w` is a real
+  time-varying term.
 - `lilRotateUV(uv, 0)` (`lil_common_functions.hlsl:424-437`) has **no
   zero-angle early-out**: it evaluates
   `sincos(0, si, co)`, `outuv = uv - 0.5`, rotates by the matrix `[co −si; si co]`,
@@ -479,14 +484,25 @@ compatibility impact.
    denominator (cell `i` occupies `[i·T, (i+1)·T)`, so the domain displacement
    of a UV displacement `ex` is `ex·width·T`, not `ex·width`) — implemented as
    the convex hull of every domain vertex offset by `(±ex, ±ey)` (a small
-   exact monotone-chain hull added to `ExactUvGeometry`, which also turns a
-   degenerate 1–2-vertex domain into its rectangle), with a zero-envelope
+   exact monotone-chain hull added to `ExactUvGeometry`; the hull is the
+   exact Minkowski sum of the domain with the envelope box, so a
+   single-point domain becomes its rectangle and an axis-aligned segment
+   becomes its rectangle, while a diagonal segment becomes the exact
+   hexagon — tighter than a bounding rectangle and therefore conservative
+   in the safe direction), with a zero-envelope
    early-out that returns the domain object unchanged so identity parity is
    structural, not incidental. Every downstream step (mode dispatch,
-   candidate ranges, clip, `NormalizeRepeat`, budget) is unchanged, and the
-   inflation strictly precedes Repeat normalization so the floor shift sees
-   the inflated minima. All callers are migrated (clean cutover, no overload
-   shim).
+   candidate ranges, clip, `NormalizeRepeat`, budget) is unchanged. The
+   implementation inflates before Repeat normalization, but the ordering is
+   not load-bearing: `NormalizeRepeat` translates a domain by an exact
+   integer number of periods, and `OutwardExpand` commutes with translation,
+   so `NormalizeRepeat(Expand(D))` and `Expand(NormalizeRepeat(D))` differ
+   only by an outcome-neutral integer-period shift — candidate ranges shift
+   by whole texture dimensions, the candidate count is unchanged, `FloorMod`
+   selects the same wrapped texels, and domain/cell intersections translate
+   covariantly. This reconciles §6.1 with the Repeat row of the §9 boundary
+   table; falsifiers F5, F7, and F21 are withdrawn on that basis (§15).
+   All callers are migrated (clean cutover, no overload shim).
 4. Overflow guard: if any corner's exact `|u·s|` or `|u·s + o|` reaches 2^127
    (dyadic corner check; 2^127 is a conservative stand-in for the binary32
    maximum finite value `(2−2^-23)·2^127`), the triangle returns `Unknown` —
@@ -497,11 +513,25 @@ compatibility impact.
    gains one gate — a non-identity `_MainTex` scale/offset refuses the alpha
    output with `LilToonSemanticDiagnosticCode.UnsupportedUv` naming
    `_MainTex_ST`, in the same shape as its existing `_MainTex_ScrollRotate`
-   gate. The gate is scoped to the cutout **alpha** interpretation, which is
+   gate. **"Same shape" means placement and diagnostic behavior only — not
+   Unity vector equality.** `_MainTex_ST` identity is checked **per component
+   with exact binary32 comparisons** (`Scale.x != 1f || Scale.y != 1f ||
+   Offset.x != 0f || Offset.y != 0f`). Epsilon-based `Vector2 ==`/`!=` is
+   **prohibited** at this C4 boundary: it treats vectors within `1e-5` as
+   equal, so a near-identity ST would bypass the gate while the resolver's own
+   exact identity test classifies it as non-identity — admitting an unattested
+   lilToon coordinate into the family-blind affine path. `-0.0f` remains
+   admitted (`-0.0f != 0f` is false; ±0 are equivalent for this coordinate
+   model). The gate is scoped to the cutout **alpha** interpretation, which is
    the only lilToon path that feeds `AlphaSemanticsResolver`
    (`LilToonCutoutMaterialSemantics.cs:330-339` is the sole lilToon
    alpha-sample emitter). Base color, emission, and normal mappings are
-   untouched.
+   untouched. The same exactness rule governs the sibling proof gates in the
+   lilToon and Poiyomi semantics: the `_MainTex_ScrollRotate` and
+   `_EmissionMap_ScrollRotate` zero gates, the `_MainTexHSVG` identity gate,
+   and the unit-tint simplification all compare per binary32 component.
+   Unity's aggregate `Vector3`/`Vector4` equality is epsilon-based and is
+   prohibited for every semantic proof decision.
 
 ### 6.2 Envelope derivation and composition
 
@@ -969,10 +999,13 @@ wrong implementation (full map in the implementation plan):
   under abs-scaling but `ProvenOpaque` under true reflection.
 - F4 mip-0-only transform: a chain transparent only at mip ≥ 1 must stay
   `Unknown`/transparent under non-identity ST.
-- F5 wrap-after-transform / F6 untransformed footprint / F7 boundary-cell
-  loss: Repeat fixtures with transform landing exactly on period boundaries;
-  footprint fixtures whose supporting cell lies outside the untransformed
-  domain.
+- F5 wrap-after-transform and F7 boundary-cell loss: **withdrawn as
+  executable falsifiers (controller equivalence audit, 2026-09-01).** Repeat
+  normalization commutes with envelope inflation up to an integer-period
+  translation (§6.1), so both named mutations are behavior-preserving; the
+  Repeat period-boundary fixtures remain as positive behavioral coverage. F6
+  untransformed footprint remains executable: footprint fixtures whose
+  supporting cell lies outside the untransformed domain.
 - F8 exact-real-for-runtime / F9 double-as-exact / F10 inward rounding: a
   transform whose exact image sits on a texel boundary with a transparent
   texel on the rounded side must not prove (the envelope absorbs the rounding;
@@ -1002,16 +1035,36 @@ wrong implementation (full map in the implementation plan):
 - F19 component swap (`_ST.zw` ↔ `.xy` exchanged, or per-axis scale crossed):
   asymmetric fixtures (offset `(0.5, 0.25)`, scale `(2, 3)`) must fail any
   swapped evaluation.
-- F20 footprint width scaled by `|s|`: the bilinear footprint is one texel of
-  the *texture* in the transformed domain; a fixture whose padded hull only
-  reaches a supporting cell at exact one-texel width must not pass under a
-  `|s|·texel` footprint.
-- F21 inflate-after-normalize: a Repeat fixture whose envelope crosses a
-  period boundary must include the boundary cell; normalizing before
-  inflating loses it and must fail.
+- F20 footprint width scaled by `|s|`: **reclassified as a structural,
+  non-executable audit (controller decision, 2026-09-01)**. The current API
+  makes an ST-scaled filter footprint impossible to express:
+  `TriangleAlphaClassifier.Classify` receives only triangle, texture,
+  sampling, and envelope, and `ExactUvGeometry.CreateTextureScaledDomain`
+  receives only triangle, texture dimensions, and envelope — neither carries
+  `UvMapping` or an ST scale. Bilinear interval width and candidate
+  expansion derive exclusively from `domain.TexelScale`, which is texture
+  geometry (width/height under a power-of-two alignment), not `_MainTex_ST`
+  scale. The ST scale exists only in `AffineUvTransform` and is consumed
+  before classification; classifier fixtures supply their envelope directly
+  and bypass it. The positive bilinear one-texel-reach tests are retained:
+  the footprint is one texel of the *texture* in the transformed domain,
+  never `|s|·texel`.
+- F21 inflate-after-normalize: **withdrawn as an executable falsifier
+  (controller equivalence audit, 2026-09-01)** — same commutativity as F5/F7
+  (§6.1): a Repeat fixture whose envelope crosses a period boundary includes
+  the boundary cell under either ordering. The existing fixture remains as
+  positive behavioral coverage.
 - F22 wider-type-as-proof: computing the transform or envelope in `double`
-  without dyadic representability proof must fail the F10 boundary fixture
-  (the 2026-08-17 spec's prohibition, restated).
+  without dyadic representability proof is refused (the 2026-08-17 spec's
+  prohibition, restated). A direct discriminator pins exact rational →
+  binary32 rounding against a double-rounding counterexample:
+  `ExactUvEnvelopeTests.EncodeToNearestFloatDoesNotDoubleRoundAboveBinary32Midpoint`
+  encodes `1 + 2^-24 + 2^-78`, whose `2^-78` perturbation vanishes in
+  binary64; a `double`-routed encoder lands exactly on the binary32
+  midpoint and ties to even at the wrong neighbor (`0x3f800000`), while
+  exact encoding selects the next neighbor `0x3f800001`. The earlier claim
+  that the F10 boundary fixture must distinguish this is withdrawn — its
+  inputs are binary64-sufficient.
 - F23 test-contract rewrite, not deletion: the resolver tests that assert
   today's identity-only refusals for scaled/offset mappings
   (`AlphaSemanticsResolverTests.UnsupportedUvMappingRefuses`) encode the
