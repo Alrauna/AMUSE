@@ -10,8 +10,8 @@ read-only context.
 | Field | Value |
 |---|---|
 | Tech Stack | Unity 2022.3.22f1, NDMF (pinned, embedded), NUnit EditMode, pinned lilToon 2.3.4 facts (vendor package **absent** from this project) |
-| Production files | 4 changed, 1 added (+meta) — exact map in §FileMap |
-| Test files | 7 changed, 2 added (+meta) — exact map in §FileMap |
+| Production files | 3 changed, 1 added (+meta) — exact map in §FileMap |
+| Test files | 6 changed, 2 added (+meta) — exact map in §FileMap |
 | Branch | created later, with explicit authorization (§Git) |
 | Commit/push | **never** assumed; nothing in this plan stages or commits |
 
@@ -39,8 +39,8 @@ read-only context.
 
 | File | Change |
 |---|---|
-| `Packages/com.alrauna.amuse/Editor/Analysis/ExactUvGeometry.cs` | add: `HalfUlp(ExactDyadic)` (½ ulp of a float as dyadic), `EncodeToNearestFloat(ExactRational)` (returns `(float, ExactRational error)`), `IsExactlyRepresentable(ExactDyadic)` (binary32 fit incl. exponent range), `ConvexHull(IReadOnlyList<ExactUvPoint>)` (exact monotone chain), `OutwardExpand(ExactUvDomain, ExactRational ex, ExactRational ey)` (hull of every vertex offset by `(±ex, ±ey)`; zero early-out returns the same domain); **and** `CreateTextureScaledDomain` (defined here, `:227`) gains the envelope parameter and inflates by `(X·width·T, Y·height·T)` with `T = domain.TexelScale` |
-| `Packages/com.alrauna.amuse/Editor/Analysis/AffineUvTransform.cs` **(+meta)** | new pure static helper: `TryTransform(UvMapping, TriangleAlphaInput, out TriangleAlphaInput transformed, out ExactRational envelopeX, out ExactRational envelopeY, out bool overflow)`. Implements §7 tiers E1/E2/E3/V per axis (E1/E3 normal-`s` guards), corner encode, envelope terms `B_enc`/`B_st`/`B_daz`/`B_noise` (§6.2 constants as named dyadic constants with derivation comments), 2^127 overflow guard, identity short-circuit |
+| `Packages/com.alrauna.amuse/Editor/Analysis/ExactUvGeometry.cs` | add: `HalfUlp(ExactDyadic)` (½ ulp of a float as dyadic), `EncodeToNearestFloat(ExactRational)` (returns `(float, ExactRational error)`), `IsExactlyRepresentable(ExactDyadic)` (binary32 fit incl. exponent range), `ConvexHull(IReadOnlyList<ExactUvPoint>)` (exact monotone chain with a **denominator-correct orientation test** — it cross-multiplies denominators; it must not reuse `Cross`, which differences numerators only and is correct solely for the unit-denominator vertices the current pipeline produces), `OutwardExpand(ExactUvDomain, ExactRational ex, ExactRational ey)` (hull of every vertex offset by `(±ex, ±ey)`; zero early-out returns the same domain); **and** `CreateTextureScaledDomain` (defined here, `:227`) gains the envelope parameter and inflates by `(X·width·T, Y·height·T)` with `T = domain.TexelScale` |
+| `Packages/com.alrauna.amuse/Editor/Analysis/AffineUvTransform.cs` **(+meta)** | new pure static helper: `bool TryTransform(UvMapping, TriangleAlphaInput, out TriangleAlphaInput transformed, out AlphaUvEnvelope envelope)` — returns `false` **iff** the §6.1 overflow guard trips (the caller then returns per-triangle `Unknown`); every axis lands in a tier, so no other failure mode exists; `AlphaUvEnvelope` is constructed inside. Implements §7 tiers E1/E2/E3/V per axis (E1/E3 normal-`s`, normal-`o`/result guards), corner encode, envelope terms `B_enc`/`B_st`/`B_daz`/`B_noise` (§6.2 constants as named dyadic constants with derivation comments), identity short-circuit |
 | `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs` | `Classify` gains a 4th parameter `AlphaUvEnvelope envelope` (new small readonly struct: `ExactRational X, Y; static Zero` — where it lives: this file) and threads it into the `ExactUvGeometry.CreateTextureScaledDomain` calls; the four mode paths keep their signatures and pass the inflated domain through unchanged |
 | `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs` | `IsSupportedMapping` narrows to `mapping.Channel == 0` (doc comment rewritten to cite the design; the "wider floating point is not such a proof" obligation text moves to the implemented tier predicate); `AlphaResolution` stores the `UvMapping`; `Classified(chain, sampling, mapping)` factory gains the parameter; `Classify` short-circuits identity, else calls `AffineUvTransform`, returns `Unknown` on `overflow`, and passes the envelope into the mip loop |
 
@@ -57,12 +57,13 @@ unchanged. If implementation reveals a need there, that is a stop condition
 | `Tests/Editor/Analysis/ExactUvEnvelopeTests.cs` **(+meta)** | new: geometry member tests (Task 1) |
 | `Tests/Editor/Analysis/AffineUvTransformTests.cs` **(+meta)** | new: tier-table and envelope-golden tests (Task 2) |
 | `Tests/Editor/Analysis/TriangleAlphaClassifierTests.cs` | migrate every `Classify(...)` call to the new signature (helpers at ~`:471,490,510,529` and direct sites) passing `AlphaUvEnvelope.Zero`; add envelope boundary fixtures (Task 3) |
-| `Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs` | rewrite `UnsupportedUvMappingRefuses` to the new boundary (channel-only) per F23 — assertions become: channel ≠ 0 refuses; scale/offset variants resolve; add identity-parity and non-identity classification tests; migrate the nine direct `AlphaResolution.Classified(chain, sampling)` call sites (`:735-876`) to the new factory shape (Task 4) |
+| `Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs` | rewrite `UnsupportedUvMappingRefuses` to the new boundary (channel-only) per F23 — assertions become: channel ≠ 0 refuses; scale/offset variants resolve; add identity-parity and non-identity classification tests; migrate the nine direct `AlphaResolution.Classified(chain, sampling)` call sites (`:735-876`) and the **three** three-argument `TriangleAlphaClassifier.Classify` oracle calls (`:316-317`, `:397-398`, `:477-478`) to the new shapes with `AlphaUvEnvelope.Zero` (touched by Task 3 *and* Task 4) |
 | `Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs` | migrate the `ClassifiedResolution` helper (`:1045-1047`, used by `ClassifiedResolutionsNeverMerge`) to the new factory shape; extend the ST-admission block: re-asserted non-identity ST resolves *and* the slot's resolution is now classified (not `UnsupportedUvMapping`) (Task 4) |
 | `Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs` | one consumer test: non-identity ST material → semantic value carries the material's mapping and the resolution classifies (Task 4) |
 | `Tests/Editor/Semantics/LilToon/LilToonCutoutAlphaTests.cs` | one consumer test: non-identity ST cutout material classifies; ScrollRotate nonzero still diagnostic-refuses (Task 4) |
 | `Tests/Editor/Build/AlphaSeparationPreparationTests.cs` | one full-path scenario + source-preservation assertions (Task 4) |
-| `Tests/Editor/Host/AlphaEvidenceClassifierIntegrationTests.cs` | migrate resolver/classifier call shapes if the signature change reaches it (mechanical, `AlphaUvEnvelope.Zero`) |
+
+Verified unaffected (grep-audited): `Tests/Editor/Host/AlphaEvidenceClassifierIntegrationTests.cs` — uses only `AlphaSemanticsResolver.Resolve(alpha, …)` (`:111`) and the unchanged instance `resolution.Classify(triangle)` (`:150, :166, :182, :185, :301`); no changed signature reaches it, no edit required.
 
 New-file metas are created together with the files (one logical unit); no
 other `.meta`, asset, manifest, or lockfile change.
@@ -76,10 +77,12 @@ other `.meta`, asset, manifest, or lockfile change.
    by hand from the binary32 definition), `EncodeToNearestFloat` (ties-to-even
    cases; error magnitude ≤ ½ ulp and exact), `IsExactlyRepresentable`
    (24-bit fit, overflow past 2^128, subnormal edge), `ConvexHull` (collinear
-   → 2 points, CCW ordering, duplicates removed), `OutwardExpand` (zero
-   early-out returns the identical reference; rectangle output for a degenerate
-   1–2 vertex domain; inflation monotone: every original vertex inside the
-   expanded hull). Run → all fail (members absent).
+   → 2 points, CCW ordering, duplicates removed, **and a mixed
+   non-unit-denominator case** — vertices with differing reduced
+   denominators — proving the orientation test is denominator-correct),
+   `OutwardExpand` (zero early-out returns the identical reference; rectangle
+   output for a degenerate 1–2 vertex domain; inflation monotone: every
+   original vertex inside the expanded hull). Run → all fail (members absent).
 2. **GREEN.** Implement the five members in `ExactUvGeometry`. Rerun → pass.
 3. Run `TriangleAlphaClassifierTests` → unchanged (no production behavior
    touched yet).
@@ -91,11 +94,15 @@ other `.meta`, asset, manifest, or lockfile change.
    - Tier table (§7) per axis: E1 positive/negative power-of-two scales,
      zero offset, all-normal hulls; E1 boundary refusals into V — hull
      touching `2^-126`, straddling zero, input-subnormal with large scale;
-     E2 zero scale both axes and one axis; E3 degenerate axis pointwise
-     exact (and pointwise *inexact* → V); E1 normal-`s` guard — the
-     subnormal power-of-two scale `s = 2^-127` over an all-normal hull must
-     fall to V (F24); degenerate-axis subnormal `c` or `s` → V; V fractional
-     scale, fractional and negative offsets.
+     E2 zero scale both axes and one axis, **with subnormal nonzero `o`
+     falling to V**; E3 degenerate axis pointwise exact (and pointwise
+     *inexact* → V), **with subnormal `c`/`s`/`o` or subnormal `c·s`
+     product falling to V**; E1 normal-`s` guard — the subnormal
+     power-of-two scale `s = 2^-127` over an all-normal hull must fall to V
+     (F24); V fractional scale, fractional and negative offsets.
+   - Asymmetric per-axis crossing golden (F19): scale `(2, 3)`, offset
+     `(0.5, 0.25)` with per-axis-distinct expected transformed corners and
+     per-axis-distinct envelopes — fails any component swap.
    - Overflow guard: corner product ≥ 2^127 → `overflow == true`.
    - Envelope golden values (envelope tier): one fully worked fixture per
      term — `B_enc`, `B_st` (including the `2^-125` floor), `B_daz`
@@ -113,8 +120,11 @@ other `.meta`, asset, manifest, or lockfile change.
    `AlphaUvEnvelope` struct and the 4th parameter to
    `TriangleAlphaClassifier.Classify` and to
    `ExactUvGeometry.CreateTextureScaledDomain`; migrate
-   every caller (resolver's one call site, all test sites listed in the file
-   map) passing `AlphaUvEnvelope.Zero`; `CreateTextureScaledDomain` accepts
+   every caller (resolver's one call site; `TriangleAlphaClassifierTests`
+   helpers and direct sites; the three three-argument oracle calls in
+   `AlphaSemanticsResolverTests` at `:316-317`, `:397-398`, `:477-478` —
+   that file is therefore touched by Task 3 as well as Task 4) passing
+   `AlphaUvEnvelope.Zero`; `CreateTextureScaledDomain` accepts
    and ignores the envelope until step 3 (marked with a single-line comment
    naming Task 3 step 3 — no dead code beyond the task boundary). Full suite
    → baseline green (identity behavior unchanged through the zero envelope).
@@ -179,12 +189,6 @@ other `.meta`, asset, manifest, or lockfile change.
      `(2,1,0,0)`, all gates default → alpha complete and classified;
      ScrollRotate `(0,0.1,0,0)` variant still diagnostic-refuses. **Fails:**
      resolver refuses (one lilToon consumer).
-   - Cross-family same-input equality (F15): the SAME captured
-     `(UvMapping, TriangleAlphaInput, AlphaMipChain, sampling)` — built once,
-     e.g. ST `(2,2,0.5,0.25)` — is classified through the Poiyomi semantic
-     value and the lilToon cutout semantic value; the two outcomes must be
-     identical for every triangle in a fixed set. **Fails:** only if the
-     resolver ever special-cases family.
    - `AdmittedMaterialStatesTests`: re-asserted non-identity ST `(2,3)`
      (existing fixture scale) resolves and the slot's `AlphaResolution` is
      classified — singleton animation (Task's required singleton case).
@@ -231,16 +235,16 @@ mapped test, observe failure, revert. No commits at any point:
 | F12 failure promoted | map budget overflow to `ProvenOpaque` | budget test |
 | F13 identity changed | apply `B_noise` to identity | identity parity test |
 | F14 non-singleton admitted | loosen `AdmitVector` equality for `_ST` | existing non-singleton refusal test (must still fail-open) |
-| F15 family divergence | no code mutation exists — the resolver is family-blind by construction; the check is the cross-family same-input equality test (Task 4), which any future family-special-casing (e.g. branching on `CapturedAlphaMaterial.Family` inside the resolver) must fail | cross-family same-input equality test |
+| F15 family divergence | discharged structurally, not by mutation: `AlphaSemanticsResolver.Resolve` takes no family input (`AlphaSemanticsResolver.cs:216-218`), so family-special-casing requires a signature change the file map forbids; Task 6's signature audit pins this, and the two consumer tests pin equal treatment on real fixtures | Task 6 signature audit + both consumer tests |
 | F16 complexity-as-empty | budget overflow → skip loop (vacuous) | budget test |
 | F17 zero-scale-as-missing-UV | return `Unknown` for E2 axes | zero-scale test |
 | F18 degenerate confusion | treat degenerate UV hull as geometry-degenerate | degenerate tests |
-| F19 component swap | transpose scale/offset application in `AffineUvTransform` | the `AffineUvTransformTests` tier goldens with scale `(2, 3)` and offset `(0.5, 0.25)` (per-axis crossing), plus the resolver offset test |
+| F19 component swap | transpose scale/offset application in `AffineUvTransform` | the `AffineUvTransformTests` asymmetric golden with scale `(2, 3)` and offset `(0.5, 0.25)` (per-axis crossing), plus the resolver offset test |
 | F20 scaled footprint | multiply footprint width by `|s|` | Bilinear one-texel-reach test |
 | F21 inflate-after-normalize | reorder in `ClassifyPointRepeat` | Point/Repeat boundary test |
 | F22 wider-type | `double` transform in `EncodeToNearestFloat` | geometry encode tests |
 | F23 hollowed tests | delete rewritten refusal tests | review check: file map diff shows rewrites, not deletions |
-| F24 subnormal DAZ amplification | drop E1/E3 normal-`s` guard | the `s = 2^-127` tier test (must fall to V with `B_daz`) and its `B_daz` golden |
+| F24 subnormal DAZ amplification | drop the E1/E3 normal-`s`/normal-`o`/normal-result guards | the `s = 2^-127` tier test (must fall to V with `B_daz`), its `B_daz` golden, and the E2/E3 subnormal-`o` tier tests |
 
 ### Task 6 — full validation, diff review, cleanup
 
@@ -254,7 +258,10 @@ mapped test, observe failure, revert. No commits at any point:
 4. Diff review: `git diff` (unstaged only — nothing staged), `git diff --check`,
    `git status --short --branch`; confirm exactly the file map, plus the
    preserved package-file churn; confirm nothing staged.
-5. Documentation: this plan and the spec need no update unless a stop
+5. Signature audit (F15): `grep -n "Resolve(" Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs`
+   shows no family/material parameter on `AlphaSemanticsResolver.Resolve`;
+   the family-blindness invariant holds at the signature level.
+6. Documentation: this plan and the spec need no update unless a stop
    condition fired; if implementation revealed a spec error, stop and report
    instead of editing silently.
 
@@ -298,7 +305,9 @@ reports; no validation may be claimed without an observed run.
 2. Files changed/added vs. the file map; any deviation and why.
 3. RED evidence: observed pre-fix failures per task (test names + failure
    modes), GREEN evidence: observed passing runs with counts.
-4. Mutation-check table: mutation applied → test failed → reverted (F1–F23).
+4. Mutation-check table: mutation applied → test failed → reverted (F1–F24;
+   F15/F23 are the two structural checks with no executable mutation —
+   report their audit evidence instead).
 5. Full-suite results (both assemblies, counts), console state.
 6. Diff summary: `git status --short --branch`, `git diff --check` output;
    confirmation that `Packages/manifest.json`/`packages-lock.json` carry only
