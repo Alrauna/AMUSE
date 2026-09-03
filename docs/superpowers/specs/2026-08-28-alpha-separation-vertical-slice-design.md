@@ -10,7 +10,7 @@
 | Unity / NDMF | 2022.3.22f1 / NDMF 1.14.4 (pinned, embedded) |
 | Census Lab | not used, not inspected, not modified |
 
-Claims are tagged **[SOURCE]** (read from checked-out repository or pinned vendor source),
+Each claim carries a tag: **[SOURCE]** (read from checked-out repository or pinned vendor source),
 **[MEASURED]** (established by a characterization already in this repository),
 **[INFERENCE]**, or **[DECISION]** (a choice this design makes and the controller may
 overturn).
@@ -21,12 +21,13 @@ overturn).
 
 One nondestructive build-time transformation, on the NDMF build avatar only:
 
-For each renderer material slot whose triangles are proven opaque across **every** admitted
-runtime material state affecting that slot, move those triangles onto an AMUSE-generated
-canonical opaque Poiyomi material — either by replacing the slot's material outright
-(`WhollyOpaqueCandidate`) or by appending an opaque submesh and material slot beside the
-preserved alpha slot (`Split`) — and rewrite the affected material-swap animation so every
-admitted runtime value maps to its corresponding opaque result.
+For each renderer material slot, examine every admitted runtime material state that affects
+the slot. If the triangles are proven opaque across all of those states, move those triangles
+onto an AMUSE-generated canonical opaque Poiyomi material. Do this by replacing the slot
+material outright (`WhollyOpaqueCandidate`), or by appending an opaque submesh and material
+
+slot beside the preserved alpha slot (`Split`). Then rewrite the affected material-swap
+animation so every admitted runtime value maps to its corresponding opaque result.
 
 Both dispositions ship together. Admitted runtime material swaps and the relevant animation
 states are supported from the outset.
@@ -43,13 +44,14 @@ resolved. Reading current code rather than the notes changes several things.
 
 ### 2.1 Both merged prerequisites are in `main`
 
-**[SOURCE]** `fix/scope-material-swap-closure-to-renderer` (commit `9c1510f`) and
-`refactor: separate capture schema from alpha relevance` (commit `47cabae`) are merged.
+**[SOURCE]** `main` contains both: `fix/scope-material-swap-closure-to-renderer` (commit
+`9c1510f`) and `refactor: separate capture schema from alpha relevance` (commit `47cabae`).
 
 - `UnityAnimationEvidenceCapture.CaptureObserved` now takes `rendererPath` and filters
   material-slot object bindings through `AddressesAnalyzedRenderer` **before** admission and
   again when building the immutable copy. The graph-wide closure defect and the
   cross-renderer refusal it caused are gone. Admitted sets are genuinely renderer-local.
+
 - `AlphaMaterialRequestSelector` now yields **two** requests per material:
   `alphaRelevanceRequest` and `captureRequest`. `CapturedAnimationEvidence` retains only
   `AlphaRelevanceRequest`. `UnityMaterialSemantics.CaptureRequestForFamily` returns
@@ -57,17 +59,18 @@ resolved. Reading current code rather than the notes changes several things.
   PoiyomiOpaqueConversion.ConversionEvidenceRequest)` for Poiyomi and the alpha request alone
   for lilToon.
 
-**Consequence: seam E is already closed.** Conversion-relevant evidence is captured for every
-admitted Poiyomi material today, in the single closed capture, without widening ordinary alpha
-relevance. This design does **not** need to touch the capture schema, `MaterialEvidenceRequest`,
+**Consequence: seam E is already closed.** The capture half already captures conversion-relevant
+evidence for every admitted Poiyomi material today, in the single closed capture, without widening
+ordinary alpha relevance. This design does **not** need to touch the capture schema, `MaterialEvidenceRequest`,
 or request selection.
 
-**Superseded:** the merged conversion design's consumer obligation 1 — "build the renderer's
+**Superseded:** consumer obligation 1 of the merged conversion design — "build the renderer's
 closed request as `Combine(<alpha requests>, ConversionEvidenceRequest)` **for that renderer
 only**" — describes a route the repository did not take. The realized shape combines per
 *family* rather than per renderer, and achieves the same coverage guarantee by keeping the
+
 relevance request narrow instead of keeping the capture request narrow. Obligation 1 is
-satisfied; its wording is stale.
+satisfied. Its wording is stale.
 
 ### 2.2 The mesh-finalization blocker is resolved and its route is characterized
 
@@ -96,23 +99,28 @@ reconstruction is not an acceptance criterion (VRChat requires Read/Write for up
 
 - **A — live/admitted pairing.** **[SOURCE]** `CaptureObserved` still builds `List<Material>
   admitted` index-aligned with `capturedMaterials` and lets the live half fall out of scope.
+
 - **B — derived per-(slot, material) evidence.** **[SOURCE]** `AdmittedMaterialStates.ResolveSlot`
   still constructs the derived `CapturedAlphaMaterial` and returns only `AlphaResolution`.
+
 - **C — `UnityRendererMutationTarget`.** **[SOURCE]** Still produced by `CaptureGeometry` and
   never read.
+
 - **D — `MeshSeparationPlan`.** **[SOURCE]** `ClassifyRuntimeStates` still ends
   `return plan.OpaqueTriangleCount;`.
+
 - **F — no third pass.** **[SOURCE]** `AmusePlatformFinishPlugin.Configure` declares exactly
   two passes.
+
 - **G — `CapturedObjectBinding.TypeName` is a string.** Unchanged, and still resolved the same
-  way: real bindings with real `Type`s are read from live clips in the second window; evidence
-  membership is compared on `(Path, TypeName, PropertyName)`.
+  way: the second window reads real bindings with real `Type`s from live clips, and membership
+  comparison uses `(Path, TypeName, PropertyName)`.
 
 ### 2.5 The pre-existing slot→renderer alpha escalation — an independently mergeable prerequisite
 
 **[SOURCE]** `AmusePlatformFinishPass.ResolveRuntimeStates` returns on the **first** slot whose
-`AdmittedMaterialStates.ResolveSlot` refuses, so one unresolvable slot refuses the whole
-renderer's analysis — including sibling slots whose alpha proof does not depend on it.
+`AdmittedMaterialStates.ResolveSlot` refuses, so one unresolvable slot refuses the analysis
+for the whole renderer — including sibling slots whose alpha proof does not depend on it.
 
 **Exactly what is in scope, and what is not.** **[SOURCE]** Material-dependency closure runs
 *before* any slot exists to resolve, and it is renderer-wide and all-or-nothing:
@@ -120,8 +128,9 @@ renderer's analysis — including sibling slots whose alpha proof does not depen
 admitted batch, an unselectable or unattested material returns
 `MaterialDependencyClosureFailure.UnattestedMaterial`, failed evidence carries no admitted
 materials at all, and `ResolveRuntimeStates` returns `MaterialDependencyClosureFailed` **before**
-`MaterialSlotsFor` or `AdmittedMaterialStates.ResolveSlot` is reached. An unattested or
-unsupported material therefore cannot be localized to its slot by changing `ResolveRuntimeStates`,
+
+the build reaches `MaterialSlotsFor` or `AdmittedMaterialStates.ResolveSlot`. An unattested or
+unsupported material therefore resists localization to its slot through changes to `ResolveRuntimeStates`,
 and this design does not claim otherwise.
 
 The escalation that *is* in scope is the one occurring **after closure has already succeeded**:
@@ -133,85 +142,93 @@ because a `material.<Property>` float curve at the renderer path is **renderer-w
 `ResolveProofRelevant` returns `RendererWide`, and `ResolveRuntimeStates` hands the same relevant
 binding list to **every** slot. So the *binding* is never slot-scoped, and a curve that no material
 can admit is not isolated to one slot — it refuses every slot it reaches, and localizing the loop
+
 changes nothing about it.
 
-What *is* per-slot is the **admission outcome**, because **[SOURCE]** `ResolveSlot` admits every
-group against *that admitted material's own captured defaults* — its doc comment states the rule
-directly: "the same animated binding may therefore be admitted against one admitted material and
+What *is* per-slot is the **admission outcome**. **[SOURCE]** `ResolveSlot` admits every group
+against *the captured defaults of that admitted material itself* — its doc comment states the
+rule directly: "the same animated binding may therefore be admitted against one admitted material and
 refused against another." The failures the prerequisite genuinely localizes are therefore
-material-dependent ones arising from one shared renderer-wide binding:
+material-dependent failures that arise from one shared renderer-wide binding:
 
-- the animated singleton **equals** slot 1's material's serialized default but **differs** from
-  slot 0's, so `AdmitScalar` returns `SourcesDisagree` for slot 0 only →
-  `AnimatedMaterialPropertyNotSingleton`;
-- the animated property is **present** on slot 1's material and **absent** from slot 0's →
-  `AnimatedPropertyAbsentFromAdmittedMaterial` for slot 0 only;
-- slot 0's admitted material resolves to unknown alpha semantics while slot 1's does not →
-  `AdmittedMaterialSemanticsUnknown` for slot 0 only.
+- the animated singleton **equals** the serialized default of the material in slot 1 but
+  **differs** from the default in slot 0, so `AdmitScalar` returns `SourcesDisagree` for slot 0
+  only → `AnimatedMaterialPropertyNotSingleton`.
 
-Each of these is a genuinely slot-scoped failure being given renderer scope today, and it cannot be
-avoided from inside the feature. A curve form that is not finite-exact
+- the animated property is **present** on the material in slot 1 and **absent** from the
+  material in slot 0 → `AnimatedPropertyAbsentFromAdmittedMaterial` for slot 0 only.
+
+- the admitted material in slot 0 resolves to unknown alpha semantics while the material in
+  slot 1 does not → `AdmittedMaterialSemanticsUnknown` for slot 0 only.
+
+Each of these is a genuinely slot-scoped failure. Today the loop gives it renderer scope, and the
+feature cannot avoid that from inside. A curve form that is not finite-exact
 (`UnsupportedAnimationCurveForm`) is **not** in this group: **[SOURCE]** `AdmitScalar` checks
-`IsFiniteExact` on the binding itself, before any material's default is consulted, so it refuses
-every slot the binding reaches regardless of the loop's scope. It is listed here so it is not
-mistaken for something the prerequisite fixes.
+`IsFiniteExact` on the binding itself, before the code consults the default of any material, so it
+
+refuses every slot the binding reaches regardless of the scope of the loop. This section lists it
+so no one mistakes it for something the prerequisite fixes.
 
 **[DECISION]** Recorded as an independently mergeable **prerequisite**,
 `fix/scope-slot-alpha-refusal-to-slot`, completed and merged **before** vertical-slice
-implementation begins, per `CLAUDE.md`'s prerequisite rule: park this branch → start the
-prerequisite from fresh `main` → complete, review and merge it → resume the vertical slice from
-updated `main`.
+implementation starts. The prerequisite rule in `.omp/roles/controller/AGENTS.md`
+§Controller workflow applies: park this branch → start the prerequisite from fresh `main` →
+complete, review and merge it → resume the vertical slice from updated `main`.
 
 What this design requires of that branch, and nothing more: the per-slot `ResolveSlot` loop must
-yield per-slot resolutions with per-slot refusals instead of returning on the first refusing
-slot, so a slot whose alpha cannot be resolved is simply not a separation candidate while its
-siblings still are. It changes *which slots a post-closure failure eliminates*, never what is
-proven, and never how a slot is proven.
+yield per-slot resolutions with per-slot refusals. It must not return on the first refusing
+slot. Then a slot whose alpha cannot be resolved is not a separation candidate, while its
+
+siblings still are. This changes *which slots a post-closure failure eliminates*. It never
+changes what is proven, and it never changes how a slot is proven.
 
 **Explicitly outside that branch.** It must not redesign `CapturedAnimationEvidence`, the closed
-capturer, or the single closed batch, and it must not localize closure. Renderer- and
+capturer, or the single closed batch. It must not localize closure. Renderer- and
 avatar-scoped failures keep their current scope unchanged: material-dependency closure failure
 (including unattested and unsupported materials), unrecognized animated material bindings,
+
 additive layers, unnormalized direct blend trees, animated mesh or slot count, and every host
 structural refusal.
 
 **Kept out of the vertical slice.** This design does not implement the prerequisite, does not
 depend on its internal shape, and does not fold it into the feature branch. Its own falsifiers
-belong to it. The vertical slice's falsifier-19 obligation is discharged by the merged
-prerequisite regression `RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling`
-(`914d9db`), re-run on this branch, with falsifier 1 proving at the feature layer that a wholly
-opaque candidate which reaches the feature is applied. No standalone feature-level F19 test
-exists; §13 records why.
+belong to it. The merged prerequisite regression
+`RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling` (`914d9db`) discharges
+
+the falsifier-19 obligation for the vertical slice. It is re-run on this branch, and falsifier 1
+proves at the feature layer that a wholly opaque candidate which reaches the feature is
+applied. No standalone feature-level F19 test exists. §13 records why.
 
 ### 2.6 Renderer-wide dependency closure — existing coverage pressure, not a prerequisite
 
-Renderer-wide closure failure is a **conservative false negative that this milestone keeps**. One
-unsupported material — a locked Poiyomi material, a transparent or cutout lilToon variant, a
-third-family shader — refuses every slot on its renderer, including slots whose own materials are
-attested and would have separated.
+Renderer-wide closure failure is a **conservative false negative that this milestone keeps**.
+One unsupported material — a locked Poiyomi material, a transparent or cutout lilToon variant,
+a third-family shader — refuses every slot on its renderer. That includes slots whose own
+materials are attested and would still separate.
 
-It is recorded here as **existing coverage pressure**, deliberately **not** a second prerequisite
-and **not** a follow-up this design specifies. Changing it would mean changing the single closed
-capture representation — per-material or per-slot capture, partial batches, a partial-attestation
-outcome — which is a materially larger architectural decision than any coverage argument currently
-available justifies. Revisit it only when real coverage evidence, from the approved Census corpus
-or reduced public fixtures, shows what it actually costs. Increasing coverage is never a reason to
-weaken the closed-capture guarantee.
+This section records it as **existing coverage pressure**, deliberately **not** a second
+prerequisite and **not** a follow-up this design specifies. Changing it would mean changing the
+single closed capture representation: per-material or per-slot capture, partial batches, or a
+partial-attestation outcome. That is a materially larger architectural decision than any
+
+coverage argument currently available justifies. Revisit it only when real coverage evidence,
+from the approved Census corpus or reduced public fixtures, shows what it actually costs.
+Increasing coverage is never a reason to weaken the closed-capture guarantee.
 
 ---
 
 ## 3. Lifecycle
 
-**Prerequisite ordering.** One independently mergeable prerequisite precedes implementation of
-everything in this document:
+**Prerequisite ordering.** One independently mergeable prerequisite precedes implementation,
+for everything in this document:
 
-1. **`fix/scope-slot-alpha-refusal-to-slot`** (§2.5) — from fresh `main`; completed, reviewed and
-   merged on its own.
+1. **`fix/scope-slot-alpha-refusal-to-slot`** (§2.5) — from fresh `main`. Completed, reviewed
+   and merged on its own.
 2. **This vertical slice** — resumed or recreated from updated `main`.
 
-Nothing else is outstanding. The two prerequisites the earlier notes named — renderer-scoped
+Nothing else remains open. The two prerequisites the earlier notes named — renderer-scoped
 material-swap closure and the capture-schema/alpha-relevance split — are already merged (§2.1),
-and the mesh-finalization question is resolved (§2.2).
+and §2.2 resolves the mesh-finalization question.
 
 Three passes in one `InPhase(BuildPhase.PlatformFinish)` sequence.
 
@@ -259,10 +276,11 @@ pass 3  "AMUSE alpha separation apply"         WithRequiredExtension(AnimatorSer
 ### 3.2 Why the barrier stays extension-free
 
 **[SOURCE]** `AmusePlatformFinishPass.RequireAnimatorServicesContextInactive` exists because a
-barrier under an active extension reads *pre-commit* controller state, and
-`CommittedControllerGraph.Enumerate` would then read the avatar's un-virtualized innate
-controllers. The barrier's placement is load-bearing and unchanged. Pass 3 does not analyze;
-it validates against already-taken evidence and mutates.
+barrier under an active extension reads *pre-commit* controller state. Then
+`CommittedControllerGraph.Enumerate` would read the un-virtualized innate controllers of the
+
+avatar. The barrier placement is load-bearing and unchanged. Pass 3 does not analyze.
+It validates against already-taken evidence and mutates.
 
 ---
 
@@ -296,18 +314,20 @@ PreparedSlotSeparation
                                               // Opaque/TransparentTriangleOrdinals
     IReadOnlyDictionary<Material, Material> OpaqueOfAdmitted   // live, reference-keyed
 ```
-
-**Nothing is copied out of an existing type, and neither existing type is modified.**
-`UnityRendererMutationTarget` is **[SOURCE]** produced today by `CaptureGeometry` and never
-consumed; holding it whole is what closes seam C. `SubmeshSeparationPlan` already carries the
+**This design copies nothing out of an existing type, and it modifies neither existing type.**
+`UnityRendererMutationTarget` **[SOURCE]** comes from `CaptureGeometry` today, and nothing
+consumes it. Holding it whole is what closes seam C. `SubmeshSeparationPlan` already carries the
 slot index, the disposition and both ordinal lists, so:
 
 - slot index — `Plan.SourceMaterialBindingIndex`. **[SOURCE]** `ClassifyRuntimeStates` fills it
   from `UnitySubmeshAlphaSnapshot.MaterialSlotIndex`, and `CaptureGeometry` constructs every
   snapshot as `new UnitySubmeshAlphaSnapshot(submesh, submesh, indices)`, so submesh index,
-  material slot index and `SourceSubmeshIndex` are the same number by construction;
-- disposition — `Plan.Disposition`;
-- triangle ordinals — `Plan.OpaqueTriangleOrdinals` / `Plan.TransparentTriangleOrdinals`;
+  material slot index and `SourceSubmeshIndex` are the same number by construction.
+
+- disposition — `Plan.Disposition`.
+
+- triangle ordinals — `Plan.OpaqueTriangleOrdinals` / `Plan.TransparentTriangleOrdinals`.
+
 - expected renderer, mesh and slot count — `Target.Renderer`, `Target.ExpectedMesh`,
   `Target.ExpectedMaterialSlotCount`.
 
@@ -324,7 +344,7 @@ exists to close. Pass 3 reads the current material from the live renderer, valid
 Nothing here enters `CapturedAnimationEvidence`, `MaterialSemantics`, `MeshSeparationPlan`,
 `SubmeshSeparationPlan`, `UnityRendererMutationTarget`, or `UnityRendererAlphaSnapshot`.
 
-**`OpaqueBySource` is avatar-scoped on purpose.** The clone is a pure function of the source
+**`OpaqueBySource` is avatar-scoped on purpose.** The clone depends only on the source
 material (`new Material(source)` plus fixed canonical constants), so two renderers referencing
 the same source material share one clone. The *decision* to use it stays per slot. This costs
 nothing and avoids duplicate generated assets in the shipped container.
@@ -363,15 +383,17 @@ NEW, only if plan.HasAnyOpaqueCandidates:
 ```
 
 **The mesh clone trigger is narrowed twice.** `plan.RequiresAnySplit` is necessary but not
-sufficient: if every `Split` slot is dropped during preparation, no clone is created at all.
-**[SOURCE]** `RequiresAnySplit` already exists on `MeshSeparationPlan`; no new predicate is
-introduced. Clones abandoned by *later* (validation-time) failures are handled by the sweep,
-not by avoiding creation.
+sufficient. If every `Split` slot is dropped during preparation, no clone is created at all.
+**[SOURCE]** `RequiresAnySplit` already exists on `MeshSeparationPlan`. No new predicate is
+
+introduced. The sweep handles clones abandoned by *later* (validation-time) failures, not
+avoidance of creation.
 
 **Determinism.** Renderer order is `GetComponentsInChildren<Renderer>(true)` order, already the
-existing loop's order. Candidate slots are ascending slot index. Admitted materials are visited
+order of the existing loop. Candidate slots ascend by slot index. The loop visits admitted materials
 in `CapturedMaterialSlotEvidence.AdmittedMaterialIndices` order, which
 `AmusePlatformFinishPass.MaterialSlotsFor` builds deterministically (current assignment first,
+
 then clip/binding/value order). No dictionary iteration order is ever observable in an output.
 
 ---
@@ -388,10 +410,12 @@ the live object.
 `CaptureObservedForTests`, index-aligned with `CapturedAnimationEvidence.AdmittedMaterials`.
 
 - No new type, no second capture, no re-admission.
-- The list is a **local** in the barrier and reaches build state only through the prepared
-  record's live half. It never enters `CapturedAnimationEvidence`, whose no-live-Unity-object
-  guarantee is unchanged.
-- On a closure failure the out list is empty; callers must not read it.
+
+- The list is a **local** in the barrier and reaches build state only through the
+  live half of the prepared record. It never enters `CapturedAnimationEvidence`, whose no-live-Unity-object
+  guarantee still holds.
+
+- On a closure failure the out list is empty. Callers must not read it.
 
 **Rejected:** a `RendererAnimationCapture` wrapper type (a new type to carry two values across
 one call), and re-deriving the pairing later from `renderer.sharedMaterials` plus curve values
@@ -402,8 +426,8 @@ one call), and re-deriving the pairing later from `renderer.sharedMaterials` plu
 ## 7. Poiyomi conversion boundary
 
 `PoiyomiOpaqueConversion` is used exactly as it stands. Its recipe, eligibility order,
-`AlreadyOpaque` classification, clone preparation and read-back validation are not redesigned,
-not wrapped, and not re-implemented. No field is added to `MaterialSemantics`.
+This design does not redesign, wrap, or re-implement the recipe, eligibility order,
+`AlreadyOpaque` classification, clone preparation or read-back validation. No field is added to `MaterialSemantics`.
 
 ### 7.1 Conversion-relevant animated properties are admitted through conversion's own request
 
@@ -414,8 +438,9 @@ renderer path resolves `Irrelevant`. Called with
 
 So the second resolution is a **second call to the existing function with a different
 relevance**, not a new mechanism, and it happens **only for renderers that produced opaque
-candidates**. Ordinary alpha proof still resolves only alpha-relevant bindings: **per-slot alpha
+candidates**. Ordinary alpha proof still resolves only alpha-relevant bindings. **Per-slot alpha
 relevance and semantic resolution are unchanged** — the same bindings are judged relevant, the
+
 same values admitted, the same semantics resolved, the same triangles proven. The prerequisite of
 §2.5 changes only the *scope* of a per-slot refusal, never any of that. This realizes shape 2 of
 the animation-rewrite note §9, with the capture half already merged.
@@ -423,34 +448,38 @@ the animation-rewrite note §9, with the capture half already merged.
 Three renderer-scoped conditions arise from this second resolution, and they are genuinely
 renderer-scoped because the bindings themselves are renderer-wide:
 
-- `ResolveProofRelevant` returns `UnrecognizedMaterialBinding` under conversion relevance;
-- `evidence.HasAdditiveLayer` with at least one conversion-relevant binding;
+- `ResolveProofRelevant` returns `UnrecognizedMaterialBinding` under conversion relevance.
+- `evidence.HasAdditiveLayer` with at least one conversion-relevant binding.
 - `evidence.HasUnnormalizedDirectBlendTree` with at least one conversion-relevant binding.
 
 Each invalidates **every candidate slot on that renderer** and nothing else: no other
-renderer, and not the renderer's alpha analysis or its accounting.
+renderer, and not the alpha analysis of the renderer or its accounting.
 
 ### 7.2 Per admitted material state, in one consistent tuple
 
-For each candidate slot, for each admitted material index in that slot's
-`AdmittedMaterialIndices` — and **only** those indices, never the whole `AdmittedMaterials`
+For each candidate slot, for each admitted material index in the
+`AdmittedMaterialIndices` of that slot — and **only** those indices, never the whole `AdmittedMaterials`
 list:
 
-1. **Derived conversion evidence.** Group this slot's conversion-relevant bindings by logical
-   property and admit each group against **this admitted material's own captured defaults**,
+1. **Derived conversion evidence.** Group the conversion-relevant bindings of this slot by logical
+   property and admit each group against **the captured defaults of this admitted material itself**,
    accumulating derivations. This is exactly what `AdmittedMaterialStates.Admit` does for
-   alpha; the change is to let it run a second time against a different relevance set. See
+
+   alpha. The change is to let it run a second time against a different relevance set. See
    §12 for the one production method this requires.
+
 2. **Effective non-property facts.** `PoiyomiOpaqueConversion.ReadEffectiveRenderState(live,
    out queue, out renderType)`, read **in the barrier, in the same pass as the evidence**.
-   **[SOURCE]** Neither fact is animation-reachable — Unity's material binding syntax is
+   **[SOURCE]** Neither fact is animation-reachable — the material binding syntax of Unity is
    `material.<PropertyName>`, and no binding form addresses a render queue or an override tag
    — so neither belongs in an evidence request, and reading them beside the capture is not a
    late live read of animation-relevant state.
+
 3. **Conversion attestation**, per the merged conversion design §5.2:
    `PoiyomiOpaqueConversion.GatherConversionSourceEvidence(live.shader, derivedEvidence)` then
    `PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(...)`. This is the sole reason the live
    `Shader` is needed. A locked Poiyomi material fails here — a correct expected refusal.
+
 4. **Eligibility.** `PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(derivedEvidence,
    queue, renderType)`.
 
@@ -462,12 +491,12 @@ re-captures material state after the evidence a decision depends on. **This supp
 
 **[SOURCE]** A `material.<Property>` curve addresses no slot and therefore drives *every*
 material on the renderer, including a generated one AMUSE appends. Conversion design §7
-obligation 4 is adopted verbatim:
+obligation 4 verbatim, adopted as written:
 
 > for every recipe property carrying an admitted conversion binding at this renderer path, the
 > admitted value must already equal that property's canonical value.
 
-Because admission is exact-singleton against the material's own serialized default, the
+Because admission is exact-singleton against the serialized default of the material itself, the
 admitted value *is* the serialized value, so this reduces to a comparison against
 `PoiyomiOpaqueConversion.CanonicalOpaqueProperties` — already exposed, no new surface.
 
@@ -489,21 +518,21 @@ interchangeability reasoning the approved scope does not require.
 | `Convertible` | `source → clone` | `PrepareCanonicalOpaqueClone(source)`, deduplicated by source material through `OpaqueBySource`, added to `CreatedClones` |
 | `Refused(reason)` | none | none; the **slot** is dropped, carrying the `PoiyomiOpaqueConversionRefusal` for reporting |
 
-**Every admitted material of a candidate slot must map before that slot is prepared at all.**
-A slot with any unmapped admitted value is dropped in the barrier and never reaches
+**Every admitted material of a candidate slot must map before the barrier prepares that slot at all.**
+The barrier drops a slot with any unmapped admitted value, and that slot never reaches
 validation. This is what makes "a triangle may move to opaque only when it is proven opaque
 across every admitted runtime material state affecting its slot" true of the *material* half
 as well as the alpha half.
 
 **Clone naming.** `PrepareCanonicalOpaqueClone` deliberately leaves the clone unnamed, because
-NDMF sub-asset names come from the object's own name and guarantee no determinism. AMUSE names
+NDMF sub-asset names come from the name of the object itself and guarantee no determinism. AMUSE names
 it immediately on creation:
 
 ```
 "<sourceMaterial.name> (AMUSE Opaque <n>)"
 ```
 
-where `n` is the clone's zero-based position in `CreatedClones`, which is appended to in the
+where `n` is the zero-based index the clone holds in `CreatedClones`, which grows in the
 deterministic order of §5. Two source materials sharing a name therefore still produce distinct
 sub-asset names.
 
@@ -511,6 +540,7 @@ sub-asset names.
 complete canonical tuple, then re-reads all 25 canonical facts via `TryFindNonCanonicalFact`
 and checks shader preservation, destroying the clone before throwing on disagreement. That
 throw is an invariant failure and must stay one — the no-catch policy applies. AMUSE adds no
+
 second validation and no catch.
 
 **No eager save.** `PrepareCanonicalOpaqueClone` takes no asset saver and cannot persist
@@ -527,6 +557,7 @@ objects, for the two reasons in §3.1.
 deliberately *not* merged into `RendererAnalysisRefusal` — analysis reads that vocabulary, and
 putting transformation conditions there would let unknown transformation state start refusing
 analysis that does not depend on it. This is the same argument `PoiyomiOpaqueConversionRefusal`
+
 already makes in its own doc comment, and the same separation.
 
 | Member | Raised in | Cause |
@@ -554,40 +585,48 @@ dependency closure succeeded — it is not slot-local all the way down:
 1. **Renderer material-dependency closure remains a precondition for any slot on that renderer to
    be analyzed at all.** **[SOURCE]** Closure is renderer-wide and all-or-nothing, and a failed
    closure returns before any slot is resolved (§2.5).
+
 2. **After successful closure**, ordinary per-slot alpha-resolution failures, conversion failures
    and late-validation failures are slot-local — the first of these conditional on the
    prerequisite of §2.5.
+
 3. **Unsupported or unattested material closure remains a renderer-wide conservative false
    negative in this milestone**, recorded as existing coverage pressure in §2.6 and not addressed
    here.
 
-The rules below are the statement of (2).
+The rules below state (2).
 
 - A failed slot keeps its **original submesh, its original material assignment, and its original
   material-swap curve**. AMUSE writes nothing for it.
+
 - Independently valid slots on the same renderer continue.
+
 - Other renderers are unaffected.
+
 - **All** candidate slots on **all** renderers are validated before **any** build-avatar write.
-- A failure that is genuinely renderer-scoped (§8.1, second group) drops that renderer's candidate
-  slots and nothing more — never the renderer's alpha analysis, never another renderer.
+
+- A failure that is genuinely renderer-scoped (§8.1, second group) drops the candidate
+  slots of that renderer and nothing more — never the alpha analysis of the renderer, never another renderer.
+
 - Cleanup happens once, after `S` is known.
+
 - **No reference counting.** The single post-validation sweep already expresses the rule.
 
 ### 8.3 Marker clips
 
-**[SOURCE]** `VirtualClip.SetObjectCurve` begins `if (IsMarkerClip) return;` — a silent no-op —
+**[SOURCE]** `VirtualClip.SetObjectCurve` starts with `if (IsMarkerClip) return;` — a silent no-op —
 and `VirtualClip.FromMarker` keeps the original SDK asset. Editing one would appear to succeed
 while the avatar kept swapping to the alpha material, and reaching the asset directly would write
 a source asset.
 
 Checked **twice**: in the barrier against `CapturedClipEvidence.IsSpecialMotion` (cheap, drops the
 slot before any clone is prepared for it), and again in pass 3 against the live `VirtualClip`,
-which is authoritative. The live check is the one correctness depends on; the early check exists
+which is authoritative. The live check is the one correctness depends on. The early check exists
 to avoid preparing work that will be discarded.
 
 ### 8.4 The clone-without-survivors case
 
-Required behaviour, and the design's answer:
+Required behaviour, and the answer of this design:
 
 > a renderer whose plan required a mesh clone, where every split slot is later invalidated
 
@@ -595,11 +634,11 @@ The clone was created in the barrier because at least one `Split` slot survived 
 When validation invalidates all of them, `S` for that renderer contains only
 `WhollyOpaqueCandidate` slots (possibly none). Then:
 
-- **the mesh clone is referenced by no surviving slot, so the sweep destroys it;**
-- `renderer.sharedMesh` is never touched and stays the source mesh;
+- **the mesh clone is referenced by no surviving slot, so the sweep destroys it.**
+- `renderer.sharedMesh` is never touched and stays the source mesh.
 - surviving wholly-opaque slots still apply — material assignment plus curve rewriting, which
-  need no geometry;
-- if `S` is empty for that renderer, nothing at all is written for it.
+  need no geometry.
+- if `S` is empty for that renderer, the feature writes nothing at all for it.
 
 This is exactly the expected direction stated in the task, and it needs no special case: it falls
 out of "finalize against `S`, then sweep what `S` does not reference". Test 4 (§13) asserts it at
@@ -610,32 +649,36 @@ cannot observe a destroyed transient.
 
 ## 9. Pass 3 — validation, finalization, sweep, apply
 
-`AmuseBuildOperation.Execute(state.Lifecycle, context.AssetSaver, prepare, apply)` is called
-**once for the whole avatar**, so there is exactly one mutation boundary. It becomes the type's
-first production consumer and is **not modified**. The `assetSaver` argument is required by its
-signature and is deliberately never used — nothing obliges a consumer to save, and §3.1 explains
+The design calls `AmuseBuildOperation.Execute(state.Lifecycle, context.AssetSaver, prepare, apply)`
+**once for the whole avatar**, so there is exactly one mutation boundary. It becomes the
+first production consumer of the type and is **not modified**. The `assetSaver` argument is required by its
+signature, and the design deliberately never uses it — nothing obliges a consumer to save, and §3.1 explains
+
 why saving would be wrong.
 
 ### 9.1 Validate — reads only, nothing constructed, nothing written
 
 Per renderer, before its slots:
 
-- `Target.Renderer` is alive; `renderer.sharedMesh` is reference-equal to
-  `Target.ExpectedMesh`; `renderer.sharedMaterials.Length ==
-  Target.ExpectedMaterialSlotCount`; `sharedMesh.subMeshCount ==
+- `Target.Renderer` is alive. `renderer.sharedMesh` is reference-equal to
+  `Target.ExpectedMesh`. `renderer.sharedMaterials.Length ==
+  Target.ExpectedMaterialSlotCount`. `sharedMesh.subMeshCount ==
   Target.ExpectedMaterialSlotCount`. Any mismatch → `RendererChangedSincePreparation` for all
+
   its candidate slots. This is an ordinary refusal, not a defect: another pass in this phase may
-  legitimately have replaced the mesh or the slot array.
+  legitimately replace the mesh or the slot array.
+
 - **Then snapshot the live `renderer.sharedMaterials` array once**, and use that snapshot for
   the rest of validation, finalization and apply. It is the authoritative statement of what the
-  renderer currently holds; nothing downstream re-reads the renderer.
+  renderer currently holds. Nothing downstream re-reads the renderer.
 
 **Why the live snapshot is required.** Length and mesh identity do not constrain *contents*.
 **[SOURCE]** a foreign NDMF pass in this phase may replace `sharedMaterials[i]` while preserving
 the array length, and nothing in the barrier-time record would notice. Since §3.1 establishes
 that correctness must not depend on pass adjacency, a barrier-time current material is stale
 state by construction, and applying an opaque result derived from it would silently overwrite
-another tool's assignment with a material AMUSE proved nothing about. Reading the current
+
+an assignment made by another tool with a material AMUSE proved nothing about. Reading the current
 material live and validating it is what makes the adjacency-independence claim true rather than
 aspirational.
 
@@ -643,49 +686,58 @@ Per candidate slot, independently:
 
 1. Discover the live target bindings — **never by clip name**:
    `AnimationIndex.GetClipsForObjectPath(rendererPath)`, **materialized to a list first**
-   (**[SOURCE]** it returns the index's own live `HashSet`), then per clip
+   (**[SOURCE]** it returns the live `HashSet` owned by the index), then per clip
    `clip.GetObjectCurveBindings()` filtered to `binding.path == rendererPath` and
    `LiveAnimationObservation.TryParseMaterialSlotBinding(binding.propertyName) == slotIndex`.
    Every declared binding type at that path and slot is a target, which is why a clip binding
+
    `Renderer` and one binding `SkinnedMeshRenderer` are both handled.
+
 2. Any target clip with `IsMarkerClip` → `MarkerClipCarriesSlotBinding`.
-3. Any target binding whose `(path, type.FullName, propertyName)` triple is absent from this
-   renderer's `CapturedAnimationEvidence` object bindings → `SlotBindingAbsentFromEvidence`.
+
+3. Any target binding whose `(path, type.FullName, propertyName)` triple is absent from the
+   `CapturedAnimationEvidence` object bindings of this renderer → `SlotBindingAbsentFromEvidence`.
    This resolves seam G without carrying `Type` in evidence: the real `Type` comes from the live
    binding, and evidence membership is a string comparison.
-4. Every keyframe value of every target curve must be a key in `OpaqueOfAdmitted`; otherwise
+
+4. Every keyframe value of every target curve must be a key in `OpaqueOfAdmitted`. Otherwise
    `RuntimeMaterialValueNotMapped`. A `null` or non-`Material` value cannot occur here — closure
    already failed the renderer — and an empty or zero-length curve contributes no values and is a
    no-op, not a refusal.
+
 5. **The live current material** — `liveMaterials[slotIndex]` from the snapshot above — must also
-   be a key in `OpaqueOfAdmitted`; otherwise `RuntimeMaterialValueNotMapped`, refusing **only
-   this slot**. Its mapped opaque result is what finalization uses (§9.2); the barrier-time
+   be a key in `OpaqueOfAdmitted`. Otherwise `RuntimeMaterialValueNotMapped`, refusing **only
+   this slot**. Finalization uses its mapped opaque result (§9.2). The barrier-time
+
    assignment is never consulted. This is deliberately the same refusal member as item 4 and not
    a new one: the condition is identical — a runtime material value this slot did not prove and
    cannot map — and the only difference is whether that value arrives from a curve keyframe or
    from the current assignment. Splitting one condition across two members would state a
+
    distinction that carries no information.
    - If the live current material is a *different but already admitted and mapped* material, that
      is not a refusal: it is one of the states this slot was proven against, so the slot applies
-     with **that** material's opaque result.
+     with the opaque result of **that** material.
+
 6. **Fewer** live values than the captured admitted set is safe and is not a refusal: the captured
    set is a conservative structural enumeration, and a subset is strictly less than what was
    proven. Timing changes are irrelevant — the proof quantifies over the *set* of admitted
    materials and carries no temporal component.
 
 The surviving set `S` is the set of (renderer, slot) pairs that passed. `S` may be empty, in
-which case `prepare` returns `NoMutation()` and nothing is applied anywhere.
+which case `prepare` returns `NoMutation()` and the feature applies nothing anywhere.
 
 ### 9.2 Finalize against `S` — transient objects only
 
-Appended slot indices, the generated mesh layout, the shared-material array and the complete
-curve-edit set are **all** products of this step, never of preparation.
+This step, never preparation, produces **all** of these: the appended slot indices, the generated
+mesh layout, the shared-material array and the complete curve-edit set.
 
 **Appended indexing.** **[DECISION]** **One appended opaque submesh and one appended material
 slot per surviving `Split` slot.** They cannot be shared even when two split slots have the same
 source material: `UnityRendererAlphaAnalysis.MaterialSlotMappingRefusalFor` requires material slot
 count to equal submesh count, each appended submesh needs its own slot, and each appended slot
 carries its own curve derived from its own source slot. Sharing would also merge two independent
+
 proofs.
 
 For renderer `R` with original slot count `n` and surviving split slots `i₁ < i₂ < … < i_k`
@@ -699,16 +751,17 @@ Deterministic, independent of dictionary iteration, and stable under any change 
 change `S`.
 
 **Materials array.** Built **from the validated live snapshot of §9.1**, never from a
-barrier-time copy, so any unrelated same-count change another pass made is carried through
+barrier-time copy, so any unrelated same-count change another pass made passes through
 untouched. Length `n + k`, where `live[…]` is that snapshot:
-- `[i]` for a surviving `WhollyOpaqueCandidate` slot → `OpaqueOfAdmitted[live[i]]`;
-- `[i]` for a surviving `Split` slot → `live[i]`, **unchanged** (the alpha half is preserved);
+- `[i]` for a surviving `WhollyOpaqueCandidate` slot → `OpaqueOfAdmitted[live[i]]`.
+- `[i]` for a surviving `Split` slot → `live[i]`, **unchanged** (the alpha half is preserved).
+
 - `[i]` for every other slot → `live[i]`, unchanged — including slots AMUSE never examined and
-  slots a foreign pass reassigned;
+  slots a foreign pass reassigned.
 - `[n + m − 1]` → `OpaqueOfAdmitted[live[i_m]]`.
 
 Because every `OpaqueOfAdmitted` lookup here was already validated in §9.1 item 5, finalization
-performs no lookup that can fail.
+runs no lookup that can fail.
 
 **Mesh finalization**, on the clone only, exactly per the merged characterization:
 
@@ -726,37 +779,41 @@ mesh.bounds = saved
 name = "<sourceMesh.name> (AMUSE Separated <rendererOrdinal>)"
 ```
 
-- Submeshes belonging to `WhollyOpaqueCandidate` and `Unchanged` slots are **not rewritten** —
-  only their bounds are restored, because raising `subMeshCount` recalculated them.
+- Submeshes belonging to `WhollyOpaqueCandidate` and `Unchanged` slots keep their index data —
+  finalization restores only their bounds, because raising `subMeshCount` recalculated them.
+
 - Index triples come from `MeshSeparationPlan`'s ordinals over
   `UnityRendererAlphaSnapshot.Submeshes[i].Indices`, which **[SOURCE]** are absolute
   (`Mesh.GetIndices` applies base vertex). The snapshot needs no new fields.
+
 - **[MEASURED]** `calculateBounds: false` is not sufficient on its own: raising `subMeshCount`
-  recalculates mesh bounds *and* every submesh's bounds before any index is written, and leaves an
+  recalculates mesh bounds *and* the bounds of every submesh before any index is written, and leaves an
   appended submesh at zero bounds. Both write-backs are obligations, not defensiveness.
+
 - **[MEASURED]** Base-vertex normalization on rewritten submeshes (`baseVertex` 4 → 0,
   `firstVertex` 0 → 4) is an intentional, characterized representation change: effective indices
   are identical and `baseVertex + firstVertex` is preserved.
+
 - No vertex is added, removed, moved or reindexed. Positions, normals, tangents, colors, every UV
   channel, bone weights, bindposes, blendshape names, frame weights and per-frame deltas come from
   `Object.Instantiate` and are never rewritten. **[MEASURED]** lossless for the characterized
   state, submesh descriptors included.
 
 **Curve-edit set.** For each surviving slot, the list of (clip, binding, new keyframe values)
-derived in §10. Nothing is written yet.
+derived in §10. This step writes nothing yet.
 
 ### 9.3 Sweep
 
 Destroy, with `Object.DestroyImmediate`:
 
-- every `Material` in `CreatedClones` that no surviving slot's mapping value references;
+- every `Material` in `CreatedClones` that the mapping values of no surviving slot reference.
 - every `PreparedRendererSeparation.MeshClone` that no surviving `Split` slot references.
 
-**[MEASURED]** destroying an abandoned, never-assigned clone leaves the source mesh's characterized
-state unchanged. **[SOURCE]** an unassigned clone is unreachable from the avatar root, so
+**[MEASURED]** destroying an abandoned, never-assigned clone leaves the characterized state of the source mesh
+unchanged. **[SOURCE]** an unassigned clone is unreachable from the avatar root, so
 `Serialize()` never persists it — and never sweeps it either, which is exactly why AMUSE must.
 
-One sweep, after `S` is fixed. It covers preparation-time drops and validation-time failures with
+One sweep runs after the code fixes `S`. It covers preparation-time drops and validation-time failures with
 one mechanism and handles a clone shared by slots `i` and `k` when only `i` fails. **No reference
 counting.**
 
@@ -776,16 +833,20 @@ In deterministic renderer order:
 
 - Steps 1–3 of §9.1–§9.3 leave the build avatar and every source asset exactly as they were.
   Apply is the first write anything can observe.
-- Ordering within apply is fixed for determinism and reproducibility; nothing renders mid-pass, so
+
+- Ordering within apply is fixed for determinism and reproducibility. Nothing renders mid-pass, so
   no intermediate state is observable.
-- **The renderer component is never replaced.** **[SOURCE]** Assigning the shared mesh suffices;
-  replacement would break animation path bindings, component references and NDMF's object-registry
-  entries. Bones, root bone, local bounds, quality, blendshape weights, probe/shadow settings,
+
+- **The renderer component is never replaced.** **[SOURCE]** Assigning the shared mesh suffices.
+  Replacement would break animation path bindings, component references and the object-registry
+  entries of NDMF. Bones, root bone, local bounds, quality, blendshape weights, probe/shadow settings,
   enabled state and sorting order are untouched, and blendshape weights survive because blendshape
   order and count are preserved.
+
 - **An unexpected exception during apply is not caught and is build-fatal.** The build avatar may be
-  half-mutated; that is precisely why it must not continue. `AmuseBuildOperation` documents no
+  half-mutated. That is precisely why it must not continue. `AmuseBuildOperation` documents no
   rollback and catches nothing. A *validation* failure is not a defect and never reaches here.
+
 - Replaced-object registration, if called at all, is **[SOURCE]** error-report provenance only. It
   rewrites no animation and no component reference, and correctness never rests on it.
 
@@ -799,29 +860,32 @@ persisted with **no `SaveAsset` call**, and none is made.
 
 ### 9.6 Why source assets stay untouched
 
-- Meshes: `Object.Instantiate` is the only relationship between source and clone; the source is
+- Meshes: `Object.Instantiate` is the only relationship between source and clone. The source is
   read and never written. **[MEASURED]** its characterized state is unchanged after cloning,
   finalizing and destroying.
+
 - Materials: `new Material(source)` inside `PrepareCanonicalOpaqueClone` is the only relationship.
+
 - Clips and controllers: every edit goes through `VirtualClip` inside an active
   `AnimatorServicesContext`, so NDMF owns cloning and committing. Marker clips — the one form whose
-  `VirtualClip` still points at the original SDK asset — are refused before any edit (§8.3), and
+  `VirtualClip` still points at the original SDK asset — meet refusal before any edit (§8.3), and
   `SetObjectCurve` on one is a no-op anyway.
-- Renderers, prefabs, scenes: only the NDMF build copy's renderer components are written, and only
+
+- Renderers, prefabs, scenes: only the renderer components of the NDMF build copy are written, and only
   their `sharedMesh` / `sharedMaterials`.
 
 ---
 
 ## 10. Animation rewrite mapping
 
-Shared preconditions per surviving slot `i` (all already established by §7–§9): the slot's admitted
-set is closed; every admitted material mapped; every affected triangle `ProvenOpaque` across all
-admitted resolutions (the existing `IntersectOutcomes` contract); no target clip is a marker.
+Shared preconditions per surviving slot `i` (all already established by §7–§9): the admitted
+set of the slot is closed. Every admitted material is mapped. Every affected triangle is `ProvenOpaque` across all
+admitted resolutions (the existing `IntersectOutcomes` contract). No target clip is a marker.
 
 **Domain.** `OpaqueOfAdmitted` for slot `i`, whose keys are exactly the live materials behind
 `CapturedMaterialSlotEvidence.AdmittedMaterialIndices` for that slot — **not** the whole
-`AdmittedMaterials` list, even now that closure is renderer-scoped, because a renderer's admitted
-list still spans all its slots.
+`AdmittedMaterials` list, even now that closure is renderer-scoped, because the admitted
+list of a renderer still spans all its slots.
 
 **Deduplication** is by source material, so a material shared across slots or clips yields one
 clone, never one per animator state.
@@ -830,23 +894,30 @@ clone, never one per animator state.
 
 1. `sharedMaterials[i] := OpaqueOfAdmitted[live[i]]`, where `live` is the validated live
    snapshot of §9.1 — never a barrier-time current material.
+
 2. For every target binding at `(rendererPath, m_Materials.Array.data[i])` in every target clip:
-   replace each keyframe's `value` with `OpaqueOfAdmitted[value]`; **`time` is never touched**;
-   write with `SetObjectCurve(binding, curve)`.
-3. No submesh is added, no mesh is generated, no draw call is added, and `sharedMesh` is untouched.
-4. When every mapping in the slot is the `AlreadyOpaque` identity, steps 1–2 are no-ops and are
-   skipped rather than written.
+   replace the `value` of each keyframe with `OpaqueOfAdmitted[value]`. **`time` is never touched**.
+   Write with `SetObjectCurve(binding, curve)`.
+
+3. This disposition adds no submesh, generates no mesh, adds no draw call, and leaves `sharedMesh` untouched.
+
+4. When every mapping in the slot is the `AlreadyOpaque` identity, steps 1–2 are no-ops, and the
+   feature skips them rather than writing them.
 
 ### 10.2 `Split` slot `i`, appended slot `j`
 
-1. Slot `i`'s curve **and** `sharedMaterials[i]` are left completely unchanged — the alpha half must
+1. The curve of slot `i` **and** `sharedMaterials[i]` are left completely unchanged — the alpha half must
    keep behaving exactly as authored.
+
 2. `sharedMaterials[j] := OpaqueOfAdmitted[live[i]]`, from the same validated live snapshot.
+
 3. For every target binding at slot `i`, construct a **new** binding identical except
-   `propertyName = "m_Materials.Array.data[j]"` — inheriting the observed binding's real `Type` —
+   `propertyName = "m_Materials.Array.data[j]"` — inheriting the real `Type` of the observed binding —
    and set a curve with **identical keyframe times** and values `OpaqueOfAdmitted[value]`.
+
 4. Appending is mandatory. **[MEASURED, existing]** prepending or inserting silently redirects the
-   existing material-swap animation onto AMUSE's generated slot.
+   existing material-swap animation onto the AMUSE-generated slot.
+
 5. **[SOURCE]** `AnimatedMaterialSlotCount` already refuses any renderer whose
    `m_Materials.Array.size` is animated, so no curve can contradict the new slot count.
 
@@ -882,21 +953,27 @@ lilToon conversion property, recipe, clone, or evidence request.
 
 - lilToon alpha analysis is untouched. `LilToonMaterialSemantics.AlphaEvidenceRequest` remains both
   its alpha relevance and its capture schema, and nothing widens it.
+
 - A lilToon-only candidate slot **whose materials are attested and capture successfully** is refused
   locally with `OpaqueConversionUnsupportedFamily` and stays exactly as authored.
-- A slot whose admitted set mixes Poiyomi and attested lilToon is refused for the same reason — not
+
+- A slot whose admitted set mixes Poiyomi and attested lilToon meets the same refusal for the same reason — not
   every admitted runtime value can be mapped, and §7.4 requires all of them to map before anything
   happens.
+
 - Unrelated Poiyomi-only slots on the same renderer and the same avatar still optimize.
+
 - **[SOURCE]** An *unattestable* lilToon variant — transparent or cutout, which is a different shader
   asset — is a different case and is **not** slot-local today: it fails alpha-family selection, so the
-  renderer's material-dependency closure fails and every slot on that renderer is refused. That is
-  §2.6's existing coverage pressure, not this feature's refusal, and widening it is not this feature's
-  job.
+  material-dependency closure of the renderer fails and the closure refuses every slot on that renderer. That is
+  the existing coverage pressure of §2.6, not a refusal of this feature. Widening it is not the job
+
+  of this feature.
+
 - Capture schema and ordinary alpha relevance remain separate, as merged.
 
-**The single family branch** lives at the orchestration boundary, in the barrier's per-slot mapping
-step (§7.2), and nowhere else:
+**The single family branch** lives at the orchestration boundary, in the per-slot mapping step of the barrier
+(§7.2), and nowhere else:
 
 ```
 switch (capturedAdmitted.Family)
@@ -912,20 +989,21 @@ Adding lilToon later requires: a lilToon conversion evidence request added to
 `UnityMaterialSemantics.CaptureRequestForFamily`, a lilToon conversion implementation with its own
 recipe and attestation, and **one new `case` in that switch**. It requires **no change** to geometry
 planning, mesh finalization, appended-slot indexing, animation discovery or rewriting, validation,
-the sweep, the apply boundary, or the prepared record's shape — all of which are expressed in terms
+the sweep, the apply boundary, or the shape of the prepared record — all of which are expressed in terms
+
 of `Material → Material` mappings and triangle ordinals, with no shader knowledge at all.
 
 **Explicitly not created** — and each would be created only when a second implementation actually
 exists: `IOpaqueConversion`, a shader adapter interface, a conversion registry, a generic conversion
-result hierarchy, a universal material or render-state IR. **[SOURCE]** `UnityMaterialSemantics`'s own
-doc comment already states the repository's rule for this: family selection is an exclusive trial,
+result hierarchy, a universal material or render-state IR. **[SOURCE]** The doc comment of `UnityMaterialSemantics`
+already states the rule of the repository for this: family selection is an exclusive trial,
 and "with a third family it becomes a third branch, and that is when a registry earns its first
 honest argument."
 
 **Recorded follow-up, not designed here:** `investigate/liltoon-opaque-conversion`. lilToon encodes
-render mode by switching the shader asset, and AMUSE's lilToon attestation accepts one shader name
+render mode by switching the shader asset, and the lilToon attestation of AMUSE accepts one shader name
 and its opaque pass, so transparent and cutout lilToon variants are unattestable today. That is an
-investigation, not a recipe, and this branch does not begin it.
+investigation, not a recipe, and this branch does not start it.
 
 ---
 
@@ -941,32 +1019,36 @@ investigation, not a recipe, and this branch does not begin it.
 | 6 | `AdmittedMaterialStates.TryAdmitDerivedEvidence(captured, bindings, relevance, out derived, out refusal)` | one extracted method |
 | 7 | one additional test-only delegate on the existing internal `AmusePlatformFinishPass.Execute` fixture overload, substituting only the shader-family opaque-conversion step | test seam, **approved** |
 
-**#6 in detail.** `ResolveSlot` already performs "group bindings by logical property, admit each
+**#6 in detail.** `ResolveSlot` already does this: "group bindings by logical property, admit each
 group against this material's own captured default, accumulate derived evidence" — and then throws
 the derived evidence away. The change extracts that loop into an internal method and has `ResolveSlot`
 call it, so alpha and conversion share one admission implementation rather than two. It removes real
+
 duplication rather than relocating it: without it, conversion would need a second copy of
 `GroupByProperty` + `Admit`, which is exactly the "second admission pipeline" the merged conversion
 design forbids.
 
 **#7 in detail — approved.** **[SOURCE]** No vendor shader package is present in this repository, and
-none may be added; the public Poiyomi fixture is a schema-complete stand-in that deliberately fails
+none may be added. The public Poiyomi fixture is a schema-complete stand-in that deliberately fails
 identity attestation on name, GUID and source hash. The internal
 `AmusePlatformFinishPass.Execute` fixture overload already carries three delegates
+
 (`selectRequest`, `capturer`, `resolveSemantics`) for exactly this reason, documented as the
 public-fixture seam. Conversion takes a fourth of the same kind, and its scope is fixed:
 
 - it substitutes **only** the shader-family opaque-conversion step of §7.2 — attestation,
   eligibility and clone preparation for one admitted material — returning either a mapped opaque
-  `Material` or a conversion refusal;
+  `Material` or a conversion refusal.
+
 - it is reachable **only** through the existing internal test overload. Production
   `AmusePlatformFinishPass.Execute(BuildContext)` passes nothing and runs the real
-  `PoiyomiOpaqueConversion` path, exactly as it already does for the other three;
+  `PoiyomiOpaqueConversion` path, exactly as it already does for the other three.
+
 - it changes no other behaviour: family selection, admission, relevance resolution, planning,
   validation, finalization, the sweep and the apply boundary are the production ones in every test.
 
 It is a delegate on an existing overload, not an interface, registry, adapter hierarchy, result
-framework, or a new test fixture framework, and none of those is introduced.
+framework, or a new test fixture framework, and this design introduces none of those.
 
 ### 12.1 The five YAGNI questions, answered
 
@@ -999,8 +1081,8 @@ framework, or a new test fixture framework, and none of those is introduced.
 ## 13. Test obligations
 
 All deterministic, all public, all EditMode. Layered narrowest-first, and reusing the existing
-infrastructure named in §12.2. Each test below must fail under a plausible incorrect implementation;
-where the falsifier is not obvious it is stated.
+infrastructure named in §12.2. Each test below must fail under a plausible incorrect implementation.
+Where the falsifier is not obvious, the test states it.
 
 | # | Obligation | Falsifier it must catch |
 |---|---|---|
@@ -1030,20 +1112,24 @@ where the falsifier is not obvious it is stated.
 - **Preparation / pass seam** — #3, #4, #12, #15, #17. These inspect prepared state and hold clone
   references across `prepare`, because **final build output cannot distinguish "never created" from
   "created, unused and swept"**, and cannot observe a destroyed transient at all. This uses the
-  prepared record and the existing internal pass entry points; **no allocation instrumentation, clone
-  factory, clone registry, or production seam is added for it**.
+  prepared record and the existing internal pass entry points. **This design adds no allocation
+
+  instrumentation, clone factory, clone registry, or production seam for it**.
+
 - **Feature seams over synthetic fixtures** — #6, #10, #11, #14, #18.
+
 - **NDMF build, through `AvatarProcessor.ProcessAvatar`** with a confined synthetic
   `INDMFPlatformProvider`, following `AmusePlatformFinishPluginTests` and
   `AnimatorServicesReactivationCharacterizationTests` — #1, #2, #5, #7, #8, #9, #13, #16, #20.
-  #20 additionally declares a probe pass between the barrier and pass 3, the same technique
+  #20 also declares a probe pass between the barrier and pass 3, the same technique
   `AmusePlatformFinishPluginTests` already uses for `ZzzAnonymousOptimizingProducerPlugin` and
   `AfterAmusePlatformFinishObserverPlugin`.
 
 Successful persistence (#16) and source-asset preservation (#13) stay end-to-end NDMF tests, because
-those are exactly the claims only a completed build can support. Only #16 points NDMF's persistence
-scope at a real temporary directory; every other test uses `OverrideTemporaryDirectoryScope(null)`.
-The split fixtures (#2, #4, #5, #14, #15, #18) additionally require a synthetic **importer-backed**
+those are exactly the claims only a completed build can support. Only #16 points the persistence
+scope of NDMF at a real temporary directory. Every other test uses `OverrideTemporaryDirectoryScope(null)`.
+The split fixtures (#2, #4, #5, #14, #15, #18) also require a synthetic **importer-backed**
+
 texture — current texture evidence refuses textures without importer identity (§15.2) — so their
 tests create the test-owned `Assets/AmuseTests_AlphaSplit` folder in the AssetDatabase and delete it
 unconditionally in `finally`, including on assertion failure.
@@ -1079,18 +1165,20 @@ mandatory here.
 
 **No unresolved controller decision remains in this document.** The two previously open ones are
 settled: the prepared record holds the existing `UnityRendererMutationTarget` and
-`SubmeshSeparationPlan` (§4), and the fourth test delegate is approved with its scope fixed
+`SubmeshSeparationPlan` (§4), and the fourth test delegate has approval, with its scope fixed
 (§12, #7).
 
 **Two things this design accepts rather than solves:**
 
 1. **Conversion attestation re-reads and re-hashes the shader source per admitted Poiyomi material**
-   (§7.2 step 3), because that is the merged conversion design's specified attestation and its schema
+   (§7.2 step 3), because that is the specified attestation of the merged conversion design and its schema
    list differs from the alpha one. It is redundant with the batch attestation on every fact except the
    required-schema list. Recorded as a known cost, not optimized away, because narrowing an attestation
+
    to save work is exactly the kind of change that must be argued explicitly rather than assumed.
+
 2. **`AmuseBuildOperation.Execute` requires an `IAssetSaver` this feature deliberately never uses.**
-   Passing `context.AssetSaver` and ignoring it is honest; changing the type's signature for one
+   Passing `context.AssetSaver` and ignoring it is honest. Changing the signature of the type for one
    consumer would not be.
 
 ---
@@ -1099,24 +1187,26 @@ settled: the prepared record holds the existing `UnityRendererMutationTarget` an
 
 ### 15.1 Ordering
 
-One prerequisite must merge before vertical-slice implementation begins:
+One prerequisite must merge before vertical-slice implementation starts:
 
 1. **`fix/scope-slot-alpha-refusal-to-slot`** (§2.5) — from fresh `main`, completed, reviewed and
    merged independently. Scope: the first-refusal behaviour of the **post-closure** per-slot
    `AdmittedMaterialStates.ResolveSlot` loop, and nothing else. Without it, a slot whose alpha
    cannot be resolved eliminates a valid sibling before preparation runs.
+
 2. **This vertical slice** — resumed or recreated from updated `main`.
 
-Nothing else is outstanding, and no controller decision is left open (§14). Renderer-wide
+Nothing else remains open, and no controller decision is left open (§14). Renderer-wide
 material-dependency closure is **not** a second prerequisite: it stays as it is, disclosed as
 existing coverage pressure (§2.6, §15.2).
 
 ### 15.2 Remaining coverage boundaries — false negatives only
 
-Runtime texture evidence is **merged** (`346f231`, PR #26) and supports its admitted formats and
+Runtime texture evidence is already in `main` (`346f231`, PR #26) and supports its admitted formats and
 host gates, so texture-backed triangle proof is a working capability rather than pending work. What
 remains are bounded, verified false-negative boundaries. Each limits *how many* triangles are proven
-opaque; none affects any mechanism in this design, and none is this feature's to widen.
+
+opaque. None affects any mechanism in this design, and this feature must not widen any of them.
 
 **[SOURCE]** Verified against current code:
 
@@ -1125,22 +1215,27 @@ opaque; none affects any mechanism in this design, and none is this feature's to
   argument ("`mask.r` is exactly one, so the fused multiply-add cannot round differently") is
   unavailable once a mask is sampled. Multiply, Add and Subtract mask modes each combine a term the
   closed scalar vocabulary cannot express.
+
 - **Texture formats.** Alpha-field acquisition admits `RGBA32`, `ARGB32`, `Alpha8`, `RGB24`, `DXT5`
-  and `BC7`. Float formats and `DXT5Crunched` are refused; streaming textures are refused outright.
+  and `BC7`. Float formats and `DXT5Crunched` are refused. Streaming textures are refused outright.
+
 - **Sampler state.** Point and Bilinear filtering only, with equal Clamp/Repeat wrap. Nonzero mip
-  bias and Trilinear are refused for scope rather than soundness; anisotropy above 1 is refused
+  bias and Trilinear are refused for scope rather than soundness. Anisotropy above 1 is refused
   because the classifier does not model an elongated footprint.
+
 - **Asset identity.** A texture with no importer — scene-only or generated — cannot prove a source
   identity or a colour interpretation, so it is refused.
+
 - **Host gates.** Texture-alpha capture requires the lazily evaluated once-per-AppDomain host
   capability check to pass, and the `StandaloneWindows64` build target. A failure refuses every
   texture-alpha capture for the remainder of the AppDomain, with no partial credit and no retry.
 
 **Renderer-wide material-dependency closure (§2.6).** One unsupported material on a renderer —
 a locked Poiyomi material, an unattestable transparent or cutout lilToon variant, a third-family
-shader — refuses **every** slot on that renderer, including attested slots that would have
-separated. This is the widest false negative in the milestone and the design keeps it deliberately:
+shader — refuses **every** slot on that renderer, including attested slots that would still
+separate. This is the widest false negative in the milestone and the design keeps it deliberately:
 narrowing it means changing the single closed capture representation, which needs real coverage
+
 evidence rather than a coverage wish. It is neither a prerequisite nor a follow-up specified here.
 
 Structural refusals unchanged by this feature also remain: property blocks, non-triangle topology,
@@ -1151,7 +1246,8 @@ animated mesh or slot count, and every host structural refusal.
 lifecycle materializes as a non-empty `MaterialPropertyBlock` on the build renderer before the
 barrier, so the pre-existing structural refusal (`MaterialPropertyOverridesPresent`) refuses that
 renderer before any feature code runs. Retained deliberately as a conservative false negative —
-the same direction as every boundary in this section; revisited only if real-avatar evidence
+
+the same direction as every boundary in this section. Revisit it only if real-avatar evidence
 justifies it. This is why falsifier 19 (§13) has no standalone feature-level fixture.
 
 The feature is fully exercisable on public synthetic fixtures — constant-alpha for most falsifiers
@@ -1165,10 +1261,13 @@ gates implementation.
 lilToon opaque conversion. Any conversion interface, registry, or result hierarchy. Any universal
 material, render-state, mesh, or mutation IR. Changes to `MaterialSemantics`, `MeshSeparationPlan`,
 `MeshSeparationPlanner`, `UnityRendererAlphaSnapshot`, `UnityRendererMutationTarget`,
+
 `AmuseBuildOperation`, `MaterialEvidenceRequest`, or the capture schema. Reference counting or any
 generated-asset lifetime registry. A curve-remapping framework or an animation reachability graph. A
+
 cross-pass transaction framework. Non-readable mesh support. Multi-renderer or cross-renderer planning.
 Profitability and cost modelling. UV repacking, texture modulation, material simplification. Any Census
+
 launcher, metric, or schema change. Any change to the upload-authorization or lifecycle boundaries.
 Fixing the pre-existing slot→renderer refusal escalation **inside this branch** — it is a separate
 prerequisite that merges first (§2.5, §15.1), and this design neither implements it nor depends on
