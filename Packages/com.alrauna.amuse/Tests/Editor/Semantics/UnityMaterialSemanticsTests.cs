@@ -386,10 +386,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "_ZWrite");
 
             CollectionAssert.AreEquivalent(
-                LilToonOpaqueConversion.ConversionRequiredSchemaProperties,
+                new[]
+                {
+                    "_SrcBlend", "_DstBlend", "_AlphaToMask", "_ZWrite",
+                    "_ZTest", "_OffsetFactor", "_OffsetUnits", "_ColorMask",
+                    "_SrcBlendAlpha", "_DstBlendAlpha", "_BlendOp",
+                    "_BlendOpAlpha", "_SrcBlendFA", "_DstBlendFA",
+                    "_SrcBlendAlphaFA", "_DstBlendAlphaFA", "_BlendOpFA",
+                    "_BlendOpAlphaFA", "_Cutoff",
+                },
                 captureSchema.PresenceProperties,
-                "the cutout schema's presence dimension must be exactly " +
-                "the conversion schema");
+                "the cutout capture schema's presence dimension must stay " +
+                "exactly the recipe plus the cutout source's own _Cutoff");
             CollectionAssert.IsSubsetOf(
                 alphaRelevance.ScalarProperties,
                 captureSchema.ScalarProperties,
@@ -419,9 +427,86 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// The transparent frontend answers selection's two questions the way
+        /// the cutout frontend does: its capture schema is its alpha request
+        /// combined with the lilToon conversion request, so one capture
+        /// serves both the transparent alpha proof and the conversion — and
+        /// the combination widens in exactly one direction, without the
+        /// compiled-out dither toggle.
+        /// </summary>
+        [Test]
+        public void TransparentCaptureSchemaCarriesConversionEvidence()
+        {
+            var material = NewMaterial(
+                "schema-transparent.shader",
+                LilToonSourceAttestation.TransparentShaderName,
+                TransparentProperties());
+
+            var selected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var alphaRelevance,
+                    out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family,
+                Is.EqualTo(
+                    CapturedAlphaMaterialFamily.LilToonTransparent));
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(
+                    LilToonTransparentMaterialSemantics
+                        .AlphaEvidenceRequest),
+                "alpha relevance must remain the transparent request itself");
+
+            foreach (var conversionOnly in
+                     new[] { "_ZWrite", "_Cutoff", "_SubpassCutoff" })
+            {
+                CollectionAssert.Contains(
+                    captureSchema.ScalarProperties, conversionOnly);
+            }
+
+            // The transparent capture must not widen the cutout or opaque
+            // requests, and must not gather the compiled-out dither toggle.
+            CollectionAssert.DoesNotContain(
+                captureSchema.ScalarProperties, "_UseDither");
+            CollectionAssert.DoesNotContain(
+                captureSchema.ScalarProperties, "_EnableOutlines");
+        }
+
+        /// <summary>
+        /// The anti-mutation guard for the fourth family: adding the
+        /// transparent requests must leave every existing request object
+        /// exactly as it was.
+        /// </summary>
+        [Test]
+        public void ExistingRequests_AreNotMutatedByTheTransparentFamily()
+        {
+            // Falsifies: a shared or widened request object.
+            CollectionAssert.DoesNotContain(
+                LilToonCutoutMaterialSemantics.AlphaEvidenceRequest
+                    .ScalarProperties,
+                "_SubpassCutoff");
+            CollectionAssert.Contains(
+                LilToonCutoutMaterialSemantics.AlphaEvidenceRequest
+                    .ScalarProperties,
+                "_UseDither");
+            CollectionAssert.DoesNotContain(
+                LilToonCutoutSourceEligibility.SourceEvidenceRequest
+                    .ScalarProperties,
+                "_AlphaBoostFA");
+        }
+
+        /// <summary>
         /// Only the exact cutout name is the cutout frontend. Near-miss
         /// vendor shader names stay unsupported and yield no request and no
-        /// capture schema.
+        /// capture schema. The transparent normal name is no longer in this
+        /// list: it is its own supported family, selected by
+        /// TransparentCaptureSchemaCarriesConversionEvidence, and its own
+        /// near misses are covered by
+        /// NearMissTransparentName_IsNeverSelectedOrAdmitted.
         /// </summary>
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
@@ -429,7 +514,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             foreach (var shaderName in new[]
                      {
                          "Hidden/lilToonCutoutOutline",
-                         "Hidden/lilToonTransparent",
                          "Hidden/lilToonOnePassTransparent",
                          "Hidden/lilToonTwoPassTransparent",
                          "Hidden/lilToonTransparentOutline",
@@ -768,6 +852,62 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _MainTex_ScrollRotate (""ScrollRotate"", Vector) = (0,0,0,0)
         _SrcBlend (""SrcBlend"", Float) = 1
         _DstBlend (""DstBlend"", Float) = 0
+        _AlphaToMask (""AlphaToMask"", Float) = 0
+        _ZWrite (""ZWrite"", Float) = 1
+        _ZTest (""ZTest"", Float) = 4
+        _OffsetFactor (""OffsetFactor"", Float) = 0
+        _OffsetUnits (""OffsetUnits"", Float) = 0
+        _ColorMask (""ColorMask"", Float) = 15
+        _SrcBlendAlpha (""SrcBlendAlpha"", Float) = 1
+        _DstBlendAlpha (""DstBlendAlpha"", Float) = 10
+        _BlendOp (""BlendOp"", Float) = 0
+        _BlendOpAlpha (""BlendOpAlpha"", Float) = 0
+        _SrcBlendFA (""SrcBlendFA"", Float) = 1
+        _DstBlendFA (""DstBlendFA"", Float) = 1
+        _SrcBlendAlphaFA (""SrcBlendAlphaFA"", Float) = 0
+        _DstBlendAlphaFA (""DstBlendAlphaFA"", Float) = 1
+        _BlendOpFA (""BlendOpFA"", Float) = 4
+        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4";
+        }
+        /// <summary>
+        /// The transparent stand-in property block: every property the
+        /// transparent alpha request and the lilToon conversion request
+        /// name, at the vendor defaults the fixture shader declares —
+        /// including the compiled-out dither toggle the request
+        /// deliberately does not gather.
+        /// </summary>
+        private static string TransparentProperties()
+        {
+            return @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _UDIMDiscardMode (""UDIMDiscardMode"", Int) = 0
+        _ShiftBackfaceUV (""ShiftBackfaceUV"", Int) = 0
+        _UseParallax (""UseParallax"", Int) = 0
+        _UseMain2ndTex (""UseMain2ndTex"", Int) = 0
+        _UseMain3rdTex (""UseMain3rdTex"", Int) = 0
+        _AlphaMaskMode (""AlphaMaskMode"", Int) = 0
+        _UseDither (""UseDither"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _Color (""Color"", Color) = (1,1,1,1)
+        _MainTex (""Texture"", 2D) = ""white"" {}
+        _DissolveParams (""DissolveParams"", Vector) = (0,0,0.5,0.1)
+        _MainTex_ScrollRotate (""ScrollRotate"", Vector) = (0,0,0,0)
+        _AlphaBoostFA (""AlphaBoostFA"", Float) = 10
+        _SubpassCutoff (""SubpassCutoff"", Range(0,1)) = 0.5
+        _DistanceFade (""DistanceFade"", Vector) = (0.1,0.01,0,0)
+        _SrcBlend (""SrcBlend"", Float) = 1
+        _DstBlend (""DstBlend"", Float) = 10
         _AlphaToMask (""AlphaToMask"", Float) = 0
         _ZWrite (""ZWrite"", Float) = 1
         _ZTest (""ZTest"", Float) = 4

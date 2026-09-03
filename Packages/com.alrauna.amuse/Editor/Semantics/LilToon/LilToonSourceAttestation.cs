@@ -360,6 +360,27 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             "c83d73a26ab86e933f8cacb8c71307d8715fcc1693cdc08d209011bb0f836178";
         internal const string CutoutPassCanonicalDigest =
             "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92";
+        // Transparent source identity (design §6). The two canonical digests
+        // were measured on 2026-09-01 from an installed
+        // jp.lilxyzw.liltoon@2.3.4 in a throwaway project outside AMUSE,
+        // using a byte-identical copy of this file, in a run that first
+        // reproduced all five digests already pinned above, and were
+        // identical across two independent Editor sessions (T1 §3.4). Never
+        // re-derive these from the lilToon repository: the generator rewrites
+        // every ltspass_*.shader at import.
+        internal const string TransparentShaderName =
+            "Hidden/lilToonTransparent";
+        internal const string TransparentShaderGuid =
+            "165365ab7100a044ca85fc8c33548a62";
+        internal const string TransparentPassShaderName =
+            "Hidden/ltspass_transparent";
+        internal const string TransparentPassShaderGuid =
+            "2683fad669f20ec49b8e9656954a33a8";
+        internal const int TransparentRenderMode = 2;
+        internal const string TransparentShaderCanonicalDigest =
+            "ea247d3cd6ecb09ad4aeefdcad37480c0dffa40d594a3b457624097f2372ba13";
+        internal const string TransparentPassCanonicalDigest =
+            "700a607661f2cc43550452795d8eae0634509dbd07b4e8c381d9412fcc52517f";
 
         internal const string ShaderFormatVersionProperty = "_lilToonVersion";
         private const string IncludeFolderName = "Includes";
@@ -418,6 +439,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 CutoutRenderMode,
                 CutoutShaderCanonicalDigest,
                 CutoutPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile TransparentProfile =
+            new LilToonSourceProfile(
+                TransparentShaderName,
+                TransparentShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                TransparentShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
 
         // D1: a valueless define the *LIL_SHADER_SETTING* substitution can emit.
         // A define with a value, such as LIL_RENDER 0, never matches.
@@ -1173,6 +1204,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// Verifies the pinned regular Transparent Normal identity (design
+        /// §6): the transparent shader, its pass, <c>LIL_RENDER 2</c>, and the
+        /// transparent canonical digests, under the shared
+        /// package/format/include-tree pins. Mismatch fails closed with a
+        /// diagnostic; there is no name-only fallback. The near-miss vendor
+        /// names Hidden/lilToonOnePassTransparent and
+        /// Hidden/lilToonTwoPassTransparent share this pass asset and are
+        /// refused on the shader identity.
+        /// </summary>
+        internal static bool TryVerifyLilToonTransparentIdentity(
+            LilToonSourceEvidence evidence,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            return Verify(evidence, TransparentProfile, out diagnostic);
+        }
+
+        /// <summary>
         /// The identity conjunction, parameterized by profile. Purely
         /// mechanical: the check order, every diagnostic code and detail
         /// string, and the verdicts are exactly the ones the opaque path has
@@ -1360,6 +1408,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence)
         {
             return Gather(shader, evidence, CutoutProfile);
+        }
+
+        /// <summary>
+        /// Gathers identity evidence for the pinned transparent identity: the
+        /// material shader is read directly and only the pass the transparent
+        /// profile names (<c>Hidden/ltspass_transparent</c>) is resolved. A
+        /// pass that does not resolve is omitted rather than guessed, so
+        /// verification fails closed.
+        /// </summary>
+        internal static LilToonSourceEvidence GatherTransparentSourceEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            return Gather(shader, evidence, TransparentProfile);
         }
 
         /// <summary>
