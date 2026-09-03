@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` for inline implementation. Use `superpowers:subagent-driven-development` only if the user separately authorizes subagents. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the current Unity package-development repository from its narrow alpha-material identity to AMUSE while preserving implemented behavior, Unity asset identity, conservative safety, and historical records.
+**Goal:** Migrate the current Unity package-development repository from its narrow alpha-material identity to AMUSE. Preserve implemented behavior, Unity asset identity, conservative safety, and historical records.
 
-**Architecture:** Perform one coherent identity cutover on the approved branch: update agent policy, move the embedded package with all `.meta` identities intact, rename namespaces/assemblies/tests together, update current documentation and development-project branding, then prove package resolution and behavioral equivalence. Keep the implemented exact classifier and immutable separation planner unchanged; document future semantic architecture without scaffolding it.
+**Architecture:** Cut over the identity in one coherent pass on the approved branch. Update agent policy, move the embedded package with all `.meta` identities intact, and rename namespaces/assemblies/tests together. Update current documentation and development-project branding. Then prove package resolution and behavioral equivalence. Keep the implemented exact classifier and immutable separation planner unchanged. Document future semantic architecture without scaffolding it.
 
-**Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, embedded Unity/VPM package metadata, NDMF 1.14.4, PowerShell, Git, GitHub Actions listing/release templates, and Unity MCP for public-project validation.
+**Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, embedded Unity/VPM package metadata, NDMF 1.14.4, PowerShell, Git, GitHub Actions listing/release templates. Unity MCP covers public-project validation.
 
 ## Global constraints
 
 - Do not start until the user explicitly approves both `docs/superpowers/specs/2026-08-15-amuse-rebrand-design.md` and this plan.
 - Work only on `chore/amuse-rebrand` based at merged `main` commit `7414672`, unless a fresh check proves a newer approved base is required.
-- Do not commit, push, open a PR, rename the GitHub repository, change repository settings/variables, tag, publish, or delete releases without separate authorization.
+- Do not commit, push, open a PR, or delete releases without separate authorization. Do not rename the GitHub repository, change repository settings/variables, tag, or publish without separate authorization.
 - The only canonical product names are `AMUSE` and `Alrauna's Material Understanding & Simplification Engine`.
 - The canonical machine identities are `com.alrauna.amuse`, `Alrauna.Amuse`, `Alrauna.Amuse.Editor`, and `Alrauna.Amuse.Tests.Editor`.
 - Keep package version `0.0.1`.
@@ -75,14 +75,14 @@
 - `Packages/vpm-manifest.json` — contains only NDMF resolution state.
 - `Tools/Bootstrap-NdmfStandalone.ps1` — already derives paths without the old project identity.
 - `.github/workflows/release.yml` and `.github/workflows/build-listing.yml` — already consume the external `PACKAGE_NAME` variable.
-- all dated files under `docs/superpowers/specs/` and `docs/superpowers/plans/`, except this migration's two new documents.
+- all dated files under `docs/superpowers/specs/` and `docs/superpowers/plans/`, except the two new documents of this migration.
 - classifier/planner fixture JSON content and all existing `.meta` file contents.
 
 ---
 
 ### Task 1: Reconfirm base and capture a recovery baseline
 
-**Files:** Read-only inspection; create no tracked file.
+**Files:** Read-only inspection. Create no tracked file.
 
 **Produces:** A current branch/base/status snapshot, old-identity inventory, GUID map, metadata snapshot, and Unity test-discovery baseline used by later tasks.
 
@@ -101,10 +101,10 @@ git merge-base --is-ancestor origin/main HEAD
 
 Expected:
 
-- branch is `chore/amuse-rebrand`;
-- worktree contains only the two approved design-phase documents before implementation begins;
-- separation-plan commit `3b9d469` is an ancestor of `origin/main`;
-- branch base is current with the approved `origin/main`, or the user is asked before rebasing onto unexpected new work.
+- branch is `chore/amuse-rebrand`.
+- worktree contains only the two approved design-phase documents before implementation starts.
+- separation-plan commit `3b9d469` is an ancestor of `origin/main`.
+- branch base is current with the approved `origin/main`, or the plan asks the user before rebasing onto unexpected new work.
 
 - [ ] **Step 2: Capture tracked old identity surfaces without editing them**
 
@@ -181,13 +181,13 @@ Describe the distributable package at `Packages/com.alrauna.amuse/`. Keep the pu
 
 - [ ] **Step 2: Replace stale project-stage text with current, compact boundaries**
 
-Remove the obsolete claim that the repository has placeholder code and no tests. State only that current production consists of Editor-only exact alpha analysis and immutable separation planning, and require agents to reinspect rather than treat that snapshot as permanent.
+Remove the obsolete claim that the repository has placeholder code and no tests. State only that current production consists of Editor-only exact alpha analysis and immutable separation planning. Require agents to reinspect rather than treat that snapshot as permanent.
 
 Replace the old ten-step alpha-only development roadmap with:
 
-- narrow vertical increments;
-- current alpha analysis/planning as one AMUSE subsystem;
-- detailed future direction living in `docs/architecture/vision.md`;
+- narrow vertical increments.
+- current alpha analysis/planning as one AMUSE subsystem.
+- detailed future direction living in `docs/architecture/vision.md`.
 - no speculative future scaffolding.
 
 - [ ] **Step 3: Generalize safety without weakening alpha behavior**
@@ -209,13 +209,13 @@ State that reusable analysis/planning should consume normalized immutable inputs
 
 Compare the edited file against the section audit in the design. Confirm that these remain materially unchanged:
 
-- private-testbed safety;
-- start-of-task and Git discipline;
-- Superpowers/Ponytail workflow;
-- Unity asset/`.meta`/GUID rules;
-- testing and regression expectations;
-- MCP instance targeting and mutation rules;
-- CI/release authorization boundaries;
+- private-testbed safety.
+- start-of-task and Git discipline.
+- Superpowers/Ponytail workflow.
+- Unity asset/`.meta`/GUID rules.
+- testing and regression expectations.
+- MCP instance targeting and mutation rules.
+- CI/release authorization boundaries.
 - completion reporting.
 
 - [ ] **Step 6: Validate `AGENTS.md` explicitly**
@@ -229,7 +229,7 @@ git diff --check -- AGENTS.md
 git diff -- AGENTS.md
 ```
 
-Expected: zero stale old product identifiers; all required AMUSE/safety boundaries present; no roadmap bloat or unrelated policy rewrite.
+Expected: zero stale old product identifiers. All required AMUSE/safety boundaries are present. No roadmap bloat or unrelated policy rewrite.
 
 ---
 
@@ -253,7 +253,7 @@ git mv Packages/com.alrauna.amuse/Tests/Editor/Alrauna.AlphaMaterialOptimizer.Te
 git mv Packages/com.alrauna.amuse/Tests/Editor/Alrauna.AlphaMaterialOptimizer.Tests.Editor.asmdef.meta Packages/com.alrauna.amuse/Tests/Editor/Alrauna.Amuse.Tests.Editor.asmdef.meta
 ```
 
-Expected: every package asset and `.meta` partner is still present under the new root; no package-root `.meta` is invented.
+Expected: every package asset and `.meta` partner is still present under the new root. The commands create no new package-root `.meta`.
 
 - [ ] **Step 2: Update package and root resolution metadata**
 
@@ -348,7 +348,7 @@ Get-Content -Raw Packages/packages-lock.json | ConvertFrom-Json | Out-Null
 rg -n 'com\.alrauna\.amuse|Alrauna\.Amuse|InternalsVisibleTo|fixture-(inputs|expectations)\.json' Packages/com.alrauna.amuse Packages/.gitignore Packages/packages-lock.json
 ```
 
-Expected: all JSON parses; the new identities are internally consistent.
+Expected: all JSON parses. The new identities are internally consistent.
 
 - [ ] **Step 6: Prove no current package identity is left under old paths**
 
@@ -360,7 +360,7 @@ git ls-files Packages/com.alrauna.amuse
 git grep -n -i -E 'Alpha Material Optimizer|AlphaMaterialOptimizer|alpha-material-optimizer|alpha_material_optimizer|alpha material optimizer|(^|[^[:alnum:]_])AMO([^[:alnum:]_]|$)' -- Packages
 ```
 
-Expected: old folder is absent; the new package tree is complete; zero old identity matches exist anywhere under `Packages`.
+Expected: old folder is absent. The new package tree is complete. Zero old identity matches exist anywhere under `Packages`.
 
 - [ ] **Step 7: Compare logical asset GUIDs and inspect rename detection**
 
@@ -368,11 +368,11 @@ Repeat the Task 1 GUID extraction. Normalize the old/new package-root prefix whe
 
 Expected:
 
-- 52 tracked `.meta` files still have 52 GUID entries;
-- zero duplicate GUID groups;
-- `package.json.meta` remains `c474695b7921e8141b9c57e2795b9a33`;
-- production asmdef GUID remains `2cca9ae73dfb9a84fa800e585fe3a948`;
-- test asmdef GUID remains `c28e6dde4cd041b4c87cc087e3b1094c`;
+- 52 tracked `.meta` files still have 52 GUID entries.
+- zero duplicate GUID groups.
+- `package.json.meta` remains `c474695b7921e8141b9c57e2795b9a33`.
+- production asmdef GUID remains `2cca9ae73dfb9a84fa800e585fe3a948`.
+- test asmdef GUID remains `c28e6dde4cd041b4c87cc087e3b1094c`.
 - all other path-to-GUID mappings match by logical suffix.
 
 Run:
@@ -382,7 +382,7 @@ git diff --summary --find-renames=50%
 git diff --numstat --find-renames=50% -- Packages
 ```
 
-Expected: Git recognizes package/asmdef moves; `.meta` files are not regenerated.
+Expected: Git recognizes package/asmdef moves. `.meta` files are not regenerated.
 
 - [ ] **Step 8: Confirm production behavior files have identity-only diffs**
 
@@ -393,7 +393,7 @@ git diff --word-diff=porcelain -- Packages/com.alrauna.amuse/Editor/Analysis Pac
 git diff --word-diff=porcelain -- Packages/com.alrauna.amuse/Tests/Editor
 ```
 
-Expected: C# changes are limited to namespace/using/friend strings and the two fixture paths. Algorithm bodies, assertions, fixture JSON, and test method names are unchanged.
+Expected: C# changes affect only namespace/using/friend strings and the two fixture paths. Algorithm bodies, assertions, fixture JSON, and test method names stay unchanged.
 
 ---
 
@@ -432,9 +432,9 @@ Keep the VCC instructions and listing template behavior intact.
 
 Use the installed `imagegen` skill because this is a raster-asset edit. Replace `Website/banner.png` with a restrained 1280x256 banner containing:
 
-- `AMUSE` as the primary text;
-- `Alrauna's Material Understanding & Simplification Engine` as the secondary text;
-- high-contrast, readable typography;
+- `AMUSE` as the primary text.
+- `Alrauna's Material Understanding & Simplification Engine` as the secondary text.
+- high-contrast, readable typography.
 - no unapproved icon, mascot, shader imagery, feature claims, or additional product suffix.
 
 Keep the existing filename and do not add alternate banner assets.
@@ -465,7 +465,7 @@ Visually inspect the new banner at its native dimensions. Expected: only the two
 
 - [ ] **Step 1: Rewrite README introduction and vision/current split**
 
-Begin with:
+Start with:
 
 ```markdown
 # AMUSE
@@ -477,9 +477,9 @@ Include sections named `Vision`, `Current implementation`, `Not implemented yet`
 
 The current list must name only:
 
-- deterministic reference fixtures;
-- exact proof-oriented triangle alpha classification for current Point/Bilinear and Clamp/Repeat semantics;
-- immutable separation candidate planning with source/material provenance;
+- deterministic reference fixtures.
+- exact proof-oriented triangle alpha classification for current Point/Bilinear and Clamp/Repeat semantics.
+- immutable separation candidate planning with source/material provenance.
 - Editor-only Unity tests and NDMF development/bootstrap infrastructure.
 
 The not-implemented list must plainly include automatic avatar transformation, shader adapters, state/animation tracing, atlasing, material normalization/combining, and generalized orchestration.
@@ -537,7 +537,7 @@ rg -n -i 'implemented.*(atlas|shader adapter|animation tracing|material combin)|
 git diff --check -- README.md docs/architecture/vision.md
 ```
 
-Expected: required sections exist; no future capability is claimed as implemented; no source directories or code scaffolding were added.
+Expected: required sections exist. The documents claim no future capability as implemented. The tasks add no source directories or code scaffolding.
 
 - [ ] **Step 4: Preserve historical design records**
 
@@ -553,7 +553,7 @@ Expected: no output.
 
 ### Task 6: Resolve/import the renamed package and run focused validation
 
-**Files:** No intended tracked edits. Unity may update ignored local state; reject unexpected tracked manifest/lock churn.
+**Files:** No intended tracked edits. Unity may update ignored local state. Reject unexpected tracked manifest/lock churn.
 
 **Consumes:** Tasks 2-5 complete and internally reviewed.
 
@@ -568,11 +568,11 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 ```
 
-Expected: both exit successfully; the second is idempotent; no tracked files change.
+Expected: both exit successfully. The second is idempotent. No tracked files change.
 
 - [ ] **Step 2: Rediscover Unity instances and select the public project by actual path**
 
-Read `mcpforunity://instances`. Select only the instance whose project root is the current public checkout. If the local directory was renamed externally, use its actual current path rather than the historical path in this plan.
+Read `mcpforunity://instances`. Select only the instance whose project root is the current public checkout. If an external rename changed the local directory, use its actual current path, not the historical path in this plan.
 
 Read `mcpforunity://project/info` and `mcpforunity://editor/state`. Expected: Unity `2022.3.22f1`, public root, editor ready. Do not select the private testbed.
 
@@ -591,7 +591,7 @@ Alrauna.AlphaMaterialOptimizer.Tests.Editor
     -> Alrauna.Amuse.Tests.Editor
 ```
 
-Expected: the same test method/case names and count are discoverable; no test remains under the old namespace.
+Expected: the same test method/case names and count are discoverable. No test remains under the old namespace.
 
 - [ ] **Step 5: Run fixture integrity tests**
 
@@ -633,7 +633,7 @@ git diff -- Packages/manifest.json Packages/vpm-manifest.json
 Get-Content -Raw Packages/packages-lock.json | ConvertFrom-Json | Out-Null
 ```
 
-Expected: manifest and VPM manifest unchanged; lockfile contains only the intended embedded package identity change; no generated Unity state is tracked.
+Expected: manifest and VPM manifest unchanged. Lockfile contains only the intended embedded package identity change. Git tracks no generated Unity state.
 
 ---
 
@@ -647,7 +647,7 @@ Expected: manifest and VPM manifest unchanged; lockfile contains only the intend
 
 Run all EditMode tests through the selected public Unity editor with failed-test details enabled.
 
-Expected: every discovered EditMode test passes; report exact passed/failed/skipped counts. Do not claim the historical 90-test result or the 91-test discovery count as the new run result without observing it.
+Expected: every discovered EditMode test passes. Report exact passed/failed/skipped counts. Do not claim the historical 90-test result or the 91-test discovery count as the new run result without observing it.
 
 - [ ] **Step 2: Recheck compilation and Console**
 
@@ -667,8 +667,8 @@ rg -n -i 'Alpha Material Optimizer|AlphaMaterialOptimizer|alpha-material-optimiz
 
 Expected:
 
-- no old product identity in current policy, README, package, project settings, website, workflows, or tooling;
-- path search returns no old package/asmdef path;
+- no old product identity in current policy, README, package, project settings, website, workflows, or tooling.
+- path search returns no old package/asmdef path.
 - old identifiers remain only in dated historical Superpowers records and the two AMUSE migration documents that inventory the transition.
 
 - [ ] **Step 4: Verify all selected new identities**
@@ -679,11 +679,11 @@ Run:
 rg -n 'AMUSE|Alrauna''s Material Understanding & Simplification Engine|com\.alrauna\.amuse|Alrauna\.Amuse' AGENTS.md README.md docs/architecture Packages ProjectSettings Website
 ```
 
-Expected: every canonical surface is present and consistently cased; no redundant `AMUSE Engine` or `AMUSE Toolkit` branding exists.
+Expected: every canonical surface is present and consistently cased. No redundant `AMUSE Engine` or `AMUSE Toolkit` branding exists.
 
 - [ ] **Step 5: Re-run GUID and package-integrity checks**
 
-Repeat Task 3 Step 7. Additionally run:
+Repeat Task 3 Step 7. Then run:
 
 ```powershell
 git diff --name-status --find-renames=50%
@@ -706,7 +706,7 @@ Get-Content -Raw Packages/vpm-manifest.json | ConvertFrom-Json | Out-Null
 rg -n 'com\.coplaydev\.unity-mcp|CoplayDev|MCPForUnity' Packages/com.alrauna.amuse
 ```
 
-Expected: all JSON parses; no CoplayDev/MCP dependency or API enters the distributable package; NDMF dependency range remains unchanged.
+Expected: all JSON parses. No CoplayDev/MCP dependency or API enters the distributable package. NDMF dependency range remains unchanged.
 
 - [ ] **Step 7: Review unstaged and staged scope separately**
 
@@ -723,22 +723,22 @@ git status --short --branch
 
 Expected:
 
-- no whitespace errors;
-- only the two design-phase docs plus approved migration files changed;
-- no staged changes unless the user separately requested staging;
+- no whitespace errors.
+- only the two design-phase docs plus approved migration files changed.
+- no staged changes unless the user separately requested staging.
 - no generated `Library`, `Temp`, `Logs`, `UserSettings`, IDE, or private-testbed files.
 
-- [ ] **Step 8: Perform the adversarial checklist**
+- [ ] **Step 8: Run the adversarial checklist**
 
 Confirm explicitly:
 
-- `AGENTS.md` remains policy and retained all Git/test/MCP/asset/release protections;
-- README/vision do not claim future features are implemented;
-- no partial old package/namespace/assembly/friend/test identity remains;
-- no manifest/lock contradiction exists;
-- no `.meta` regeneration, GUID churn, or duplicate GUID exists;
-- no classifier/planner/fixture semantic edit occurred;
-- no private-testbed mutation occurred;
+- `AGENTS.md` remains policy and retained all Git/test/MCP/asset/release protections.
+- README/vision claim no future features as implemented.
+- no partial old package/namespace/assembly/friend/test identity remains.
+- no manifest/lock contradiction exists.
+- no `.meta` regeneration, GUID churn, or duplicate GUID exists.
+- no classifier/planner/fixture semantic edit occurred.
+- no private-testbed mutation occurred.
 - no repository setting, release, commit, push, or history rewrite occurred.
 
 ---
@@ -753,9 +753,9 @@ Confirm explicitly:
 
 List, but do not execute:
 
-1. rename `Alrauna/alpha-material-optimizer-ndmf` to `Alrauna/amuse`;
-2. set Actions variable `PACKAGE_NAME` to `com.alrauna.amuse`;
-3. verify repository description/homepage, Pages environment, listing URL, branch protection, Actions variables/secrets/environments, and external listing sources;
+1. rename `Alrauna/alpha-material-optimizer-ndmf` to `Alrauna/amuse`.
+2. set Actions variable `PACKAGE_NAME` to `com.alrauna.amuse`.
+3. verify repository description/homepage, Pages environment, listing URL, branch protection, Actions variables/secrets/environments, and external listing sources.
 4. verify generated release artifact names and VPM listing keys before any release.
 
 - [ ] **Step 2: Provide the local remote update procedure**
@@ -769,7 +769,7 @@ git remote -v
 git status --short --branch
 ```
 
-Do not run it before the repository is actually renamed.
+Do not run these commands until the repository rename actually happens.
 
 - [ ] **Step 3: State VPM migration behavior**
 
@@ -777,7 +777,7 @@ Report that `com.alrauna.amuse` is a distinct package, not an upgrade. Existing 
 
 - [ ] **Step 4: Stop for review**
 
-Report exact files changed, rename/GUID evidence, test counts/results, compiler/Console results, bootstrap results, stale-name classification, skipped validation, remaining external actions, Git status, and private-testbed non-use/non-modification.
+Report exact files changed, rename/GUID evidence, test counts/results, compiler/Console results, bootstrap results, stale-name classification, and skipped validation. Report remaining external actions, Git status, and private-testbed non-use/non-modification.
 
 Do not commit, push, open a PR, rename the repository, change GitHub settings, or publish.
 

@@ -1,16 +1,16 @@
 # Runtime Texture Evidence Implementation Plan
 
-> **Execution:** This plan is executed **serially in the current Claude Code chat**, task by task, in the order below. No subagent, parallel dispatch, or worktree isolation is authorized; do not delegate any task. Steps use checkbox (`- [ ]`) syntax for tracking. **Implementation output stays unstaged and uncommitted** for controller review — no `git add`, no commit, no push, no PR at any point.
+> **Execution:** The controller executes this plan **serially in the current Claude Code chat**, task by task, in the order below. The plan authorizes no subagent, parallel dispatch, or worktree isolation. Do not delegate any task. Steps use checkbox (`- [ ]`) syntax for tracking. **Implementation output stays unstaged and uncommitted** for controller review. No `git add`, no commit, no push, no PR at any point.
 
-**Goal:** Let AMUSE obtain alpha evidence from ordinary imported Unity textures that are non-readable, block-compressed, and mipmapped, by replacing the `GetPixels32` acquisition route with a gated GPU texel-fetch predicate that captures every declared mip, and by carrying that chain through the six seams that today carry one grid.
+**Goal:** Let AMUSE get alpha evidence from ordinary imported Unity textures that are non-readable, block-compressed, and mipmapped. The plan replaces the `GetPixels32` acquisition route with a gated GPU texel-fetch predicate that captures every declared mip. It carries that chain through the six seams that today carry one grid.
 
-**Architecture:** One new internal type `AlphaMipChain` wraps an ordered chain of existing `AlphaTextureData`. `AlphaFieldProvider` keeps its role and changes its returned value; `AlphaResolution` classifies every level and combines outcomes. `UnityAlphaFieldEvidence` gains a private `TryAcquireLevel` GPU core beneath its identity and policy gates, plus internal pure gate/validation predicates and one AppDomain-local host-capability latch. The existing predicate shader moves from the research package into the product with its `.meta` and GUID intact.
+**Architecture:** One new internal type `AlphaMipChain` wraps an ordered chain of existing `AlphaTextureData`. The provider `AlphaFieldProvider` keeps its role and changes its returned value. The resolution type `AlphaResolution` classifies every level and combines outcomes. The evidence type `UnityAlphaFieldEvidence` gains a private `TryAcquireLevel` GPU core beneath its identity and policy gates. It also gains internal pure gate/validation predicates and one AppDomain-local host-capability latch. The existing predicate shader moves from the research package into the product with its `.meta` and GUID intact.
 
 **Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, existing `Alrauna.Amuse.Editor`, `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies. No new dependency, assembly, package metadata, or NDMF configuration change.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-runtime-texture-evidence-design.md` — authoritative, committed at `7f1c8a7`.
 
-**Plan status:** awaiting controller approval. Do not begin Task 1 until approved.
+**Plan status:** awaiting controller approval. Do not start Task 1 until approved.
 
 ---
 
@@ -19,27 +19,27 @@
 ### Correctness invariants
 
 - `AlphaMipChain` guarantees **shape only**: non-empty, mip 0 first, no null element, and `w[i] == max(1, w[i-1] >> 1)` and `h[i] == max(1, h[i-1] >> 1)` per axis independently. It does **not** require termination at 1x1 and deliberately accepts a correctly shaped prefix such as `8x8 -> 4x4` (spec §4.4).
-- **Completeness** — that the chain is every level the sampler may select — belongs to the `AlphaFieldProvider` contract and the capture loop, never to the constructor. Production constructs the chain only after exactly `texture.mipmapCount` successful level captures.
-- Outcome precedence over a chain: any `MustRemainTransparent` wins; otherwise any `Unknown` wins; otherwise `ProvenOpaque`. Early exit on `MustRemainTransparent` only — **never** on `Unknown`.
-- The empty chain is unrepresentable, so `ProvenOpaque` can never be reached vacuously.
+- **Completeness** — that the chain is every level the sampler may select — belongs to the `AlphaFieldProvider` contract and the capture loop. It never belongs to the constructor. Production constructs the chain only after exactly `texture.mipmapCount` successful level captures.
+- Outcome precedence over a chain: any `MustRemainTransparent` wins. Otherwise any `Unknown` wins. Otherwise `ProvenOpaque` wins. Early exit on `MustRemainTransparent` only — **never** on `Unknown`.
+- The empty chain is unrepresentable, so no vacuous chain can reach `ProvenOpaque`.
 - `TriangleAlphaClassifier` and `AlphaTextureData` do not change.
 - `TryGetUniformOutcome` gains no new uniform path. Do **not** add "every level is `IsFullyOpaque`, therefore `Uniform(ProvenOpaque)`".
 - `ResolveScaledSample` for `k < 1` still reads **zero bytes**: it calls the provider, checks the chain is non-null, and returns `Uniform(MustRemainTransparent)`.
 - Admitted formats, exactly: `RGBA32`, `ARGB32`, `Alpha8`, `RGB24`, `DXT5`, `BC7`. Do not add `DXT5Crunched`, `ARGB4444`, ASTC, any float format, or anything else.
 - Active build target gate, exactly: `BuildTarget.StandaloneWindows64`.
 - Channel gate, exactly: `TextureChannel.Alpha`.
-- Every byte read back must be exactly `0` or `255`; the allocated target's `graphicsFormat` must be exactly `GraphicsFormat.R8_UNorm`.
+- Every byte read back must be exactly `0` or `255`. The `graphicsFormat` of the allocated target must be exactly `GraphicsFormat.R8_UNorm`.
 - `Editor/Analysis/` must contain no `UnityEditor` identifier. `UnityAlphaFieldEvidenceTests.AnalysisNamespace_HasNoDependencyOnTheUnityEditorNamespace` enforces this and will fail if `AlphaMipChain.cs` names `UnityEditor`.
 
 ### Scope boundaries — do not implement
 
-- No compatibility adapter, second `AlphaFieldProvider`, generic GPU backend, injectable capture interface, factory, registry, service, texture-evidence cache, or temporary abstraction to ease sequencing.
+- No compatibility adapter, second `AlphaFieldProvider`, generic GPU backend, or injectable capture interface. No factory, registry, service, texture-evidence cache, or temporary abstraction to ease sequencing.
 - No mesh, submesh, material-conversion, or vertical-slice work.
 - No NDMF phase, plugin, or `Configure()` change.
 - No change to `TriangleAlphaClassifier.cs`, `MaterialSemantics`, the Poiyomi or lilToon production frontends, package metadata, or any `.asmdef`.
 - No importer, quality-setting, streaming-state, scene, or prefab mutation **in production**. Tests follow the synthetic-fixture boundary below.
-- No RGB or non-alpha channel support; no trilinear, anisotropic, derivative, LOD, or streaming sampling semantics.
-- No Android/Quest support; no second shader; no new performance framework, budget, counter, or telemetry.
+- No RGB or non-alpha channel support. No trilinear, anisotropic, derivative, LOD, or streaming sampling semantics.
+- No Android/Quest support. No second shader. No new performance framework, budget, counter, or telemetry.
 - No Census Lab use of any kind.
 
 ### Synthetic-fixture importer policy
@@ -54,14 +54,14 @@ mipmapped, non-readable, compressed state is exactly the thing under test.
   that the test itself just wrote into its **own dedicated temporary test folder**
   under `Assets/` — for example `Assets/AmuseTests_AlphaField`,
   `Assets/AmuseTests_BuildLowerMip`, or the folder an existing suite already owns.
-  That folder and every asset in it must be deleted in `[TearDown]` or in the
-  test's `finally`, whether or not assertions passed.
+  The test must delete that folder and every asset in it in `[TearDown]` or in its
+  `finally` block, whether or not assertions passed.
 
 **Never permitted, in production or in tests:**
 
 - Production mutating any importer setting, for any reason.
-- Mutating an **existing, user-owned, source-avatar, Census, or repository fixture**
-  asset's importer — or its pixels — to obtain evidence or to induce a refusal.
+- Mutating the **importer of an existing, user-owned, source-avatar, Census, or repository fixture**
+  asset — or its pixels — to get evidence or to induce a refusal.
 - Changing project or global settings: `QualitySettings`, the active build target,
   global streaming state, or any global or per-texture mipmap limit.
 
@@ -73,27 +73,27 @@ test did not create is evidence tampering.
 
 None of the following may appear in any test this plan produces:
 
-- changing `EditorUserBuildSettings.activeBuildTarget`;
-- changing `QualitySettings`, global streaming state, or any mipmap limit;
-- mutating an existing, user-owned, source-avatar, Census, or repository fixture
-  asset's importer or pixels, whether to gain evidence or to induce a refusal;
-- moving, renaming, deleting, or replacing the production shader to make it missing;
-- forcing or faking `SystemInfo` device capabilities;
-- manufacturing an `AsyncGPUReadback` error;
-- setting the host-capability latch through a test-only setter, reflection, injection, or an override hook;
+- changing `EditorUserBuildSettings.activeBuildTarget`.
+- changing `QualitySettings`, global streaming state, or any mipmap limit.
+- mutating the importer or pixels of an existing, user-owned, source-avatar, Census, or
+  repository fixture asset, whether to gain evidence or to induce a refusal.
+- moving, renaming, deleting, or replacing the production shader to make it missing.
+- forcing or faking `SystemInfo` device capabilities.
+- manufacturing an `AsyncGPUReadback` error.
+- setting the host-capability latch through a test-only setter, reflection, injection, or an override hook.
 - any fake or injected GPU backend.
 
-Configuring a newly created synthetic asset's importer inside a test-owned temporary
-folder is **not** on this list; it is governed by the policy above.
+Configuring the importer of a newly created synthetic asset inside a test-owned temporary
+folder is **not** on this list. The policy above governs it.
 
-For those paths the plan uses production-called pure predicates or documented structural review, exactly as spec §13.4-§13.6 approves.
+For those paths the plan uses production-called pure predicates or documented structural review. Spec §13.4-§13.6 approves exactly these paths.
 
 ### Process
 
 - Do not stage, commit, push, or open a PR. Leave every implementation change in the working tree.
 - Do not touch any branch other than `feat/runtime-texture-evidence`.
 - Before reporting any Unity test result, enumerate Unity instances read-only and select only the instance whose normalized `Application.dataPath` equals the normalized `<repo-root>/Assets`. A case-only match is not identity.
-- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before restoring host toolchain churn; restore only when the entire diff is exactly that machine-generated state and nothing intentional shares those files.
+- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before restoring host toolchain churn. Restore only when the entire diff is exactly that machine-generated state and nothing intentional shares those files.
 - Each new `.cs` file is one logical unit with its Unity-generated `.meta`. A new folder also generates a `.meta`.
 
 ---
@@ -141,28 +141,28 @@ For those paths the plan uses production-called pure predicates or documented st
 - **2 added production files** (`AlphaMipChain.cs`, and the moved `AmuseAlphaExactOne.shader`), **7 modified production files**, **1 modified research file**, **1 moved-out research shader**.
 - **1 added test file** (`AlphaMipChainTests.cs`), **8 modified test files**,
   including `Build/AmusePlatformFinishPluginTests.cs`.
-- **`.meta` accounting: 3 new** — `Editor/Analysis/AlphaMipChain.cs.meta`, `Editor/Host/Shaders.meta` (new folder), `Tests/Editor/Analysis/AlphaMipChainTests.cs.meta` — and **1 moved**, the shader's own `.meta`.
-- Exactly **one** shader asset exists at completion. None is created and none is deleted.
+- **`.meta` accounting: 3 new** — `Editor/Analysis/AlphaMipChain.cs.meta`, `Editor/Host/Shaders.meta` (new folder), `Tests/Editor/Analysis/AlphaMipChainTests.cs.meta` — and **1 moved**, the `.meta` file of that shader.
+- Exactly **one** shader asset exists at completion. The plan creates no shader asset and deletes none.
 
 ---
 
 ## How compilation is preserved during the six-seam migration
 
-`AlphaFieldProvider` is a delegate. Changing its `out` parameter type breaks every implementation and every call site in the same compile. There is no way to stage that across several compilable tasks **without** a compatibility adapter or a second provider, and both are forbidden by the specification and by this plan's scope boundaries.
+`AlphaFieldProvider` is a delegate. Changing its `out` parameter type breaks every implementation and every call site in the same compile. There is no way to stage that across several compilable tasks **without** a compatibility adapter or a second provider. The specification and the scope boundaries of this plan forbid both.
 
-Therefore **Task 2 migrates all six seams in one task**, and keeps behaviour identical by having the producer wrap its existing single grid in a one-element chain:
+Therefore **Task 2 migrates all six seams in one task**. The producer wraps its existing single grid in a one-element chain, and this keeps behaviour identical:
 
 ```csharp
 field = new AlphaMipChain(new[] { new AlphaTextureData(width, height, alpha) });
 ```
 
-With a one-element chain the Task 2 aggregation loop returns exactly what today's single `Classify` call returns, so every existing behavioural test stays green through mechanical type edits only. Multi-mip acquisition arrives later, in Task 5, against seams that already carry the right type. This is the smallest sequencing that never introduces an adapter and never leaves the repository uncompilable.
+With a one-element chain the Task 2 aggregation loop returns exactly what the single `Classify` call of today returns. So every existing behavioural test stays green through mechanical type edits only. Multi-mip acquisition arrives later, in Task 5, against seams that already carry the right type. This is the smallest sequencing that never introduces an adapter and never leaves the repository uncompilable.
 
 Every other task compiles independently:
 
 - Task 1 adds a type nothing consumes yet.
 - Task 3 moves an asset and re-points one research literal.
-- Task 4 adds internal predicates consumed by Task 5 **within this plan**; leaving any of them without a production caller at plan end is a defect, not an acceptable outcome.
+- Task 4 adds internal predicates consumed by Task 5 **within this plan**. Leaving any of them without a production caller at plan end is a defect, not an acceptable outcome.
 - Tasks 5-7 change behaviour behind seams whose types already settled in Task 2.
 
 ---
@@ -193,11 +193,11 @@ Run focused suites during tasks and the full suite at the end. Discover and pin 
 
 - [ ] **Step 0: Record the timing baseline, before any edit**
 
-The working tree is still unmodified at this point, so this is the only moment a
-true baseline can be taken. Run `RendererAlphaAnalysisIntegrationTests` and
-`AmusePlatformFinishPluginTests` on the pinned Unity instance and record each
-suite's wall-clock duration and test count. Task 7, Step 3 compares against these
-numbers; without them, no before/after claim may be made.
+The working tree is still unmodified at this point. Only now can the plan take a
+true baseline. Run `RendererAlphaAnalysisIntegrationTests` and
+`AmusePlatformFinishPluginTests` on the pinned Unity instance and record the
+wall-clock duration and test count of each suite. Task 7, Step 3 compares against
+these numbers. Without them, the plan cannot make a before/after claim.
 
 Record them in the session transcript only. **Do not** create a results file, a
 benchmark harness, or any committed artefact.
@@ -467,7 +467,7 @@ Confirm Unity generated `AlphaMipChain.cs.meta` and `AlphaMipChainTests.cs.meta`
 
 ## Task 2: Migrate the six seams, preserving single-mip behaviour
 
-Every seam moves in one task because `AlphaFieldProvider` is a delegate and no compatibility adapter is permitted. The producer keeps `GetPixels32` and every current refusal; it wraps its single grid in a one-element chain. Behaviour must be **identical** at the end of this task.
+Every seam moves in one task because `AlphaFieldProvider` is a delegate and the rules permit no compatibility adapter. The producer keeps `GetPixels32` and every current refusal. It wraps its single grid in a one-element chain. Behaviour must be **identical** at the end of this task.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs` (`:34-37`, `:48`, `:56`, `:100-108`, `:157-165`, `:230-252`, `:254-280`)
@@ -483,11 +483,11 @@ Every seam moves in one task because `AlphaFieldProvider` is a delegate and no c
 
 **Interfaces:**
 - Consumes: `AlphaMipChain` from Task 1.
-- Produces: `internal delegate bool AlphaFieldProvider(TextureSourceId source, TextureChannel channel, out AlphaMipChain chain)`; `AlphaResolution.Classified(AlphaMipChain chain, AlphaSamplingSettings sampling)`; `UnityAlphaFieldEvidence.TryCapture(Texture texture, out TextureSourceId source, out AlphaMipChain chain)`; `UnityAlphaFieldEvidence.TryGetAlphaField(TextureSourceId source, TextureChannel channel, out AlphaMipChain chain)`; `CapturedTextureEvidence.AlphaChannel` of type `AlphaMipChain`; `UnityRendererAlphaAnalysis.GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial>)` returning `IReadOnlyDictionary<TextureSourceId, AlphaMipChain>`. Tasks 5-7 rely on exactly these.
+- Produces: `internal delegate bool AlphaFieldProvider(TextureSourceId source, TextureChannel channel, out AlphaMipChain chain)`, `AlphaResolution.Classified(AlphaMipChain chain, AlphaSamplingSettings sampling)`, `UnityAlphaFieldEvidence.TryCapture(Texture texture, out TextureSourceId source, out AlphaMipChain chain)`, `UnityAlphaFieldEvidence.TryGetAlphaField(TextureSourceId source, TextureChannel channel, out AlphaMipChain chain)`, `CapturedTextureEvidence.AlphaChannel` of type `AlphaMipChain`, and `UnityRendererAlphaAnalysis.GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial>)` returning `IReadOnlyDictionary<TextureSourceId, AlphaMipChain>`. Tasks 5-7 rely on exactly these.
 
 - [ ] **Step 1: Write the failing aggregation tests**
 
-Add to `AlphaSemanticsResolverTests.cs`. These need no GPU: chains are built directly.
+Add to `AlphaSemanticsResolverTests.cs`. These need no GPU: the tests build chains directly.
 
 ```csharp
         private static AlphaMipChain Chain(params AlphaTextureData[] levels)
@@ -632,7 +632,7 @@ Add to `AlphaSemanticsResolverTests.cs`. These need no GPU: chains are built dir
         }
 ```
 
-`OpaqueCornerTriangle()` and `TransparentCornerTriangle()` already exist at `:76` and `:90`; there is no `Sampling(...)` helper, so `AlphaSamplingSettings` is constructed directly. Add one new triangle helper beside the existing two — `MixedField()` is 2x2 with the bottom row 255 and the top row 0, so a triangle spanning both rows classifies `Unknown` there while `OpaqueCornerTriangle()` stays wholly inside the opaque row:
+`OpaqueCornerTriangle()` and `TransparentCornerTriangle()` already exist at `:76` and `:90`. There is no `Sampling(...)` helper, so the tests construct `AlphaSamplingSettings` directly. Add one new triangle helper beside the existing two. `MixedField()` is 2x2 with the bottom row 255 and the top row 0. A triangle spanning both rows classifies `Unknown` there, while `OpaqueCornerTriangle()` stays wholly inside the opaque row:
 
 ```csharp
         /// <summary>
@@ -666,11 +666,11 @@ Delegate at `:34-37`:
         out AlphaMipChain chain);
 ```
 
-Update the delegate's XML doc so both obligations are explicit. Replace "over the relevant base-level texel domain in bottom-to-top order" with a statement binding the predicate to **every level**, and add the completeness clause:
+Update the XML doc of the delegate so both obligations are explicit. Replace "over the relevant base-level texel domain in bottom-to-top order" with a statement binding the predicate to **every level**. Add the completeness clause:
 
 > ... that for **every level of the returned chain**, in bottom-to-top row-major order, every effective per-texel scalar value is finite and within [0, 1], that byte 255 marks exactly the texels whose value is exactly 1, and that every other byte marks a value strictly below 1. It further attests that the chain is the source's **complete declared mip chain**, mip 0 first: the sampler may select any level and the resolver cannot know which, so an incomplete chain would let an unexamined level escape the proof. `AlphaMipChain` validates shape only and cannot check this; the provider owns it.
 
-In `AlphaResolution`: rename `_field` to `_chain` and type it `AlphaMipChain`; change the private constructor parameter and the `Classified` factory parameter to `AlphaMipChain chain`. The existing null guard keeps its meaning.
+In `AlphaResolution`: rename `_field` to `_chain` and type it `AlphaMipChain`. Change the private constructor parameter and the `Classified` factory parameter to `AlphaMipChain chain`. The existing null guard keeps its meaning.
 
 Replace the classified arm of `Classify` (`:161-164`):
 
@@ -708,13 +708,13 @@ Replace the classified arm of `Classify` (`:161-164`):
                 : TriangleAlphaOutcome.ProvenOpaque;
 ```
 
-In `ResolveSampled` and `ResolveScaledSample`, rename the `out var field` locals to `out var chain` and the null checks to `chain == null`. **Do not change either method's logic.** `ResolveScaledSample` still returns `AlphaResolution.Uniform(TriangleAlphaOutcome.MustRemainTransparent)` for `k < 1` without reading a byte. Extend its XML doc with one sentence:
+In `ResolveSampled` and `ResolveScaledSample`, rename the `out var field` locals to `out var chain` and the null checks to `chain == null`. **Do not change the logic of either method.** `ResolveScaledSample` still returns `AlphaResolution.Uniform(TriangleAlphaOutcome.MustRemainTransparent)` for `k < 1` without reading a byte. Extend its XML doc with one sentence:
 
 > The evidence contract now bounds the sampled value to [0, 1] at **every** level, so the bound holds whichever level the hardware selects; the lemma is strengthened, not weakened, and still needs no byte of the contents.
 
 - [ ] **Step 4: Change the remaining five seams and the comment**
 
-`UnityAlphaFieldEvidence.cs`: type the dictionary `Dictionary<TextureSourceId, AlphaMipChain>`; change `TryCapture`'s and `TryGetAlphaField`'s `out` parameters to `out AlphaMipChain chain`; at the end of the successful `TryCapture` path, replace the single-field construction with the one-element wrap:
+In `UnityAlphaFieldEvidence.cs`: type the dictionary `Dictionary<TextureSourceId, AlphaMipChain>`. Change the `out` parameters of `TryCapture` and `TryGetAlphaField` to `out AlphaMipChain chain`. At the end of the successful `TryCapture` path, replace the single-field construction with the one-element wrap:
 
 ```csharp
                 // Single-mip acquisition is unchanged in this task; the chain is
@@ -727,17 +727,17 @@ In `ResolveSampled` and `ResolveScaledSample`, rename the `out var field` locals
                 return true;
 ```
 
-`UnityMaterialEvidenceCapture.cs`: `AlphaChannel` property type (`:263`), constructor parameter (`:274`), and the capture local (`:989`) become `AlphaMipChain`. Add to `AlphaChannel`'s doc that the value is the complete declared mip chain.
+`UnityMaterialEvidenceCapture.cs`: `AlphaChannel` property type (`:263`), constructor parameter (`:274`), and the capture local (`:989`) become `AlphaMipChain`. Add to the doc of `AlphaChannel` that the value is the complete declared mip chain.
 
-`UnityRendererAlphaAnalysis.cs`: the lambda's `out AlphaTextureData field` (`:505`) becomes `out AlphaMipChain chain`, and `GatherAlphaFields` returns `IReadOnlyDictionary<TextureSourceId, AlphaMipChain>` with its local dictionary retyped. The `channel == TextureChannel.Alpha` guard is unchanged.
+`UnityRendererAlphaAnalysis.cs`: the `out AlphaTextureData field` lambda parameter (`:505`) becomes `out AlphaMipChain chain`, and `GatherAlphaFields` returns `IReadOnlyDictionary<TextureSourceId, AlphaMipChain>` with its local dictionary retyped. The `channel == TextureChannel.Alpha` guard stays unchanged.
 
-`AmusePlatformFinishPlugin.cs`: `AlphaFields`'s `out AlphaTextureData field` (`:471`) becomes `out AlphaMipChain chain`. Nothing else in the pass changes.
+`AmusePlatformFinishPlugin.cs`: the `out AlphaTextureData field` parameter of `AlphaFields` (`:471`) becomes `out AlphaMipChain chain`. Nothing else in the pass changes.
 
-`AdmittedMaterialStates.cs:175`: change `<see cref="AlphaTextureData"/>` to `<see cref="AlphaMipChain"/>` in the sentence about reference-distinct evidence. The rule is unchanged in substance — two chains are no more cheaply provable equivalent than two grids.
+`AdmittedMaterialStates.cs:175`: change `<see cref="AlphaTextureData"/>` to `<see cref="AlphaMipChain"/>` in the sentence about reference-distinct evidence. The rule keeps its substance — two chains are no more cheaply provable equivalent than two grids.
 
 - [ ] **Step 5: Update the existing tests mechanically**
 
-`AlphaSemanticsResolverTests.cs`: change `Providing`/`ProvidingNothing` and the four inline lambdas at `:213`, `:282`, `:459`, `:575` to `out AlphaMipChain result`. `Providing` takes an `AlphaMipChain`; add a `Providing(AlphaTextureData)` overload that wraps a single level so existing call sites read unchanged:
+`AlphaSemanticsResolverTests.cs`: change `Providing`/`ProvidingNothing` and the four inline lambdas at `:213`, `:282`, `:459`, `:575` to `out AlphaMipChain result`. `Providing` takes an `AlphaMipChain`. Add a `Providing(AlphaTextureData)` overload that wraps a single level so existing call sites read unchanged:
 
 ```csharp
         private static AlphaFieldProvider Providing(AlphaTextureData field)
@@ -756,11 +756,11 @@ In `ResolveSampled` and `ResolveScaledSample`, rename the `out var field` locals
         }
 ```
 
-`AdmittedMaterialStatesTests.cs`: `NoAlphaFields` (`:472-479`) takes `out AlphaMipChain field`; `ClassifiedResolution` (`:1186-1192`) wraps its 1x1 grid in a chain.
+`AdmittedMaterialStatesTests.cs`: `NoAlphaFields` (`:472-479`) takes `out AlphaMipChain field`. `ClassifiedResolution` (`:1186-1192`) wraps its 1x1 grid in a chain.
 
-`UnityAlphaFieldEvidenceTests.cs`: `TryField` (`:137-156`) returns `out AlphaMipChain`; every assertion that read `field.GetAlpha(...)`, `field.Width`, `field.Height`, `field.IsFullyOpaque` reads `chain[0]. ...`. `AssertSameField` compares `chain[0]` against `chain[0]`. Do not change any assertion's expected value.
+`UnityAlphaFieldEvidenceTests.cs`: `TryField` (`:137-156`) returns `out AlphaMipChain`. Every assertion that read `field.GetAlpha(...)`, `field.Width`, `field.Height`, `field.IsFullyOpaque` reads `chain[0]. ...`. `AssertSameField` compares `chain[0]` against `chain[0]`. Do not change the expected value of any assertion.
 
-`UnityMaterialEvidenceCaptureTests.cs`: `:357-358` becomes `main.Texture.AlphaChannel[0].GetAlpha(0, 0)` and `[0].GetAlpha(3, 3)`; the retained-reference assertions at `:395-397` compare the chain with `Is.SameAs` and read `alpha[0].GetAlpha(...)`.
+`UnityMaterialEvidenceCaptureTests.cs`: `:357-358` becomes `main.Texture.AlphaChannel[0].GetAlpha(0, 0)` and `[0].GetAlpha(3, 3)`. The retained-reference assertions at `:395-397` compare the chain with `Is.SameAs` and read `alpha[0].GetAlpha(...)`.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -769,9 +769,9 @@ Expected: all pass. `TriangleAlphaClassifierTests` must pass **unmodified** — 
 
 - [ ] **Step 7: Confirm behaviour is unchanged**
 
-No test's expected value may have been edited in Step 5 — only types and accessor
-shape. If any expected value needed changing, stop and report it: it means the
-migration altered behaviour, which this task forbids.
+Step 5 may edit only types and accessor shape. It may not edit the expected value of
+any test. If an expected value needs changing, stop and report it. The migration
+altered behaviour in that case, and this task forbids that.
 
 **These named existing tests establish one-mip behavioural equivalence** and must be
 green with their expectations untouched:
@@ -807,7 +807,7 @@ green with their expectations untouched:
 - [ ] **Step 1: Move the asset and its `.meta` together**
 
 Use a plain filesystem move — **never `git mv`**, which would stage the rename. The
-`.meta` moves with the asset so the GUID survives; Unity then reconciles the move on
+`.meta` moves with the asset so the GUID survives. Unity then reconciles the move on
 its next refresh without reimporting the asset under a new identity.
 
 ```bash
@@ -839,7 +839,7 @@ Expected: `guid: 85ccb222632d847b6b653f0e05b1ee97`. If it differs, stop — the 
 
 Change the `Shader` declaration to `Shader "Hidden/Alrauna/Amuse/AlphaExactOne"`.
 
-Replace the header comment with a statement of its production role. **Leave the fragment body exactly as it is**, green channel included:
+Replace the header comment with a statement of its production role. Leave the fragment body **exactly as it is**, green channel included:
 
 ```hlsl
 // The AMUSE alpha evidence predicate. Editor-only: it lives under Editor/ so it
@@ -879,9 +879,9 @@ In `UnityAlphaFieldEvidence`:
 
 - [ ] **Step 5: Re-point the research probe**
 
-In `AlphaEvidenceProbe.cs`, delete the private `ShaderPath` literal at `:103-105` and replace every one of its four uses (`:116`, `:179`, `:263`, and the `ProbeSupport` load) with `UnityAlphaFieldEvidence.ShaderAssetPath`. Add `using Alrauna.Amuse.Editor.Host;`. The assembly reference and `InternalsVisibleTo` grant already exist, so no `.asmdef` or `AssemblyInfo` change is needed.
+In `AlphaEvidenceProbe.cs`, delete the private `ShaderPath` literal at `:103-105` and replace every one of its four uses (`:116`, `:179`, `:263`, and the `ProbeSupport` load) with `UnityAlphaFieldEvidence.ShaderAssetPath`. Add `using Alrauna.Amuse.Editor.Host;`. The assembly reference and `InternalsVisibleTo` grant already exist, so the plan needs no `.asmdef` or `AssemblyInfo` change.
 
-Update the class doc: it currently says "nothing in `com.alrauna.amuse` references it". Replace with: the probe now loads the **product** shader, so the characterization and production exercise one asset and the predicate cannot drift.
+Update the class doc: it currently says "nothing in `com.alrauna.amuse` references it". Replace with: the probe now loads the **product** shader. The characterization and production exercise one asset, and the predicate cannot drift.
 
 - [ ] **Step 6: Run the research calibration suite**
 
@@ -902,7 +902,7 @@ Expected: exactly one path, the moved production shader.
 
 ## Task 4: Internal gate predicates and output validators
 
-Pure, allocation-free, `internal` so `Alrauna.Amuse.Tests.Editor` reaches them through the existing grant at `Editor/AssemblyInfo.cs:3`. **Task 5 wires every one of them.** Any predicate still without a production caller when the plan ends is a defect.
+They are pure, allocation-free, and `internal`. So `Alrauna.Amuse.Tests.Editor` reaches them through the existing grant at `Editor/AssemblyInfo.cs:3`. **Task 5 wires every one of them.** Any predicate still without a production caller when the plan ends is a defect.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAlphaFieldEvidence.cs`
@@ -922,28 +922,27 @@ Pure, allocation-free, `internal` so `Alrauna.Amuse.Tests.Editor` reaches them t
   - `bool IsBinaryPredicateBuffer(byte[] bytes)`
   - `bool MatchesExpectedPattern(byte[] actual, byte[] expected)`
 
-All **twelve** are invoked by `TryCapture`, `TryAcquireLevel`, or
-`RunHostCapabilityCheck` in Task 5 — seven policy/capability gates
-(`IsAdmittedBuildTarget`, `IsAdmittedFormat`, `MipResidencyGatesPass`,
-`AreDimensionsUsable`, `HostCapabilitiesPass`, `SourceSamplingGatePasses`,
-`IsShaderUsable`) and five output validators (`IsExpectedTargetFormat`,
-`IsExpectedLevelSize`, `IsExpectedBufferLength`, `IsBinaryPredicateBuffer`,
-`MatchesExpectedPattern`).
+`TryCapture`, `TryAcquireLevel`, and `RunHostCapabilityCheck` in Task 5 invoke all
+**twelve** — seven policy/capability gates (`IsAdmittedBuildTarget`,
+`IsAdmittedFormat`, `MipResidencyGatesPass`, `AreDimensionsUsable`,
+`HostCapabilitiesPass`, `SourceSamplingGatePasses`, `IsShaderUsable`) and five
+output validators (`IsExpectedTargetFormat`, `IsExpectedLevelSize`,
+`IsExpectedBufferLength`, `IsBinaryPredicateBuffer`, `MatchesExpectedPattern`).
 
-`SourceSamplingGatePasses(textureFormat, exactGraphicsFormatSampleable)` was added
+`SourceSamplingGatePasses(textureFormat, exactGraphicsFormatSampleable)` arrived
 during implementation, after a measured contradiction between two pinned spec
-clauses: `IsFormatSupported(R8G8B8_UNorm, Sample)` is `False` on this host, and that
-is `RGB24`'s reported `graphicsFormat`, so an exact-format requirement refused an
-admitted format. Its whole policy is *exact format sampleable -> true; otherwise
-RGB24 -> true; otherwise false*. It makes no `SystemInfo` call of its own. See
-spec §8 and investigation §10a. Three responsibilities stay separate on purpose:
-`IsExpectedLevelSize` compares the two dimensions, `IsExpectedBufferLength` compares
-the **actual returned length** against `width * height`, and
-`IsBinaryPredicateBuffer` is responsible for exactly one thing — that every returned
-byte is `0` or `255`. Folding length into the byte scan is what made the earlier
-draft's mismatch branch unreachable, because production allocated the array and then
-passed its own `Length` as the expected value. Production must pass the length Unity
-returned, before any array of its own exists.
+clauses. `IsFormatSupported(R8G8B8_UNorm, Sample)` is `False` on this host. The
+reported `graphicsFormat` of `RGB24` is that format, so an exact-format requirement
+refused an admitted format. The whole policy of the gate: return true when the exact
+format is sampleable. Return true for RGB24 otherwise. Return false otherwise. It
+makes no `SystemInfo` call of its own. See spec §8 and investigation §10a. Three
+responsibilities stay separate on purpose: `IsExpectedLevelSize` compares the two
+dimensions. `IsExpectedBufferLength` compares the **actual returned length** against
+`width * height`. `IsBinaryPredicateBuffer` handles exactly one thing — that every
+returned byte is `0` or `255`. Folding length into the byte scan made the mismatch
+branch of the earlier draft unreachable, because production allocated the array and
+then passed its own `Length` as the expected value. Production must pass the length
+Unity returned, before any array of its own exists.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1384,18 +1383,18 @@ check has validated — GPU-derived alpha admitted without the precondition that
 it trustworthy. Gate 12 is therefore written in the **same GREEN step** as the route,
 and `TryCapture` never exists in a form that can return a chain without it.
 
-Behaviour changes here: non-readable, block-compressed and mipmapped textures begin
+Behaviour changes here: non-readable, block-compressed and mipmapped textures start
 producing evidence, and `GetPixels32` leaves production.
 
 **Files:**
-- Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAlphaFieldEvidence.cs` (`TryCapture` replaced; the core, the check and the latch added)
+- Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAlphaFieldEvidence.cs` (`TryCapture` replaced, with the core, the check and the latch added)
 - Test: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAlphaFieldEvidenceTests.cs`
 
 **Interfaces:**
-- Consumes: Task 3's `ShaderAssetPath`; all twelve Task 4 predicates.
+- Consumes: the `ShaderAssetPath` of Task 3, plus all twelve Task 4 predicates.
 - Produces:
-  - `private static bool TryAcquireLevel(Texture2D texture, int mip, Material material, out AlphaTextureData level)` — private; called only by the chain loop and the capability check.
-  - `internal static bool HostCapabilityCheckPasses()` — gate 12's reader. **No setter, no reset, no reflection hook.**
+  - `private static bool TryAcquireLevel(Texture2D texture, int mip, Material material, out AlphaTextureData level)` — private, called only by the chain loop and the capability check.
+  - `internal static bool HostCapabilityCheckPasses()` — the reader of gate 12. **No setter, no reset, no reflection hook.**
 
 ### A note on the latch and test ordering
 
@@ -1409,8 +1408,8 @@ This plan therefore never claims a test exercised the real check on a fresh latc
 - `TheHostCapabilityCheckPassesOnThisHost` asserts the value is `true`. That claim is
   sound either way — a cached `true` can only have come from a real passing run
   earlier in this AppDomain, since nothing else can write the latch.
-- `RenderTexture.active` restoration is asserted around **ordinary capture**, which
-  allocates on every call and so is never short-circuited.
+- The tests assert `RenderTexture.active` restoration around **ordinary capture**, which
+  allocates on every call and so never short-circuits.
 - Cleanup inside the capability check itself is a **reviewed structural guarantee**,
   not an executed assertion, precisely because it may not run.
 
@@ -1676,12 +1675,12 @@ Add to `UnityAlphaFieldEvidenceTests.cs`. Every fixture is a real project asset 
 - [ ] **Step 2: Invert the existing refusal tests, in this RED step**
 
 Existing cases in this file pin refusals this task removes, or assert alpha
-**magnitudes** the GPU route does not preserve. Both are **expected-value changes and
-must be made now, before any production edit**, so the RED run states the intended
-new behaviour rather than being retrofitted after GREEN.
+**magnitudes** the GPU route does not preserve. Both are **expected-value changes.
+Make them now, before any production edit**, so the RED run states the intended
+new behaviour instead of a retrofit after GREEN.
 
 **The evidence is predicate bytes, not magnitudes.** Sampled alpha exactly one stores
-`255`; every finite value below one stores `0`. Assertions that read `128` or `254`
+`255`. Every finite value below one stores `0`. Assertions that read `128` or `254`
 under the old `GetPixels32` route must assert `0`, against a `255` anchor so the
 result is a real asymmetry rather than a blank field.
 
@@ -1717,11 +1716,11 @@ Default texture type with a console error, so it is not available as an override
 case.
 
 **Fixture policy.** These fixtures are newly created synthetic assets written into
-this file's own `TempFolder`, which `[TearDown]` deletes whether or not assertions
-passed, so configuring their importers through the existing `Import` /
-`CreateTextureAsset` / `Format` helpers is permitted by the synthetic-fixture
-importer policy in Global Constraints. Nothing here touches an asset the test did not
-create, and no project or global setting is changed.
+the `TempFolder` of this file, which `[TearDown]` deletes whether or not assertions
+passed. So the existing `Import` /
+`CreateTextureAsset` / `Format` helpers may configure their importers under the
+synthetic-fixture importer policy in Global Constraints. Nothing here touches an
+asset the test did not create, and no project or global setting changes.
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
@@ -2062,7 +2061,7 @@ Add the latch and the check in this same step, so gate 12 above resolves:
         }
 ```
 
-Gate 12's call site is already written into the gate sequence above, in this same
+The gate sequence above already contains the call site of gate 12, in this same
 step. There is no intermediate state in which the GPU route returns a chain that the
 orientation check has not validated.
 
@@ -2076,8 +2075,8 @@ than a CPU copy.
 
 Run `UnityAlphaFieldEvidenceTests`. Expected: **all** pass, including the four
 inverted cases from Step 2, the three refusal cases left untouched, and every
-pre-existing case in the file. No expected value may be edited at this point — Step 2
-was the only place expected values were allowed to change.
+pre-existing case in the file. No expected value may change at this point. Step 2
+was the only place where expected values could change.
 
 - [ ] **Step 6: Confirm the Console carries no readback errors**
 
@@ -2117,10 +2116,11 @@ odd-aligned so it does not survive halving.
 | 1 | 4x4 | `x = 2`, covering source `x` 4 and 5 | mean of `255` and `200` — below one |
 
 A triangle whose UV support lies wholly inside source texel `(4, 0)` is therefore
-`ProvenOpaque` from mip 0 alone and `MustRemainTransparent` once mip 1 is consulted.
+`ProvenOpaque` from mip 0 alone and `MustRemainTransparent` once the tests consult mip 1.
 Texel `(4, 0)` spans `u ∈ [0.5, 0.625)` and `v ∈ [0, 0.125)`, so UVs
 `(0.51, 0.01)`, `(0.61, 0.01)`, `(0.51, 0.11)` lie wholly inside it. Under `Point`
-filtering and `Clamp` wrap — the sampling this fixture's importer already sets — that
+filtering and `Clamp` wrap — the sampling that the importer of this fixture already
+sets — that
 support maps to exactly one texel at each level: `(4, 0)` at mip 0 and `(2, 0)` at
 mip 1.
 
@@ -2134,9 +2134,9 @@ one at every level and still proves. That control is what shows the refusal is
 evidence-scoped rather than a blanket failure of the new route.
 
 **`BuildFixtureMesh` is not reused.** Its UVs (`:161-171`) are
-`0.55-0.9` and `0.01-0.2` against a 4x4 texture; neither region lies inside source
+`0.55-0.9` and `0.01-0.2` against a 4x4 texture. Neither region lies inside source
 texel `(4, 0)` of an 8x8 texture, so it cannot express the precondition. A dedicated
-mesh is built instead.
+mesh takes its place.
 
 ### Route, read from the current file
 
@@ -2174,7 +2174,7 @@ is already zero, so exactly two properties must change to put alpha on `_MainTex
 
 - [ ] **Step 1: Add every fixture helper**
 
-All fixture construction happens before any test is written, so Step 2's tests
+The tests write all fixture construction before any test, so the tests of Step 2
 compile as a set.
 
 #### 1a. Renderer and classifier fixture helpers
@@ -2686,7 +2686,7 @@ single-texel precondition.
         }
 ```
 
-The `try` opens **before** the temporary folder is created, so a failure in
+The `try` opens **before** `CreateFolder` creates the temporary folder. A failure in
 `CreateFolder` or in the first import still releases the root GameObject and deletes
 whatever part of the folder exists. `ImportLowerMipTexture` wraps its in-memory
 staging `Texture2D` in its own `try`/`finally`, so a throw from `EncodeToPNG` or
@@ -2694,10 +2694,10 @@ staging `Texture2D` in its own `try`/`finally`, so a throw from `EncodeToPNG` or
 
 The outer `finally` order mirrors the existing build tests (`:715-721`): committed
 clone first, then the root, then the objects this test created, then the original
-controller graph, and last the asset folder. Every created asset, GameObject,
-material, mesh, clip, controller and committed clone is released whether or not an
-assertion failed. No shared fixture abstraction and no class-wide `SetUp`/`TearDown`
-is introduced — the other build tests are untouched.
+controller graph, and last the asset folder. The test releases every created asset,
+GameObject, material, mesh, clip, controller and committed clone whether or not an
+assertion failed. It introduces no shared fixture abstraction and no class-wide
+`SetUp`/`TearDown` — the other build tests stay untouched.
 
 #### 2e. The shared-evidence identity assertion
 
@@ -2714,13 +2714,13 @@ assigned to two materials in a single `Capture` batch yields one shared
 ```
 
 **State the claim exactly.** `ReferenceEquals` proves the two assignments **share
-one evidence object and one chain instance**. It does **not** prove the GPU capture
-executed exactly once — a second capture that happened to be discarded would leave
+one evidence object and one chain instance**. It does **not** prove that the GPU capture
+ran exactly once — a second capture that happened to be discarded would leave
 this assertion green. Once-per-batch acquisition is a **code-structure property**
-confirmed by review of `UnityMaterialEvidenceCapture.Capture` (`:674-721`), where
-`CaptureTexture` is called once per distinct `TextureSourceId` from the `identified`
+confirmed by review of `UnityMaterialEvidenceCapture.Capture` (`:674-721`): `Capture`
+calls `CaptureTexture` once per distinct `TextureSourceId` from the `identified`
 dictionary. Do not add a counter, a hook, or any other instrumentation to observe the
-call count; no comment in this test may claim more than shared identity.
+call count. No comment in this test may claim more than shared identity.
 
 #### 2f. The sampling admission and over-deletion tests
 
@@ -2790,7 +2790,7 @@ false for every mipmapped fixture and no resolution is ever classified:**
 | `ATriangleInsideAMipZeroOpaqueTexelIsRefusedByALowerMip` (classifier) | `Resolve`'s `TryGetSampling` assertion fails outright |
 | `RuntimeStateIntegration_ALowerMipPreventsAMipZeroOnlyOpaqueProof` (build) | `OpaqueCandidateTriangleCount` is `0`, not `1` |
 
-**Must already PASS — these verify Task 5's acquisition, not this task's edit, and
+**Must already PASS — these verify the acquisition of Task 5, not the edit of this task, and
 must not be described as RED:**
 
 | Case | Why it already passes |
@@ -2802,7 +2802,7 @@ must not be described as RED:**
 | `TryGetSampling_MipmappedWithBiasOrAnisotropy_StillRefuses` | Bias and anisotropy already refuse today, for their own clauses. It is an over-deletion guard, green before and after. |
 
 Record which set each observed failure belongs to. A case in the second table failing
-means something earlier is wrong; stop and diagnose rather than proceeding.
+means something earlier is wrong. Stop and diagnose rather than proceeding.
 
 - [ ] **Step 4: Delete exactly one clause**
 
@@ -2814,7 +2814,7 @@ means something earlier is wrong; stop and diagnose rather than proceeding.
             }
 ```
 
-In the method's XML doc, delete only the word "mipmapped" from the refusal list. Add:
+In the XML doc of the method, delete only the word "mipmapped" from the refusal list. Add:
 
 > Mipmapped sampling is admitted because the resolver classifies every level of the captured chain. Nonzero mip bias stays refused as conservative deferred coverage - the conjunction would in fact cover it, since bias only shifts which level is selected. Trilinear likewise stays refused for scope rather than soundness: interpolating between two levels whose contributing samples are all exactly one is itself exactly one, but the sampling vocabulary does not express trilinear and widening it is a separate milestone. Anisotropy stays refused because it averages texels across a footprint the classifier does not model at all.
 
@@ -2843,9 +2843,9 @@ Clear the Console, run the full suite, then **classify every remaining entry** i
 exactly one of:
 
 1. **Expected synthetic** — an exception or error a test deliberately provokes, each
-   traceable to the test that provokes it;
+   traceable to the test that provokes it.
 2. **Pre-existing harness or MCP noise** — present on a baseline run of the same
-   suites before this milestone's changes;
+   suites before the changes of this milestone.
 3. **New and unexplained** — anything else.
 
 The gate: **category 3 must be empty**, and specifically there must be **no**
@@ -2856,8 +2856,8 @@ evaluated before any GPU call. Report the counts in each category.
 
 - [ ] **Step 3: Timing observation**
 
-A before/after comparison is only honest if a baseline was actually recorded, so the
-baseline is taken in **Task 1, Step 0**, before any production edit, from the same
+A before/after comparison is only honest if a baseline was actually recorded, so
+**Task 1, Step 0** takes the baseline, before any production edit, from the same
 runner and the same two suites. Re-run those two suites now and compare against the
 recorded numbers.
 
@@ -2871,7 +2871,7 @@ pressure, report it as a finding for controller review.
 
 - [ ] **Step 4: Source-asset integrity**
 
-Confirm no fixture, avatar, importer setting, `QualitySettings`, scene, or prefab was modified:
+Confirm that no fixture, avatar, importer setting, `QualitySettings`, scene, or prefab changed:
 
 ```bash
 git status --porcelain
@@ -2889,15 +2889,15 @@ git diff --check
 git diff --cached --stat
 ```
 
-Confirm: every new `.cs` has its `.meta`; `Editor/Host/Shaders.meta` exists; the
-shader `.meta` still carries GUID `85ccb222632d847b6b653f0e05b1ee97`; exactly one
-`.shader` outside `Tests/Editor/Semantics`; no trailing whitespace.
+Confirm: every new `.cs` has its `.meta`. `Editor/Host/Shaders.meta` exists. The
+shader `.meta` still carries GUID `85ccb222632d847b6b653f0e05b1ee97`. Exactly one
+`.shader` sits outside `Tests/Editor/Semantics`. No trailing whitespace.
 
 **`git diff --cached` must be empty.** The shader move appears as an unstaged
 delete of the research path plus an untracked add at the product path — or, if Git
 pairs them heuristically in `git status`, as an unstaged rename. Either shape is
-correct. A *staged* rename record is not, and means `git mv` was used against this
-plan's instructions.
+correct. A *staged* rename record is not, and means someone used `git mv` against the
+instructions of this plan.
 
 - [ ] **Step 6: Manifest churn check**
 
@@ -2912,7 +2912,7 @@ git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json
 Confirm unchanged: `TriangleAlphaClassifier.cs`, every `MaterialSemantics` file, the
 Poiyomi and lilToon production frontends, every `.asmdef`, both `package.json` files,
 and `AmusePlatformFinishPlugin.Configure()` — Task 6 adds build **tests** only and touches no production build code. Confirm `Assets/AmuseTests_BuildLowerMip` no longer
-exists. Confirm no cache, registry, service, second provider, adapter, or injectable backend was introduced, and that every Task 4 predicate has a production caller.
+exists. Confirm that no cache, registry, service, second provider, adapter, or injectable backend appeared, and that every Task 4 predicate has a production caller.
 
 - [ ] **Step 8: Census confirmation**
 
@@ -2920,7 +2920,7 @@ Confirm the Census Lab was not opened, read, listed, or modified at any point.
 
 - [ ] **Step 9: Report and stop**
 
-Report changed files, `.meta` accounting, test totals, the timing observation, remaining unsupported cases, the structural guarantees that review must confirm (`finally` placement in `TryAcquireLevel`, `TryCaptureChain`, and `RunHostCapabilityCheck`), and any point where the repository contradicted the specification. **Leave everything uncommitted.** Do not push, do not open a PR, and do not begin any follow-up work.
+Report changed files, `.meta` accounting, test totals, the timing observation, remaining unsupported cases, and the structural guarantees that review must confirm (`finally` placement in `TryAcquireLevel`, `TryCaptureChain`, and `RunHostCapabilityCheck`). Report any point where the repository contradicted the specification. **Leave everything uncommitted.** Do not push, do not open a PR, and do not start any follow-up work.
 
 ---
 

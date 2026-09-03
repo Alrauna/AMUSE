@@ -2,7 +2,7 @@
 
 ## Purpose
 
-AMUSE — Alrauna's Material Understanding & Simplification Engine — is intended to optimize material, texture, geometry, and rendering usage in Unity avatars without changing observable behavior. It is hosted by Unity and NDMF, but its core responsibility is broader than any single alpha-material optimization.
+AMUSE (Alrauna's Material Understanding & Simplification Engine) is intended to optimize material, texture, geometry, and rendering use in Unity avatars. It does not change observable behavior. Unity and NDMF host it, but its core responsibility is broader than any single alpha-material optimization.
 
 This document describes the long-term direction. It does not claim that the full pipeline exists today.
 
@@ -10,11 +10,11 @@ This document describes the long-term direction. It does not claim that the full
 
 AMUSE is proof-first:
 
-- optimize when all relevant supported states prove a transformation preserves behavior;
-- preserve the original behavior when evidence shows the transformation is unsafe; and
+- optimize when all relevant supported states prove that a transformation preserves behavior;
+- preserve the original behavior when evidence shows that the transformation is unsafe;
 - return an explicit unknown or unsupported result when the available model is incomplete.
 
-More uncertainty must never make optimization more aggressive. False negatives reduce optimization coverage; false positives are correctness defects.
+More uncertainty must never make optimization more aggressive. False negatives reduce optimization coverage. False positives are correctness defects.
 
 ## Architectural direction
 
@@ -27,19 +27,19 @@ The intended high-level flow is:
 5. A host-side executor applies only the approved plan to generated build artifacts.
 6. Validation and diagnostics make both applied and skipped work inspectable.
 
-These are responsibility boundaries, not a requirement to create one class, assembly, or abstraction per step.
+These are responsibility boundaries. They do not require one class, assembly, or abstraction for each step.
 
 ## Semantic understanding
 
-AMUSE should model the behavior that determines whether a rendering change is equivalent: mesh topology and UVs, material and shader properties, texture sampling semantics, animation bindings, material swaps, and other state that can alter the result. Shader-specific adapters may eventually translate implementation details into normalized material semantics, while recognized external modifiers may contribute additional semantics to the effective material. Each analyzer should state the domain it supports. Unknown modifiers, unmodeled shader behavior, or incomplete reachable-state information must fail closed.
+AMUSE should model the behavior that determines if a rendering change is equivalent. This behavior includes mesh topology and UVs, material and shader properties, texture sampling semantics, animation bindings, material swaps, and other state. This state can alter the result. Shader-specific adapters may eventually translate implementation details into normalized material semantics. Recognized external modifiers may add more semantics to the effective material. Each analyzer should state the domain it supports. Unknown modifiers, unmodeled shader behavior, or incomplete reachable-state information must fail closed.
 
 See `shader-frontend-comparison.md` for what the two implemented shader frontends have actually established as shared, shader-specific, or still unproven.
 
 ## Analysis and combined planning
 
-Individual facts are useful only when combined over the full relevant state space, including reachable animation, material-swap, renderer, and property relationships when those analyzers exist. The planning layer should consume normalized analysis results, produce the same plan for the same input, and remain separable from mutation. Plans should identify what can change, what must remain unchanged, and why.
+Individual facts are useful only when combined over the full relevant state space. This space includes reachable animation, material-swap, renderer, and property relationships when those analyzers exist. The planning layer should use normalized analysis results. It should produce the same plan for the same input and remain separate from mutation. Plans should identify what can change, what must remain unchanged, and why.
 
-Planning should also consider whether a proven transformation is worthwhile, but profitability can only suppress safe work; it cannot turn an unproven transformation into an allowed one.
+Planning should also consider whether a proven transformation is worthwhile. However, profitability can only suppress safe work. It cannot turn an unproven transformation into an allowed one.
 
 ## Unity/NDMF host integration
 
@@ -63,11 +63,11 @@ Implemented now:
 
 - exact triangle UV and alpha reasoning for a defined input domain;
 - conservative classification outcomes;
-- deterministic mesh-separation planning; and
+- deterministic mesh-separation planning;
 - synthetic fixtures and EditMode tests for that behavior.
 
-Future work includes shader-specific and modifier-aware material semantics; reachable animation and material-state analysis; texture-use, UV-island, and atlas planning; material normalization and combining; alpha and overdraw optimization; combined optimization planning; nondestructive transformation execution; NDMF pass integration; compatibility handling; diagnostics; and profitability policy. These directions describe possible analysis responsibilities, not implemented features or a commitment to scaffold them now.
+Future work includes shader-specific and modifier-aware material semantics, reachable animation and material-state analysis, texture-use, UV-island, and atlas planning, and material normalization and combining. Alpha and overdraw optimization, combined optimization planning, nondestructive transformation execution, NDMF pass integration, compatibility handling, diagnostics, and profitability policy are also future work. These directions describe possible analysis responsibilities, not implemented features or a commitment to scaffold them now.
 
 ## Non-goals for current development
 
-Current development does not attempt to understand arbitrary shaders, optimize on incomplete evidence, modify avatar source assets, make the private testbed a product dependency, or scaffold the entire future architecture before a narrow vertical increment requires it.
+Current development does not attempt to understand arbitrary shaders or optimize on incomplete evidence. It does not modify avatar source assets or make the private testbed a product dependency. It also does not scaffold the entire future architecture before a narrow vertical increment requires it.

@@ -2,25 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` for inline implementation. Use `superpowers:subagent-driven-development` only if the user separately authorizes subagents. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a pure Editor-only classifier that returns `ProvenOpaque`, `MustRemainTransparent`, or `Unknown` for one geometry triangle over the approved continuous Point/Bilinear and Clamp/Repeat alpha semantics.
+**Goal:** Add a pure, Editor-only classifier. It returns `ProvenOpaque`, `MustRemainTransparent`, or `Unknown` for one geometry triangle. It covers the approved continuous Point/Bilinear and Clamp/Repeat alpha semantics.
 
-**Architecture:** Adapt fixture inputs into immutable production value/data types, represent finite floats exactly on a texture-scaled dyadic `BigInteger` lattice, and use a minimal exact rational type for vertices created by clipping the full UV triangle/segment/point against Point cells or Bilinear positive-weight support regions. Normalize Repeat by whole periods and return `Unknown` before mixed-texture candidate work exceeds `65536` support regions.
+**Architecture:** Adapt fixture inputs into immutable production value/data types. Represent finite floats exactly on a texture-scaled dyadic `BigInteger` lattice. Clip the full UV triangle/segment/point against Point cells or Bilinear positive-weight support regions. Use a minimal exact rational type for the vertices that clipping creates. Normalize Repeat by whole periods and return `Unknown` before mixed-texture candidate work exceeds `65536` support regions.
 
 **Tech Stack:** Unity 2022.3.22f1, C# Editor assembly, `UnityEngine.Vector2`/`Vector3`, `System.Numerics.BigInteger`, NUnit EditMode tests, and the existing deterministic fixture catalogs.
 
 ## Global Constraints
 
 - Do not start implementation until the user explicitly approves `docs/superpowers/specs/2026-08-15-geometry-classifier-design.md` and this plan.
-- Work on `feat/geometry-classifier`; recheck branch, status, merge base, and user changes before editing.
+- Work on `feat/geometry-classifier`. Recheck branch, status, merge base, and user changes before editing.
 - Alpha byte `255` is the only opaque value. Values `0` through `254` remain non-opaque without thresholds or rounding.
 - Classify the entire continuous closed barycentric UV domain, including edges, vertices, UV line collapse, and UV point collapse.
-- Geometry degeneracy and intentional missing UV0 return `Unknown`; malformed/non-finite inputs throw.
+- Geometry degeneracy and intentional missing UV0 return `Unknown`. Malformed/non-finite inputs throw.
 - Use exact dyadic/integer boundary reasoning. Do not introduce numeric epsilons, finite sampling, raster grids, or Unity texture-sampling APIs.
-- `MaxSupportRegions` is exactly `65536`; exceeding it on a mixed texture returns `Unknown` before enumeration.
+- `MaxSupportRegions` is exactly `65536`. If a mixed texture exceeds it, the classifier returns `Unknown` before enumeration.
 - Keep production code independent of fixture DTOs, expectation data, `Mesh`, `Texture2D`, NDMF state, assets, files, GameObjects, and MCP.
 - Keep actual fixture classification separate from expectation lookup until the assertion boundary.
-- The first Task 1 red may be a compiler failure because no production analysis types exist. After the production boundary compiles, record subsequent red states as executable assertion failures, using minimal compiling method shells where necessary.
-- Do not modify either fixture JSON catalog, fixture expected outcomes, package manifests/locks, dependencies, asmdefs, workflows, release automation, scenes, or private testbed content.
+- The first Task 1 red may be a compiler failure because no production analysis types exist. After the production boundary compiles, record later red states as executable assertion failures. Where necessary, add minimal compiling method shells.
+- Do not modify either fixture JSON catalog or fixture expected outcomes. Do not modify package manifests/locks, dependencies, asmdefs, workflows, release automation, scenes, or private testbed content.
 - Do not add a dependency, generic property-testing framework, caching framework, jobs/Burst/GPU path, transform logic, or speculative future integration abstraction.
 - Preserve Unity `.meta` files as asset pairs and inspect GUID/scope changes before completion.
 - Do not commit or push unless the user separately authorizes it.
@@ -48,7 +48,7 @@
 
 ## Shared production interfaces
 
-Keep these exact names across tasks unless an approved red/green step demonstrates a concrete correction is needed:
+Keep these exact names across tasks unless an approved red/green step shows that a concrete correction is required:
 
 ```csharp
 namespace Alrauna.AlphaMaterialOptimizer.Editor.Analysis
@@ -127,7 +127,7 @@ namespace Alrauna.AlphaMaterialOptimizer.Editor.Analysis
 }
 ```
 
-`ExactUvGeometry.cs` remains an internal implementation detail. It produces a point/segment/polygon domain on one exact integer lattice and tests it against intervals whose finite bounds use that lattice:
+`ExactUvGeometry.cs` remains an internal implementation detail. It produces a point/segment/polygon domain on one exact integer lattice. It tests the domain against intervals whose finite bounds use that lattice:
 
 ```csharp
 internal readonly struct ExactDyadic
@@ -192,7 +192,7 @@ internal static class ExactUvGeometry
 
 ## Shared fixture adapter
 
-Add one adapter in `TriangleAlphaClassifierTests.cs`. It must compute all actual outcomes using only `FixtureInputCatalog`; only afterward may the assertion helper read `FixtureExpectationCatalog`:
+Add one adapter in `TriangleAlphaClassifierTests.cs`. It must compute all actual outcomes with only `FixtureInputCatalog`. Only afterward may the assertion helper read `FixtureExpectationCatalog`:
 
 ```csharp
 private static TriangleAlphaOutcome[] ClassifyInputCase(
@@ -302,7 +302,7 @@ git merge-base main HEAD
 git diff --name-status main...HEAD
 ```
 
-Expected: `feat/geometry-classifier`; no unrelated or unexplained changes. Re-read the design and fixture contract if the branch moved.
+Expected: `feat/geometry-classifier`, with no unrelated or unexplained changes. Re-read the design and fixture contract if the branch moved.
 
 - [ ] **Step 2: Add the first fixture-driven classifier tests**
 
@@ -346,7 +346,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Alrauna.AlphaMaterialOptimizer.Tests.Editor")]
 ```
 
-Implement the shared input/result types, constructor validation, `ExactDyadic`, and the shared helper signatures. Use minimal compiling shells for exact behavior that later tests will drive: `DecodeFloat` returns canonical zero, `IsDegenerateGeometry` returns `false`, `FloorDiv` uses ordinary integer division, and `FloorMod` uses ordinary remainder. `Classify` follows this order:
+Implement the shared input/result types, constructor validation, `ExactDyadic`, and the shared helper signatures. Use minimal compiling shells: `DecodeFloat` returns canonical zero, `IsDegenerateGeometry` returns `false`, `FloorDiv` uses ordinary integer division, and `FloorMod` uses ordinary remainder. `Classify` follows this order:
 
 ```csharp
 ValidateSampling(sampling);
@@ -362,7 +362,7 @@ ValidateFiniteUvs(triangle);
 return TriangleAlphaOutcome.Unknown;
 ```
 
-Do not claim this shell is the implementation; its purpose is to make the next red state executable.
+Do not claim this shell is the implementation. Its purpose is to make the next red state executable.
 
 - [ ] **Step 5: Add direct float-decoder and exact-geometry tests**
 
@@ -402,11 +402,11 @@ Run the decoder and exact-geometry tests. Expected: the nonzero decoder cases an
 
 - [ ] **Step 7: Implement exact decoding and geometry degeneracy**
 
-Decode each finite float exactly, canonicalize signed zero and trailing binary factors as specified, move geometry axes to common exponents, compute `(p1 - p0) × (p2 - p0)` with `BigInteger`, and return true only when all three components are zero.
+Decode each finite float exactly. Canonicalize signed zero and trailing binary factors as specified. Move geometry axes to common exponents. Compute `(p1 - p0) × (p2 - p0)` with `BigInteger`. Return true only when all three components are zero.
 
 - [ ] **Step 8: Run focused tests green**
 
-Use Unity MCP `run_tests` with `mode: EditMode` and test names for `FloatDecoderProducesCanonicalExactDyadic`, `GeometryDegeneracyUsesExactDecodedValues`, `ExplicitUncertaintyMatchesOracle`, and `NonFiniteGeometryIsMalformed`; poll `get_test_job(wait_timeout: 60, include_failed_tests: true)`. Expected: all focused tests pass, including both parameterized fixture cases; zero compiler errors.
+Use Unity MCP `run_tests` with `mode: EditMode` and test names for `FloatDecoderProducesCanonicalExactDyadic`, `GeometryDegeneracyUsesExactDecodedValues`, `ExplicitUncertaintyMatchesOracle`, and `NonFiniteGeometryIsMalformed`. Poll `get_test_job(wait_timeout: 60, include_failed_tests: true)`. Expected: all focused tests pass, including both parameterized fixture cases, with zero compiler errors.
 
 - [ ] **Step 9: Run the existing fixture integrity tests**
 
@@ -451,11 +451,11 @@ public void TextureDataCopiesCallerAlpha()
 
 - [ ] **Step 2: Run executable assertion-red**
 
-Run the two focused tests. Expected: the project compiles; uniform fixture assertions fail because the classifier still returns `Unknown`, and the immutability assertion fails until storage is copied/cached.
+Run the two focused tests. Expected: the project compiles. Uniform fixture assertions fail because the classifier still returns `Unknown`. The immutability assertion fails until the constructor copies/caches its storage.
 
 - [ ] **Step 3: Implement exact uniform behavior**
 
-In the constructor, require `width > 0`, `height > 0`, non-null alpha, and exact checked length `width * height`; copy once while calculating:
+In the constructor, require `width > 0`, `height > 0`, non-null alpha, and exact checked length `width * height`. Copy once while calculating:
 
 ```csharp
 IsFullyOpaque = true;
@@ -480,7 +480,7 @@ if (texture.IsFullyNonOpaque)
 
 - [ ] **Step 4: Run focused and complete current tests green**
 
-Run the uniform tests, uncertainty tests, and all fixture integrity tests. Expected: all pass; alpha `254` is `MustRemainTransparent`.
+Run the uniform tests, uncertainty tests, and all fixture integrity tests. Expected: all pass. Alpha `254` is `MustRemainTransparent`.
 
 - [ ] **Step 5: Inspect Console and diff**
 
@@ -496,7 +496,7 @@ Confirm no new compiler errors/warnings, then run `git diff --check` and inspect
 - Modify: `Packages/com.alrauna.alpha-material-optimizer/Editor/Analysis/TriangleAlphaClassifier.cs`
 - Modify: `Packages/com.alrauna.alpha-material-optimizer/Editor/Analysis/ExactUvGeometry.cs`
 
-**Interfaces:** Produces exact scaled UV hulls, a minimal rational coordinate used only for clipping, finite/infinite intervals with side inclusivity, exact domain/box intersection, Point candidate bounds, and Clamp preimages.
+**Interfaces:** Produces exact scaled UV hulls and a minimal rational coordinate used only for clipping. Produces finite/infinite intervals with side inclusivity, exact domain/box intersection, Point candidate bounds, and Clamp preimages.
 
 - [ ] **Step 1: Add Point + Clamp fixture tests**
 
@@ -513,7 +513,7 @@ public void PointClampCasesMatchOracle(string caseId)
 }
 ```
 
-Add direct collapsed-domain checks: an opaque Point/Clamp UV point returns `ProvenOpaque`; a UV line entering a non-opaque cell returns `MustRemainTransparent`; a point exactly on a Point upper boundary belongs only to the next cell.
+Add direct collapsed-domain checks. An opaque Point/Clamp UV point returns `ProvenOpaque`. A UV line that enters a non-opaque cell returns `MustRemainTransparent`. A point exactly on a Point upper boundary belongs only to the next cell.
 
 - [ ] **Step 2: Run executable assertion-red**
 
@@ -521,7 +521,7 @@ Expected: the project compiles and mixed Point/Clamp assertions fail because tho
 
 - [ ] **Step 3: Implement the exact lattice**
 
-Decode a float as `significand * 2^exponent`, choose a common exponent `<= -1`, multiply U significands by width and V significands by height, and shift to one `BigInteger` lattice. Set:
+Decode a float as `significand * 2^exponent`. Choose a common exponent `<= -1`. Multiply U significands by width and V significands by height. Shift to one `BigInteger` lattice. Set:
 
 ```text
 TexelScale = 2^(-commonExponent)
@@ -532,11 +532,11 @@ Build the convex hull of the three UV points. Preserve triangle, extreme segment
 
 - [ ] **Step 4: Implement exact open/closed box intersection**
 
-Clipping an edge against an integer support boundary can create a non-dyadic rational vertex. Add a private `ExactRational` represented by a `BigInteger` numerator and positive denominator; implement exact comparison by cross multiplication and exact segment/boundary intersection. Canonicalize zero and denominator sign, but do not add a general symbolic algebra layer.
+An edge clipped at an integer support boundary can create a non-dyadic rational vertex. Add a private `ExactRational` with a `BigInteger` numerator and a positive denominator. Implement exact comparison by cross multiplication and exact segment/boundary intersection. Canonicalize zero and denominator sign, but do not add a general symbolic algebra layer.
 
-Clip the domain against the closed closure of four finite interval bounds using those exact rational vertices. If empty, return false. For each open side, require at least one clipped vertex strictly inside that side; otherwise return false. If every open side has a strict witness, return true by convexity.
+Clip the domain against the closed closure of four finite interval bounds. Use those exact rational vertices. If the result is empty, return false. For each open side, require at least one clipped vertex strictly inside that side. Otherwise, return false. If every open side has a strict witness, return true by convexity.
 
-Unit-test the helper indirectly with the collapsed point/line and exact-boundary classifier tests; do not expose it as public API.
+Unit-test the helper indirectly with the collapsed point/line and exact-boundary classifier tests. Do not expose it as public API.
 
 - [ ] **Step 5: Implement Point + Clamp support**
 
@@ -549,7 +549,7 @@ index == 0:         (-infinity, 1 texel)
 index == last:      [last, +infinity)
 ```
 
-Restrict candidate x/y indices using the monotonic clamped domain bounding box. Compute candidate count with checked/`BigInteger` arithmetic; return `Unknown` if it exceeds `65536`. For each candidate with alpha below `255`, call exact intersection. Return `MustRemainTransparent` on the first witness and `ProvenOpaque` only after the complete bounded set has no witness.
+Use the monotonic clamped domain bounding box to restrict candidate x/y indices. Compute candidate count with checked/`BigInteger` arithmetic. Return `Unknown` if the count exceeds `65536`. For each candidate with alpha below `255`, call exact intersection. Return `MustRemainTransparent` on the first witness and `ProvenOpaque` only after the complete bounded set has no witness.
 
 - [ ] **Step 6: Run Point + Clamp green**
 
@@ -581,9 +581,16 @@ public void PointRepeatFixtureMatchesOracle()
 }
 ```
 
-Add direct tests for: negative U wrapping into an opaque texel; U exactly at an integer seam selecting period cell zero; translating all UVs by `(17, -23)` preserving the outcome; a long thin domain crossing a non-opaque cell; several periods under the budget; and a mixed-texture span over the budget returning `Unknown`.
+Add direct tests for these cases:
 
-The Task 1 shells keep these tests compilable while retaining C#'s incorrect truncating behavior. Directly exercise a four-cell period at the negative exact multiple and both conceptual sides:
+- Negative U wraps into an opaque texel.
+- U exactly at an integer seam selects period cell zero.
+- A translation of all UVs by `(17, -23)` preserves the outcome.
+- A long thin domain crosses a non-opaque cell.
+- Several periods stay under the budget.
+- A mixed-texture span over the budget returns `Unknown`.
+
+The Task 1 shells keep these tests compilable. They also keep the incorrect truncating behavior of C#. Directly exercise a four-cell period at the negative exact multiple and both conceptual sides:
 
 ```csharp
 [TestCase(-4, -1, 0)] // Exactly -period.
@@ -606,7 +613,7 @@ public void RepeatFloorArithmeticUsesMathematicalFloor(
 
 - [ ] **Step 2: Run executable assertion-red**
 
-Expected: the project compiles; Repeat outcome assertions fail, and naive truncating division specifically fails for `-5`, `-3`, and `-1` while the `-4` exact-multiple control passes.
+Expected: the project compiles. Repeat outcome assertions fail. Naive truncating division specifically fails for `-5`, `-3`, and `-1`, while the `-4` exact-multiple control passes.
 
 - [ ] **Step 3: Implement floor arithmetic**
 
@@ -626,11 +633,11 @@ Require positive divisors/moduli.
 
 For each axis, subtract `FloorDiv(min, texturePeriod) * texturePeriod` from all domain vertices. Enumerate integer Point cells from `floor(min / TexelScale)` through `floor(max / TexelScale)` and map indices with `FloorMod`.
 
-Calculate `xCount * yCount` as `BigInteger`. If above `MaxSupportRegions`, return `Unknown` before converting bounds to loop integers. Otherwise use the exact half-open support box from Task 3.
+Calculate `xCount * yCount` as `BigInteger`. If the count is above `MaxSupportRegions`, return `Unknown` before you convert bounds to loop integers. Otherwise use the exact half-open support box from Task 3.
 
 - [ ] **Step 5: Run Repeat green and all twelve fixture cases covered so far**
 
-Run all classifier and integrity tests. Expected: `outside-uv-clamp` remains transparent while the same geometry under Repeat is proven opaque; property tests pass.
+Run all classifier and integrity tests. Expected: `outside-uv-clamp` remains transparent while the same geometry under Repeat is proven opaque. Property tests pass.
 
 - [ ] **Step 6: Inspect performance guards**
 
@@ -658,11 +665,18 @@ public void BilinearBoundaryFixtureMatchesOracle()
 }
 ```
 
-Add direct tests for: an opaque-side triangle whose support does not reach transparency; a UV point exactly one texel-center distance from a non-opaque texel (zero weight, so no witness); the same point moved to an explicitly chosen dyadic coordinate inside positive support; Clamp at normalized `0` and `1`; collapsed UV line/point; and textures one texel wide or high.
+Add direct tests for these cases:
+
+- An opaque-side triangle whose support does not reach transparency.
+- A UV point exactly one texel-center distance from a non-opaque texel (zero weight, so no witness).
+- The same point at an explicitly chosen dyadic coordinate inside positive support.
+- Clamp at normalized `0` and `1`.
+- A collapsed UV line/point.
+- A texture one texel wide or high.
 
 - [ ] **Step 2: Run executable assertion-red**
 
-Expected: the project compiles; the approved boundary assertion fails because the result is not yet `MustRemainTransparent`, and the zero/positive support distinction is absent.
+Expected: the project compiles. The approved boundary assertion fails because the result is not yet `MustRemainTransparent`. The zero/positive support distinction is absent.
 
 - [ ] **Step 3: Implement Bilinear + Clamp regions**
 
@@ -675,7 +689,7 @@ index == 0:         (-infinity, i + 1.5 texels)
 index == last:      (i - 0.5, +infinity)
 ```
 
-Represent half-texel bounds as lattice integers. Expand candidate bounds by one texel, cap before enumeration, skip alpha `255`, and use exact open-side intersection. A positive-weight non-opaque witness returns `MustRemainTransparent`; no witness returns `ProvenOpaque`.
+Represent half-texel bounds as lattice integers. Expand candidate bounds by one texel. Cap the count before enumeration. Skip alpha `255` and use exact open-side intersection. A positive-weight non-opaque witness returns `MustRemainTransparent`. No witness returns `ProvenOpaque`.
 
 - [ ] **Step 4: Run Bilinear + Clamp green**
 
@@ -683,7 +697,7 @@ Run all classifier and integrity tests. Expected: all fourteen triangle outcomes
 
 - [ ] **Step 5: Check Console and numeric code**
 
-Confirm zero C# compiler errors and no new warnings/error-level messages. The two baseline empty-asmdef entries may remain as stale Console history because this workflow does not clear the Console; new instances should stop once production scripts exist. Search for floating comparison tolerances and verify support endpoints remain open.
+Confirm zero C# compiler errors and no new warnings/error-level messages. The two baseline empty-asmdef entries may remain as stale Console history because this workflow does not clear the Console. New instances should stop once production scripts exist. Search for floating comparison tolerances and confirm support endpoints remain open.
 
 ---
 
@@ -717,7 +731,7 @@ public void BilinearRepeatSupportCrossesTheSeam()
 }
 ```
 
-Also assert negative seam coordinates, integer-period translation invariance, a one-texel texture remaining opaque, and an over-budget mixed span returning `Unknown`.
+Also assert negative seam coordinates, integer-period translation invariance, and a one-texel texture that stays opaque. Assert an over-budget mixed span that returns `Unknown`.
 
 - [ ] **Step 2: Run executable assertion-red**
 
@@ -733,7 +747,7 @@ Run all classifier and fixture integrity tests. Expected: Bilinear Repeat proper
 
 - [ ] **Step 5: Refactor only observed duplication**
 
-If Point/Bilinear or Clamp/Repeat paths now duplicate candidate-loop mechanics, extract one private iterator/helper only when both existing callers become shorter and semantics remain explicit. Do not add interfaces, factories, strategy classes, or future filter modes.
+If Point/Bilinear or Clamp/Repeat paths now duplicate candidate-loop mechanics, extract one private iterator/helper. Do this only when both existing callers become shorter and semantics remain explicit. Do not add interfaces, factories, strategy classes, or future filter modes.
 
 ---
 
@@ -750,17 +764,17 @@ If Point/Bilinear or Clamp/Repeat paths now duplicate candidate-loop mechanics, 
 
 Add tests that construct inputs directly and assert:
 
-- reversing positions and matching UV winding preserves the result;
-- a tiny triangle whose vertices select opaque Point cells but whose edge/interior enters a non-opaque checker cell is not proven opaque;
-- a long thin triangle crossing many cells finds a non-opaque witness;
-- UV line and point collapses classify without geometry becoming `Unknown`;
-- very large positive/negative Repeat offsets give the same result after normalization;
-- a large mixed span returns `Unknown`, while all-opaque and all-nonopaque textures still take exact fast paths;
-- replacing present UV0 with intentional missing UV0 never promotes a result to `ProvenOpaque`;
-- invalid texture dimensions/length, undefined enum values, and non-finite present UVs throw;
-- alpha `254` remains non-opaque in direct Point and Bilinear inputs.
+- Reversing positions and matching UV winding preserves the result.
+- A tiny triangle whose vertices select opaque Point cells. Its edge/interior enters a non-opaque checker cell, so the result is not proven opaque.
+- A long thin triangle that crosses many cells finds a non-opaque witness.
+- UV line and point collapses classify, and the geometry does not become `Unknown`.
+- Very large positive/negative Repeat offsets give the same result after normalization.
+- A large mixed span returns `Unknown`, while all-opaque and all-nonopaque textures still take exact fast paths.
+- Replacing present UV0 with intentional missing UV0 never promotes a result to `ProvenOpaque`.
+- Invalid texture dimensions/length, undefined enum values, and non-finite present UVs throw.
+- Alpha `254` remains non-opaque in direct Point and Bilinear inputs.
 
-Use ordinary NUnit test cases; add no dependency or generated property framework.
+Use ordinary NUnit test cases. Do not add a dependency or a generated property framework.
 
 - [ ] **Step 2: Run each new test and correct only demonstrated defects**
 
@@ -768,11 +782,11 @@ For any failure, inspect the exact support/domain math before editing. Keep the 
 
 - [ ] **Step 3: Run the full classifier fixture join**
 
-Run every test in `TriangleAlphaClassifierTests`. Expected: every approved fixture case and direct property test passes; the fixture adapter obtains expected strings only after actual results are computed.
+Run every test in `TriangleAlphaClassifierTests`. Expected: every approved fixture case and direct property test passes. The fixture adapter reads expected strings only after the classifier computes the actual results.
 
 - [ ] **Step 4: Run the complete EditMode suite**
 
-Use Unity MCP `run_tests(mode: EditMode, include_failed_tests: true)` and poll with `get_test_job(wait_timeout: 60, include_failed_tests: true)`. Record observed total, passed, failed, skipped, and duration. Expected: zero failures.
+Use Unity MCP `run_tests(mode: EditMode, include_failed_tests: true)`. Poll with `get_test_job(wait_timeout: 60, include_failed_tests: true)`. Record observed total, passed, failed, skipped, and duration. Expected: zero failures.
 
 - [ ] **Step 5: Read the final Unity baseline**
 
@@ -793,15 +807,15 @@ git diff --cached
 
 Confirm only the approved spec/plan, production analysis files, tests, assembly visibility attribute, and matching `.meta` files changed. Confirm fixture JSON, expected outcomes, asmdefs, manifests, dependencies, workflows, and private content did not change.
 
-For any still-untracked intended file, also run `git diff --no-index --check -- NUL <path>` on Windows. Exit `1` is expected because the file differs from `NUL`; any whitespace-error diagnostic is not expected.
+For any still-untracked intended file, also run `git diff --no-index --check -- NUL <path>` on Windows. Exit `1` is expected because the file differs from `NUL`. Any whitespace-error diagnostic is not expected.
 
 - [ ] **Step 7: Review requirements line by line**
 
-Check the implementation against every section of `docs/superpowers/specs/2026-08-15-geometry-classifier-design.md`. Explicitly record exact behaviors, the sole conservative workload-cap behavior, unsupported/deferred work, validation skipped, and whether MCP or the private testbed was modified.
+Check the implementation against every section of `docs/superpowers/specs/2026-08-15-geometry-classifier-design.md`. Explicitly record exact behaviors, the sole conservative workload-cap behavior, unsupported/deferred work, and skipped validation. Record whether MCP or the private testbed changed.
 
 - [ ] **Step 8: Commit only if separately authorized**
 
-If and only if the user has authorized commits, stage only the reviewed files and commit coherent task groups with focused messages such as:
+If and only if the user authorized commits, stage only the reviewed files. Commit coherent task groups with focused messages such as:
 
 ```text
 test: specify triangle alpha classification
