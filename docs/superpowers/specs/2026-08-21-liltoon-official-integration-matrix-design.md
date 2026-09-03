@@ -1,22 +1,22 @@
 # Official lilToon 2.3.4 integration matrix investigation
 
-**Status:** source-side characterization complete; implementation is not authorized
+**Status:** source-side characterization is complete. Implementation is not authorized.
 
 **Branch:** `investigate/liltoon-official-integration-matrix`
 
 **Base:** `origin/main` at `1a5c9d7` (`Merge pull request #8 from Alrauna/fix/liltoon-source-attestation-hardening`), containing hardening commit `8eaa4f428f1a278b06d9df1f7f7480b806ffe2e1`
 
-**Scope:** official lilToon 2.3.4 BRP base-opaque shaders with official LTCGI, AudioLink package, and external VRC Light Volumes integrations. This document characterizes evidence for later work. It does not add positive support or weaken the standalone attestation predicate.
+**Scope:** official lilToon 2.3.4 BRP base-opaque shaders with official LTCGI, AudioLink package, and external VRC Light Volumes integrations. This document characterizes evidence for later work. It does not add positive support and does not weaken the standalone attestation predicate.
 
 ## Executive conclusion
 
-For the exact current stable package sources selected below, all eight activation states have closed, union-shaped physical shader-source graphs. The three integrations occupy a fixed order, but the selected VRC Light Volumes and AudioLink sources do not define any of the macros that select LTCGI code. Enabling them therefore does not change the effective LTCGI source in the characterized states.
+For the exact current stable package sources selected below, all eight activation states have closed, union-shaped physical shader-source graphs. The three integrations occupy a fixed order. The selected VRC Light Volumes and AudioLink sources do not define any of the macros that select LTCGI code. Enabling them therefore does not change the effective LTCGI source in the characterized states.
 
-All seven integrated states are classified **A: safely composable**. This conclusion is deliberately narrow: it is true only when AMUSE proves the exact activation records and positions, exact lilToon 2.3.4 Layer-1 evidence, exact package identities, exact external executable closures, and absence of uncharacterized source or macro inputs. A matching package version without matching executable source is not sufficient.
+All seven integrated states carry classification **A: safely composable**. This conclusion is deliberately narrow. It is true only when AMUSE proves the exact activation records and positions, exact lilToon 2.3.4 Layer-1 evidence, exact package identities, exact external executable closures, and absence of uncharacterized source or macro inputs. A matching package version without matching executable source is not sufficient.
 
-The likely implementation shape is **A: one fixed official-integration validator with composable exact integration evidence**. It needs no registry, provider API, generic profile framework, or general HLSL preprocessor. Two exact canonical base/pass digest pairs suffice in the observed matrix: the existing standalone pair when LTCGI is absent and the already-characterized LTCGI pair when it is present.
+The likely implementation shape is **A: one fixed official-integration validator with composable exact integration evidence**. It needs no registry, provider API, generic profile framework, or general HLSL preprocessor. Two exact canonical base/pass digest pairs suffice in the observed matrix: the existing standalone pair when LTCGI is absent, and the already-characterized LTCGI pair when it is present.
 
-Production work should not begin yet. AMUSE still lacks both an authoritative lifecycle point establishing when its analysis occurs relative to package resolution, lilToon generation, integrations, NDMF/build preprocessors, and later mutations, and a guarantee that all evidence comes from one coherent material/generated-source/package/external-source state. Those related but distinct boundaries are outside this investigation and are prerequisites for sound positive support. Consequently, this branch does not include an implementation plan.
+Production work should not start yet. AMUSE still lacks an authoritative lifecycle point that establishes when its analysis occurs relative to package resolution, lilToon generation, integrations, NDMF/build preprocessors, and later mutations. AMUSE also lacks a guarantee that all evidence comes from one coherent material/generated-source/package/external-source state. Those related but distinct boundaries are outside this investigation. They are prerequisites for sound positive support. As a result, this branch does not include an implementation plan.
 
 ## Central security answer
 
@@ -27,23 +27,23 @@ Two characterized shader states are equivalent enough for AMUSE to trust lilToon
 3. The applicable exact canonical generated base/pass digest pair.
 4. Each active external package's exact package name and selected version.
 5. Every file in each active external executable shader-source closure, by package-relative path and exact-byte digest, including all transitive includes.
-6. The characterized include edges and order connecting generated lilToon source to those closures.
-7. The small fixed macro-provenance facts described below, especially absence of uncharacterized LTCGI control macros.
-8. Absence of additional external includes or other third-party shader source in the active graph.
+6. The characterized include edges and order that connect generated lilToon source to those closures.
+7. The small fixed macro-provenance facts described below, especially the absence of uncharacterized LTCGI control macros.
+8. The absence of additional external includes or other third-party shader source in the active graph.
 9. A coherent, immutable snapshot: the material, generated lilToon source, package resolution, and external source files must describe the same build state.
 
-Any mismatch or missing fact is `Unknown`, and therefore no optimization.
+Any mismatch or missing fact is `Unknown`. In that case, apply no optimization.
 
 ## Exact upstream versions
 
 | Component | Selected version | Exact upstream revision | lilToon acceptance gate | Selection rationale |
 |---|---:|---|---|---|
 | lilToon | 2.3.4 | [`252fd8cfc46106d4967e95b3f2c788418502f227`](https://github.com/lilxyzw/lilToon/tree/252fd8cfc46106d4967e95b3f2c788418502f227) | target itself | Existing AMUSE target and PR #8 baseline. |
-| LTCGI | 1.7.3 | [`b2014d6c6e76c551c30084973e54687941265d68`](https://github.com/PiMaker/ltcgi/tree/b2014d6c6e76c551c30084973e54687941265d68) | package `at.pimaker.ltcgi`, expression `1.4` | Current stable release; its release specifically addresses current VRC Light Volumes integration compatibility. |
+| LTCGI | 1.7.3 | [`b2014d6c6e76c551c30084973e54687941265d68`](https://github.com/PiMaker/ltcgi/tree/b2014d6c6e76c551c30084973e54687941265d68) | package `at.pimaker.ltcgi`, expression `1.4` | Current stable release. Its release specifically addresses current VRC Light Volumes integration compatibility. |
 | AudioLink | 3.1.2 | [`5bd23af5b2aaefff1ac3f48379332f6f78f17f97`](https://github.com/VRChatCommunity/AudioLink/tree/5bd23af5b2aaefff1ac3f48379332f6f78f17f97) | package `com.llealloo.audiolink`, expression `2` | Current official release and current VRChat curated package version. |
-| VRC Light Volumes | 2.1.3 | [`7ead7482f40b9612e6e4faafae835ffd9a73e149`](https://github.com/REDSIM/VRCLightVolumes/tree/7ead7482f40b9612e6e4faafae835ffd9a73e149) | package `red.sim.lightvolumes`, any version | Current stable 2.x release. The project's compatibility documentation identifies lilToon support from 2.0.0; 3.0 remains a development line rather than this target. |
+| VRC Light Volumes | 2.1.3 | [`7ead7482f40b9612e6e4faafae835ffd9a73e149`](https://github.com/REDSIM/VRCLightVolumes/tree/7ead7482f40b9612e6e4faafae835ffd9a73e149) | package `red.sim.lightvolumes`, any version | Current stable 2.x release. The project's compatibility documentation identifies lilToon support from 2.0.0. Version 3.0 remains a development line rather than this target. |
 
-The lilToon version expressions are compilation/activation gates, not executable-identity claims. They accept more versions than this investigation attests. Near-term positive support should initially select the exact versions above.
+The lilToon version expressions are compilation/activation gates, not executable-identity claims. They accept more versions than this investigation attests. Near-term positive support should select the exact versions above at first.
 
 The package manifests' exact-byte SHA-256 values in the characterized revisions are:
 
@@ -54,23 +54,23 @@ The package manifests' exact-byte SHA-256 values in the characterized revisions 
 | AudioLink 3.1.2 | `481b26866a32b886f8257175336af331d60686af6a626d4fa1bc796c22bd761d` |
 | VRC Light Volumes 2.1.3 | `40a3eee02b0dfcae2c70422ac4f199b3aee47e6fa46a06427c7e3dd54f18e8c5` |
 
-These hashes are useful package-identity evidence, but executable attestation must also use the smaller source closures below.
+These hashes give useful package-identity evidence, but executable attestation must also use the smaller source closures below.
 
 ### Characterized adjacent versions
 
-The following adjacent releases have byte-identical active lilToon shader closures but were not run through the complete genuine eight-state matrix. They are legitimate candidates for later expansion, not near-term positive targets:
+The following adjacent releases have byte-identical active lilToon shader closures. AMUSE did not run them through the complete genuine eight-state matrix. They are legitimate candidates for later expansion, not near-term positive targets:
 
 | Integration | Versions with selected closure bytes | Executable closure digest or file digest | Disposition |
 |---|---|---|---|
-| LTCGI | 1.7.0, 1.7.1, 1.7.2, 1.7.3 | `0454de0f3d8dd84070e2ec518e3041d972fc4ffd075adb87f7c1c3bfb92d4165` | 1.7.3 selected; older variants deferred. |
-| AudioLink | 3.1.1, 3.1.2 | `AudioLink.cginc` `f0d6a26e714e8f0da1fd1691226c61a7603280382d3d7c20038f39e59f34f04f` | 3.1.2 selected; 3.1.1 deferred. |
-| VRC Light Volumes | 2.1.0, 2.1.1, 2.1.3 | `LightVolumes.cginc` `da3b6294a0ac533dd717d2b12a43443797760b67a43dd4cdabb0cd116d30157d` | 2.1.3 selected; earlier 2.1 variants deferred. |
+| LTCGI | 1.7.0, 1.7.1, 1.7.2, 1.7.3 | `0454de0f3d8dd84070e2ec518e3041d972fc4ffd075adb87f7c1c3bfb92d4165` | 1.7.3 selected. Older variants deferred. |
+| AudioLink | 3.1.1, 3.1.2 | `AudioLink.cginc` `f0d6a26e714e8f0da1fd1691226c61a7603280382d3d7c20038f39e59f34f04f` | 3.1.2 selected. 3.1.1 deferred. |
+| VRC Light Volumes | 2.1.0, 2.1.1, 2.1.3 | `LightVolumes.cginc` `da3b6294a0ac533dd717d2b12a43443797760b67a43dd4cdabb0cd116d30157d` | 2.1.3 selected. Earlier 2.1 variants deferred. |
 
-Other inspected AudioLink releases have different active-source hashes: 2.0.0 `0da220e...`, 2.1.0 `1da2296...`, and 3.1.0 `6952243...`. VRC Light Volumes 2.0.0 (`93cda975...`) and 2.0.1 (`5b28777c...`) also differ. Truncated values here are comparison notes, not proposed pins. These versions require separate characterization if ever prioritized.
+Other inspected AudioLink releases have different active-source hashes: 2.0.0 `0da220e...`, 2.1.0 `1da2296...`, and 3.1.0 `6952243...`. VRC Light Volumes 2.0.0 (`93cda975...`) and 2.0.1 (`5b28777c...`) also differ. The truncated values here are comparison notes, not proposed pins. These versions need separate characterization if the project ever prioritizes them.
 
 ### Pinned primary-source evidence
 
-The version and graph conclusions above were checked against these exact upstream files rather than inferred from package presence:
+The version and graph conclusions above were checked against these exact upstream files, not inferred from package presence:
 
 - lilToon 2.3.4 [`lilToon.Editor.asmdef`](https://github.com/lilxyzw/lilToon/blob/252fd8cfc46106d4967e95b3f2c788418502f227/Assets/lilToon/Editor/lilToon.Editor.asmdef) supplies the three Unity version defines and version expressions.
 - lilToon 2.3.4 [`lilToonSetting.cs`](https://github.com/lilxyzw/lilToon/blob/252fd8cfc46106d4967e95b3f2c788418502f227/Assets/lilToon/Editor/lilToonSetting.cs) emits the Light Volumes and AudioLink package R1 records.
@@ -80,7 +80,7 @@ The version and graph conclusions above were checked against these exact upstrea
 
 ## Activation and generated-source matrix
 
-Line indices below are zero-based, matching the current Layer-2 representation. `R1+N` means the record occurs at offset `N` within the raw R1 region. Every source was generated by official lilToon tooling; no generated source was hand-edited.
+The line indices below are zero-based and match the current Layer-2 representation. `R1+N` means the record occurs at offset `N` within the raw R1 region. Official lilToon tooling generated every source. No generated source was hand-edited.
 
 The exact activators are:
 
@@ -96,24 +96,24 @@ The exact activators are:
 | 4 | 0/0/1 | Light Volumes line 746, `R1+102` | none | standalone | standalone | `a3b3521f33442b8d28654c5102d1fdac166184ae89b1bd80470a313db3494689` | A | Yes, after analysis/snapshot boundary |
 | 5 | 1/1/0 | AudioLink line 746, `R1+102` | lines 792, 841 | LTCGI | LTCGI | `ad6606c03183ff7d15a9d3a1a561803b9b36cc4271586adf8e02b2717741260a` | A | Yes, after analysis/snapshot boundary |
 | 6 | 1/0/1 | Light Volumes line 746, `R1+102` | lines 792, 841 | LTCGI | LTCGI | `9e6012cf7e289cebdcf5bb503b2967aac157420634a158e8522231c63d3ad1d4` | A | Yes, after analysis/snapshot boundary |
-| 7 | 0/1/1 | Light Volumes line 746, `R1+102`; AudioLink line 747, `R1+103` | none | standalone | standalone | `9eb986ce557870e89cda05b8edb8e09f913e2ba61815964e7a5227711a5c4684` | A | Yes, after analysis/snapshot boundary |
-| 8 | 1/1/1 | Light Volumes line 746, `R1+102`; AudioLink line 747, `R1+103` | lines 793, 842 | LTCGI | LTCGI | `cc23ec7e4e7a225b8bec7838de3400d4188fdd9d55363330eddcc6f170ec5b81` | A | Yes, after analysis/snapshot boundary |
+| 7 | 0/1/1 | Light Volumes line 746, `R1+102`, then AudioLink line 747, `R1+103` | none | standalone | standalone | `9eb986ce557870e89cda05b8edb8e09f913e2ba61815964e7a5227711a5c4684` | A | Yes, after analysis/snapshot boundary |
+| 8 | 1/1/1 | Light Volumes line 746, `R1+102`, then AudioLink line 747, `R1+103` | lines 793, 842 | LTCGI | LTCGI | `cc23ec7e4e7a225b8bec7838de3400d4188fdd9d55363330eddcc6f170ec5b81` | A | Yes, after analysis/snapshot boundary |
 
-`standalone` and `LTCGI` in the digest columns refer to the exact full hashes shown in states 1 and 2, not loose aliases in a future predicate.
+`standalone` and `LTCGI` in the digest columns refer to the exact full hashes shown in states 1 and 2. They are not loose aliases in a future predicate.
 
-The generated base changes only for LTCGI, by the official `"LTCGI"="ALWAYS"` SubShader tag at zero-based line 639. AudioLink and VRC Light Volumes do not alter the base. Their pass changes are precisely their independent R1 records. LTCGI changes the pass at its two fixed forward-pass insertion sites. Pairwise and triple diffs showed that the combined generated sources are the union of those independent records.
+The generated base changes only for LTCGI, through the official `"LTCGI"="ALWAYS"` SubShader tag at zero-based line 639. AudioLink and VRC Light Volumes do not alter the base. Their pass changes are precisely their independent R1 records. LTCGI changes the pass at its two fixed forward-pass insertion sites. Pairwise and triple diffs show that the combined generated sources form the union of those independent records.
 
-The existing standalone canonical pins survive every state without LTCGI. The same previously characterized LTCGI base/pass pins survive every state with LTCGI. A per-tuple canonical pin is therefore not justified.
+The existing standalone canonical pins survive every state without LTCGI. The same already-characterized LTCGI base/pass pins survive every state with LTCGI. A per-tuple canonical pin is therefore not justified.
 
 ## Genuine scratch characterization
 
-The empirical matrix was generated in disposable projects under `/private/tmp` using Unity exactly 2022.3.22f1 and embedded checkouts of the exact official revisions above. Each project installed one matrix tuple and invoked official lilToon shader-setting generation in batch mode. The current AMUSE package was used only as a reference for reproducing its canonicalization and Layer-2 measurements; production code was not changed.
+AMUSE generated the empirical matrix in disposable projects under `/private/tmp`, using Unity exactly 2022.3.22f1 and embedded checkouts of the exact official revisions above. Each project installed one matrix tuple and invoked official lilToon shader-setting generation in batch mode. The investigation used the current AMUSE package only as a reference for reproducing its canonicalization and Layer-2 measurements. It did not change production code.
 
-AudioLink's package uses Unity UI APIs. Its own manifest does not declare `com.unity.ugui`, while normal VRChat projects provide that host package. The initial AudioLink-only import exposed the omission; the four AudioLink scratch projects were then given `com.unity.ugui` 1.0.0 as an ordinary Unity host dependency and all eight projects completed batch generation successfully. That host dependency is not part of the active shader-source closure.
+AudioLink's package uses Unity UI APIs. Its own manifest does not declare `com.unity.ugui`, while normal VRChat projects supply that host package. The initial AudioLink-only import exposed the omission. The four AudioLink scratch projects then received `com.unity.ugui` 1.0.0 as an ordinary Unity host dependency, and all eight projects completed batch generation successfully. That host dependency is not part of the active shader-source closure.
 
-The all-integrations project was additionally regenerated after disabling twelve ordinary official lilToon settings used by the prior hardening investigation. Its pass retained the LTCGI canonical digest, had raw digest `d8fa4031c08f442f3f9995f7441b2167f49516082c8fe20e45107aebf845fbd6`, and retained the same structural activation order at its shifted positions: Light Volumes 733, AudioLink 734, and LTCGI 780/830. Re-enabling all settings reproduced the default all-integrations digest in the table. This demonstrates that integration identity is positional/structural rather than tied to default material feature settings.
+The all-integrations project was also regenerated after twelve ordinary official lilToon settings, used by the prior hardening investigation, were disabled. Its pass retained the LTCGI canonical digest, had raw digest `d8fa4031c08f442f3f9995f7441b2167f49516082c8fe20e45107aebf845fbd6`, and retained the same structural activation order at its shifted positions: Light Volumes 733, AudioLink 734, and LTCGI 780/830. Re-enabling all settings reproduced the default all-integrations digest in the table above. This shows that integration identity is positional and structural, not tied to default material feature settings.
 
-The scratch projects are disposable research instruments and are not repository fixtures. The Census Lab and its private avatars were not used or modified.
+The scratch projects are disposable research instruments, not repository fixtures. The investigation did not use or modify the Census Lab or its private avatars.
 
 ## Source-closure maps
 
@@ -129,7 +129,7 @@ generated ltspass_opaque.shader
 
 The active external closure is the single file `Shaders/LightVolumes.cginc`, exact-byte SHA-256 `da3b6294a0ac533dd717d2b12a43443797760b67a43dd4cdabb0cd116d30157d`. It contains no transitive `#include`. The package-relative closure-list digest is `b16977e4e8d5bf9b169ed2ed3a82bd6b944d9b1b5dd9df4a2543b3dfb584c7c4`.
 
-Other package shaders, compute shaders, scripts, editor tools, and samples do not enter the characterized lilToon compilation graph and are outside the executable shader closure. Their absence from the closure does not make package version/manifest identity optional.
+Other package shaders, compute shaders, scripts, editor tools, and samples do not enter the characterized lilToon compilation graph and stay outside the executable shader closure. Their absence from the closure does not make package version/manifest identity optional.
 
 ### AudioLink 3.1.2
 
@@ -172,9 +172,9 @@ generated ltspass_opaque.shader
 
 The deterministic six-file package-relative closure-list digest is `0454de0f3d8dd84070e2ec518e3041d972fc4ffd075adb87f7c1c3bfb92d4165`.
 
-For every closure-list digest in this document, the recipe is reproducible and deliberately simple: compute the exact-byte SHA-256 of each file; form `package/relative/path:lowercase-hex-digest` rows; sort rows by ordinal package-relative path; join with one LF and no final LF; then SHA-256 the resulting UTF-8 bytes. A future implementation may instead compare the fixed path/digest records directly.
+For every closure-list digest in this document, the recipe is reproducible and deliberately simple. Compute the exact-byte SHA-256 of each file. Form `package/relative/path:lowercase-hex-digest` rows. Sort the rows by ordinal package-relative path. Join them with one LF and no final LF. Then compute the SHA-256 of the resulting UTF-8 bytes. A future implementation may instead compare the fixed path/digest records directly.
 
-`Shaders/LTCGI_AudioLinkNoOp.cginc` is not active because the characterized generated/lilToon sources never define `LTCGI_AUDIOLINK`. Its observed hash was `b88a...`, but it is intentionally not a proposed pin. A state that activates `LTCGI_AUDIOLINK` is a different, currently unsupported integration. LTCGI demo shaders, Amplify assets, scripts, and examples likewise remain outside the active closure.
+`Shaders/LTCGI_AudioLinkNoOp.cginc` is not active, because the characterized generated/lilToon sources never define `LTCGI_AUDIOLINK`. Its observed hash was `b88a...`, but this is not a proposed pin. A state that activates `LTCGI_AUDIOLINK` is a different, currently unsupported integration. LTCGI demo shaders, Amplify assets, scripts, and examples likewise stay outside the active closure.
 
 ## Include order and macro provenance
 
@@ -188,26 +188,26 @@ external VRC Light Volumes
   -> external LTCGI
 ```
 
-That order creates a potential macro channel, so physical file hashes alone would not prove composition. The channel was audited rather than assumed harmless.
+That order creates a potential macro channel, so physical file hashes alone would not prove composition. AMUSE audited the channel rather than assuming it was harmless.
 
 | Integration | Relevant consumed state | State exported downstream | Cross-integration result |
 |---|---|---|---|
-| VRC Light Volumes 2.1.3 | Its include guard and `SHADER_TARGET_SURFACE_ANALYSIS` | `VRC_LIGHT_VOLUMES_INCLUDED`, `VRCLV_VERSION=2`, fixed maximum-count definitions, and `LV_*` definitions/functions | Defines no AudioLink or LTCGI selector/control macro. Exact file identity is nevertheless required because modified earlier source could create one. |
+| VRC Light Volumes 2.1.3 | Its include guard and `SHADER_TARGET_SURFACE_ANALYSIS` | `VRC_LIGHT_VOLUMES_INCLUDED`, `VRCLV_VERSION=2`, fixed maximum-count definitions, and `LV_*` definitions/functions | Defines no AudioLink or LTCGI selector/control macro. Exact file identity is still required, because modified earlier source could create one. |
 | AudioLink 3.1.2 | Include guard, lilToon's `glsl_mod`, `SHADER_TARGET_SURFACE_ANALYSIS`, and `SHADER_API_GLCORE` | `AUDIOLINK_CGINC_INCLUDED`, `AUDIOLINK_WIDTH=128`, ALPASS/data definitions, and functions | Does not define `LTCGI_AUDIOLINK` or another audited LTCGI control. Its exported names cannot select different LTCGI code in the characterized state. |
 | LTCGI 1.7.3 | lilToon callback macros plus LTCGI controls including avatar/toggle/off, v2 callbacks, surface-analysis, visualization, `LTCGI_AUDIOLINK`, sampler, static/fast/cylinder modes | LTCGI structs, uniforms, functions, and guards | lilToon defines the exact v2 callback bridge immediately before the LTCGI includes. The selected earlier closures define none of LTCGI's optional control macros. `LTCGI_AUDIOLINK` is absent. |
 
-This falsifies the concern that ordinary AudioLink package activation silently changes the selected LTCGI code: it does not set LTCGI's separate AudioLink selector. It also establishes the limit of the conclusion. A locally modified AudioLink or Light Volumes file could define a downstream selector without changing its own apparent feature activation; exact closure hashes reject that state. A known LTCGI closure combined with different earlier source or different generated macro state is not equivalent.
+This falsifies the concern that ordinary AudioLink package activation silently changes the selected LTCGI code: it does not set LTCGI's separate AudioLink selector. It also sets the limit of the conclusion. A locally modified AudioLink or Light Volumes file could define a downstream selector without changing its own apparent feature activation. Exact closure hashes reject that state. A known LTCGI closure combined with different earlier source or different generated macro state is not equivalent.
 
-No generic preprocessing reconstruction is needed. A future predicate can use fixed facts:
+This case needs no generic preprocessing reconstruction. A future predicate can use fixed facts:
 
-- exact generated activator records and structural positions;
-- exact selected earlier closure hashes;
-- exact pinned lilToon include tree and include order;
-- exact LTCGI callback bridge source already inside the pinned lilToon tree;
-- absence of all specifically audited optional LTCGI control activators, including `LTCGI_AUDIOLINK`;
+- exact generated activator records and structural positions\.
+- exact selected earlier closure hashes\.
+- exact pinned lilToon include tree and include order\.
+- exact LTCGI callback bridge source already inside the pinned lilToon tree\.
+- absence of all specifically audited optional LTCGI control activators, including `LTCGI_AUDIOLINK`\.
 - absence of extra external include edges.
 
-Compiler-provided macros remain part of the host boundary. This investigation targets Unity 2022.3.22f1, BRP, ordinary runtime shader compilation, and the existing base-opaque profile. Surface-analysis or other compiler modes are not new positive profiles.
+Macros that the compiler supplies remain part of the host boundary. This investigation targets Unity 2022.3.22f1, BRP, ordinary runtime shader compilation, and the existing base-opaque profile. Surface-analysis and other compiler modes are not new positive profiles.
 
 ## Composability analysis
 
@@ -215,27 +215,27 @@ For each pair/triple tuple:
 
 | Tuple | Physical closure union? | Earlier integration changes later active code? | Generated changes beyond activators? | Evidence interaction | Result |
 |---|---|---|---|---|---|
-| LTCGI + AudioLink | Yes | No; `LTCGI_AUDIOLINK` remains absent | No | Exact AudioLink closure and absent LTCGI selector close the macro channel | A |
+| LTCGI + AudioLink | Yes | No. `LTCGI_AUDIOLINK` remains absent | No | Exact AudioLink closure and absent LTCGI selector close the macro channel | A |
 | LTCGI + Light Volumes | Yes | No audited LTCGI control is exported | No | Exact Light Volumes closure closes the earlier macro channel | A |
 | AudioLink + Light Volumes | Yes | No AudioLink selector is altered | No | Fixed order and exact two single-file closures | A |
-| LTCGI + AudioLink + Light Volumes | Yes | No for the exact selected sources | No | Conjunction of the same fixed facts; no new tuple-specific source | A |
+| LTCGI + AudioLink + Light Volumes | Yes | No, for the exact selected sources | No | Conjunction of the same fixed facts, with no new tuple-specific source | A |
 
-The individual-only states are also A. There are no B or C states among the exact selected eight-state matrix. This does not authorize arbitrary mixing of versions: every tuple is proved as one conjunction of exact evidence, and any unselected version or new macro fact remains D (`Unsupported/unclosed`) until separately characterized.
+The individual-only states are also A. The exact selected eight-state matrix contains no B or C states. This does not authorize arbitrary mixing of versions. AMUSE proves every tuple as one conjunction of exact evidence, and any unselected version or new macro fact remains D (`Unsupported/unclosed`) until separately characterized.
 
 ## Proposed future trust predicates
 
 A subsequent branch should prefer one concrete validator with three fixed optional integration evidence blocks:
 
-- **Standalone bit:** all three external activators absent; existing standalone predicate unchanged.
+- **Standalone bit:** all three external activators absent. The existing standalone predicate stays unchanged.
 - **Light Volumes bit:** one exact R1 record at the characterized slot, exact package/version/manifest, exact single-file closure, exact include edge, and bundled `LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE` not simultaneously represented.
 - **AudioLink bit:** one exact R1 record at the characterized slot (after Light Volumes when both are active), exact package/version/manifest, exact single-file closure, and exact include edge.
 - **LTCGI bit:** exactly two records outside R1 at the two characterized forward-pass sites, exact LTCGI base tag, exact package/version/manifest, exact six-file closure and include graph, exact lilToon callback bridge, and absence of uncharacterized LTCGI controls.
 
 The canonical source predicate selects one of two existing exact pairs based only on the LTCGI bit. The overall predicate accepts only one of the explicitly characterized eight activation tuples and requires the exact union of the active closure blocks. This is composable evidence, not a generic extension system.
 
-PR #8's evidence representation is substantially sufficient. R1 raw records and global activator occurrences already represent the activation language without baking in standalone absence. The smallest production extension appears to be fixed external package/source-closure evidence for these three packages. LTCGI's adjacency to `LIL_PASS_FORWARD` can be validated directly against the already-retained canonical source; adding a generic syntax model is unnecessary. If implementation shows that repeated direct inspection is awkward, the only justified Layer-2 addition would be fixed predecessor/successor context on an activator occurrence.
+PR #8's evidence representation is substantially sufficient. R1 raw records and global activator occurrences already represent the activation language without baking in standalone absence. The smallest production extension appears to be fixed external package/source-closure evidence for these three packages. A direct check against the already-retained canonical source can validate LTCGI's adjacency to `LIL_PASS_FORWARD`. A generic syntax model is unnecessary. If implementation shows that repeated direct inspection is awkward, the only justified Layer-2 addition would be fixed predecessor/successor context on an activator occurrence.
 
-Package installation without activation is not itself executable participation. An exact standalone generated state may continue through the standalone predicate even if an inactive optional package is installed, provided the active shader graph and all standalone evidence remain exact. It must not be mislabeled as a positive integrated state.
+Package installation without activation is not itself executable participation. An exact standalone generated state may continue through the standalone predicate even if an inactive optional package is installed, as long as the active shader graph and all standalone evidence remain exact. Do not mislabel it as a positive integrated state.
 
 ## Negative and falsification witnesses
 
@@ -244,7 +244,7 @@ Future tests should mutate one trust fact at a time and require `Unknown`/no opt
 | Witness | Required failure reason |
 |---|---|
 | Correct activator, wrong package version | Selected exact package identity/version is absent. |
-| Package installed, integration not activated | Integrated predicate does not match; only exact standalone may apply if no external source participates. |
+| Package installed, integration not activated | Integrated predicate does not match. Only exact standalone may apply if no external source participates. |
 | Activator present, package/source missing | Required include edge and closure cannot resolve. |
 | Modified external executable file | File and closure digest mismatch. |
 | Missing transitive LTCGI file | Closure is incomplete. |
@@ -258,34 +258,34 @@ Future tests should mutate one trust fact at a time and require `Unknown`/no opt
 | AudioLink activation with inconsistent macro state | Exact generated record, earlier source, and AudioLink closure conjunction fails. |
 | Additional third-party shader code | Exact include tree/edge set fails. |
 | Same apparent feature state with substituted package source | Package revision/manifest and closure hashes fail. |
-| Known LTCGI bytes with different upstream macro state | Exact generated source and all earlier closure evidence fail; LTCGI bytes alone are insufficient. |
+| Known LTCGI bytes with different upstream macro state | Exact generated source and all earlier closure evidence fail. LTCGI bytes alone are insufficient. |
 | `LTCGI_AUDIOLINK` or another uncharacterized LTCGI control appears | Characterized absence predicate fails. |
-| Source changes between evidence collection and use | Coherent-snapshot prerequisite fails; evidence must be discarded. |
+| Source changes between evidence collection and use | Coherent-snapshot prerequisite fails, and AMUSE must discard the evidence. |
 
 No heuristic equivalence, semantic guess, version range, or package-presence shortcut is acceptable.
 
 ## Intended support scope
 
-### Near-term first-class targets
+### Near-term primary targets
 
-- lilToon 2.3.4 with LTCGI 1.7.3, AudioLink 3.1.2, and VRC Light Volumes 2.1.3;
-- each integration independently;
-- all four pair/triple combinations;
-- the existing standalone control;
-- only the BRP base-opaque profile and exact snapshot described here.
+- lilToon 2.3.4 with LTCGI 1.7.3, AudioLink 3.1.2, and VRC Light Volumes 2.1.3.
+- each integration independently.
+- all four pair/triple combinations.
+- the existing standalone control.
+- only the BRP base-opaque profile and the exact snapshot described here.
 
 ### Characterized but deferred
 
-- LTCGI 1.7.0-1.7.2, whose active six-file closure matches 1.7.3;
-- AudioLink 3.1.1, whose active include matches 3.1.2;
-- VRC Light Volumes 2.1.0 and 2.1.1, whose active include matches 2.1.3;
-- any combination that requires further work to establish the authoritative analysis lifecycle or a coherent evidence snapshot.
+- LTCGI 1.7.0-1.7.2, whose active six-file closure matches 1.7.3.
+- AudioLink 3.1.1, whose active include matches 3.1.2.
+- VRC Light Volumes 2.1.0 and 2.1.1, whose active include matches 2.1.3.
+- any combination that needs further work to establish the authoritative analysis lifecycle or a coherent evidence snapshot.
 
 ### Intentionally unsupported
 
-- AudioLink 2.x and 3.1.0, VRC Light Volumes 2.0.x or 3.0 development versions, unsupported historical LTCGI variants, and any uncharacterized release;
-- `LTCGI_AUDIOLINK`, arbitrary LTCGI compile controls, or other macro overlays;
-- locally modified or substituted packages, custom shaders, transformed derivatives, arbitrary lilToon extensions, extra third-party includes, and unknown package overlays;
+- AudioLink 2.x and 3.1.0, VRC Light Volumes 2.0.x or 3.0 development versions, unsupported historical LTCGI variants, and any uncharacterized release\.
+- `LTCGI_AUDIOLINK`, arbitrary LTCGI compile controls, or other macro overlays\.
+- locally modified or substituted packages, custom shaders, transformed derivatives, arbitrary lilToon extensions, extra third-party includes, and unknown package overlays\.
 - any unclosed source graph or state whose effective upstream macro inputs cannot be proved.
 
 ## Analysis lifecycle and snapshot assumptions
@@ -294,16 +294,16 @@ No heuristic equivalence, semantic guess, version range, or package-presence sho
 
 Every conclusion assumes AMUSE has an authoritative analysis point with all of these lifecycle properties:
 
-1. Unity has resolved the exact packages and version defines;
-2. official lilToon tooling has generated `lts.shader` and `ltspass_opaque.shader` for the material/settings state;
-3. integration tooling has made all intended source and material changes;
+1. Unity has resolved the exact packages and version defines\.
+2. official lilToon tooling has generated `lts.shader` and `ltspass_opaque.shader` for the material/settings state\.
+3. integration tooling has made all intended source and material changes\.
 4. no later tool will regenerate, swap, or mutate the material, generated source, include graph, or external files before compilation/use.
 
 If a lilToon build preprocessor, another NDMF pass, or any later transformation can change this evidence after AMUSE analyzes it, the predicate is unsound regardless of its hash coverage.
 
 ### Snapshot coherence and TOCTOU boundary
 
-Ordering alone is insufficient. The material state, generated lilToon sources, package resolution, external executable closures, include graph, and relevant semantic evidence gathered by AMUSE must all describe one coherent build state. A correctly ordered analysis that reads those inputs at mutually inconsistent times would still be unsound. Package and source evidence must therefore remain coherent through the decision and use of the attestation result, avoiding a time-of-check/time-of-use mismatch.
+Ordering alone is not sufficient. The material state, generated lilToon sources, package resolution, external executable closures, include graph, and relevant semantic evidence gathered by AMUSE must all describe one coherent build state. An analysis that reads those inputs in the correct order but at mutually inconsistent times would still be unsound. Package and source evidence must therefore stay coherent through the decision and use of the attestation result, and so avoid a time-of-check/time-of-use mismatch.
 
 The previous investigation found no authoritative analysis/lifecycle contract, and the coherent-snapshot guarantee is likewise unresolved. This work does not solve either boundary. Establishing both is the remaining prerequisite before positive implementation can safely proceed.
 
@@ -312,9 +312,9 @@ The previous investigation found no authoritative analysis/lifecycle contract, a
 - The authoritative Unity/NDMF/build lifecycle point at which AMUSE can observe and rely on the characterized state.
 - How AMUSE can prove that material, generated-source, package, external-source, include-graph, and semantic evidence came from one coherent build state, without this investigation prescribing an API.
 - Whether the deferred byte-equivalent adjacent versions merit full scratch-matrix validation and near-term support.
-- Whether Unity platform/compiler macro variation outside the exact Unity 2022.3.22f1 BRP target needs an additional host predicate. No wider claim is made here.
+- Whether Unity platform/compiler macro variation outside the exact Unity 2022.3.22f1 BRP target needs an additional host predicate. This document makes no wider claim.
 
-These unknowns do not undermine the source-side A classifications. They block turning those classifications into production attestations until both the lifecycle-ordering and coherent-snapshot boundaries are proven.
+These unknowns do not undermine the source-side A classifications. They block turning those classifications into production attestations until AMUSE proves both the lifecycle-ordering and coherent-snapshot boundaries.
 
 ## Final recommendation
 
@@ -322,4 +322,5 @@ Use implementation shape **A** once the analysis-lifecycle and coherent-snapshot
 
 Do not build atomic per-combination profiles, a generic registry/provider/plugin architecture, or a general preprocessor. The observed combinations do not justify them.
 
-No implementation plan accompanies this document because the authoritative analysis lifecycle and coherent evidence snapshot remain architectural prerequisites. Production attestation code, semantic adapters, census tooling, NDMF ordering, and unrelated optimizer areas are unchanged on this branch.
+No implementation plan accompanies this document, because the authoritative analysis lifecycle and coherent evidence snapshot remain architectural prerequisites. Production attestation code, semantic adapters, census tooling, NDMF ordering, and unrelated optimizer areas are unchanged on this branch.
+</content>

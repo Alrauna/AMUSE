@@ -6,7 +6,7 @@ Date: 2026-08-19
 
 ## Executive decision summary
 
-**The consumer-facing boundary this milestone was asked to design already exists.**
+**The consumer-facing boundary in the milestone brief already exists.**
 `AlphaSemanticsResolver` (merged at `33df8ea`) declares:
 
 ```csharp
@@ -18,7 +18,7 @@ internal delegate bool AlphaFieldProvider(
 
 with a fully specified predicate contract in its XML doc, and it has **one production
 implementation: none.** Every existing test supplies a hand-built lambda. This milestone
-writes the missing Unity implementation of that delegate and nothing else.
+writes the missing Unity implementation for that delegate and nothing else.
 
 Consequently:
 
@@ -39,12 +39,11 @@ Consequently:
 | Admitted v1 formats | `RGBA32`, `ARGB32`, `Alpha8`, `RGB24` — each **measured** predicate-equivalent to shader `.a` |
 | Importer inspection | **None.** No `TextureImporter` is opened by the producer. |
 
-**The central architectural insight**, established by measurement: reading the *imported*
-`Texture2D` rather than the source file collapses almost the entire list of import
-concerns this milestone was asked to investigate. Resize, `maxTextureSize`, NPOT scaling,
-`alphaSource`, swizzling, `alphaIsTransparency`, sRGB, and platform overrides are all
-**already applied to the texture the GPU samples**, so the producer needs to inspect none
-of them and opens no `TextureImporter` at all.
+**The central architectural insight** comes from measurement. Reading the *imported* `Texture2D`
+rather than the source file collapses almost the entire list of import concerns in the brief.
+The import step **already applies** resize, `maxTextureSize`, NPOT scaling, `alphaSource`,
+swizzling, `alphaIsTransparency`, sRGB, and platform overrides to the texture the GPU samples.
+The producer does not need to inspect any of them and opens no `TextureImporter`.
 
 Note the precise form of that claim — the two halves are not the same statement:
 
@@ -54,10 +53,10 @@ importer history does not need to be inspected
 importer setting does not affect the imported field
 ```
 
-The first is what the collapse establishes. The second is **false** for `alphaSource`,
-resize, NPOT scaling, and swizzling, all of which demonstrably change the field. The
-producer simply reports whichever field resulted. What survives as an actual condition is a
-small set of format and state predicates, each measured against a real shader sample.
+The first is what the collapse establishes. The second is **false** for `alphaSource`, resize, NPOT scaling,
+and swizzling, all of which demonstrably change the field. The producer reports whichever field resulted.
+What survives as an actual condition is a small set of format and state predicates,
+each measured against a real shader sample.
 
 ## Verified base state
 
@@ -68,13 +67,12 @@ small set of format and state predicates, each measured against a real shader sa
 | Worktree at branch creation | Clean. |
 | Branch created | `feat/texture-alpha-evidence` from `016f3d2`. |
 | Stacked on old feature branch | No. |
-| Unity project | `E:/AI/Git/AMUSE/Assets`, Unity **2022.3.22f1**, active target `StandaloneWindows64`, color space Gamma. |
+| Unity project | `<repo-root>/Assets`, Unity **2022.3.22f1**, active target `StandaloneWindows64`, color space Gamma. |
 | Unity instance used | The **public** development project, confirmed by `Application.dataPath` before any operation. The private avatar testbed was **not** used. |
 
 ## Current contract: what `TriangleAlphaClassifier` actually requires
 
-Read from `Editor/Analysis/TriangleAlphaClassifier.cs` at `016f3d2`. Nothing below is
-inferred.
+Read from `Editor/Analysis/TriangleAlphaClassifier.cs` at `016f3d2`. Nothing below is an inference.
 
 ### `AlphaTextureData` — the alpha input type
 
@@ -102,9 +100,9 @@ Every one of the four sampling paths tests exactly one thing:
 if (texture.GetAlpha(x, y) == byte.MaxValue) { continue; }   // 255 == opaque
 ```
 
-**The magnitude of a non-255 byte is never read.** The classifier's alpha input is
-effectively a *per-texel boolean* — "is this texel exactly opaque?" — transported in a
-byte. This is the single most important fact for the producer's exactness argument
+**The magnitude of a non-255 byte is never read.** The alpha input of the classifier is
+effectively a *per-texel boolean* — "is this texel exactly opaque?" — transported in a byte.
+This is the single most important fact for the exactness argument
 (see [Exactness argument](#exactness-argument)).
 
 ### Sampling and geometry inputs
@@ -119,10 +117,10 @@ byte. This is the single most important fact for the producer's exactness argume
 
 ### What is therefore *not* the producer's job
 
-Filter mode, wrap mode, UV mapping, and geometry all arrive through
-`TextureSample.Sampling` / `TriangleAlphaInput` and are validated by
-`UnityTextureEvidence.TryGetSampling` and `AlphaSemanticsResolver`. **The producer must
-not re-derive them**; it answers one question only: *what is the alpha field?*
+Filter mode, wrap mode, UV mapping, and geometry all arrive through `TextureSample.Sampling`
+/ `TriangleAlphaInput`. `UnityTextureEvidence.TryGetSampling` and `AlphaSemanticsResolver`
+validate them. **The producer must not re-derive them.** It answers one question only: *what
+is the alpha field?*
 
 ## Current contract: the `AlphaSemanticsResolver` output seam
 
@@ -136,15 +134,15 @@ returns an `AlphaResolution` that is one of:
 - **`Refused(failure)`** — one of `SemanticsUnknown`, `UnsupportedMultiplier`,
   `UnsupportedUvMapping`, `UnsupportedSampling`, `MissingTextureEvidence`.
 
-The producer is reached **only** through `MissingTextureEvidence`'s guard, i.e. after
-the resolver has already proven:
+The resolver reaches the producer **only** through the `MissingTextureEvidence` guard, i.e. after
+it has already proven:
 
-1. the semantic Alpha value is `Complete`;
-2. the UV mapping is identity on channel 0 (`IsSupportedMapping`);
-3. the sampling maps onto `{Point, Bilinear} x {Clamp, Repeat}` (`TryMapSampling`);
-4. any multiplier is exactly `1f` (a `k < 1` path never needs field *contents*).
+1. The semantic Alpha value is `Complete`.
+2. The UV mapping is identity on channel 0 (`IsSupportedMapping`).
+3. The sampling maps onto `{Point, Bilinear} x {Clamp, Repeat}` (`TryMapSampling`).
+4. Any multiplier is exactly `1f` (a `k < 1` path never needs field *contents*).
 
-**The seam is sufficient. No new contract is needed and `MaterialSemantics` requires no
+**The seam is sufficient. The design needs no new contract, and `MaterialSemantics` requires no
 change.** The producer receives `(TextureSourceId, TextureChannel)` — deliberately not a
 `Texture` — and returns `bool` + `AlphaTextureData`, which is exactly a refusal predicate
 in the established `UnityTextureEvidence` style.
@@ -211,10 +209,10 @@ only one the classifier needs:
 Predicate equivalence is weaker than value identity and stronger than a bound. It is
 exactly what `AlphaFieldProvider` asks for and exactly what `TriangleAlphaClassifier`
 consumes, because the classifier reads no non-255 magnitude. Every format admitted to the
-allow-list was **measured** against a real shader sample (Experiment 5); a format that
+allow-list was **measured** against a real shader sample (Experiment 5). A format that
 cannot be positively shown predicate-equivalent is not admitted.
 
-Four candidate layers were distinguished, per the milestone brief:
+Per the milestone brief, the design distinguishes four candidate layers:
 
 | Layer | Relationship to effective alpha |
 | --- | --- |
@@ -225,8 +223,8 @@ Four candidate layers were distinguished, per the milestone brief:
 
 **Consequence — the collapse.** AMUSE reads the imported texture, so every transformation
 between the source file and the imported data is already applied. The producer therefore
-needs **no importer inspection**. Two distinct claims are involved and they must not be
-conflated:
+needs **no importer inspection**. This split involves two distinct claims, and the design
+must not conflate them:
 
 ```
 importer history does not need to be inspected
@@ -238,7 +236,7 @@ The first is what the collapse establishes. The second is **false** for several 
 and the design does not assert it.
 
 **Class 1 — settings that change the imported alpha field.** The producer does not inspect
-them, and simply reports whatever field resulted:
+them, and reports whatever field resulted:
 
 | Setting | Measured effect on the field |
 | --- | --- |
@@ -255,7 +253,7 @@ them, and simply reports whatever field resulted:
 | `sRGBTexture` | None. Alpha is never sRGB-encoded; only RGB is. |
 
 **Class 3 — no reconciliation needed:** platform overrides (the loaded texture *is* the
-active target's import) and texture streaming (can only affect mip levels > 0, which the
+import for the active target) and texture streaming (can only affect mip levels > 0, which the
 domain excludes).
 
 None of the three classes appears as a condition in the supported domain. Gating on them
@@ -265,11 +263,10 @@ Class 1 settings are still *observable in the result*, and the tests assert exac
 
 ## Unity 2022.3 evidence research
 
-All measurements were taken in the **public** development project (Unity 2022.3.22f1,
-`StandaloneWindows64`) via `execute_code`, using 4x4 RGBA32 PNGs written with a known
-alpha pattern (bottom-left texel `128`, top-right texel `254`, all others `255`), imported
-with `mipmapEnabled = false`. Scratch assets were created under
-`Assets/AmuseScratch_TexProbe` and **deleted**; the worktree was verified clean afterwards.
+All measurements ran in the **public** development project (Unity 2022.3.22f1, `StandaloneWindows64`) via
+`execute_code`, using 4x4 RGBA32 PNGs written with a known alpha pattern (bottom-left texel `128`,
+top-right texel `254`, all others `255`), imported with `mipmapEnabled = false`. The experiments created
+scratch assets under `Assets/AmuseScratch_TexProbe` and **deleted** them. A check then confirmed the worktree clean.
 
 ### Experiment 1 — import state
 
@@ -307,9 +304,9 @@ RGBA32, alpha 254 / 255 -> GetPixels32().a == 254 / 255   (exact)
 ```
 
 `GetPixels32` quantizes a float channel to a byte by **rounding**, so any value in roughly
-`[0.998, 1.0)` becomes 255. Experiment 2's apparently-clean `RGBAHalf` row was a
-coincidence of round-tripping `b/255` values. **This is why the allow-list is defined by
-native alpha bit depth, not by "is it lossy".**
+`[0.998, 1.0)` becomes 255. The apparently-clean `RGBAHalf` row in Experiment 2 was an
+artifact of round-tripping `b/255` values. **This is why native alpha bit depth, not "is it
+lossy", defines the allow-list.**
 
 ### Experiment 4 — row order and type discrimination
 
@@ -332,7 +329,7 @@ A `RenderTexture` is a `Texture` but not a `Texture2D`, so the cast refuses it f
 
 The gate that decides the allow-list. A scratch ShaderLab file
 (`Hidden/AmuseScratch/AlphaPredicate`) sampled each imported texture and emitted a
-*predicate*, not a value, so the readback's own 8-bit quantization cannot corrupt the
+*predicate*, not a value, so the 8-bit readback quantization itself cannot corrupt the
 answer:
 
 ```hlsl
@@ -359,7 +356,7 @@ Source alpha values tested: **0, 128, 254, 255**.
 | `RGB24` | `RGB24` | cpu 255 / gpu 1 | cpu 255 / gpu 1 | cpu 255 / gpu 1 | cpu 255 / gpu 1 | **AGREE 4/4** |
 | `BGRA32` | — | \- | \- | \- | \- | **UNREACHABLE** |
 
-("cpu N" is `GetPixels32().a`; "gpu 1" means the shader observed `.a >= 1.0`. The
+("cpu N" is `GetPixels32().a`. "gpu 1" means the shader observed `.a >= 1.0`. The
 predicate compared is `cpu == 255` against `gpu == 1`.)
 
 Three findings:
@@ -367,18 +364,18 @@ Three findings:
 1. **All 16 comparisons agree.** `RGBA32`, `ARGB32`, `Alpha8`, and `RGB24` are positively
    proven predicate-equivalent at every tested value.
 2. `rOne` was `0` in every alpha case, confirming the shader read the alpha channel and
-   not red. `Alpha8` in particular returns its value through `.a` in a shader, not `.r`;
-   had it uploaded as a red-only format the row would have diverged.
+   not red. `Alpha8` in particular returns its value through `.a` in a shader, not `.r`.
+   If Unity uploaded it as a red-only format, the row would diverge.
 3. **`TextureImporterFormat` has no `BGRA32` member in 2022.3** (the enum offers
-   `Alpha8, ARGB16, RGB24, RGBA32, ARGB32, RG32`), so Unity cannot be asked to produce it
+   `Alpha8, ARGB16, RGB24, RGBA32, ARGB32, RG32`), so Unity cannot produce it
    through the importer and it **cannot be positively proven**. It is therefore **removed
    from the v1 allow-list**, per the review instruction to admit only what is proven.
 
 ### Experiment 6 — `TextureImporter` alpha swizzling (the stop-condition check)
 
 `TextureImporter.swizzleR/G/B/A` **exist** in 2022.3.22 with values
-`R, G, B, A, OneMinusR, OneMinusG, OneMinusB, OneMinusA, Zero, One`. If swizzling were
-applied at *sample* time rather than baked at import, `GetPixels32().a` would not reflect
+`R, G, B, A, OneMinusR, OneMinusG, OneMinusB, OneMinusA, Zero, One`. If Unity applied
+swizzling at *sample* time rather than at import, `GetPixels32().a` would not reflect
 the channel the shader observes and the no-`TextureImporter` producer would be unsound.
 
 Two uniform `RGBA32` sources with deliberately distinct red and alpha, crossed with four
@@ -398,7 +395,7 @@ Two uniform `RGBA32` sources with deliberately distinct red and alpha, crossed w
 **Result: 8/8 agree, and the swizzle demonstrably moved both views together.** The
 `A → R` and `A → OneMinusA` rows are the decisive ones: the CPU byte changed away from the
 source alpha in exactly the cases where the shader value changed, and by the same
-predicate. Swizzling is applied **at import**, so `GetPixels32().a` already reflects the
+predicate. Unity applies swizzling **at import**, so `GetPixels32().a` already reflects the
 alpha channel shader sampling observes.
 
 **The stop condition did not fire.** The no-`TextureImporter` producer remains sound, and
@@ -416,12 +413,12 @@ no swizzle inspection is required.
 
 Two facts that shape the implementation:
 
-- **`MissingReferenceException`'s base type is `System.SystemException`, not
-  `UnityException`.** Catching `UnityException` would *not* catch it. This is the kind of
-  assumption that has to be measured rather than remembered.
-- A destroyed `Texture2D` satisfies Unity's overloaded `== null`, so an explicit null check
-  rejects it **before** any read. `ReferenceEquals(texture, null)` is `false` for a
-  destroyed object and must not be used.
+- **The base type of `MissingReferenceException` is `System.SystemException`, not
+  `UnityException`.** Catching `UnityException` would *not* catch it. This assumption
+  needs measurement, not memory.
+- Unity overloads `== null`, and a destroyed `Texture2D` satisfies that overload, so an
+  explicit null check rejects it **before** any read. `ReferenceEquals(texture, null)` is
+  `false` for a destroyed object and the code must not use it.
 
 ## Positive allow-list — the supported first domain
 
@@ -440,14 +437,14 @@ Two facts that shape the implementation:
 | 9 | The returned array holds exactly `width * height` entries | Defensive; a mismatch means an assumption broke, and `AlphaTextureData` would throw. |
 
 `BGRA32` was in the draft allow-list and is **removed**: `TextureImporterFormat` has no
-`BGRA32` member in 2022.3, so Unity cannot be asked to produce one and predicate
-equivalence cannot be positively demonstrated. Admitting it would be widening under
+`BGRA32` member in 2022.3, so Unity cannot produce one and predicate
+equivalence cannot be positively demonstrated. Admitting it would widen the contract under
 uncertainty.
 
 Conditions deliberately **not** included, because measurement showed them unnecessary:
 `sRGBTexture`, `alphaIsTransparency`, `alphaSource`, `maxTextureSize`, `npotScale`,
 `textureType`, `textureShape`, platform-override presence, streaming settings, wrap mode,
-filter mode, anisotropy, and the existence of a `TextureImporter` at all.
+filter mode, anisotropy, and whether a `TextureImporter` exists at all.
 
 > **The producer needs no `TextureImporter`.** Every fact it checks is on the `Texture2D`
 > itself. This is a stronger position than `UnityTextureEvidence`'s importer-based
@@ -466,7 +463,7 @@ GPU maps UNorm8 `b` to `b/255`, so
 Exact.
 
 **Group B — alpha structurally absent** (`RGB24`): the sampler returns `1.0` for a missing
-alpha component per D3D/Vulkan/GL rules; `GetPixels32` reports `255` (measured, 16/16).
+alpha component per D3D/Vulkan/GL rules. `GetPixels32` reports `255` (measured, 16/16).
 The predicate holds trivially and no compression or quantization can affect a channel that
 does not exist. Confirmed against a real shader sample for all four source alpha values.
 
@@ -477,7 +474,7 @@ says why the predicate should hold, and the measurement says that it does.
 
 Experiment 7 showed that a destroyed `Texture2D` throws `MissingReferenceException` from
 **`.isReadable` itself**, not only from `GetPixels32`. The guard therefore covers every
-Unity-object evidence read the producer performs after the null and `Texture2D` checks —
+Unity-object evidence read the producer makes after the null and `Texture2D` checks —
 `isReadable`, `format`, `mipmapCount`, `width`, `height`, and the pixel read — while
 `ArgumentException` stays narrowly associated with the `GetPixels32(0)` evidence read,
 which is the only operation measured to raise it:
@@ -516,23 +513,24 @@ Constraints, all deliberate:
 
 - **No `catch (Exception)`, no bare `catch { }`, and no `catch (UnityException)` as a
   substitute.** Only the two exception types Experiment 7 actually produced are caught. An
-  unexpected exception type is a defect and must surface, not be swallowed into a silent
+  unexpected exception type is a defect and must surface, not disappear into a silent
   refusal.
 - `MissingReferenceException` is caught **explicitly**, because its base type is
   `SystemException` — catching `UnityException` would miss it entirely.
 - The **primary** defence against a destroyed texture is the `texture == null` check at the
-  head of the method, using Unity's overloaded operator, which is `true` for a destroyed
-  object. `ReferenceEquals(texture, null)` is `false` for one and must not be used. The
+  head of the method, using the overloaded Unity equality operator, which is `true` for a destroyed
+  object. `ReferenceEquals(texture, null)` is `false` for one and the code must not use it. The
   `MissingReferenceException` handler is defensive depth for a destruction that races the
-  reads; it is not the path a destroyed texture normally takes.
-- **No texture-size cap.** No evidence requires one; `isReadable` already bounds the
+  reads. It is not the path a destroyed texture normally takes.
+- **No texture-size cap.** No evidence requires one. `isReadable` already bounds the
   realistic input set. Adding a cap would be a speculative gate.
 
 **Testability note.** The `width`/`height`/length checks and the two catches guard states
 Unity 2022.3 is not known to produce through the approved architecture once the positive
-preconditions pass. They are retained as defensive hardening and verified by code review;
-no test seam, mock `Texture2D`, reflection, or deliberate corruption is introduced to
-manufacture them.
+preconditions pass.
+
+The design retains them as defensive hardening, and code review verifies them. It introduces
+no test seam, mock `Texture2D`, reflection, or deliberate corruption to manufacture them.
 
 ## Refusal / Unknown matrix
 
@@ -567,24 +565,23 @@ No epsilon, no tolerance, no sampling, no histogram, no heuristic appears anywhe
 The claim is **predicate equivalence**, not value identity — see
 [The claim AMUSE makes](#the-claim-amuse-makes-stated-precisely).
 
-1. The classifier's only alpha predicate is `byte == 255`. Non-255 magnitudes are never read.
+1. The only alpha predicate of the classifier is `byte == 255`. Non-255 magnitudes are never read.
 2. For Group A formats, UNorm8 decode is `b/255`, so `b == 255` iff the sampled value is
-   exactly `1.0`, and every other byte gives a value strictly below 1 and at least 0. Both
-   bounds of the delegate's `[0, 1]` attestation hold exactly. **Measured against a real
-   shader sample** at alpha 0/128/254/255 for `RGBA32`, `ARGB32`, and `Alpha8`
-   (Experiment 5), including under every `swizzleA` mode tested (Experiment 6).
-3. For Group B, alpha is absent and the sampler returns exactly `1.0`; `GetPixels32`
+   exactly `1.0`, and every other byte gives a value strictly below 1 and at least 0. The delegate
+   attests `[0, 1]`, and both bounds hold exactly. **Measured against a real shader sample** at
+   alpha 0/128/254/255 for `RGBA32`, `ARGB32`, and `Alpha8` (Experiment 5), including under
+   every `swizzleA` mode tested (Experiment 6).
+3. For Group B, alpha is absent and the sampler returns exactly `1.0`. `GetPixels32`
    reports `255` uniformly. **Measured**, 4/4.
-4. Under Point filtering the sampled value is one texel's value, so the predicate transfers
-   directly. Under Bilinear the sampled value is a convex combination of up to four texel
-   values, all in `[0, 1]`; such a combination equals 1 **iff** every positive-weight
-   contributor equals 1. That is precisely what the classifier tests by scanning the
-   contributing texel neighbourhood, and it is why the delegate's contract is phrased as a
-   predicate rather than as value equality.
-5. Every refused case above is refused because step 2 or 3 **cannot be asserted**, not
-   because the deviation was measured to be small. Compressed and float formats are
-   refused even though most of their texels round-trip correctly — one measured
-   `254 → 255` is a correctness bug, and its rarity is irrelevant.
+4. Under Point filtering the sampled value is the value of one texel, so the predicate transfers directly.
+   Under Bilinear the sampled value combines up to four texel values, all in `[0, 1]`.
+   Such a combination equals 1 **iff** every positive-weight contributor equals 1. That is
+   precisely what the classifier tests by scanning the contributing texel neighbourhood, and it is why
+   the delegate contract states a predicate rather than value equality.
+5. Every refusal above happens because the design cannot prove step 2 or 3 for that case, not
+   because measurement showed a small deviation. The design refuses compressed and float formats
+   even though most of their texels round-trip correctly — one measured `254 → 255` is a
+   correctness bug, and its rarity is irrelevant.
 
 ## Proposed producer API
 
@@ -622,13 +619,13 @@ The constructor builds `Dictionary<TextureSourceId, Texture2D>` by calling the *
   one class, exactly as the characterization milestone left it.
 - No `AssetDatabase.GUIDToAssetPath` scan, no sub-asset enumeration, no path handling, no
   ordering question — therefore deterministic by construction.
-- Identity is produced by the same function the frontends used to produce the
+- The identity comes from the same function the frontends used to produce the
   `TextureSample`, so the two can never disagree.
 - Instance scope gives the evidence a natural, obvious lifetime.
 
 Ambiguity rule: if two supplied textures resolve to the same `TextureSourceId` they are the
-same asset, so first-wins is sound; a texture whose id cannot be resolved is skipped, and a
-later lookup for it simply refuses.
+same asset, so first-wins is sound. The constructor skips any texture whose id it cannot
+resolve, and a later lookup for it refuses.
 
 ### Placement — the only forced structural change
 
@@ -641,16 +638,16 @@ Measured at `016f3d2`:
   reverse (`AlphaSemanticsResolver` has `using Alrauna.Amuse.Editor.Semantics`).
 
 The producer needs `AlphaTextureData` (Analysis) **and** `Texture2D` (Unity). Putting it in
-`Analysis` would introduce the proof core's first `UnityEditor`/asset dependency — the
-milestone's stated prohibition. Putting it in `Semantics` would invert the existing
+`Analysis` would introduce the first `UnityEditor`/asset dependency of the proof core — the
+prohibition the milestone states. Putting it in `Semantics` would invert the existing
 dependency direction. Therefore a third location is required, not preferred:
 `Editor/Host/`, same assembly, no asmdef change.
 
-This is proposed **because two existing constraints leave no alternative**, not to scaffold
+The design proposes this **because two existing constraints leave no alternative**, not to scaffold
 a host layer. It gets exactly one file.
 
 A companion source-text test makes the boundary enforceable, in the spirit of
-`UnityTextureEvidence`'s five-member reflection guard — *a boundary nobody can verify is a
+the five-member reflection guard of `UnityTextureEvidence` — *a boundary nobody can verify is a
 boundary that erodes*. The invariant it asserts is **"`Editor/Analysis` has no dependency
 on the `UnityEditor` namespace"**, matched as a word-boundary identifier so it also catches
 fully-qualified references (`UnityEditor.AssetDatabase.…`) and aliases
@@ -659,8 +656,8 @@ fully-qualified references (`UnityEditor.AssetDatabase.…`) and aliases
 ## Relationship to `UnityTextureEvidence`
 
 **Untouched.** No sixth method, no signature change, no widened predicate. The
-characterization milestone's `SharedClass_ExposesExactlyFiveSemanticFacts` guard must
-still pass unmodified.
+`SharedClass_ExposesExactlyFiveSemanticFacts` guard of the characterization
+milestone must still pass unmodified.
 
 The producer *consumes* one of the five (`TryGetSourceId`) and is a different kind of
 thing:
@@ -679,12 +676,12 @@ milestone brief — that the responsibility "may deserve a separate internal pro
 
 ## Relationship to `TriangleAlphaClassifier`
 
-No change, and none is needed. The classifier's input contract proved **sufficient**: the
+No change, and the design needs none. The input contract of the classifier proved **sufficient**: the
 producer can construct `AlphaTextureData` directly with zero adaptation, zero
 transposition, and zero new type. No stop condition fired here.
 
 One property is worth recording because it shapes the tests: `AlphaTextureData`
-short-circuits on `IsFullyOpaque` / `IsFullyNonOpaque` *before* any geometry is examined.
+short-circuits on `IsFullyOpaque` / `IsFullyNonOpaque` *before* the classifier examines any geometry.
 A uniformly-opaque texture therefore returns `ProvenOpaque` for **any** triangle, which
 means a uniform texture cannot detect a row-order or axis error. Integration tests must
 use an asymmetric field.
@@ -706,15 +703,15 @@ gates, or material-global semantics — it receives an opaque id and a channel.
 - The correct key is not yet knowable. `TextureSourceId` alone is wrong: it does not change
   when the importer, the active build target, or a platform override changes, all of which
   change the effective field.
-- A per-instance map already exists and is naturally scoped to one analysis, so the obvious
-  future home is memoizing inside the existing dictionary — not a static.
+- A per-instance map already exists and is naturally scoped to one analysis, so a future
+  cache would live inside the existing dictionary — not in a static.
 
 **Never a global static cache**, because its invalidation semantics against re-import,
 `SaveAndReimport`, and build-target switching are unproven.
 
 Cost note for later: `GetPixels32` on a 2048-square texture allocates roughly 16 MB of
 `Color32[]` plus a 4 MB byte array. `Texture2D.GetPixelData<byte>` avoids the managed copy
-but requires per-format byte-layout knowledge. Recorded as the optimization path; **not**
+but requires per-format byte-layout knowledge. Recorded as the optimization path. **Not**
 implemented, since no measured pressure exists.
 
 ## Malformed versus unsupported
@@ -730,12 +727,12 @@ Follows the established convention exactly:
 | **Skipped at construction** | no throw | a `null` or destroyed element inside `textures`, or one whose id cannot be resolved |
 
 Rationale for the split: a caller handing a `null` collection or an undefined enum has a
-bug that silence would hide; a caller handing a mixed array of real textures, some of which
-happen to be unassigned slots, is doing something normal. `Material.GetTexture` returns
+bug that silence would hide. A caller handing a mixed array of real textures, with a few
+unassigned slots among them, does something normal. `Material.GetTexture` returns
 `null` for an unassigned slot, so tolerating `null` elements is the ordinary case, not an
 error.
 
-`AlphaTextureData`'s own constructor validation is not duplicated — conditions 7 and 8
+The `AlphaTextureData` constructor validation itself is not duplicated — conditions 7 and 8
 refuse before it can throw.
 
 ## Test strategy
@@ -745,7 +742,7 @@ EditMode, in the **public** development project, following the existing
 `[TearDown]` `DeleteAsset`, PNGs written with `EncodeToPNG` and imported with
 `ForceSynchronousImport`.
 
-Every test maps to a proof obligation or a refusal boundary; none exists to raise a count.
+Every test maps to a proof obligation or a refusal boundary. None exists to raise a count.
 
 ### Positive evidence
 
@@ -765,7 +762,7 @@ Every test maps to a proof obligation or a refusal boundary; none exists to rais
 #### The `alphaSource` test contract
 
 `alphaSource` is a **Class 1** setting: it changes the imported alpha field. Asserting
-invariance under it would be asserting something false. The correct obligation is that the
+invariance under it would assert something false. The correct obligation is that the
 producer *follows* the import result without inspecting the setting:
 
 | `alphaSource` | Source used | Expected field |
@@ -774,11 +771,10 @@ producer *follows* the import result without inspecting the setting:
 | `FromGrayScale` | same source | the generated-alpha result — bytes equal the luminance-derived alpha, **not** the source alpha (measured: alpha became `20`) |
 | `None` | same source | the no-alpha result — an all-255 field |
 
-Each case asserts the *field that was actually imported*, and each is a distinct expected
-value, so a producer that secretly branched on `alphaSource` and a producer that reads the
-imported texture are distinguished by the `FromGrayScale` row. The producer must contain
-no reference to `alphaSource`, and the test for that is structural: the production file
-contains no `TextureImporter` use at all.
+Each case asserts the *field that was actually imported*, and each is a distinct expected value.
+The `FromGrayScale` row thus distinguishes a producer that secretly branches on `alphaSource`
+from one that reads the imported texture. The producer must contain no reference to `alphaSource`,
+and the test for that is structural: the production file contains no `TextureImporter` use at all.
 
 ### Refusal boundaries
 
@@ -799,11 +795,13 @@ contains no `TextureImporter` use at all.
 | `null` element inside the collection is skipped, not thrown | Unassigned-slot tolerance |
 | `Editor/Analysis` has **no dependency on the `UnityEditor` namespace** | The placement boundary |
 
-**Conditional, not mandatory.** Zero dimensions and a `GetPixels32` length mismatch are
-tested **only if** Unity 2022.3 can produce them through a deterministic real fixture under
-the approved architecture. No test seam, mock `Texture2D`, reflection, or deliberate
-corruption is introduced to manufacture them. If no natural fixture exists, the guards are
-verified by code review at Task 10 and that absence is recorded.
+**Conditional, not mandatory.** The tests cover zero dimensions and a `GetPixels32` length mismatch
+**only if** Unity 2022.3 can produce them through a deterministic real fixture under the approved
+architecture.
+
+The design introduces no test seam, mock `Texture2D`, reflection, or deliberate corruption to
+manufacture them. If no natural fixture exists, code review verifies the guards at Task 10 and
+records that absence.
 
 ### Integration-level classifier test
 
@@ -838,7 +836,7 @@ alpha-to-coverage. No `sample.rgb x sample.a` work. No `IShaderAdapter`, registr
 factory, `TextureEvidence<T>`, generalized texture framework, shader schema, expression DAG,
 feature graph, or HLSL parser. No third shader adapter. No atlasing, material combining,
 animation or state tracing, optimization-planner change, NDMF pass, avatar component,
-inspector UI, Play Mode work, or CI change. No asset mutation of any kind: the producer
+inspector UI, Play Mode work, or CI change. No asset changes of any kind: the producer
 reads and never writes, and never toggles `isReadable`. No refactor of unrelated helpers.
 No modification to either shader frontend.
 
@@ -862,8 +860,8 @@ None fired during design research. Explicitly evaluated:
 
 One condition warrants a note rather than a stop: the supported domain **requires
 `isReadable`, which is off by default**, so v1 will refuse most real avatar textures. This
-is a coverage limitation, not a correctness or architecture problem, and it is the honest
-consequence of not approximating. See [Deferred work](#deferred-work).
+is a coverage limitation, not a correctness or architecture problem, and it honestly results from not
+approximating. See [Deferred work](#deferred-work).
 
 ## Risks
 
@@ -896,7 +894,7 @@ consequence of not approximating. See [Deferred work](#deferred-work).
 1. **The chain is now closed.** After this milestone every link exists:
    `Material → MaterialSemantics.Alpha → AlphaSemanticsResolver → AlphaTextureData →
    TriangleAlphaClassifier → TriangleAlphaOutcome`. The next milestone connects
-   `Renderer → Mesh → triangles` and joins it to `MeshSeparationPlanner`; it should not
+   `Renderer → Mesh → triangles` and joins it to `MeshSeparationPlanner`. It should not
    need to invent any new seam.
 2. **The next milestone will immediately feel the `isReadable` wall.** A real avatar will
    produce `MissingTextureEvidence` almost everywhere. That is the correct fail-closed
@@ -904,7 +902,7 @@ consequence of not approximating. See [Deferred work](#deferred-work).
 3. **Diagnostics become the visible product surface.** `AlphaResolutionFailure` currently
    has one refusal for every texture-evidence problem. Distinguishing "non-readable" from
    "compressed" from "mipmapped" is what makes the refusal actionable — but that is a
-   change to `AlphaSemanticsResolver`'s enum and belongs to the milestone that has a
+   change to the `AlphaSemanticsResolver` enum and belongs to the milestone that has a
    consumer for it, not to this one.
 4. **`Editor/Host/` is now the named home** for anything that must touch both Unity objects
    and Analysis types. Mesh extraction (`Renderer`/`Mesh` → `TriangleAlphaInput`) is the

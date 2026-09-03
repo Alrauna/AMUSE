@@ -8,31 +8,29 @@
 
 ## Decision
 
-Keep the existing standalone lilToon 2.3.4 identity pins and R1/R2/R3 canonicalization output unchanged. Add a second, pre-canonicalization evidence layer that records every R1 region and every third-party integration activator occurrence from the raw generated sources. The standalone verifier accepts only the closed language that the official 2.3.4 generator can emit at the exact supported source locations, with all three external activators absent.
+Keep the existing standalone lilToon 2.3.4 identity pins and R1, R2, and R3 canonicalization output unchanged. Add a second, pre-canonicalization evidence layer that records every R1 region and every occurrence of a third-party integration activator in the raw generated sources. The standalone verifier accepts only the closed language that the official 2.3.4 generator can emit at the exact supported source locations. All three external activators must be absent.
 
-The implementation has one recognizer for R1. It returns both:
+The implementation has one recognizer for R1. It returns two things:
 
-1. the same canonical text `Canonicalize` returns today; and
-2. an immutable provenance record describing what R1 removed and where it found it.
+1. the same canonical text that `Canonicalize` returns today
+2. an immutable provenance record that describes what R1 removed, and where it found it
 
 `Canonicalize` remains as the existing test seam and delegates to that analysis. `GatherSourceEvidence` retains the analysis records for both the material shader and the opaque pass. `TryVerifyLilToonIdentity` validates those records before a matching canonical digest can authorize semantic interpretation.
 
-This is a fixed standalone profile check, not a registry or general preprocessor. A future exact LTCGI, AudioLink, or external VRC Light Volumes profile can consume the same raw record and add its own characterized activation/source-closure predicate. This branch accepts none of them.
+This is a fixed standalone profile check, not a registry or general preprocessor. A future exact LTCGI, AudioLink, or external VRC Light Volumes profile can reuse the same raw record. It can add its own characterized activation and source-closure predicate. This branch accepts none of them.
 
 ## Problem and root cause
 
-R1 currently recognizes a broad syntactic language:
+R1 currently recognizes a broad syntactic language: any of the following, when it appears in the maximal matching run immediately after an exact `HLSLINCLUDE` line:
 
-- a valueless `LIL_FEATURE_*` define;
-- a valueless `LIL_OPTIMIZE_*` define;
-- `LIL_INPUT_OPTIMIZED`; or
-- any non-empty `#pragma skip_variants` line;
-
-when it appears in the maximal matching run immediately after an exact `HLSLINCLUDE` line.
+- a valueless `LIL_FEATURE_*` define
+- a valueless `LIL_OPTIMIZE_*` define
+- `LIL_INPUT_OPTIMIZED`
+- any non-empty `#pragma skip_variants` line
 
 The recognizer then discards the matching lines. The resulting digest proves the retained canonical remainder, but no evidence proves the provenance of the erased lines.
 
-That creates a false-positive channel. For example, placing any of these in the pass's setting run leaves the existing standalone pass digest unchanged:
+That creates a false-positive channel. For example, if any of these appear in the pass's setting run, the existing standalone pass digest stays unchanged:
 
 ```hlsl
 #define LIL_FEATURE_VRCLIGHTVOLUMES
@@ -48,20 +46,20 @@ The root cause is therefore not a bad digest pin and not R1 canonicalization its
 
 ### Meaning and limit of provenance
 
-“Provenance” in this design is a membership proof, not a historical reconstruction. Layer 2 proves that the erased variation belongs to the closed official lilToon 2.3.4 generator-emittable language and satisfies the selected profile's trust constraints. It does not prove that a particular live generator invocation historically produced the source, nor does it reconstruct every compile symbol, Unity setting, or environment input that may have existed at generation time.
+"Provenance" in this design is a membership proof, not a historical reconstruction. Layer 2 proves that the erased variation belongs to the closed official lilToon 2.3.4 generator-emittable language and satisfies the selected profile's trust constraints. It does not prove that one live generator invocation historically produced the source. It also does not reconstruct every compile symbol, Unity setting, or environment input possible at generation time.
 
-The security property is narrower and stronger than that historical claim: every accepted erased record is bounded to characterized official output, every external activator satisfies the selected profile, and all existing source, include-tree, digest, identity, and semantic evidence still matches. All of those checks remain conjunctive.
+The security property is narrower and stronger than that historical claim. Every accepted erased record is bounded to characterized official output. Every external activator satisfies the selected profile. All existing source, include-tree, digest, identity, and semantic evidence still matches. All of these checks remain conjunctive.
 
 ## Scope
 
-This design hardens only the current canonical upstream lilToon 2.3.4 BRP base-opaque standalone profile:
+This design hardens only the current canonical upstream lilToon 2.3.4 BRP (Built-in Render Pipeline) base-opaque standalone profile:
 
-- shader `lilToon`, GUID `df12117ecd77c31469c224178886498e`;
-- opaque pass `Hidden/ltspass_opaque`, GUID `61b4f98a5d78b4a4a9d89180fac793fc`;
-- package `jp.lilxyzw.liltoon` version `2.3.4` when package evidence exists;
-- material shader-format stamp exactly `45f`;
-- `LIL_RENDER` exactly `0`;
-- the existing base, pass, and include-tree pins, unchanged.
+- shader `lilToon`, GUID `df12117ecd77c31469c224178886498e`
+- opaque pass `Hidden/ltspass_opaque`, GUID `61b4f98a5d78b4a4a9d89180fac793fc`
+- package `jp.lilxyzw.liltoon` version `2.3.4` when package evidence exists
+- material shader-format stamp exactly `45f`
+- `LIL_RENDER` exactly `0`
+- the existing base, pass, and include-tree pins, unchanged
 
 No integrated profile, external source closure, NDMF ordering rule, shader-family expansion, semantic equation, census behavior, or package dependency is added.
 
@@ -69,21 +67,21 @@ No integrated profile, external source closure, NDMF ordering rule, shader-famil
 
 ### 1. Structured extraction plus fixed validation — selected
 
-Have the existing R1 walk produce canonical text and an ordered raw record together. Validate the record against the exact official 2.3.4 grammar and the standalone activation rule.
+The existing R1 walk produces canonical text and an ordered raw record together. The validation checks the record against the exact official 2.3.4 grammar and the standalone activation rule.
 
-This preserves the pins, prevents parser drift, retains count/location evidence, and leaves a concrete activation record reusable by later official integration profiles.
+This preserves the pins and prevents parser drift. It also retains count and location evidence, and leaves a concrete activation record for later official integration profiles to reuse.
 
 ### 2. Pin raw removed-region digests — rejected
 
-Pinning the default and stripped raw runs would close those two witnesses but refuse the many other legitimate combinations of lilToon settings that R1 intentionally supports. Enumerating every combination would be unbounded and would turn ordinary settings into profile proliferation.
+If the design pins the default and stripped raw runs, it closes those two witnesses. But it also refuses the many other legitimate combinations of lilToon settings that R1 intentionally supports. The list of every combination would be unbounded. It would also turn ordinary settings into profile proliferation.
 
 ### 3. Add an independent activator scanner only — rejected
 
-A scanner for only the three known activators would close the known package channels but still accept unknown `LIL_FEATURE_*`, `LIL_OPTIMIZE_*`, and `skip_variants` records erased by R1. A separate scanner would also duplicate the R1 boundary logic and could drift from canonicalization.
+A scanner for only the three known activators would close the known package channels. But it would still accept unknown `LIL_FEATURE_*`, `LIL_OPTIMIZE_*`, and `skip_variants` records that R1 erases. A separate scanner would also duplicate the R1 boundary logic and could drift from canonicalization.
 
 ## Layer-2 representation
 
-The existing source-attestation file gains small immutable evidence values; names may be adjusted during implementation, but their information content is fixed by this design.
+The existing source-attestation file gains small immutable evidence values. Implementation can adjust the names, but this design fixes their information content.
 
 ```csharp
 internal enum LilToonRemovedRecordKind
@@ -122,9 +120,9 @@ internal sealed class LilToonCanonicalizationAnalysis
 }
 ```
 
-Line indices are zero-based indices into the normalized raw source. `Text` is the trimmed raw line. The original indentation is not trust-relevant, but internal whitespace and trailing tokens are: official generation emits exact trimmed forms. Every exact `HLSLINCLUDE` produces a region record even if its R1 run is empty. This preserves the distinction between the pass's empty shader-scope block and its populated SubShader setting block.
+Line indices are zero-based indices into the normalized raw source. `Text` is the trimmed raw line. The original indentation is not trust-relevant. Internal whitespace and trailing tokens are trust-relevant, because official generation emits exact trimmed forms. Every exact `HLSLINCLUDE` produces a region record even if its R1 run is empty. This preserves the distinction between the pass's empty shader-scope block and its populated SubShader setting block.
 
-Every collection property is backed by a private defensive copy wrapped in a genuinely read-only collection. No caller-owned list is retained, and no backing array is exposed through an interface that a caller can cast back to an array and mutate.
+Every collection property is backed by a private defensive copy wrapped in a genuinely read-only collection. No caller-owned list is retained. No backing array is exposed through an interface that lets a caller cast it back to an array and mutate it.
 
 The activation scan records define directives for these exact identifiers anywhere in either raw generated source, including valued or otherwise unexpected forms:
 
@@ -165,17 +163,17 @@ internal static string Canonicalize(
 }
 ```
 
-This is a behavioral-preservation requirement, not an opportunity to rewrite R1/R2/R3. Existing canonicalization tests and all three digest constants remain unchanged.
+This is a behavioral-preservation requirement, not an opportunity to rewrite R1, R2, or R3. Existing canonicalization tests and all three digest constants remain unchanged.
 
-Provenance validation is deliberately separate from canonicalization. Invalid raw evidence still produces the same canonical text it produced before, which permits a regression test to prove that the old digest alone would accept the witness. Identity verification then refuses the associated provenance.
+Provenance validation is deliberately separate from canonicalization. Invalid raw evidence still produces the same canonical text it produced before. This lets a regression test prove that the old digest alone would accept the witness. Identity verification then refuses the associated provenance.
 
 ## Closed official 2.3.4 generator domain
 
-The closed domain comes from the pinned upstream `BuildShaderSettingString(shaderSetting, isFile: false)`, `BuildShaderSettingStringMulti`, and the pinned `UnpackContainer` skip-variant replacement/deduplication. It is not defined by the `LIL_FEATURE_*` or `LIL_OPTIMIZE_*` prefixes.
+The closed domain comes from the pinned upstream `BuildShaderSettingString(shaderSetting, isFile: false)` and `BuildShaderSettingStringMulti` methods, and from the pinned `UnpackContainer` skip-variant replacement and deduplication logic. The `LIL_FEATURE_*` and `LIL_OPTIMIZE_*` prefixes do not define it.
 
 ### Exact define identifiers
 
-The generator can place exactly 109 define identifiers in the R1 setting run: the following 100 feature-setting identifiers, five optimizer identifiers, three package/bundled-integration identifiers, and `LIL_INPUT_OPTIMIZED`.
+The generator can place exactly 109 define identifiers in the R1 setting run. These are the following 100 feature-setting identifiers, five optimizer identifiers, three package and bundled-integration identifiers, and `LIL_INPUT_OPTIMIZED`.
 
 The 100 feature-setting identifiers, in generator order, are:
 
@@ -292,7 +290,7 @@ LIL_OPTIMIZE_USE_VERTEXLIGHT
 LIL_OPTIMIZE_USE_LIGHTMAP
 ```
 
-The three compile/package-dependent identifiers occupying the next generator slot are:
+The three compile-dependent and package-dependent identifiers in the next generator slot are:
 
 ```text
 LIL_FEATURE_VRCLIGHTVOLUMES
@@ -300,7 +298,7 @@ LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE
 LIL_FEATURE_AUDIOLINK_PACKAGE
 ```
 
-The two Light Volumes forms are mutually exclusive in official generation. The first and third activate external package source and are forbidden by the standalone profile. `LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE` selects source already covered by the lilToon include-tree digest and remains a legitimate standalone generator variation.
+The two Light Volumes forms are mutually exclusive in official generation. The first and third activate external package source. The standalone profile forbids both. `LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE` selects source that the lilToon include-tree digest already covers. It remains a legitimate standalone generator variation.
 
 `LIL_INPUT_OPTIMIZED` is the only define that can follow the skip-variant records. `LIL_FEATURE_LTCGI` is intentionally absent from the 109-identifier R1 domain: official 2.3.4 emits it outside R1 at two forward-program positions. Any R1 occurrence is therefore both an unknown generator record and a forbidden standalone activator.
 
@@ -323,15 +321,15 @@ The standalone setting record must satisfy all of these rules:
 1. The material shader contains no R1 regions and no activator occurrence.
 2. The pass contains exactly two `HLSLINCLUDE` regions. Region 0 is empty because its next line is the valued `#define LIL_RENDER 0`. Region 1 contains the setting record.
 3. Every region-1 define has the exact trimmed form `#define <identifier>` and follows the fixed generator order above. No identifier appears twice.
-4. `LIL_FEATURE_Main2ndDissolveNoiseMask`, `LIL_FEATURE_Main3rdDissolveNoiseMask`, and `LIL_FEATURE_DissolveNoiseMask` are always present; upstream emits them unconditionally.
+4. `LIL_FEATURE_Main2ndDissolveNoiseMask`, `LIL_FEATURE_Main3rdDissolveNoiseMask`, and `LIL_FEATURE_DissolveNoiseMask` are always present. Upstream emits them unconditionally.
 5. `LIL_FEATURE_DECAL`, `LIL_FEATURE_ANIMATE_DECAL`, and `LIL_FEATURE_LAYER_DISSOLVE` require `LIL_FEATURE_MAIN2ND` or `LIL_FEATURE_MAIN3RD`.
 6. `LIL_FEATURE_RECEIVE_SHADOW`, `LIL_FEATURE_SHADOW_3RD`, and `LIL_FEATURE_SHADOW_LUT` require `LIL_FEATURE_SHADOW`.
 7. `LIL_FEATURE_ANIMATE_EMISSION_UV`, `LIL_FEATURE_ANIMATE_EMISSION_MASK_UV`, and `LIL_FEATURE_EMISSION_GRADATION` require `LIL_FEATURE_EMISSION_1ST` or `LIL_FEATURE_EMISSION_2ND`.
-8. `LIL_FEATURE_RIMLIGHT_DIRECTION` requires `LIL_FEATURE_RIMLIGHT`; `LIL_FEATURE_POM` requires `LIL_FEATURE_PARALLAX`; and `LIL_FEATURE_AUDIOLINK_VERTEX` and `LIL_FEATURE_AUDIOLINK_LOCAL` require `LIL_FEATURE_AUDIOLINK`.
+8. `LIL_FEATURE_RIMLIGHT_DIRECTION` requires `LIL_FEATURE_RIMLIGHT`. `LIL_FEATURE_POM` requires `LIL_FEATURE_PARALLAX`. `LIL_FEATURE_AUDIOLINK_VERTEX` and `LIL_FEATURE_AUDIOLINK_LOCAL` require `LIL_FEATURE_AUDIOLINK`.
 9. The two Light Volumes identifiers are mutually exclusive. The standalone profile additionally forbids the external form and `LIL_FEATURE_AUDIOLINK_PACKAGE`.
 10. The three exact skip-variant records follow all generator defines, in their fixed order. Their presence is the exact inverse of `LIL_FEATURE_REFLECTION`, `LIL_OPTIMIZE_USE_VERTEXLIGHT`, and `LIL_OPTIMIZE_USE_LIGHTMAP`, respectively.
 11. Optional `LIL_INPUT_OPTIMIZED` is last.
-12. No other record, empty bridge, malformed directive, duplicate, reordering, or additional token is accepted.
+12. No other record, empty bridge, malformed directive, duplicate, reordering, or additional token is valid.
 
 These checks characterize membership in the generator-emittable language without reconstructing HLSL preprocessing, lilToon's entire setting object, or the historical generator environment.
 
@@ -339,15 +337,15 @@ These checks characterize membership in the generator-emittable language without
 
 The exact acceptance property is:
 
-> A source pair is eligible for the standalone lilToon 2.3.4 profile only when the base source has no R1-removed record, the pass has the exact two-region structure above, the pass setting record is a valid official 2.3.4 generator record, and neither raw source defines `LIL_FEATURE_VRCLIGHTVOLUMES`, `LIL_FEATURE_AUDIOLINK_PACKAGE`, or `LIL_FEATURE_LTCGI` anywhere. It must then satisfy every existing name, GUID, version, package, include-tree, canonical digest, `LIL_RENDER`, and output-local semantic check.
+> A source pair is eligible for the standalone lilToon 2.3.4 profile only when the base source has no R1-removed record. The pass must have the exact two-region structure above. The pass setting record must be a valid official 2.3.4 generator record. Neither raw source may define `LIL_FEATURE_VRCLIGHTVOLUMES`, `LIL_FEATURE_AUDIOLINK_PACKAGE`, or `LIL_FEATURE_LTCGI` anywhere. The pair must then also satisfy every existing name, GUID, version, package, include-tree, canonical digest, `LIL_RENDER`, and output-local semantic check.
 
 The checks are conjunctive. A valid provenance record cannot compensate for a digest mismatch, and matching canonical pins cannot compensate for invalid provenance.
 
-Standalone profile validation runs after the cheap shader/version/package/pass identity checks and before digest acceptance and semantic interpretation. Failure behavior is:
+Standalone profile validation runs after the cheap shader, version, package, and pass identity checks. It runs before digest acceptance and semantic interpretation. Failure behavior is:
 
-- missing analysis record: `MissingSourceEvidence`;
-- any of the three known external activators: `UnsupportedShaderVariant`, naming the identifier;
-- unknown, malformed, duplicated, relocated, out-of-order, or structurally impossible R1 evidence: `ModifiedShaderSource`, naming canonicalization provenance for the relevant source.
+- missing analysis record → `MissingSourceEvidence`
+- any of the three known external activators → `UnsupportedShaderVariant`, naming the identifier
+- unknown, malformed, duplicated, relocated, out-of-order, or structurally impossible R1 evidence → `ModifiedShaderSource`, naming canonicalization provenance for the relevant source
 
 No diagnostic enum or logging subsystem is added.
 
@@ -357,12 +355,12 @@ The raw evidence shape does not encode "all integrations absent". It records exa
 
 A later characterized profile can reuse the same evidence by adding a concrete predicate such as:
 
-- LTCGI-only: exact base tag/digest, exactly two forward-position `LIL_FEATURE_LTCGI` occurrences, no R1 LTCGI occurrence, and AudioLink-package/external-Light-Volumes absent;
-- AudioLink: exact official R1 AudioLink-package occurrence at the generator slot and its attested external source/provenance closure;
-- external VRC Light Volumes: exact official R1 occurrence at the generator slot and its attested external source/provenance closure;
-- a characterized combination: the exact union of those activation facts plus every required external closure and earlier macro input.
+- LTCGI-only: exact base tag and digest, exactly two forward-position `LIL_FEATURE_LTCGI` occurrences, no R1 LTCGI occurrence, and AudioLink-package and external-Light-Volumes activators absent
+- AudioLink: exact official R1 AudioLink-package occurrence at the generator slot, and its attested external source and provenance closure
+- external VRC Light Volumes: exact official R1 occurrence at the generator slot, and its attested external source and provenance closure
+- a characterized combination: the exact union of those activation facts plus every required external closure and earlier macro input
 
-Those validators and source closures are not implemented now. No enum of future profiles, provider interface, registry, plugin API, or generalized dependency manager is introduced.
+This design does not implement those validators and source closures now. This branch introduces no enum of future profiles, provider interface, registry, plugin API, or generalized dependency manager.
 
 ## Data flow
 
@@ -384,70 +382,70 @@ existing output-local semantic interpretation
 
 ## Test design
 
-All production behavior is test-driven. Tests use synthetic public strings and exact token records; no upstream shader file or private fixture is copied into the repository.
+All production behavior is test-driven. Tests use synthetic public strings and exact token records. The tests copy no upstream shader file or private fixture into the repository.
 
 ### Positive characterization
 
-- the exact 103-record default standalone setting sequence, independently confirmed against genuine official 2.3.4 output on 2026-08-21, is accepted;
-- the exact 91-record stripped-settings sequence is accepted, including the corresponding existing R2 shadow-slot variation;
-- targeted positive witnesses cover default `LIL_FEATURE_PARALLAX` with its dependent `LIL_FEATURE_POM`, plus legitimate standalone records not exercised by the default state: `LIL_FEATURE_CLIPPING_CANCELLER` and `LIL_OPTIMIZE_USE_FORWARDADD_SHADOW`, all in exact generator order;
-- a legal `LIL_OPTIMIZE_USE_LIGHTMAP` state is accepted only with its exact inverse skip-variant behavior: enabling it removes `#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE`, while disabling it requires that pragma;
-- additional legitimate official subsets exercise `LIL_INPUT_OPTIMIZED` and bundled `LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE`;
-- canonical output for existing R1/R2/R3 cases remains byte-identical;
-- all three digest pin constants remain byte-identical;
+- the test accepts the exact 103-record default standalone setting sequence, independently confirmed against genuine official 2.3.4 output on 2026-08-21.
+- the test accepts the exact 91-record stripped-settings sequence, including the corresponding existing R2 shadow-slot variation.
+- targeted positive witnesses cover default `LIL_FEATURE_PARALLAX` with its dependent `LIL_FEATURE_POM`, plus legitimate standalone records not exercised by the default state: `LIL_FEATURE_CLIPPING_CANCELLER` and `LIL_OPTIMIZE_USE_FORWARDADD_SHADOW`, all in exact generator order.
+- the test accepts a legal `LIL_OPTIMIZE_USE_LIGHTMAP` state only with its exact inverse skip-variant behavior: enabling it removes `#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE`, and disabling it requires that pragma.
+- additional legitimate official subsets exercise `LIL_INPUT_OPTIMIZED` and bundled `LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE`.
+- canonical output for existing R1, R2, and R3 cases remains byte-identical.
+- all three digest pin constants remain byte-identical.
 - the existing BaseColor, Alpha, Emission, and Normal suites remain green.
 
-The 91-record sequence differs from default by the characterized setting changes: first/second Normal, first BumpMap source, first/second Emission, first EmissionMap source, shadow reception, outline shadow reception, and backlight are disabled; the three nested emission-control defines consequently disappear. The count falls by twelve. R2 separately removes the generated `SHADOW_VERY_HIGH` slot line. The genuine-package end-to-end witness corrected the earlier 102/90 count characterization to 103/91 because official default and stripped output both contain `LIL_FEATURE_POM`; the grammar and digest pins did not change.
+The 91-record sequence differs from the default sequence by these characterized setting changes: the first and second Normal, the first BumpMap source, the first and second Emission, the first EmissionMap source, shadow reception, outline shadow reception, and backlight are disabled. The three nested emission-control defines consequently disappear. The count falls by twelve. R2 separately removes the generated `SHADOW_VERY_HIGH` slot line. The genuine-package end-to-end witness corrected the earlier 102/90 count characterization to 103/91, because official default and stripped output both contain `LIL_FEATURE_POM`. The grammar and digest pins did not change.
 
 ### Negative characterization
 
-- each of `LIL_FEATURE_VRCLIGHTVOLUMES`, `LIL_FEATURE_AUDIOLINK_PACKAGE`, and `LIL_FEATURE_LTCGI` hidden in region 1 refuses;
-- a known external activator duplicated or moved to a different position in region 1 refuses;
-- an activator elsewhere in either raw source refuses, independent of the canonical digest result;
-- unknown `LIL_FEATURE_AMUSE_UNKNOWN` and `LIL_OPTIMIZE_AMUSE_UNKNOWN` records refuse;
-- an unknown or multi-keyword `skip_variants` record refuses;
-- a known internal token duplicated, reordered, placed in region 0, or given non-generator whitespace refuses;
-- each structural implication and each mandatory unconditional token is covered by a focused refusal test;
+- each of `LIL_FEATURE_VRCLIGHTVOLUMES`, `LIL_FEATURE_AUDIOLINK_PACKAGE`, and `LIL_FEATURE_LTCGI` hidden in region 1 refuses.
+- a known external activator duplicated or moved to a different position in region 1 refuses.
+- an activator elsewhere in either raw source refuses, independent of the canonical digest result.
+- unknown `LIL_FEATURE_AMUSE_UNKNOWN` and `LIL_OPTIMIZE_AMUSE_UNKNOWN` records refuse.
+- an unknown or multi-keyword `skip_variants` record refuses.
+- a known internal token duplicated, reordered, placed in region 0, or given non-generator whitespace refuses.
+- a focused refusal test covers each structural implication and each mandatory unconditional token.
 - a missing provenance record refuses as missing source evidence.
 
-At least one test for every hidden known/unknown witness first asserts:
+At least one test for every hidden known or unknown witness first asserts:
 
 ```csharp
 Assert.That(mutated.CanonicalSource, Is.EqualTo(clean.CanonicalSource));
 ```
 
-and then proves that the mutated provenance causes `TryVerifyLilToonIdentity` to return false while all existing pin fields remain valid. This explicitly demonstrates the old false-positive hole rather than merely testing a new helper in isolation.
+The same test then proves that the mutated provenance causes `TryVerifyLilToonIdentity` to return false, while all existing pin fields remain valid. This explicitly demonstrates the old false-positive hole rather than merely testing a new helper in isolation.
 
-Existing wrong-version, wrong-identity/GUID, modified canonical source, modified include tree, redirected include, derivative/custom shader, differently named variant, and unknown-shader tests remain unchanged.
+Existing tests for wrong version, wrong identity or GUID, modified canonical source, modified include tree, redirected include, derivative or custom shader, differently named variant, and unknown shader remain unchanged.
 
 ## Expected implementation files
 
-Production implementation is expected to modify only:
+This design expects production implementation to modify only:
 
 - `Packages/com.alrauna.amuse/Editor/Semantics/LilToon/LilToonSourceAttestation.cs`
 - `Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/LilToonAttestationTests.cs`
 
-No new Unity asset is required, so no `.meta` change is expected. `LilToonMaterialSemantics.cs`, `UnityMaterialSemantics.cs`, package metadata, census code, and semantic tests should remain untouched unless implementation reveals a contradiction and returns to review.
+No new Unity asset is required. Thus no `.meta` change is expected. `LilToonMaterialSemantics.cs`, `UnityMaterialSemantics.cs`, package metadata, census code, and semantic tests should remain untouched unless implementation reveals a contradiction and returns to review.
 
 ## Validation
 
 Implementation validation will require:
 
-1. focused `LilToonAttestationTests` red/green cycles;
-2. the complete lilToon semantic test set;
-3. the complete public EditMode suite;
-4. inspection of unstaged and staged diffs;
-5. confirmation that the three existing pins are unchanged;
-6. confirmation that no host-specific Unity toolchain/sysroot churn is included.
+1. focused `LilToonAttestationTests` red/green cycles
+2. the complete lilToon semantic test set
+3. the complete public EditMode suite
+4. inspection of unstaged and staged diffs
+5. confirmation that the three existing pins are unchanged
+6. confirmation that no host-specific Unity toolchain and sysroot churn is included
 
-Before any Unity result is reported, the public instance must be selected by exact normalized `Application.dataPath == <repo-root>/Assets`. The Census Lab is not required and must not be modified.
+Before reporting any Unity result, the agent must select the public instance by exact normalized `Application.dataPath == <repo-root>/Assets`. The Census Lab is not required. The implementer must not modify it.
 
 ## Risks and explicit assumptions
 
-- The 109-identifier domain and grouping rules are pinned to official lilToon 2.3.4. A later upstream version must be separately characterized.
+- The 109-identifier domain and grouping rules are pinned to official lilToon 2.3.4. The team must characterize a later upstream version separately.
 - The setting record validation intentionally produces false negatives for modified generators, even when their output would be semantically harmless.
-- Exact trimmed directive forms are part of provenance. A third-party writer that reformats an otherwise equivalent line is not official generator output and refuses.
-- Existing filesystem atomicity/TOCTOU assumptions are unchanged. This branch does not invent NDMF snapshot ordering.
+- Exact trimmed directive forms are part of provenance. A third-party writer that reformats an otherwise equivalent line does not produce official generator output. That line refuses.
+- Existing filesystem atomicity and TOCTOU assumptions are unchanged. This branch does not invent NDMF snapshot ordering.
 - SHA-256 collision resistance remains an existing cryptographic assumption.
 
 ## Evidence anchors
@@ -464,12 +462,12 @@ Before any Unity result is reported, the public instance must be selected by exa
 
 ## Out of scope
 
-- positive LTCGI, AudioLink package, or external VRC Light Volumes support;
-- external integration source-closure characterization;
-- arbitrary custom shader or VRCFury derivative support;
-- a generic integration/profile/provider framework;
-- a general HLSL parser or preprocessor;
-- NDMF pass ordering or an AMUSE NDMF plugin;
-- census schema, aggregation, or runner changes;
-- Poiyomi, MissingTextureEvidence, or unrelated cleanup;
-- changing canonical pins or weakening existing refusals.
+- positive LTCGI, AudioLink package, or external VRC Light Volumes support
+- external integration source-closure characterization
+- arbitrary custom shader or VRCFury derivative support
+- a generic integration, profile, or provider framework
+- a general HLSL parser or preprocessor
+- NDMF pass ordering or an AMUSE NDMF plugin
+- census schema, aggregation, or runner changes
+- Poiyomi, MissingTextureEvidence, or unrelated cleanup
+- changing canonical pins or weakening existing refusals

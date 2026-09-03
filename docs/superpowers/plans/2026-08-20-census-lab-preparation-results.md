@@ -5,40 +5,33 @@ Date: 2026-08-20
 Plan: `docs/superpowers/plans/2026-08-20-census-lab-preparation.md`
 Design: `docs/superpowers/specs/2026-08-20-census-lab-preparation-design.md`
 
-Everything below was observed. Nothing is inferred, and where a prediction was wrong the
-prediction is stated alongside what replaced it.
+Everything below was observed. Nothing is inferred. When a prediction was wrong, this document states the prediction and what replaced it.
 
 ## 1. The decisive answer
 
-**`ProvenOpaque` is reachable through AMUSE's production analysis path.** A census may
-proceed, on Poiyomi content, in this environment.
+**`ProvenOpaque` is reachable through AMUSE's production analysis path.** A census may proceed on Poiyomi content in this environment.
 
-`MustRemainTransparent` is reachable too. `MissingTextureEvidence` is **not**, by the route
-tried, and lilToon reaches nothing at all. Both are recorded below as findings rather than
-fixed.
+`MustRemainTransparent` is also reachable. The tried route does **not** reach `MissingTextureEvidence`, and lilToon reaches nothing. The findings below record both results without fixes.
 
 ## 2. Environment
 
-Both Unity instances were identified by `Application.dataPath`, normalized and compared
-exactly, before any run whose result is reported here.
+Before each reported run, we identified both Unity instances by `Application.dataPath`. We normalized and compared each path exactly.
 
 | | Public development project | Census Lab |
 |---|---|---|
 | `Application.dataPath` | `<repo-root>/Assets` — exact, same-case match | not `<repo-root>/Assets` |
-| MCP instance | `AMUSE@d5617927`, port 6402 | `AMUSE-Census-Lab@13495ff7`, port 6400 |
+| MCP instance | the public development instance | the private Census Lab instance |
 | Unity | 2022.3.22f1 | 2022.3.22f1 |
 | Poiyomi | absent | `com.poiyomi.toon` **9.3.64** |
 | lilToon | absent | `jp.lilxyzw.liltoon` **2.3.4** |
 
-Both installed vendor versions match AMUSE's pins exactly, so gate case 1 passes and every
-observation below is about AMUSE rather than about a version mismatch.
+Both installed vendor versions exactly match AMUSE's pins. Therefore, gate case 1 passes. Every observation below concerns AMUSE, not a version mismatch.
 
 ## 3. Gate results
 
-Ten tests. **Lab: 10 passed, 0 failed, 0 skipped.** **Public project: 812 passed, 0 failed,
-0 skipped**, from an 802 baseline measured before any change on this branch.
+Ten tests ran. **Lab: 10 passed, 0 failed, 0 skipped.** **Public project: 812 passed, 0 failed, 0 skipped.** The baseline was 802 before any change on this branch.
 
-Case 6 reported, in the Lab:
+Case 6 gave this report in the Lab:
 
 > `VENDOR REACHABILITY EXERCISED for: com.poiyomi.toon 9.3.64, jp.lilxyzw.liltoon 2.3.4`
 
@@ -50,8 +43,7 @@ and in the public project:
 
 ## 4. What the production path actually returns
 
-Measured in the Lab through `RendererObservationBuilder.Build(renderer, path, families)` —
-the production overload, no semantics provider — on a one-triangle mesh with one material.
+We measured these results in the Lab through `RendererObservationBuilder.Build(renderer, path, families)`. This is the production overload without a semantics provider. We used a one-triangle mesh with one material.
 
 ### 4.1 Poiyomi 9.3.64, shader `.poiyomi/Poiyomi Toon`
 
@@ -79,131 +71,79 @@ the production overload, no semantics provider — on a one-triangle mesh with o
 
 ## 5. Predictions that were wrong
 
-Four, all recorded rather than coded around. This is why the design required characterization
-instead of prediction; every one of these would have been a false assertion shipped as a gate.
+Four predictions were wrong. We recorded all four instead of coding around them. This is why the design required characterization instead of prediction. Each prediction could have become a false assertion shipped as a gate.
 
 ### 5.1 `_Color` alpha does not drive Poiyomi's alpha
 
-**Predicted:** setting `_Color.a` below 1 reaches `MustRemainTransparent`.
-**Observed:** it changes nothing; the material still proves opaque.
+**Predicted:** Setting `_Color.a` below 1 reaches `MustRemainTransparent`.
+**Observed:** It changes nothing. The material still proves opaque.
 
-**Cause,** read from source after observing: `PoiyomiMaterialSemantics.InterpretAlpha` checks
-`_AlphaForceOpaque` first and returns `Constant(1f)` immediately when it is set. It defaults
-to **1** on a fresh material. Colour alpha is never consulted.
+**Cause:** Source review after the observation showed that `PoiyomiMaterialSemantics.InterpretAlpha` checks `_AlphaForceOpaque` first. It immediately returns `Constant(1f)` when that property is set. The property defaults to **1** on a fresh material. The code never checks colour alpha.
 
-This is correct behaviour, not a defect: a forced-opaque material is opaque. It does mean the
-naive gate would have passed *without ever running the alpha equation* — a green result
-proving less than it appeared to.
+This behavior is correct, not a defect. A forced-opaque material is opaque. However, the naive gate would have passed without ever running the alpha equation. This green result would prove less than it appeared to prove.
 
-**Replaced by:** `PoiyomiReachesProvenOpaqueThroughTheProductionPath`, which asserts both the
-forced-opaque path and the computed path with the force flag off, so the equation actually
-runs.
+**Replaced by:** `PoiyomiReachesProvenOpaqueThroughTheProductionPath` asserts both the forced-opaque path and the computed path with the force flag off. Thus, the equation runs.
 
 ### 5.2 One alpha gate is non-zero by default
 
-**Observed:** of AMUSE's 28 alpha gates (5 coverage, 23 feature), exactly one is non-zero on
-an untouched Poiyomi material: **`_MainAlphaMaskMode = 2`**. Every other gate defaults to 0.
+**Observed:** Of AMUSE's 28 alpha gates (5 coverage, 23 feature), exactly one is non-zero on an untouched Poiyomi material: **`_MainAlphaMaskMode = 2`**. Every other gate defaults to 0.
 
-So reaching the real alpha equation needs exactly two property writes — `_AlphaForceOpaque=0`
-and `_MainAlphaMaskMode=0` — not the 28-property scrub first attempted. The test sets those
-two and explains why, rather than duplicating AMUSE's private gate list.
+Thus, the real alpha equation needs exactly two property writes: `_AlphaForceOpaque=0` and `_MainAlphaMaskMode=0`. It does not need the 28-property scrub first attempted. The test sets those two and explains why. It does not duplicate AMUSE's private gate list.
 
 ### 5.3 `MissingTextureEvidence` is not reachable this way
 
-**Predicted:** a runtime `Texture2D` in `_MainTex` yields `MissingTextureEvidence`.
-**Observed:** `SemanticsUnknown`, with the shader still attested as Poiyomi.
+**Predicted:** A runtime `Texture2D` in `_MainTex` yields `MissingTextureEvidence`.
+**Observed:** It yields `SemanticsUnknown`, while the shader remains attested as Poiyomi.
 
-**Cause:** a runtime texture is not a project asset, so it has no `TextureImporter`, and
-Poiyomi's own `InterpretAlpha` requires that import evidence to build a texture sample at
-all. It returns `Unknown` at the *semantics* layer, so `AlphaSemanticsResolver` never runs
-and never gets to report `MissingTextureEvidence`.
+**Cause:** A runtime texture is not a project asset, so it has no `TextureImporter`. Poiyomi's own `InterpretAlpha` requires that import evidence before it can build any texture sample. It returns `Unknown` at the *semantics* layer. Therefore, `AlphaSemanticsResolver` never runs and cannot report `MissingTextureEvidence`.
 
-**Consequence, and it is a real gap:** production reachability of `MissingTextureEvidence`
-is **unproven**. `CollectorSeamCountingTests` proves the census *counts* it correctly when it
-occurs; nothing yet proves AMUSE *produces* it from a real material. Reaching it plausibly
-requires a texture that **is** a project asset — so the adapter can read its filter, wrap,
-and importer — whose alpha field the resolver still cannot supply.
+**Consequence, which is a real gap:** Production reachability of `MissingTextureEvidence` is **unproven**. `CollectorSeamCountingTests` proves that the census *counts* it correctly when it occurs. However, nothing yet proves that AMUSE *produces* it from a real material. A plausible route requires a texture that **is** a project asset. The adapter can then read its filter, wrap, and importer. However, the resolver still cannot supply its alpha field.
 
-**Replaced by:** `ANonAssetTextureIsRefusedBySemanticsBeforeTheResolverSeesIt`, which asserts
-the observed `SemanticsUnknown` and carries the gap in its doc-comment, with a message that
-tells a future reader the gap has closed if the assertion ever starts failing.
+**Replaced by:** `ANonAssetTextureIsRefusedBySemanticsBeforeTheResolverSeesIt` asserts the observed `SemanticsUnknown`. Its doc-comment records the gap. Its message tells a future reader that the gap has closed if the assertion starts failing.
 
 ### 5.4 lilToon is not attested at all
 
-**Predicted:** lilToon behaves like Poiyomi, since the Lab has exactly the pinned 2.3.4.
-**Observed:** no lilToon material is attested in any configuration tried. Every one reports
-`SemanticsUnknown` with `ShaderFamilyAttestation.None`.
+**Predicted:** lilToon behaves like Poiyomi because the Lab has exactly the pinned 2.3.4.
+**Observed:** No tried configuration attests a lilToon material. Each material reports `SemanticsUnknown` with `ShaderFamilyAttestation.None`.
 
-**Likely cause,** stated as a hypothesis and not verified: lilToon regenerates its shader
-assets from per-project settings, and `LilToonSourceAttestation` digests those generated
-assets. The Lab carries a `ProjectSettings/lilToonSetting.json` dated well before this work,
-so its generated shaders can legitimately differ from the pinned digests. Confirming this
-would mean tracing the digest computation against this install, which is out of scope here.
+**Likely cause:** This cause is a hypothesis and is not verified. lilToon regenerates its shader assets from per-project settings. `LilToonSourceAttestation` digests those generated assets. The Lab has a `ProjectSettings/lilToonSetting.json` dated well before this work. Therefore, its generated shaders can legitimately differ from the pinned digests. Confirmation requires tracing the digest computation against this install, which is out of scope here.
 
-**Replaced by:** `LilToonIsNotAttestedInThisEnvironmentDespiteMatchingItsPin`, which asserts
-the observed state and says in its message that if it ever fails, that is good news and it
-should become a positive reachability assertion.
+**Replaced by:** `LilToonIsNotAttestedInThisEnvironmentDespiteMatchingItsPin` asserts the observed state. Its message says that failure is good news and should cause conversion to a positive reachability assertion.
 
-**This is the most consequential finding for census interpretation.** A census run in this
-environment measures **zero lilToon coverage**, and that is a statement about AMUSE in this
-environment, not about any avatar. lilToon is one of the two most common VRChat avatar shader
-families; a census reporting it as unsupported would badly misdirect the roadmap.
+**This is the most consequential finding for census interpretation.** A census in this environment measures **zero lilToon coverage**. This result describes AMUSE in this environment, not any avatar. lilToon is one of the two most common VRChat avatar shader families. A census that reports it as unsupported would badly misdirect the roadmap.
 
 ## 6. The deferred investigation now has evidence
 
-The design's §6 recorded, from source alone, that the census cannot distinguish an unknown
-shader family from a supported-but-locked vendor material. That is now **observed**, not
-argued:
+From source alone, the design's §6 recorded that the census cannot distinguish two cases. These cases are an unknown shader family and a supported-but-locked vendor material. The observations now confirm this result:
 
 - a locked Poiyomi material reports `AlphaFailure = SemanticsUnknown` and
   `ShaderFamilyAttestation = None`;
 - an untouched lilToon material reports **exactly the same pair**.
 
-Two completely different situations — a supported shader whose material is locked, and a
-supported shader whose install AMUSE cannot attest — are byte-identical in the census record,
-and a genuinely unknown third-party shader would be identical again.
+These situations are completely different. One is a supported shader with a locked material. The other is a supported shader whose install AMUSE cannot attest. However, they are byte-identical in the census record. A genuinely unknown third-party shader would also be identical.
 
-Both tests assert the attestation value specifically, so the indistinguishability is pinned
-rather than described.
+Both tests specifically assert the attestation value. Thus, the tests pin the indistinguishability instead of only describing it.
 
-**Nothing was implemented and no attestation behaviour was changed.** The rule for reading
-any future census stands, and is now evidenced: *the unattested-family share is an upper
-bound on unsupported shader families, never a measurement of them.*
+**We implemented nothing and changed no attestation behaviour.** The rule for reading any future census still applies and now has evidence. *The unattested-family share is an upper bound on unsupported shader families, never a measurement of them.*
 
-One refinement the data supports: `ShaderFamilyAttestation` **does** separate a third case —
-`_AlphaForceOpaque=0` with default gates gives `SemanticsUnknown` while attestation stays
-`Poiyomi`. So "attested shader, unsupported alpha feature" is already distinguishable in the
-existing record from "unattested anything". No new category is needed for that split.
+The data supports one refinement. `ShaderFamilyAttestation` **does** separate a third case. `_AlphaForceOpaque=0` with default gates gives `SemanticsUnknown`, while attestation stays `Poiyomi`. Thus, the existing record distinguishes "attested shader, unsupported alpha feature" from "unattested anything". This split needs no new category.
 
 ## 7. Lab mutation
 
-**Authorized and performed:** one change to the Lab's `Packages/manifest.json` — the
-`com.alrauna.amuse.research` local `file:` reference, derived from the existing
-`com.alrauna.amuse` entry rather than copied from any document, plus a `testables` array so
-the Test Framework discovers tests in a non-embedded local package. The complete diff is two
-hunks and nothing else.
+**Authorized and performed:** We made one change to the Lab's `Packages/manifest.json`. We added the `com.alrauna.amuse.research` local `file:` reference and a `testables` array. We derived the reference from the existing `com.alrauna.amuse` entry, not from any document. The array lets the Test Framework discover tests in a non-embedded local package. The complete diff has two hunks and nothing else.
 
-`Packages/packages-lock.json` changed as a consequence of the resolve. Expected, and stated in
-the plan.
+`Packages/packages-lock.json` changed because of the resolve. The plan expected and stated this change.
 
 **Verified unchanged after the run:**
 
-- `Assets/` tree byte-identical to the pre-run inspection — the same LTCGI gizmo, LTCGI shader
-  include, and `csc.rsp`;
+- `Assets/` tree byte-identical to the pre-run inspection. It contained the same LTCGI gizmo, LTCGI shader include, and `csc.rsp`;
 - **zero shaders under `Assets/`**, so Poiyomi's locker never ran;
 - zero assets matching the gate's naming;
 - no scene open, no scene dirty, never in Play Mode.
 
-**One thing I could not verify, stated plainly:** `ProjectSettings/ProjectSettings.asset` was
-written during the session, at 22:38:30, around the final gate run. It contains no reference
-to this work — only the pre-existing `productName` and VRChat define symbols — so there is no
-evidence of a substantive change, and Unity writes this file routinely on domain reload.
-**But I cannot prove its content is unchanged, because no baseline existed to compare against.**
+**One thing I could not verify:** Unity wrote `ProjectSettings/ProjectSettings.asset` during the session at 22:38:30, around the final gate run. It contains no reference to this work. It contains only the pre-existing `productName` and VRChat define symbols. Therefore, there is no evidence of a substantive change. Unity also routinely writes this file on domain reload. **However, I cannot prove that its content is unchanged because no baseline existed for comparison.**
 
-That is a direct consequence of design decision §3.2 (the Lab is not a repository), and it is
-exactly the hole the design's §8 assigns to the unbuilt Layer 3 asset manifest. This run is a
-concrete argument for building it before real avatars are involved: "was the Lab mutated?"
-must be answerable after the fact, and today it is not.
+That gap directly results from design decision §3.2, which states that the Lab is not a repository. It is exactly the gap that design §8 assigns to the unbuilt Layer 3 asset manifest. This run gives a concrete reason to build it before real avatars are involved. "Was the Lab mutated?" must be answerable after the fact. Today, it is not.
 
 ## 8. Validation summary
 
@@ -222,19 +162,13 @@ must be answerable after the fact, and today it is not.
 | New census categories, fields, or schema changes | **none** |
 | Fixture assets committed | **none** — every material and mesh is built in memory |
 
-The version-pin assertion was proved non-vacuous rather than assumed: pointing the probe's
-Poiyomi arm at `"Standard"` made it fail with `Expected: "9.3.64" But was: null`, and the
-probe was reverted to a byte-identical file.
+We proved that the version-pin assertion was non-vacuous instead of assuming it. Pointing the probe's Poiyomi arm at `"Standard"` made it fail with `Expected: "9.3.64" But was: null`. We then reverted the probe to a byte-identical file.
 
-Unity host-toolchain churn (`com.unity.toolchain.macos-arm64-linux-x86_64` plus its
-`com.unity.sysroot*` dependencies) reappeared in `Packages/manifest.json` and
-`Packages/packages-lock.json` on **every** Unity reconnect during this branch. Each time the
-full diff was inspected, found to contain nothing but those generated entries, and restored
-per AGENTS.md. None of it was ever staged.
+Unity host-toolchain churn (`com.unity.toolchain.macos-arm64-linux-x86_64` plus its `com.unity.sysroot*` dependencies) reappeared in `Packages/manifest.json` and `Packages/packages-lock.json`. This occurred on **every** Unity reconnect during this branch. Each time, we inspected the full diff and found only those generated entries. We restored them according to AGENTS.md. None of them was ever staged.
 
 ## 9. What a census still needs
 
-Unchanged from the design's §8, plus what this run added:
+The gaps from design §8 remain unchanged. This run added more gaps:
 
 | Gap | Status |
 |---|---|
@@ -247,6 +181,4 @@ Unchanged from the design's §8, plus what this run added:
 | **lilToon attestation in a real install** | **New. Blocks meaningful lilToon coverage** |
 | **Production reachability of `MissingTextureEvidence`** | **New. Unproven** |
 
-The last two are the ones a census cannot honestly ignore. lilToon especially: with it
-unattested, a census over real avatars would report a large unsupported share that says more
-about AMUSE's lilToon adapter than about the avatars measured.
+A census cannot honestly ignore the last two gaps. lilToon is especially important. Without attestation, a census over real avatars would report a large unsupported share. That result says more about AMUSE's lilToon adapter than about the measured avatars.
