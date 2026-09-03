@@ -212,7 +212,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// <paramref name="poiyomiConversion"/> and
         /// <paramref name="lilToonConversion"/> are the fourth and fifth
         /// public-fixture seams. A null value means "run the real
-        /// <c>PoiyomiOpaqueConversion</c> resp. <c>LilToonOpaqueConversion</c>
+        /// <c>PoiyomiOpaqueConversion</c> resp. <c>LilToonOpaqueTarget</c>
         /// path", which is what production does; the three other delegates
         /// keep their guards because their null is a caller defect, while
         /// these two's null is meaningful.

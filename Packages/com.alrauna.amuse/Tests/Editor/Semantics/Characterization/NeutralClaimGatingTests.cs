@@ -237,4 +237,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                 $"Normal claimed Unmodified with normal writer '{gate}' enabled.");
         }
     }
+
+    public sealed class LilToonTransparentNeutralClaimGatingTests
+        : LilToonFixtureTestBase
+    {
+        // Full reviewed list. _UseDither is deliberately absent: it is
+        // compiled out at LIL_RENDER 2 and is not a gate on this family.
+        private static readonly string[] AlphaCoverageGates =
+        {
+            "_Invisible",
+            "_UDIMDiscardCompile",
+            "_UDIMDiscardMode",
+            "_ShiftBackfaceUV",
+            "_UseParallax",
+            "_UseMain2ndTex",
+            "_UseMain3rdTex",
+            "_AlphaMaskMode",
+            "_IDMask1", "_IDMask2", "_IDMask3", "_IDMask4",
+            "_IDMask5", "_IDMask6", "_IDMask7", "_IDMask8",
+            "_IDMaskControlsDissolve",
+        };
+
+        [Test]
+        public void Alpha_NoMainTex_CoverageGateEnabled_IsNotClaimed(
+            [ValueSource(nameof(AlphaCoverageGates))] string gate)
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetFloat(gate, 1f);
+
+            var result = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(
+                result.Semantics.Alpha.IsComplete,
+                Is.False,
+                gate + ": an enabled coverage writer must block the claim " +
+                "even with no _MainTex assigned");
+        }
+    }
 }

@@ -247,10 +247,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The real extension-free barrier through the public-fixture seams.
-        /// The conversion delegate defaults to the verified seam; a test that
-        /// must substitute a different conversion boundary — e.g. an identity
-        /// mapping — arms <see cref="ConversionOverride"/> for the duration
-        /// of its build, the same way <see cref="SpecialClipNames"/> works.
+        /// The conversion delegate defaults to the family-routing verified
+        /// seam; a test that must substitute a different conversion
+        /// boundary — e.g. an identity mapping — arms
+        /// <see cref="ConversionOverride"/> for the duration of its build,
+        /// the same way <see cref="SpecialClipNames"/> works.
         /// </summary>
         private static void BarrierPass(BuildContext context)
         {
@@ -262,7 +263,37 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VerifiedLilToonTestSeams.VerifiedAlphaOnly,
                 ConversionOverride ??
                     VerifiedPoiyomiTestSeams.VerifiedConversion,
-                VerifiedLilToonTestSeams.VerifiedConversion);
+                VerifiedFamilyConversion);
+        }
+
+        /// <summary>
+        /// Routes the family-agnostic lilToon conversion seam parameter to
+        /// the family-specific verified seam function by fixture shader
+        /// reference: the transparent stand-in to
+        /// <see cref="VerifiedLilToonTestSeams.VerifiedTransparentConversionStep"/>,
+        /// everything else — the cutout stand-in first of all — to
+        /// <see cref="VerifiedLilToonTestSeams.VerifiedConversion"/>, whose
+        /// behavior for those materials is exactly what every pre-existing
+        /// expectation here was written against.
+        /// </summary>
+        private static bool VerifiedFamilyConversion(
+            Material live,
+            CapturedMaterialEvidence derived,
+            Material preparedOpaque,
+            out Material opaque,
+            out LilToonOpaqueConversionRefusal refusal)
+        {
+            if (live != null && live.shader == Shader.Find(
+                    LilToonConversionShaderNames.Transparent))
+            {
+                return VerifiedLilToonTestSeams
+                    .VerifiedTransparentConversionStep(
+                        live, derived, preparedOpaque,
+                        out opaque, out refusal);
+            }
+
+            return VerifiedLilToonTestSeams.VerifiedConversion(
+                live, derived, preparedOpaque, out opaque, out refusal);
         }
 
         private static VerifiedPoiyomiConversion ConversionOverride
@@ -2140,6 +2171,401 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Row 21 — regression parity with a transparent sibling. Two real
+        /// builds through the full lifecycle: a control avatar carrying
+        /// exactly the pre-existing cutout-split and Poiyomi fixtures, and
+        /// a sibling avatar carrying the same two fixtures plus one
+        /// transparent conversion renderer. Every observable of the
+        /// cutout and Poiyomi paths must be byte-identical across the two
+        /// builds — clone facts (shader, queue, RenderType, every
+        /// shader-declared float), retention names, the rewritten
+        /// appended curve, the mesh indices, the applied counts — and the
+        /// transparent sibling must convert onto the same canonical
+        /// recipe beside them.
+        /// <para>
+        /// Falsifies a shared or widened request object: the transparent
+        /// family's capture and conversion requests join the renderer
+        /// unions in the sibling build, so any leakage into the cutout or
+        /// Poiyomi evidence, gates, or results shows up as a digest
+        /// difference here. Cross-build identity is asserted through
+        /// observable facts only, never object references.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TransparentSiblingKeepsPoiyomiAndCutoutResultsByteIdentical()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var control = new TransparentParityResult();
+                    control.Build(
+                        fixtures, withTransparentSibling: false);
+                    TransparentParityResult sibling = null;
+                    try
+                    {
+                        sibling = new TransparentParityResult();
+                        sibling.Build(
+                            fixtures, withTransparentSibling: true);
+
+                        // The cutout path: byte-identical clone facts,
+                        // retention name, curve rewrite, mesh split and
+                        // applied accounting with the transparent sibling
+                        // present.
+                        Assert.That(sibling.CutoutCloneFacts,
+                            Is.EqualTo(control.CutoutCloneFacts),
+                            "the cutout clone must be byte-identical to " +
+                            "its pre-existing expectation when a " +
+                            "transparent sibling converts beside it");
+                        Assert.That(sibling.CutoutCloneName,
+                            Is.EqualTo(control.CutoutCloneName),
+                            "the cutout clone's retention name must not " +
+                            "shift when the transparent renderer registers " +
+                            "after it");
+                        Assert.That(sibling.CutoutAppendedCurve,
+                            Is.EqualTo(control.CutoutAppendedCurve),
+                            "the appended curve must carry identical " +
+                            "keyframe times and mapping in both builds");
+                        Assert.That(sibling.CutoutMeshIndices,
+                            Is.EqualTo(control.CutoutMeshIndices),
+                            "the split submesh and appended submesh must " +
+                            "carry identical index buffers in both builds");
+                        Assert.That(sibling.CutoutOwnCurve,
+                            Is.EqualTo(control.CutoutOwnCurve),
+                            "the split slot's authored curve must stay " +
+                            "untouched in both builds");
+
+                        // The Poiyomi path: byte-identical clone facts and
+                        // in-place replacement.
+                        Assert.That(sibling.PoiyomiCloneFacts,
+                            Is.EqualTo(control.PoiyomiCloneFacts),
+                            "the Poiyomi clone must be byte-identical to " +
+                            "its pre-existing expectation when a " +
+                            "transparent sibling converts beside it");
+                        Assert.That(sibling.PoiyomiName,
+                            Is.EqualTo(control.PoiyomiName));
+                        Assert.That(sibling.AppliedRendererCount,
+                            Is.EqualTo(control.AppliedRendererCount + 1),
+                            "only the transparent renderer may add to the " +
+                            "applied accounting");
+                        Assert.That(sibling.AppliedOpaqueTriangleCount,
+                            Is.EqualTo(control.AppliedOpaqueTriangleCount + 1),
+                            "only the transparent triangle may add to the " +
+                            "applied opaque accounting");
+
+                        // The transparent sibling itself: converted onto
+                        // the canonical opaque recipe beside the siblings.
+                        Assert.That(
+                            sibling.State.Separation.TryGetOpaque(
+                                sibling.TransparentMaterial,
+                                out var transparentClone),
+                            Is.True,
+                            "fixture precondition: the transparent " +
+                            "sibling must convert, or the parity proof " +
+                            "runs beside nothing");
+                        AssertCanonicalOpaqueRecipe(transparentClone);
+                        Assert.That(
+                            sibling.State.Separation.CreatedClones,
+                            Has.Count.EqualTo(3),
+                            "the cutout source, the Poiyomi source and " +
+                            "the transparent source must each clone once");
+                    }
+                    finally
+                    {
+                        if (sibling != null)
+                        {
+                            sibling.Dispose();
+                        }
+                    }
+
+                    control.Dispose();
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// One full-build parity fixture: a cutout split renderer with a
+        /// swap clip (the appended-slot fixture), a Poiyomi verified-opaque
+        /// renderer, and — in the sibling variant — a transparent
+        /// conversion renderer last, so registration order keeps the
+        /// control artifacts' retention names stable.
+        /// </summary>
+        private sealed class TransparentParityResult : IDisposable
+        {
+            private readonly List<UnityEngine.Object> owned =
+                new List<UnityEngine.Object>();
+
+            private GameObject root;
+            private AnimationClip clip;
+            private AnimatorController controller;
+            private AmusePlatformFinishState state;
+
+            internal AmusePlatformFinishState State => state;
+            internal Material TransparentMaterial { get; private set; }
+            internal string CutoutCloneFacts { get; private set; }
+            internal string CutoutCloneName { get; private set; }
+            internal string CutoutAppendedCurve { get; private set; }
+            internal string CutoutMeshIndices { get; private set; }
+            internal string CutoutOwnCurve { get; private set; }
+            internal string PoiyomiCloneFacts { get; private set; }
+            internal string PoiyomiName { get; private set; }
+            internal int AppliedRendererCount { get; private set; }
+            internal int AppliedOpaqueTriangleCount { get; private set; }
+
+            private T Own<T>(T obj) where T : UnityEngine.Object
+            {
+                if (obj != null)
+                {
+                    owned.Add(obj);
+                }
+
+                return obj;
+            }
+
+            internal void Build(
+                LilToonCutoutConversionFixtures fixtures,
+                bool withTransparentSibling)
+            {
+                root = new GameObject(
+                    "AMUSE transparent parity " +
+                    (withTransparentSibling ? "sibling" : "control"));
+                try
+                {
+                    // The cutout + Poiyomi fixture: exactly the proven
+                    // full-artifact shape — one renderer whose slot 0 is a
+                    // Poiyomi verified-opaque whole slot and whose slot 1
+                    // is a cutout split slot with a swap clip — so the
+                    // control expectations are the pre-existing ones.
+                    var splitTexture =
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "parity_split_" +
+                            (withTransparentSibling ? "sibling" : "control"));
+                    var cutout = Own(
+                        NewCutoutSplitMaterial(splitTexture));
+                    var swap = Own(
+                        LilToonFixtureTestBase.CreateVerifiedMaterial());
+                    var poiyomi = Own(VerifiedOpaqueMaterial());
+
+                    var sourceMesh = Own(
+                        AlphaSeparationSplitTests
+                            .CreateOpaqueAndSplitSourceMesh());
+                    var cutoutRenderer = AddRenderer(
+                        root, "cutoutBody", sourceMesh, poiyomi, cutout);
+
+                    clip = Own(NewSwapClip(
+                        "AMUSE parity swap", "cutoutBody", 1,
+                        (0f, cutout), (1f, swap)));
+                    controller = Own(NewController(
+                        root, "AMUSE parity graph", clip));
+
+                    if (withTransparentSibling)
+                    {
+                        var transparent = Own(
+                            NewTransparentConversionMaterial(
+                                fixtures.ImportFullyOpaqueMipmap(
+                                    "parity_transparent")));
+                        var transparentMesh = Own(SingleTriangleMesh());
+                        transparentMesh.uv = new[]
+                        {
+                            new Vector2(0.25f, 0.25f),
+                            new Vector2(0.75f, 0.25f),
+                            new Vector2(0.25f, 0.75f),
+                        };
+
+                        // Added last, so registration order keeps the
+                        // control artifacts' retention names stable.
+                        AddRenderer(
+                            root, "transparentBody",
+                            transparentMesh, transparent);
+                        TransparentMaterial = transparent;
+                    }
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(context.Successful, Is.True,
+                        "fixture precondition: the build must complete");
+                    Assert.That(state.Separation, Is.Not.Null);
+                    AssertNoFeatureRefusals(state);
+
+                    var cutoutClone =
+                        state.Separation.OpaqueBySource[cutout];
+                    var poiClone =
+                        state.Separation.OpaqueBySource[poiyomi];
+                    CutoutCloneFacts =
+                        DigestMaterialWithoutTextures(cutoutClone);
+                    CutoutCloneName = cutoutClone.name;
+                    PoiyomiCloneFacts =
+                        DigestMaterialWithoutTextures(poiClone);
+                    PoiyomiName = poiClone.name;
+                    CutoutOwnCurve = DescribeAuthoredCurve(
+                        clip, "cutoutBody",
+                        "m_Materials.Array.data[0]");
+                    CutoutMeshIndices = DescribeSubmeshIndices(
+                        cutoutRenderer.sharedMesh);
+                    AppliedRendererCount =
+                        state.AppliedRendererCount;
+                    AppliedOpaqueTriangleCount =
+                        state.AppliedOpaqueTriangleCount;
+
+                    var appendedClip = CommittedClipWithObjectBinding(
+                        root, "cutoutBody",
+                        "m_Materials.Array.data[2]");
+                    CutoutOwnCurve = DescribeAuthoredCurve(
+                        clip, "cutoutBody",
+                        "m_Materials.Array.data[1]");
+                    CutoutAppendedCurve = DescribeAuthoredCurve(
+                        appendedClip, "cutoutBody",
+                        "m_Materials.Array.data[2]");
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+            public void Dispose()
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+                for (var index = owned.Count - 1; index >= 0; index--)
+                {
+                    if (owned[index] != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(owned[index]);
+                    }
+                }
+
+                owned.Clear();
+            }
+        }
+
+        /// <summary>
+        /// A convertible transparent fixture material over a fully-opaque
+        /// mip chain. The caller owns destruction through the tracker.
+        /// </summary>
+        private static Material NewTransparentConversionMaterial(
+            Texture2D mipTexture)
+        {
+            var material =
+                LilToonFixtureTestBase.CreateTransparentConversionMaterial();
+            material.SetTexture("_MainTex", mipTexture);
+            return material;
+        }
+
+        /// <summary>
+        /// The characterized clone facts a cross-build digest may compare:
+        /// shader identity by name, queue, RenderType, keywords and every
+        /// shader-declared non-texture property value. Texture references
+        /// are deliberately excluded — each parity build imports its own
+        /// texture assets — so the digest compares conversion results, not
+        /// fixture identities.
+        /// </summary>
+        private static string DigestMaterialWithoutTextures(Material material)
+        {
+            var shader = material.shader;
+            var parts = new List<string>
+            {
+                material.name,
+                shader.name,
+                material.renderQueue.ToString(CultureInfo.InvariantCulture),
+                material.GetTag("RenderType", false),
+                "keywords=" + string.Join(
+                    ",", material.shaderKeywords
+                        .OrderBy(keyword => keyword, StringComparer.Ordinal)),
+            };
+
+            var count = shader.GetPropertyCount();
+            for (var index = 0; index < count; index++)
+            {
+                var propertyName = shader.GetPropertyName(index);
+                var type = shader.GetPropertyType(index);
+                if (type ==
+                    UnityEngine.Rendering.ShaderPropertyType.Texture)
+                {
+                    continue;
+                }
+
+                parts.Add(
+                    propertyName + ":" + type + "=" +
+                    DescribeNonTexturePropertyValue(
+                        material, propertyName, type));
+            }
+
+            return string.Join("\n", parts);
+        }
+
+        /// <summary>
+        /// Describes a shader property value of any non-texture type, in a
+        /// culture-invariant round-trip form the cross-build digest can
+        /// compare byte for byte.
+        /// </summary>
+        private static string DescribeNonTexturePropertyValue(
+            Material material,
+            string propertyName,
+            UnityEngine.Rendering.ShaderPropertyType type)
+        {
+            switch (type)
+            {
+                case UnityEngine.Rendering.ShaderPropertyType.Color:
+                    var color = material.GetColor(propertyName);
+                    return "(" + color.r.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + color.g.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + color.b.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + color.a.ToString("R", CultureInfo.InvariantCulture) +
+                           ")";
+                case UnityEngine.Rendering.ShaderPropertyType.Vector:
+                    var vector = material.GetVector(propertyName);
+                    return "(" + vector.x.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + vector.y.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + vector.z.ToString("R", CultureInfo.InvariantCulture) +
+                           "," + vector.w.ToString("R", CultureInfo.InvariantCulture) +
+                           ")";
+                case UnityEngine.Rendering.ShaderPropertyType.Float:
+                case UnityEngine.Rendering.ShaderPropertyType.Range:
+                    return material.GetFloat(propertyName)
+                        .ToString("R", CultureInfo.InvariantCulture);
+                case UnityEngine.Rendering.ShaderPropertyType.Int:
+                    return material.GetInteger(propertyName)
+                        .ToString(CultureInfo.InvariantCulture);
+                default:
+                    return "<unhandled " + type + ">";
+            }
+        }
+
+        private static string DescribeSubmeshIndices(Mesh mesh)
+        {
+            var parts = new List<string>
+            {
+                mesh.subMeshCount.ToString(CultureInfo.InvariantCulture),
+            };
+            for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
+            {
+                parts.Add(string.Join(
+                    ",",
+                    mesh.GetIndices(submesh).Select(index =>
+                        index.ToString(CultureInfo.InvariantCulture))));
+            }
+
+            return string.Join("|", parts);
+        }
+
         // --- Cutout conversion fixture helpers -------------------------------
 
         /// <summary>
@@ -2175,6 +2601,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             /// <summary>The tuple-carrying attested opaque stand-in.</summary>
             internal const string OpaqueTarget = OpaqueConversionShaderName;
+
+            /// <summary>The schema-complete transparent source stand-in.</summary>
+            internal const string Transparent = TransparentConversionShaderName;
         }
 
         /// <summary>
@@ -2214,7 +2643,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static void AssertCanonicalOpaqueRecipe(Material clone)
         {
             foreach (var (property, value) in
-                         LilToonOpaqueConversion.CanonicalOpaqueProperties)
+                         LilToonOpaqueTarget.CanonicalOpaqueProperties)
             {
                 Assert.That(clone.GetFloat(property), Is.EqualTo(value),
                     "canonical recipe '" + property + "'");
@@ -2222,14 +2651,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(clone.renderQueue,
                 Is.EqualTo(
-                    LilToonOpaqueConversion.CanonicalOpaqueRenderQueue));
+                    LilToonOpaqueTarget.CanonicalOpaqueRenderQueue));
             Assert.That(
                 clone.GetTag(
-                    LilToonOpaqueConversion.RenderTypeTagName, false),
+                    LilToonOpaqueTarget.RenderTypeTagName, false),
                 Is.EqualTo(
-                    LilToonOpaqueConversion.CanonicalOpaqueRenderType));
+                    LilToonOpaqueTarget.CanonicalOpaqueRenderType));
             Assert.That(
-                LilToonOpaqueConversion.TryFindNonCanonicalFact(
+                LilToonOpaqueTarget.TryFindNonCanonicalFact(
                     clone, out _),
                 Is.False,
                 "every canonical fact must read back on the clone");
@@ -2272,7 +2701,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     .ToString("R", CultureInfo.InvariantCulture),
             };
             foreach (var (property, _) in
-                         LilToonOpaqueConversion.CanonicalOpaqueProperties)
+                         LilToonOpaqueTarget.CanonicalOpaqueProperties)
             {
                 parts.Add(
                     material.GetFloat(property)
