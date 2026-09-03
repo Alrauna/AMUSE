@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a conservative Editor-only lilToon 2.3.4 frontend that produces exact `MaterialSemantics` for the single base opaque target, and extract the five Unity texture-evidence facts now shared by two frontends.
+**Goal:** Add a conservative Editor-only lilToon 2.3.4 frontend. It produces exact `MaterialSemantics` for the single base opaque target. The plan also extracts the five Unity texture-evidence facts now shared by two frontends.
 
-**Architecture:** Two new lilToon files split by responsibility — source attestation and semantic interpretation — plus one new shared `UnityTextureEvidence` class that both the Poiyomi and lilToon frontends consume. The semantic core, alpha classifier, separation planner, and alpha resolver are not modified. Poiyomi is modified only by behaviour-preserving delegation to the five shared helpers plus deletion of helpers made strictly dead by that delegation.
+**Architecture:** Two new lilToon files split by responsibility: source attestation and semantic interpretation. Both the Poiyomi and lilToon frontends consume a new shared `UnityTextureEvidence` class. This plan does not modify the semantic core, the alpha classifier, the separation planner, or the alpha resolver. Poiyomi changes only through behaviour-preserving delegation to the five shared helpers. The plan deletes the helpers that this delegation makes strictly dead.
 
 **Tech Stack:** Unity 2022.3, C#, NUnit EditMode tests, existing `Alrauna.Amuse.Editor` and `Alrauna.Amuse.Tests.Editor` assemblies. No new dependency, assembly, asmdef, or package metadata change.
 
@@ -13,21 +13,32 @@
 ## Global Constraints
 
 - Supported lilToon release: `2.3.4`, tag commit `252fd8cfc46106d4967e95b3f2c788418502f227`, package `jp.lilxyzw.liltoon`, MIT.
-- Supported shader: name `lilToon`, asset GUID `df12117ecd77c31469c224178886498e`. Pass shader `Hidden/ltspass_opaque`, GUID `61b4f98a5d78b4a4a9d89180fac793fc`. **Nothing else is recognized**; every other shader, lilToon or not, returns `UnsupportedShader`.
+
+- Supported shader: name `lilToon`, asset GUID `df12117ecd77c31469c224178886498e`. Pass shader `Hidden/ltspass_opaque`, GUID `61b4f98a5d78b4a4a9d89180fac793fc`. **The plan recognizes nothing else.** Every other shader, lilToon or not, returns `UnsupportedShader`.
+
 - Material shader-format stamp: `_lilToonVersion` exists, is finite, and is **exactly `45f`**. No rounding, no tolerance.
-- Three digest pins, all normalized (BOM stripped, CRLF/CR to LF, SHA-256, lowercase hex), **measured by Task 0** on 2026-08-18 from a scratch `jp.lilxyzw.liltoon@2.3.4` install and cross-checked between default and stripped shader settings:
+
+- Three digest pins, all normalized (BOM stripped, CRLF/CR to LF, SHA-256, lowercase hex). **Task 0 measured them** on 2026-08-18 from a scratch `jp.lilxyzw.liltoon@2.3.4` install, and cross-checked them between default and stripped shader settings:
   - `lts.shader` canonical: `5206bec25e82db5f8009b27fcc5ba94d7c41113031d4b6b0a2c25ca324a9c704`
   - `ltspass_opaque.shader` canonical: `6b6c30c1cbe546fe753bcdc77f547441e3f9114ee80e9591bde2b8e6e7e5eb14`
   - `Shader/Includes/**` tree: `6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46`
-  These are measurements, not guesses. Never re-derive them from the lilToon repository, whose committed generated shaders are stale relative to their own tag's generator.
+  These are measurements, not guesses. Never re-derive them from the lilToon repository. Its committed generated shaders are stale relative to the generator of their own tag.
+
 - Everything new is `internal` and lives under `Alrauna.Amuse.Editor.Semantics` or `Alrauna.Amuse.Editor.Semantics.LilToon`.
+
 - `MaterialSemantics.cs` is **not** modified. Any change to it stops the task and returns to architectural review.
+
 - `UnityTextureEvidence` holds **exactly five** methods. No NDMF type, no optimization policy, no shader property name, no `Material` parameter, and no sixth method may enter it.
-- Every safety predicate is **positive**: it returns success only for explicitly proven-safe cases, and refuses anything unrecognized. No predicate may be phrased as "does this look unsafe?".
-- No lilToon upstream source file is copied into this repository.
+
+- Every safety predicate is **positive**: it returns success only for explicitly proven-safe cases, and refuses anything unrecognized. Phrase no predicate as "does this look unsafe?".
+
+- This plan copies no lilToon upstream source file into this repository.
+
 - Unproven behaviour becomes `Unknown` plus one diagnostic. It is never guessed, and additional uncertainty never widens a claim.
+
 - Every new `.cs` and `.shader` file needs its Unity-generated `.meta`. Never hand-write, delete, or regenerate a `.meta` for an existing asset.
-- **Do not commit, stage persistently, push, or open a PR at any point in this plan.** Git finalization is a separate approval gate; see "Git discipline".
+
+- **Do not commit, stage persistently, push, or open a PR at any point in this plan.** Git finalization is a separate approval gate. See "Git discipline".
 
 ## File structure
 
@@ -49,7 +60,7 @@
 
 ## Running tests
 
-All test runs use the public `E:/AI/Git/AMUSE` Unity instance through Unity MCP `run_tests` (EditMode). Before the first run, use read-only MCP discovery to confirm the connected instance's project root is `E:/AI/Git/AMUSE`. If no public Unity Editor is running, **do not** substitute the private avatar testbed — report the blocked validation and stop.
+All test runs use the public `<repo-root>` Unity instance through Unity MCP `run_tests` (EditMode). Before the first run, use read-only MCP discovery to confirm the project root of the connected instance is `<repo-root>`. If no public Unity Editor runs, **do not** substitute the private avatar testbed. Report the blocked validation and stop.
 
 Focused run example:
 
@@ -60,27 +71,27 @@ include_failed_tests: true
 
 Full run: all EditMode tests, no filter.
 
-After creating any new file, call Unity MCP `refresh_unity` before running tests so the asset and its `.meta` are generated.
+After creating any new file, call Unity MCP `refresh_unity` before running tests so Unity generates the asset and its `.meta`.
 
 ## Git discipline
 
 Work on `feat/liltoon-semantics-adapter`, already created from `b53bb17`.
 
-**Do not commit at any point in this plan.** Implementation authorization and Git finalization are separate approval gates. Tasks 0–8 each end with a scope inspection instead of a commit; Task 9 stages temporarily for review and then resets.
+**Do not commit at any point in this plan.** Implementation authorization and Git finalization are separate approval gates. Tasks 0–8 each end with a scope inspection instead of a commit. Task 9 stages temporarily for review and then resets.
 
 ```bash
 git status --porcelain --untracked-files=all
 ```
 
-`--untracked-files=all` is required: new `.cs`, `.shader`, and `.meta` files are untracked and would otherwise be invisible. Confirm the listed paths are exactly the files this task and its predecessors were meant to touch, plus their `.meta` siblings, and that no `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `Packages/manifest.json`, `Packages/packages-lock.json`, or `Packages/vpm-manifest.json` entry appears. Record the delta from the previous task's inspection.
+`--untracked-files=all` is required: git does not show new `.cs`, `.shader`, or `.meta` files without it. Confirm that the listed paths are exactly the files that this task and its predecessors were meant to touch. The list must also include their `.meta` siblings. Confirm also that no `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `Packages/manifest.json`, `Packages/packages-lock.json`, or `Packages/vpm-manifest.json` entry appears. Record the delta from the inspection of the previous task.
 
-Nothing is staged before Task 9, and nothing is committed at all. `HEAD` must still be `b53bb17` when the plan finishes.
+Nothing enters the staging area before Task 9, and this plan commits nothing at all. `HEAD` must still be `b53bb17` when the plan finishes.
 
 ---
 
 ### Task 0: Produce the digest pins from a real lilToon install (BLOCKING)
 
-**Executed 2026-08-18; see the recorded outcome at the end of this task.** The pins could not be taken from the lilToon repository: its committed `ltspass_opaque.shader` contains `#pragma skip_variants PROBE_VOLUMES_OFF PROBE_VOLUMES_L1 PROBE_VOLUMES_L2`, while `GetSkipVariantsProbeVolumes()` at the same tag returns the empty string. Running the real generator confirmed this — the line disappeared and the file hash moved `bb5eaf4d…` → `efcb1fc6…`. The committed artifact is stale relative to its own generator and is not reproducible from the pinned source.
+**Executed 2026-08-18. See the recorded outcome at the end of this task.** The pins could not come from the lilToon repository. Its committed `ltspass_opaque.shader` contains `#pragma skip_variants PROBE_VOLUMES_OFF PROBE_VOLUMES_L1 PROBE_VOLUMES_L2`, while `GetSkipVariantsProbeVolumes()` at the same tag returns the empty string. Running the real generator confirmed this. The line disappeared, and the file hash moved `bb5eaf4d…` → `efcb1fc6…`. The committed artifact is stale relative to its own generator and is not reproducible from the pinned source.
 
 This task measures a real install, cross-checks the region rules, and records the constants Task 2 will use. It produces no repository code. **No later task may proceed until it succeeds.**
 
@@ -88,23 +99,25 @@ This task measures a real install, cross-checks the region rules, and records th
 
 **Interfaces:** produces the three digest values consumed by Task 2.
 
-- [x] **Step 1: Obtain two reference installs**
+- [x] **Step 1: Get two reference installs**
 
 Install `jp.lilxyzw.liltoon@2.3.4` into a scratch Unity 2022.3 project — **not** the public dev project and **not** the private avatar testbed. Let lilToon run its startup generation with default settings. Copy `Assets/lilToon/Shader/lts.shader`, `Assets/lilToon/Shader/ltspass_opaque.shader`, and the whole `Assets/lilToon/Shader/Includes/` directory to the scratchpad as `install-default/`.
 
-Then open lilToon's shader-setting UI, disable at least normal maps, emission, and shadow reception — the last one flips `useBaseShadow`, which is what exercises the R2 shadow slot — apply, and copy the same three artifacts to `install-stripped/`.
+Then open the shader-setting UI of lilToon. Disable at least normal maps, emission, and shadow reception. The last one flips `useBaseShadow`, and this is what exercises the R2 shadow slot. Apply, and copy the same three artifacts to `install-stripped/`.
 
-If a scratch install cannot be produced, report the blocked validation and stop. Do not substitute the private testbed, and do not invent constants.
+If you cannot produce a scratch install, report the blocked validation and stop. Do not substitute the private testbed, and do not invent constants.
 
 - [x] **Step 2: Implement the canonicalizer as a scratch script and compute both installs**
 
-Implement exactly the design spec's rules; do not simplify them for the script.
+Implement exactly the rules of the design spec. Do not simplify them for the script.
 
-Line kinds: **D1** a valueless `#define <IDENT>` where `IDENT` starts `LIL_FEATURE_`/`LIL_OPTIMIZE_` or equals `LIL_INPUT_OPTIMIZED`; **D2** `#pragma skip_variants <tokens>`. There is no whitespace-line kind.
+Line kinds: **D1** is a valueless `#define <IDENT>` where `IDENT` starts `LIL_FEATURE_`/`LIL_OPTIMIZE_` or equals `LIL_INPUT_OPTIMIZED`. **D2** is `#pragma skip_variants <tokens>`. There is no whitespace-line kind.
 
-- **R1 — region A.** After each line whose trimmed text is exactly `HLSLINCLUDE`, the maximal contiguous run where every line is D1 or D2. A blank line does not extend the run. Drop D1 and D2 inside it.
-- **R2 — the shadow slot.** Drop a line only when all three hold: the immediately preceding raw line is exactly `#define LIL_PASS_FORWARD`; the line is a `#pragma skip_variants` carrying exactly one keyword; and that keyword is exactly `SHADOW_VERY_HIGH`. Anything else stays hashed. There is no general pragma-prologue region and no blank-line normalization.
-- **R3** — only on lines matching `^\s*(//)?#include\s+"<path>"\s*$`. Resolve `<path>` against the shader file's own directory and against an **explicitly supplied project root** (never the process working directory); accept only if exactly one candidate is a file enumerated in that install's `Includes/` tree, compared with **exact ordinal** path identity (if both resolve to attested files and differ, treat as ambiguous). Replace with `Includes/<path relative to the include root>`, `/` separators, subdirectories preserved. Otherwise leave the line byte-identical.
+- **R1 — region A.** Find each line whose trimmed text is exactly `HLSLINCLUDE`. After it, take the maximal contiguous run where every line is D1 or D2. A blank line does not extend the run. Drop D1 and D2 inside it.
+
+- **R2 — the shadow slot.** Drop a line only when all three conditions hold. The immediately preceding raw line is exactly `#define LIL_PASS_FORWARD`. The line is a `#pragma skip_variants` carrying exactly one keyword, and that keyword is exactly `SHADOW_VERY_HIGH`. Anything else stays hashed. There is no general pragma-prologue region and no blank-line normalization.
+
+- **R3** — apply only to lines matching `^\s*(//)?#include\s+"<path>"\s*$`. Resolve `<path>` against the directory of the shader file itself, and against an **explicitly supplied project root**. Do not use the process working directory. Accept only if exactly one candidate is a file in the `Includes/` tree of that install. Compare with **exact ordinal** path identity, and treat as ambiguous when both candidates resolve to attested files and differ. Replace the line with `Includes/<path relative to the include root>`, `/` separators, and preserved subdirectories, or else leave it byte-identical.
 
 Then normalize (BOM strip, CRLF/CR to LF) and SHA-256. For the include tree, hash every non-`.meta` file under `Includes/`, sort the `(relative path, hash)` pairs ordinally, join as `path:hash` with `\n`, and hash that listing.
 
@@ -113,16 +126,17 @@ Then normalize (BOM strip, CRLF/CR to LF) and SHA-256. For the include tree, has
 Assert all of the following. Any failure stops the milestone.
 
 1. The **canonical** digests of `lts.shader`, `ltspass_opaque.shader`, and the `Includes/**` tree are **identical** between `install-default` and `install-stripped`.
-2. The **raw** (non-canonical) hashes of `ltspass_opaque.shader` **differ** between the two installs — otherwise the stripped install did not actually change anything and the cross-check proved nothing.
-3. In both installs the pass contains exactly one `#define LIL_RENDER` line, its value is `0`, and it is the only **valued** `#define` in the file.
-4. In both installs, region A of the Shader-scope `HLSLINCLUDE` is empty — its first line is the valued `LIL_RENDER` define — so `LIL_RENDER` was never a canonicalization candidate.
-5. Every `#include` directive in both generated files resolved into the attested tree. Any unresolved include means the install layout is not modelled; stop.
+
+2. The **raw** (non-canonical) hashes of `ltspass_opaque.shader` **differ** between the two installs. Otherwise the stripped install did not actually change anything, and the cross-check proved nothing.
+3. In both installs the pass contains exactly one `#define LIL_RENDER` line with value `0`, and it is the only **valued** `#define` there.
+4. In both installs, region A of the Shader-scope `HLSLINCLUDE` is empty. Its first line is the valued `LIL_RENDER` define, so `LIL_RENDER` was never a canonicalization candidate.
+5. Every `#include` directive in both generated files resolved into the attested tree. Any unresolved include means the install layout is not modelled, so stop.
 
 - [x] **Step 4: Record the constants and gate**
 
-If every assertion holds: record the three canonical digests verbatim in the completion report and carry them into Task 2 Step 3. They are now measured facts, not guesses.
+If every assertion holds: record the three canonical digests verbatim in the completion report. Carry them into Task 2 Step 3. They are now measured facts, not guesses.
 
-If any assertion fails: **stop**. Diff the canonicalized texts of the two installs to locate the unmodelled variation. Do **not** widen region A, the R2 shadow slot, or R3 to make the observed files agree — that is fitting the rule to the sample and is exactly what the design forbids. Report the variation, the diff, and a recommendation, and return to architectural review.
+If any assertion fails: **stop**. Diff the canonicalized texts of the two installs to locate the unmodelled variation. Do **not** widen region A, the R2 shadow slot, or R3 to make the observed files agree. That fits the rule to the sample, and the design forbids exactly that. Report the variation, the diff, and a recommendation, and return to architectural review.
 
 - [x] **Step 5: Scope inspection**
 
@@ -134,7 +148,7 @@ Expected: only the two documentation files. This task adds no repository content
 
 #### Recorded outcome (executed 2026-08-18)
 
-**COMPLETE — 14 of 14 assertions passed.** Environment: scratch Unity 2022.3.22f1 project, `jp.lilxyzw.liltoon-2.3.4.zip` release artifact, both states driven through lilToon's own `ApplyShaderSetting`.
+**COMPLETE: 14 of 14 assertions passed.** Environment: scratch Unity 2022.3.22f1 project, `jp.lilxyzw.liltoon-2.3.4.zip` release artifact, both states driven through the lilToon `ApplyShaderSetting` call.
 
 | Assertion | Result |
 | --- | --- |
@@ -147,16 +161,16 @@ Expected: only the two documentation files. This task adds no repository content
 | Shader-scope region A empty (both) | PASS — runs `[0, 102]` / `[0, 90]` |
 | Every include resolved through R3 (both) | PASS — 3 + 21 directives, 0 unresolved |
 
-Drop accounting: default `1068 → 966` lines (region A 102, slot 0); stripped `1057 → 966` (region A 90, slot 1). Canonical texts are byte-identical.
+Drop accounting: default `1068 → 966` lines (region A 102, slot 0). Stripped: `1057 → 966` (region A 90, slot 1). Canonical texts are byte-identical.
 
-Negative controls on the real stripped artifact — each must change the digest, and each did: the slot pragma relocated one line down, an identical pragma injected into a pass body, an identical pragma after `#define LIL_PASS_FORWARDADD`, a constant `skip_variants` line deleted, and an include redirected to a same-basename file outside the tree. Removing a region-A feature define correctly left the digest unchanged.
+Negative controls ran on the real stripped artifact. Each must change the digest, and each did. The slot pragma relocated one line down, and an identical pragma injected into a pass body. A third control placed an identical pragma after `#define LIL_PASS_FORWARDADD`, and a fourth deleted a constant `skip_variants` line. A fifth redirected an include to a same-basename file outside the tree. Removing a region-A feature define correctly left the digest unchanged.
 
 
 ---
 
 ### Task 1: Shared Unity texture evidence
 
-Extract the five texture facts that now have two concrete consumers, and repoint Poiyomi at them. Poiyomi's public-to-tests method names are preserved as delegating wrappers so its existing tests pass unmodified.
+Extract the five texture facts that now have two concrete consumers, and repoint Poiyomi at them. The plan preserves the public-to-tests method names of Poiyomi as delegating wrappers, so its existing tests pass unmodified.
 
 **Files:**
 

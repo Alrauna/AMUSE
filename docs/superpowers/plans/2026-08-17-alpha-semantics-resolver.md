@@ -4,24 +4,24 @@
 
 **Goal:** Implement the approved shader-independent bridge from a complete normalized `MaterialSemantics.Alpha` value to the existing exact triangle alpha classifier.
 
-**Architecture:** One internal Editor-only static resolver switches exhaustively over the closed Alpha vocabulary and returns one immutable resolution: a uniform triangle outcome, an exact classifier configuration, or a named refusal. Immutable scalar-field evidence arrives through a caller-supplied lookup delegate, so the resolver never touches Unity assets, meshes, or shaders. The classifier, geometry, semantic core, and planner are consumed unchanged.
+**Architecture:** One internal Editor-only static resolver switches exhaustively over the closed Alpha vocabulary. It returns one immutable resolution: a uniform triangle outcome, an exact classifier configuration, or a named refusal. Immutable scalar-field evidence comes through a caller-supplied lookup delegate. Thus, the resolver never accesses Unity assets, meshes, or shaders. It uses the classifier, geometry, semantic core, and planner without changes.
 
-**Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, existing `Alrauna.Amuse.Editor` and `Alrauna.Amuse.Tests.Editor` assemblies. No new dependency, assembly, asmdef, or package metadata change.
+**Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, and existing `Alrauna.Amuse.Editor` and `Alrauna.Amuse.Tests.Editor` assemblies. Do not add a dependency, assembly, asmdef, or package metadata change.
 
 ## Global constraints
 
-- The approved specification is `docs/superpowers/specs/2026-08-17-alpha-semantics-resolver-design.md`. Read it before Task 1, including its "Review amendments" section: the evidence contract is a provable "exactly 1 versus strictly below 1" partition plus a `[0, 1]` bound, **not** a demand that the source be a literal 8-bit `b/255` field; the deferred UV-transform criterion requires exact dyadic/rational arithmetic, never `double`; and `AlphaResolution` must make its invariants unrepresentable or reject them.
-- No texture is written, baked, quantized, or altered. Evidence normalization is a later host producer's job and is out of scope here; this milestone only consumes evidence.
+- The approved specification is `docs/superpowers/specs/2026-08-17-alpha-semantics-resolver-design.md`. Read it before Task 1, including its "Review amendments" section. The evidence contract is a provable "exactly 1 versus strictly below 1" partition plus a `[0, 1]` bound. It does **not** require the source to be a literal 8-bit `b/255` field. The deferred UV-transform criterion requires exact dyadic/rational arithmetic, never `double`. `AlphaResolution` must make its invariants unrepresentable or reject them.
+- Do not write, bake, quantize, or alter a texture. Evidence normalization is the responsibility of a later host producer and is out of scope. This milestone only consumes evidence.
 - Execute only after explicit design/plan approval, on `feat/alpha-semantics-resolver` based on `4e37d29`.
-- Use red/green TDD. Observe every focused red for the intended reason before writing production code, then observe that same scope green. Never write production code first.
+- Use red/green TDD. Observe each focused red for the intended reason before you write production code. Then observe the same scope green. Never write production code first.
 - All new production types are `internal` and Editor-only, in namespace `Alrauna.Amuse.Editor.Analysis`.
-- Do **not** modify `TriangleAlphaClassifier.cs`, `ExactUvGeometry.cs`, `MeshSeparationPlanner.cs`, `MaterialSemantics.cs`, the Poiyomi adapter, any existing test, the reference fixtures, asmdefs, `AssemblyInfo.cs`, package metadata, manifests/locks, workflows, or project settings. The resolver adds files; it changes none.
-- No `AssetDatabase`, `Texture`, `Texture2D`, `Material`, `Mesh`, `Renderer`, `Shader`, NDMF type, MCP call, file I/O, `Debug.Log`, or `QualitySettings` access in the resolver or its tests.
-- No epsilon, tolerance, rounding, or approximate comparison anywhere. Float comparisons are exact.
-- Never widen a claim under uncertainty. Every unsupported case is a refusal or `TriangleAlphaOutcome.Unknown`; never `ProvenOpaque`.
-- Treat each Unity asset and its `.meta` file as one unit. New `.cs` files must get their `.meta` from Unity import; inspect every new GUID; do not hand-write, copy, or delete `.meta` files.
-- Do not commit, push, open a PR, tag, publish, or change repository settings. Those require separate authorization; the plan ends at a review handoff.
-- If execution demonstrates that the approved closed semantic vocabulary or the classifier contract cannot express a required case, **stop at a new design approval gate**. Do not grow an expression form, extend classifier inputs, or bake a texture during execution.
+- Do **not** modify `TriangleAlphaClassifier.cs`, `ExactUvGeometry.cs`, `MeshSeparationPlanner.cs`, `MaterialSemantics.cs`, the Poiyomi adapter, any existing test, the reference fixtures, or asmdefs. Also, do **not** modify `AssemblyInfo.cs`, package metadata, manifests/locks, workflows, or project settings. The resolver adds files and changes none.
+- Do not use `AssetDatabase`, `Texture`, `Texture2D`, `Material`, `Mesh`, `Renderer`, `Shader`, an NDMF type, or an MCP call. Do not access file I/O, `Debug.Log`, or `QualitySettings` in the resolver or its tests.
+- Do not use epsilon, tolerance, rounding, or approximate comparisons. Compare floats exactly.
+- Never widen a claim under uncertainty. Each unsupported case is a refusal or `TriangleAlphaOutcome.Unknown`, never `ProvenOpaque`.
+- Treat each Unity asset and its `.meta` file as one unit. Unity import must supply the `.meta` for new `.cs` files. Inspect each new GUID. Do not manually write, copy, or delete `.meta` files.
+- Do not commit, push, open a PR, tag, publish, or change repository settings. Those actions require separate authorization. The plan ends at a review handoff.
+- Stop at a new design approval gate if execution finds that the approved vocabulary or classifier contract cannot express a required case. Do not grow an expression form, extend classifier inputs, or bake a texture during execution.
 
 ---
 
@@ -36,7 +36,7 @@
 
 **Modify:** none.
 
-Both target directories already exist and are already covered by the existing asmdefs, so no new folder or `.meta` for a folder is required. Keep the enum, delegate, resolution type, and resolver in the single production file: they are one small contract, exactly as `MaterialSemantics.cs` keeps its vocabulary together.
+Both target directories already exist, and the existing asmdefs already cover them. Thus, you do not need a new folder or `.meta` for a folder. Keep the enum, delegate, resolution type, and resolver in the single production file. They form one small contract, as `MaterialSemantics.cs` keeps its vocabulary together.
 
 ## Interfaces produced by this plan
 
@@ -76,11 +76,11 @@ namespace Alrauna.Amuse.Editor.Analysis
 }
 ```
 
-`TextureSourceId`, `TextureChannel`, `ScalarSemanticValue`, `SemanticOutput<T>`, `TextureSample`, `UvMapping`, `TextureSampling`, `TextureFilterMode`, and `TextureWrapMode` come from `Alrauna.Amuse.Editor.Semantics` and are used as they exist today.
+`TextureSourceId`, `TextureChannel`, `ScalarSemanticValue`, `SemanticOutput<T>`, `TextureSample`, `UvMapping`, `TextureSampling`, `TextureFilterMode`, and `TextureWrapMode` come from `Alrauna.Amuse.Editor.Semantics`. Use them as they exist today.
 
 ## Shared test helpers
 
-Add these once, at the top of the test class in Task 1, and reuse them in every later task. Do not redefine them per task.
+Add these once at the top of the test class in Task 1. Reuse them in each later task. Do not redefine them for each task.
 
 ```csharp
 using System;
@@ -180,11 +180,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 }
 ```
 
-`MixedField` stores rows bottom-to-top, so texel row 0 (`v < 0.5`) is opaque and row 1 (`v > 0.5`) is transparent. With Point/Clamp sampling, `OpaqueCornerTriangle` therefore classifies `ProvenOpaque` and `TransparentCornerTriangle` classifies `MustRemainTransparent`. Verify this assumption in Task 3 Step 1 by asserting the same outcomes from a direct `TriangleAlphaClassifier.Classify` call in the same test; if the direct call disagrees, fix the fixture coordinates, never the assertion.
+`MixedField` stores rows from bottom to top. Thus, texel row 0 (`v < 0.5`) is opaque, and row 1 (`v > 0.5`) is transparent. With Point/Clamp sampling, `OpaqueCornerTriangle` therefore classifies `ProvenOpaque`, and `TransparentCornerTriangle` classifies `MustRemainTransparent`. Verify this assumption in Task 3 Step 1. Assert the same outcomes from a direct `TriangleAlphaClassifier.Classify` call in the same test. If the direct call disagrees, fix the fixture coordinates, never the assertion.
 
 ## Running tests
 
-All test runs use the public `E:/AI/Git/AMUSE` Unity instance through Unity MCP `run_tests` (EditMode). Before the first run, use read-only MCP discovery to confirm the connected instance's project root is `E:/AI/Git/AMUSE`. If no public Unity Editor is running, **do not** substitute the private avatar testbed — report the blocked validation and stop.
+Run all tests on the public `<repo-root>` Unity instance through Unity MCP `run_tests` (EditMode). Before the first run, use read-only MCP discovery. Confirm that the connected instance's project root is `<repo-root>`. If no public Unity Editor is running, **do not** use the private avatar testbed. Report the blocked validation and stop.
 
 Focused run:
 
@@ -211,7 +211,7 @@ Full run: all EditMode tests, no filter.
 
 - [x] **Step 1: Write the failing boundary tests**
 
-Add the shared helpers above, then these tests:
+Add the shared helpers above, then add these tests:
 
 ```csharp
 [Test]
@@ -262,11 +262,11 @@ public void NullFieldProviderIsMalformed()
 
 - [x] **Step 2: Run the focused tests and observe red**
 
-Expected: the test assembly cannot resolve `AlphaSemanticsResolver`, `AlphaResolution`, `AlphaResolutionFailure`, or `AlphaFieldProvider`. This first red is a compile failure because no production type exists yet; every later red must be an executable assertion failure.
+Expected: the test assembly cannot resolve `AlphaSemanticsResolver`, `AlphaResolution`, `AlphaResolutionFailure`, or `AlphaFieldProvider`. This first red is a compile failure because no production type exists yet. Each later red must be an executable assertion failure.
 
 - [x] **Step 3: Write the minimal production shell**
 
-Create `AlphaSemanticsResolver.cs` with the enum, delegate, resolution type, and resolver. Implement only the unknown-semantics path and the malformed-argument check; leave the complete-value path throwing `NotImplementedException` so Task 2 has a genuine executable red.
+Create `AlphaSemanticsResolver.cs` with the enum, delegate, resolution type, and resolver. Implement only the unknown-semantics path and the malformed-argument check. Leave the complete-value path throwing `NotImplementedException` so Task 2 has a genuine executable red.
 
 ```csharp
 using System;
@@ -420,11 +420,11 @@ namespace Alrauna.Amuse.Editor.Analysis
 
 - [x] **Step 4: Import and inspect the new asset pair**
 
-Let Unity import the new files (MCP `refresh_unity`). Confirm `AlphaSemanticsResolver.cs.meta` and `AlphaSemanticsResolverTests.cs.meta` were created by Unity with fresh unique GUIDs and that no other `.meta` changed.
+Let Unity import the new files (MCP `refresh_unity`). Confirm that Unity created `AlphaSemanticsResolver.cs.meta` and `AlphaSemanticsResolverTests.cs.meta` with fresh unique GUIDs. Confirm that no other `.meta` changed.
 
 - [x] **Step 5: Run the focused tests and observe green**
 
-Expected: the four boundary tests pass; no other test changes state; no unexpected Console errors.
+Expected: the four boundary tests pass. No other test changes state. The Console has no unexpected errors.
 
 ---
 
@@ -523,11 +523,11 @@ public void ConstantAlphaNeverConsultsTheFieldProvider()
 
 - [x] **Step 2: Run the focused tests and observe red**
 
-Expected: every new test fails with `NotImplementedException` from `Resolve`. The four Task 1 tests still pass.
+Expected: each new test fails with `NotImplementedException` from `Resolve`. The four Task 1 tests still pass.
 
 - [x] **Step 3: Implement the constant branch**
 
-Replace the `NotImplementedException` with a kind switch whose constant arm applies the decision table, and leave the two texture arms throwing `NotImplementedException` for Task 3.
+Replace the `NotImplementedException` with a kind switch. Its constant arm must apply the decision table. Leave the two texture arms throwing `NotImplementedException` for Task 3.
 
 ```csharp
 var value = alpha.GetCompleteValue();
@@ -565,11 +565,11 @@ private static AlphaResolution ResolveScalar(float scalar)
 }
 ```
 
-`ResolveScalar` applies the lemma to the constant itself — the degenerate case `s = 1`. Task 4 handles the multiplier separately because its `k < 1` arm must still obtain the range-attesting field before concluding; do not try to merge the two.
+`ResolveScalar` applies the lemma to the constant itself, which is the degenerate case `s = 1`. Task 4 handles the multiplier separately. Its `k < 1` arm must still obtain the range-attesting field before it concludes. Do not merge the two.
 
 - [x] **Step 4: Run the focused tests and observe green**
 
-Expected: all Task 1 and Task 2 tests pass. `ScalarSemanticValue.Constant` rejects NaN and infinity on construction, so no non-finite arm is needed or permitted here.
+Expected: all Task 1 and Task 2 tests pass. `ScalarSemanticValue.Constant` rejects NaN and infinity during construction. Thus, no non-finite arm is needed or permitted here.
 
 ---
 
@@ -726,11 +726,11 @@ public void UnsupportedUvMappingIsCheckedBeforeTextureEvidence()
 
 - [x] **Step 2: Run the focused tests and observe red**
 
-Expected: every new test fails with `NotImplementedException`. Tasks 1–2 stay green.
+Expected: each new test fails with `NotImplementedException`. Tasks 1–2 stay green.
 
 - [x] **Step 3: Implement the sampled branch**
 
-Add the `TextureSample` arm to the kind switch and the three helpers below. Check order is UV mapping, then sampling, then evidence.
+Add the `TextureSample` arm to the kind switch and add the three helpers below. Check UV mapping first, sampling second, and evidence third.
 
 ```csharp
 case ScalarSemanticValueKind.TextureSample:
@@ -830,7 +830,7 @@ private static bool TryMapSampling(
 }
 ```
 
-Note the file needs `using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;` only if `UnityEngine` is also imported. Do not import `UnityEngine` in this file; nothing here needs it.
+The file needs `using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;` only if `UnityEngine` is also imported. Do not import `UnityEngine` in this file. Nothing here needs it.
 
 - [x] **Step 4: Run the focused tests and observe green**
 
@@ -948,11 +948,11 @@ public void MultiplierBelowOneIgnoresUnsupportedUvMapping()
 }
 ```
 
-The last test pins a deliberate design decision: with a multiplier below one the conclusion depends only on the sampled range, not on where the sample is taken, so an unsupported UV mapping does not weaken it. If a reviewer prefers refusal there, that is a design amendment, not an implementation choice.
+The last test sets a deliberate design decision. With a multiplier below one, the conclusion depends only on the sampled range, not the sample location. Thus, an unsupported UV mapping does not weaken the conclusion. A reviewer preference for refusal is a design amendment, not an implementation choice.
 
 - [x] **Step 2: Run the focused tests and observe red**
 
-Expected: every new test fails with `NotImplementedException`. Tasks 1–3 stay green.
+Expected: each new test fails with `NotImplementedException`. Tasks 1–3 stay green.
 
 - [x] **Step 3: Implement the multiplier branch**
 
@@ -1005,7 +1005,7 @@ private static AlphaResolution ResolveScaledSample(
 }
 ```
 
-Then replace the switch's `default:` arm: it must return `AlphaResolution.Refused(AlphaResolutionFailure.SemanticsUnknown)` rather than throw, so a semantic form added later fails closed instead of crashing a build. Remove the `NotImplementedException` entirely.
+Then replace the switch's `default:` arm. It must return `AlphaResolution.Refused(AlphaResolutionFailure.SemanticsUnknown)` instead of throwing. Thus, a semantic form added later fails closed instead of crashing a build. Remove the `NotImplementedException` entirely.
 
 - [x] **Step 4: Run the focused tests and observe green**
 
@@ -1021,7 +1021,7 @@ Expected: all Task 1–4 tests pass. `Resolve` now has no unimplemented path.
 
 - [x] **Step 1: Write the failing (or immediately passing) adversarial tests**
 
-These assert properties the implementation should already satisfy. Any that fails is a real defect; fix production minimally and record it.
+These tests assert properties that the implementation should already satisfy. A failure is a real defect. Fix production minimally and record the fix.
 
 ```csharp
 [Test]
@@ -1176,11 +1176,11 @@ public void NoResolutionEverReportsProvenOpaqueWithoutProof()
 
 - [x] **Step 2: Run the focused tests**
 
-Expected: all pass. Investigate any failure as a genuine defect before changing a test. Never relax an assertion to make it pass.
+Expected: all tests pass. Investigate each failure as a genuine defect before you change a test. Never relax an assertion to make it pass.
 
 - [x] **Step 3: Confirm the shader-independence boundary by inspection**
 
-Read the finished production file end to end and confirm it names no shader, property, package, version, Unity object type, mesh concept, render mode, or NDMF type, and performs no arithmetic on field bytes.
+Read the finished production file from start to end. Confirm that it names no shader, property, package, version, Unity object type, mesh concept, render mode, or NDMF type. Confirm that it performs no arithmetic on field bytes.
 
 ---
 
@@ -1190,9 +1190,9 @@ Read the finished production file end to end and confirm it names no shader, pro
 
 - [x] **Step 1: Run focused and full EditMode validation**
 
-Run the focused resolver class, then every EditMode test. Record total, passed, failed, skipped, duration, and any Console errors. Expected: zero failures, zero skips, and all pre-existing classifier, geometry, planner, fixture, and semantics tests unchanged and green.
+Run the focused resolver class, then run each EditMode test. Record total, passed, failed, skipped, duration, and all Console errors. Expected: zero failures and zero skips. All existing classifier, geometry, planner, fixture, and semantics tests remain unchanged and green.
 
-If no public Unity Editor is available, report the blocked validation and its exact reason; do not substitute the private testbed.
+If no public Unity Editor is available, report the blocked validation and its exact reason. Do not use the private testbed.
 
 - [x] **Step 2: Run static boundary checks**
 
@@ -1204,17 +1204,17 @@ rg -n "AssetDatabase|Texture2D|UnityEditor|Material|Mesh|Renderer|Shader|NDMF|na
 rg -n "Epsilon|Approximately|Mathf\.|1e-|tolerance" Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs
 ```
 
-Expected: no matches. Inspect every match rather than treating the command as a blind gate.
+Expected: no matches. Inspect each match instead of using the command as a blind gate.
 
 - [x] **Step 3: Inspect Git and Unity asset scope**
 
-Every file this milestone adds is **untracked**, so `git diff --check` and `git diff --stat` inspect nothing. Stage exactly the approved set, inspect the cached diff, then unstage. Do not commit.
+Each file that this milestone adds is **untracked**. Therefore, `git diff --check` and `git diff --stat` inspect nothing. Stage exactly the approved set, inspect the cached diff, and then unstage it. Do not commit.
 
 ```bash
 git status --short
 ```
 
-Expected: only the two approved documents and the four planned files (`AlphaSemanticsResolver.cs`, `AlphaSemanticsResolver.cs.meta`, `AlphaSemanticsResolverTests.cs`, `AlphaSemanticsResolverTests.cs.meta`), all untracked. Anything else must be explained before continuing.
+Expected: only the two approved documents and the four planned files are present. The files are `AlphaSemanticsResolver.cs`, `AlphaSemanticsResolver.cs.meta`, `AlphaSemanticsResolverTests.cs`, and `AlphaSemanticsResolverTests.cs.meta`. All six files are untracked. Explain anything else before you continue.
 
 ```bash
 git add -- docs/superpowers/specs/2026-08-17-alpha-semantics-resolver-design.md docs/superpowers/plans/2026-08-17-alpha-semantics-resolver.md Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs.meta Packages/com.alrauna.amuse/Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs Packages/com.alrauna.amuse/Tests/Editor/Analysis/AlphaSemanticsResolverTests.cs.meta
@@ -1232,11 +1232,11 @@ git diff --cached --stat
 git diff --cached
 ```
 
-Read the full cached diff. Confirm each new `.meta` has a unique stable GUID paired with its script, and that the classifier, geometry, planner, semantic core, Poiyomi adapter, fixtures, asmdefs, `AssemblyInfo.cs`, package metadata, manifests/locks, workflows, and project settings are absent from it.
+Read the full cached diff. Confirm that each new `.meta` has a unique stable GUID paired with its script. Confirm that the classifier, geometry, planner, semantic core, Poiyomi adapter, fixtures, and asmdefs are absent from it. Also confirm that `AssemblyInfo.cs`, package metadata, manifests/locks, workflows, and project settings are absent from it.
 
-`git diff --cached --check` reports trailing whitespace in Unity-generated `.meta` files. That is repo-standard Unity output: identify it as such in the report and leave it alone. Never "normalize" a `.meta` file to silence the warning.
+`git diff --cached --check` reports trailing whitespace in Unity-generated `.meta` files. This is standard Unity output for this repository. Identify it as such in the report and leave it unchanged. Never "normalize" a `.meta` file to remove the warning.
 
-Then unstage everything, leaving the working tree exactly as it was:
+Then unstage everything and leave the working tree exactly as it was:
 
 ```bash
 git reset
@@ -1246,21 +1246,21 @@ git reset
 git status --short
 ```
 
-Expected: the same six untracked paths, nothing staged, nothing committed.
+Expected: the same six untracked paths, with nothing staged and nothing committed.
 
 - [x] **Step 4: Re-run the closed-vocabulary gate**
 
-Classify every unsupported case observed during execution:
+Classify each unsupported case observed during execution:
 
-- A: safely deferred as a refusal (expected for every case in this milestone);
-- B: a generic extraction/evidence boundary justified by two concrete producers;
-- C: one small closed classifier or semantic addition with a concrete consumer;
-- D: expression-graph pressure — a hard stop.
+- A: safely deferred as a refusal (expected for every case in this milestone)
+- B: a generic extraction/evidence boundary justified by two concrete producers
+- C: one small closed classifier or semantic addition with a concrete consumer
+- D: expression-graph pressure: a hard stop
 
 Expected: all pressure remains A. Any B, C, or D evidence stops execution for a design amendment.
 
 - [x] **Step 5: Report for review**
 
-Report branch and base commit; the implemented decision table and every refusal code; the field-evidence contract as implemented; focused and full test results with observed counts; any skipped validation and why; the architectural pressures from the design that execution confirmed or contradicted; all changed files and the Git-scope checks; whether Unity MCP was used and against which project; and remaining risk, especially the identity-ST coverage limit and the absent evidence producer.
+Report the branch and base commit. Report the implemented decision table and each refusal code. Report the field-evidence contract as implemented. Include focused and full test results with observed counts. Report all skipped validation and the reason. Report the architectural pressures that execution confirmed or contradicted. Include all changed files and the Git-scope checks. State whether Unity MCP was used and against which project. Report remaining risk, especially the identity-ST coverage limit and the absent evidence producer.
 
-Stop for review. Commit, push, PR, publishing, and settings changes remain separately authorized.
+Stop for review. Commit, push, PR, publishing, and settings changes require separate authorization.
