@@ -19,7 +19,7 @@ namespace Alrauna.Amuse.Editor.Build
     /// the feature: the internal barrier overload takes them as optional
     /// final parameters, and production passes nothing and runs the real
     /// <see cref="PoiyomiOpaqueConversion"/> and
-    /// <see cref="LilToonOpaqueConversion"/> paths.
+    /// <see cref="LilToonOpaqueTarget"/> paths.
     /// <para>
     /// Delegates on an existing overload, not an interface, registry,
     /// adapter hierarchy, result framework, or a test fixture framework.
@@ -33,8 +33,9 @@ namespace Alrauna.Amuse.Editor.Build
         out PoiyomiOpaqueConversionRefusal refusal);
 
     /// <summary>
-    /// The verified-fixture seam for the cutout conversion family — the
-    /// exact shape of <see cref="VerifiedPoiyomiConversion"/> with the
+    /// The verified-fixture seam for the lilToon conversion families
+    /// (cutout and transparent) — the exact shape of
+    /// <see cref="VerifiedPoiyomiConversion"/> with the
     /// lilToon refusal vocabulary.
     /// </summary>
     internal delegate bool VerifiedLilToonConversion(
@@ -52,13 +53,13 @@ namespace Alrauna.Amuse.Editor.Build
     /// and mutates nothing but AMUSE-owned transient objects — no renderer, no
     /// clip, no source asset, and no asset saving.
     /// <para>
-    /// The shader-family branch lives here and nowhere else: Poiyomi and the
-    /// cutout lilToon frontend convert, the opaque lilToon frontend is
-    /// already the canonical opaque answer and maps to itself, and every
-    /// other family is refused with
+    /// The shader-family branch lives here and nowhere else: Poiyomi and
+    /// the two lilToon alpha frontends (cutout and transparent) convert,
+    /// the opaque lilToon frontend is already the canonical opaque answer
+    /// and maps to itself, and every other family is refused with
     /// <see cref="AlphaSeparationSlotRefusal.OpaqueConversionUnsupportedFamily"/>.
-    /// Adding a third conversion family later means adding one case here and
-    /// nothing else in the feature.
+    /// Adding a conversion family later means adding one case here and
+    /// one entry in each family map, and nothing else in the feature.
     /// </para>
     /// </summary>
     internal static class AlphaSeparationPreparation
@@ -462,7 +463,10 @@ namespace Alrauna.Amuse.Editor.Build
                     opaque = live;
                     return AlphaSeparationSlotRefusal.None;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
                 {
+                    var isTransparent = captured.Family ==
+                        CapturedAlphaMaterialFamily.LilToonTransparent;
                     // Derived conversion evidence: the same group-and-admit
                     // loop the alpha resolution uses, re-run against this
                     // family's own conversion request, so conversion shares
@@ -473,8 +477,7 @@ namespace Alrauna.Amuse.Editor.Build
                     if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
                             captured,
                             conversionBindings,
-                            LilToonOpaqueConversion
-                                .ConversionEvidenceRequest,
+                            ConversionRequestForFamily(captured.Family),
                             out var derived,
                             out _))
                     {
@@ -511,8 +514,9 @@ namespace Alrauna.Amuse.Editor.Build
                     if (lilToonConversion != null)
                     {
                         // The verified-fixture seam substitutes the
-                        // cutout-family conversion step — effective render
-                        // state, real eligibility and the real canonical
+                        // lilToon conversion step the caller supplies —
+                        // effective render state, real eligibility and
+                        // the real canonical
                         // clone recipe — and deliberately skips the
                         // source-identity check no stand-in shader can pass.
                         if (!lilToonConversion(
@@ -532,25 +536,37 @@ namespace Alrauna.Amuse.Editor.Build
                         // beside the evidence: neither fact is
                         // animation-reachable, so reading them here is not a
                         // late live read of animation-relevant state.
-                        LilToonOpaqueConversion.ReadEffectiveRenderState(
+                        LilToonOpaqueTarget.ReadEffectiveRenderState(
                             live, out var queue, out var renderType);
 
-                        // Conversion attestation of the pinned cutout
-                        // source, per the merged conversion design.
-                        var sourceEvidence =
-                            LilToonSourceAttestation
+                        // Conversion attestation of the pinned cutout or
+                        // transparent source, per the merged conversion
+                        // design.
+                        var sourceEvidence = isTransparent
+                            ? LilToonSourceAttestation
+                                .GatherTransparentSourceEvidence(
+                                    live.shader, derived)
+                            : LilToonSourceAttestation
                                 .GatherCutoutSourceEvidence(
                                     live.shader, derived);
-                        if (!LilToonSourceAttestation
+                        var attested = isTransparent
+                            ? LilToonSourceAttestation
+                                .TryVerifyLilToonTransparentIdentity(
+                                    sourceEvidence, out _)
+                            : LilToonSourceAttestation
                                 .TryVerifyLilToonCutoutIdentity(
-                                    sourceEvidence, out _))
+                                    sourceEvidence, out _);
+                        if (!attested)
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
 
-                        var eligibility =
-                            LilToonOpaqueConversion
+                        var eligibility = isTransparent
+                            ? LilToonTransparentSourceEligibility
+                                .EvaluateVerifiedEligibility(
+                                    derived, queue, renderType)
+                            : LilToonCutoutSourceEligibility
                                 .EvaluateVerifiedEligibility(
                                     derived, queue, renderType);
                         if (eligibility.Outcome !=
@@ -564,7 +580,7 @@ namespace Alrauna.Amuse.Editor.Build
                         // reused here; only a first conversion creates the
                         // canonical clone.
                         opaque = preparedOpaque ??
-                            LilToonOpaqueConversion
+                            LilToonOpaqueTarget
                                 .PrepareCanonicalOpaqueClone(live, derived);
                     }
 
@@ -708,7 +724,10 @@ namespace Alrauna.Amuse.Editor.Build
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     return PoiyomiOpaqueConversion.ConversionEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
-                    return LilToonOpaqueConversion.ConversionEvidenceRequest;
+                    return LilToonCutoutSourceEligibility.ConversionEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return LilToonTransparentSourceEligibility
+                        .ConversionEvidenceRequest;
                 default:
                     return null;
             }
@@ -729,7 +748,9 @@ namespace Alrauna.Amuse.Editor.Build
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     return PoiyomiOpaqueConversion.CanonicalOpaqueProperties;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
-                    return LilToonOpaqueConversion.CanonicalOpaqueProperties;
+                    return LilToonOpaqueTarget.CanonicalOpaqueProperties;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return LilToonOpaqueTarget.CanonicalOpaqueProperties;
                 default:
                     return null;
             }
