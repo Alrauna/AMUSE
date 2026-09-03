@@ -2,34 +2,33 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Compose AMUSE's existing semantic, texture-evidence, exact-geometry, and separation-planning components into one Editor-only, read-only analysis that turns a supported Unity `Renderer` into an immutable `MeshSeparationPlan` plus per-submesh refusal provenance.
+**Goal:** Compose the existing AMUSE semantic, texture-evidence, exact-geometry, and separation-planning components into one Editor-only, read-only analysis. The analysis turns a supported Unity `Renderer` into an immutable `MeshSeparationPlan` plus per-submesh refusal provenance.
 
-**Architecture:** One static Host entry point (`UnityRendererAlphaAnalysis.Analyze`) validates the renderer, refuses outright when a `MaterialPropertyBlock` could invalidate base-material proofs, resolves alpha semantics once per distinct material through a two-branch shader-frontend dispatch, classifies each triangle through the existing exact classifier, and hands every submesh — analyzable or not — to the unchanged `MeshSeparationPlanner`. Nothing upstream of `Host` changes. Nothing mutates.
+**Architecture:** One static Host entry point (`UnityRendererAlphaAnalysis.Analyze`) validates the renderer. It refuses outright when a `MaterialPropertyBlock` could invalidate base-material proofs. It resolves alpha semantics once per distinct material through a two-branch shader-frontend dispatch. It classifies each triangle through the existing exact classifier, and hands every submesh, analyzable or not, to the unchanged `MeshSeparationPlanner`. Nothing upstream of `Host` changes, and nothing mutates.
 
 **Tech Stack:** Unity 2022.3.22f1 Editor, C#, NUnit EditMode tests, NDMF 1.14.4 (resolved, unused by this code).
 
 **Design:** `docs/superpowers/specs/2026-08-20-end-to-end-alpha-analysis-design.md`, revision 2 — read it before Task 1. It is the authority for every decision below.
 
-**Status: executed and complete (2026-08-20). Awaiting Git/PR finalization.** Tasks 0–7 all
-ran against the positively identified public Unity project. Baseline 666 / 666; final
-**695 / 695 passed, 0 failed, 0 skipped, 0 console errors**, 29 tests added. Task 1 measured
-that a non-readable imported mesh reads completely in the Editor; Task 3 measured that
-`HasPropertyBlock()` covers index-scoped blocks; Task 5 passed on its first run as a
-composition test, recorded as such rather than as a RED/GREEN cycle; Task 6 confirmed a
-non-readable texture refusal stays inside its own submesh. No stop condition fired, and no
-frozen component changed.
+**Status: executed and complete (2026-08-20). Awaiting Git/PR finalization.** Tasks 0–7 all ran against the positively identified public Unity project. Baseline 666 / 666, final **695 / 695 passed, 0 failed, 0 skipped, 0 console errors**, 29 tests added.
 
-**Plan revision 2** applied the architectural review: the mesh-readability characterization now runs *first*, per-task commits are removed, the property-block guard is added, UV dependency semantics are corrected, the extra-material rationale is corrected, the manufactured Task 5 RED is removed, `.meta` files are in scope, and the proposed architecture guard is dropped because an equivalent already exists.
+Task 1 measured that a non-readable imported mesh reads completely in the Editor.
+Task 3 measured that `HasPropertyBlock()` covers index-scoped blocks.
+Task 5 passed on its first run as a composition test, recorded as such rather than as a RED/GREEN cycle.
+Task 6 confirmed a non-readable texture refusal stays inside its own submesh.
+No stop condition fired, and no frozen component changed.
+
+**Plan revision 2** applied the architectural review. It runs the mesh-readability characterization *first* and removes per-task commits. It adds the property-block guard. It corrects UV dependency semantics and the extra-material rationale. It removes the manufactured Task 5 RED, and it puts `.meta` files in scope. It drops the proposed architecture guard because an equivalent already exists.
 
 ## Global Constraints
 
 - Base commit: `7f37b11`. Branch: `feat/end-to-end-alpha-analysis`.
-- **Nothing is staged, committed, pushed, or opened as a PR at any point in this plan.** All implementation work stays unstaged through the final review gate. Git finalization requires separate, explicit authorization and is not implied by implementation authorization.
+- **Nothing in this plan stages, commits, pushes, or opens a PR.** All implementation work stays unstaged through the final review gate. Git finalization requires separate, explicit authorization, and implementation authorization does not imply it.
 - Production code is **observational only**: no `MeshFilter.mesh`, no `Renderer.materials`, no `Renderer.GetPropertyBlock`, no `BakeMesh`, no importer writes, no `AssetDatabase` writes, no `SaveAssets`, no scene mutation.
-- **Never write `catch (Exception)`.** Do not add exception handling around Unity mesh reads at all unless Task 1 observes a throw, and in that case stop for review rather than choosing a policy.
+- **Never write `catch (Exception)`.** Do not add exception handling around Unity mesh reads at all unless Task 1 observes a throw. In that case, stop for review rather than choosing a policy.
 - Do not modify `MeshSeparationPlanner`, `TriangleAlphaClassifier`, `ExactUvGeometry`, `AlphaSemanticsResolver`, `MaterialSemantics`, `UnityTextureEvidence`, `UnityAlphaFieldEvidence`, or either shader frontend. If a change to any of them appears necessary, **stop and escalate**.
 - Do not add project dependencies, vendor shader packages, or VPM repositories. Do not touch `Packages/manifest.json`, `Packages/packages-lock.json`, or `Packages/vpm-manifest.json`.
-- Do not use the private avatar testbed. Every Unity MCP operation whose result is reported must first confirm, by read-only discovery, that the instance's normalized `Application.dataPath` equals `<repo-root>/Assets`.
+- Do not use the private avatar testbed. Report no Unity MCP result before a read-only discovery check confirms that the normalized `Application.dataPath` of the instance equals `<repo-root>/Assets`.
 - `Alrauna.Amuse.Editor.Analysis` must gain no `UnityEditor` dependency. Do **not** add a guard test for this — one already exists in `UnityAlphaFieldEvidenceTests`.
 - Proof-first: only `TriangleAlphaOutcome.ProvenOpaque` may become an opaque candidate. Uncertainty always yields `Unknown`, never a wider claim.
 - Every new test class is `public sealed`, lives in `Alrauna.Amuse.Tests.Editor.*`, and cleans up every object and asset folder it creates in `[TearDown]`.
@@ -64,9 +63,9 @@ Packages/com.alrauna.amuse/Tests/Editor/Host/UnityRendererAlphaAnalysisTests.cs.
 Packages/com.alrauna.amuse/Tests/Editor/Host/RendererAlphaAnalysisIntegrationTests.cs.meta
 ```
 
-**Never** hand-write, copy, clone, or invent a GUID. Let Unity import each new `.cs` and
-generate its `.meta`, then inspect. No new directory is introduced by this plan, so no
-folder `.meta` should appear; if one does, stop and investigate.
+**Never** hand-write, copy, clone, or invent a GUID.
+Let Unity import each new `.cs` and generate its `.meta`, then inspect. This plan introduces no new directory, so no folder `.meta` should appear.
+If one does, stop and investigate.
 
 **Modify:** nothing.
 
@@ -80,36 +79,32 @@ control `UnityEditorDetector_ReportsADirectoryThatDoesDependOnIt`). Do not dupli
 
 Run this after **every** task that creates a `.cs` file, before moving on:
 
-- [ ] Trigger a Unity asset refresh so the new script imports and its `.meta` is generated.
+- [ ] Trigger a Unity asset refresh so the new script imports and Unity generates its `.meta`.
+
 - [ ] `git status --short` — every new `.cs` has exactly one matching `.cs.meta`, both
       untracked (`??`). **No pre-existing `.meta` appears as modified (` M`) or deleted.**
-- [ ] Each new `.meta` carries a `guid:` line, and every new GUID is unique **across this
-      repository's own asset set** — not merely among the new files. The invariant is that
-      every `.meta` GUID under `Assets/` and `Packages/com.alrauna.amuse/` is distinct, so
-      a newly generated GUID must collide with neither another new one nor any pre-existing
-      one:
+
+- [ ] Each new `.meta` carries a `guid:` line.
+      Every new GUID is unique **across the asset set of this repository** — not merely among the new files.
+      The invariant is that every `.meta` GUID under `Assets/` and `Packages/com.alrauna.amuse/` is distinct.
+      A newly generated GUID must collide with neither another new one nor any pre-existing one:
 
 ```bash
 find "$(git rev-parse --show-toplevel)/Assets" "$(git rev-parse --show-toplevel)/Packages/com.alrauna.amuse" -name '*.meta' -print0 | xargs -0 grep -h '^guid:' | sort | uniq -d
 ```
 
-Expected: no output. The `find` walks tracked and untracked `.meta` files alike, so it
-covers both halves of the invariant in one pass. The roots come from
-`git rev-parse --show-toplevel`, never from a hard-coded checkout path, and the command
-uses only `find`, `xargs`, `grep`, `sort`, and `uniq`, which behave identically on macOS,
-Linux, and Git Bash.
+Expected: no output. The `find` walks tracked and untracked `.meta` files alike, so it covers both halves of the invariant in one pass.
+The roots come from `git rev-parse --show-toplevel`, never from a hard-coded checkout path.
+The command uses only `find`, `xargs`, `grep`, `sort`, and `uniq`, which behave identically on macOS, Linux, and Git Bash.
 
-Scope note, verified on this branch's base commit: restricting the walk to those two roots
-is not a convenience. Scanning all of `Packages/` reports twelve pre-existing duplicates,
-every one of them a pair of `Packages/nadena.dev.ndmf/Dependencies~/X.meta` and
-`Packages/nadena.dev.ndmf/Dependencies/X.meta` — the NDMF standalone bootstrap copies that
-directory verbatim, GUIDs included. Unity never sees the `Dependencies~` original (a
-trailing tilde hides a directory from the asset database), so it is not a real collision,
-it is third-party vendored content, and it is outside anything this milestone may touch.
-Including it would make the check permanently red and therefore useless. `Library/`,
-`Temp/`, `Logs/`, and `UserSettings/` fall outside both roots already.
+Scope note, verified on the base commit of this branch. Restricting the walk to those two roots is not a convenience.
+Scanning all of `Packages/` reports twelve pre-existing duplicates, every one of them a pair of `Packages/nadena.dev.ndmf/Dependencies~/X.meta` and `Packages/nadena.dev.ndmf/Dependencies/X.meta`. The NDMF standalone bootstrap copies that directory verbatim, GUIDs included.
 
-Any duplicate GUID within the two roots means a `.meta` was copied rather than generated.
+Unity never sees the `Dependencies~` original, because a trailing tilde hides a directory from the asset database.
+This is not a real collision. It is third-party vendored content, outside anything this milestone may touch.
+Including it would make the check permanently red and therefore useless. `Library/`, `Temp/`, `Logs/`, and `UserSettings/` fall outside both roots already.
+
+Any duplicate GUID within the two roots means a copied `.meta`, not a generated one.
 **Delete the new `.meta` and re-import it.** Never edit or regenerate a pre-existing `.meta`
 to resolve a collision.
 
@@ -156,7 +151,7 @@ untouched `main`, stop and report before writing code.
 
 - [ ] **Step 4: Record the baseline**
 
-Write the observed numbers into the task notes. Nothing is created, staged, or committed.
+Write the observed numbers into the task notes. This task creates, stages, and commits nothing.
 
 ---
 
@@ -166,7 +161,7 @@ Write the observed numbers into the task notes. Nothing is created, staged, or c
 - Create: `Packages/com.alrauna.amuse/Tests/Editor/Host/MeshReadabilityCharacterizationTests.cs` (+ Unity-generated `.meta`)
 
 **Interfaces:**
-- Consumes: nothing. **No AMUSE production code is involved** — this characterizes Unity itself.
+- Consumes: nothing. **No AMUSE production code takes part** — this characterizes Unity itself.
 - Produces: the observed fact that decides whether the production read path needs any
   unreadable-mesh handling at all.
 
@@ -174,10 +169,9 @@ Write the observed numbers into the task notes. Nothing is created, staged, or c
 `Mesh.GetIndices` succeed in the Editor on an imported mesh with
 `ModelImporter.isReadable == false` — the default that real avatar models ship with.
 
-**This is characterization, not RED/GREEN.** Unity documents that mesh data access is
-permitted from Editor code outside the game/rendering loop regardless of `isReadable`, so
-this is expected to pass on first run. Record that truthfully; do not manufacture a failing
-version.
+**This is characterization, not RED/GREEN.**
+Unity documents that Editor code outside the game/rendering loop may access mesh data regardless of `isReadable`. This task is therefore expected to pass on first run.
+Record that truthfully. Do not manufacture a failing version.
 
 - [ ] **Step 1: Write the characterization test**
 
@@ -314,13 +308,11 @@ Run the EditMode suite filtered to `MeshReadabilityCharacterizationTests`.
 
 **Expected: PASS.** Copy the `TestContext.WriteLine` output into the task notes verbatim.
 
-**If any `Assert.DoesNotThrow` fails: STOP.** Record the exact operation named in the
-assertion message and the exact exception type NUnit reports, and escalate for
-architectural review before writing any production read path. **Do not add a `catch`, and
-never `catch (Exception)`.**
+**If any `Assert.DoesNotThrow` fails: STOP.** Record the exact operation named in the assertion message and the exact exception type NUnit reports.
+Escalate for architectural review before writing any production read path.
+**Do not add a `catch`, and never `catch (Exception)`.**
 
-**If an operation returns a short or empty array without throwing: STOP** and escalate the
-same way — that changes what `MalformedMeshData` means.
+**If an operation returns a short or empty array without throwing: STOP** and escalate the same way. That changes what `MalformedMeshData` means.
 
 - [ ] **Step 3: Metadata checkpoint**
 
@@ -328,9 +320,8 @@ Run the Metadata checkpoint above for `MeshReadabilityCharacterizationTests.cs`.
 
 - [ ] **Step 4: Record the finding in the design document**
 
-Replace the expectation wording in the design's "Mesh readability and exception policy"
-subsection with the observed result, and update Risks item 3 to state the measured
-behaviour. Change no other design decision on the strength of it.
+Replace the expectation wording in the "Mesh readability and exception policy" subsection of the design with the observed result.
+Update Risks item 3 to state the measured behaviour. Change no other design decision on the strength of it.
 
 - [ ] **Step 5: Checkpoint (no commit)**
 
@@ -353,8 +344,7 @@ staged.
 - Consumes: `PoiyomiMaterialSemantics.AnalyzeBaseMaterial(Material) → PoiyomiSemanticResult`, `LilToonMaterialSemantics.AnalyzeBaseMaterial(Material) → LilToonSemanticResult`, both with `bool IsSupportedMaterial` and `MaterialSemantics Semantics`.
 - Produces: `internal static MaterialSemantics UnityMaterialSemantics.AnalyzeBaseMaterial(Material material)` and `internal static MaterialSemantics UnityMaterialSemantics.AllUnknown()`, both in namespace `Alrauna.Amuse.Editor.Semantics`.
 
-**Architectural question this task proves:** that frontend selection needs no interface,
-registry, or dispatch table — each frontend's own attestation is sufficient and exclusive.
+**Architectural question this task proves:** that frontend selection needs no interface, registry, or dispatch table — the attestation of each frontend alone is sufficient and exclusive.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -538,10 +528,9 @@ untracked. Nothing staged.
   - `internal static RendererAlphaAnalysis UnityRendererAlphaAnalysis.Analyze(Renderer renderer)`
   - `internal static RendererAlphaAnalysis UnityRendererAlphaAnalysis.Analyze(Renderer renderer, BaseMaterialSemanticsProvider semanticsProvider)`
 
-**Architectural questions this task proves:** that every unproven Unity renderer state can
-be refused *before* `MeshSeparationInput` would throw; that a `MaterialPropertyBlock`
-cannot silently invalidate a base-material proof; and that `HasPropertyBlock()` actually
-covers per-material-index blocks.
+**Architectural questions this task proves:** that the analysis refuses every unproven Unity renderer state *before* `MeshSeparationInput` would throw.
+That a `MaterialPropertyBlock` cannot silently invalidate a base-material proof.
+And that `HasPropertyBlock()` actually covers per-material-index blocks.
 
 - [ ] **Step 1: Write the failing refusal tests**
 
@@ -1052,9 +1041,8 @@ refusal value.
 Run the EditMode suite filtered to `UnityRendererAlphaAnalysisTests`.
 Expected: 9 passed, 0 failed.
 
-**If `APerMaterialIndexPropertyBlockAlsoRefuses` fails on its `HasPropertyBlock()`
-assertion, STOP** and escalate: the guard has a hole and choosing a wider API is an
-architectural decision, not an implementation one.
+**If `APerMaterialIndexPropertyBlockAlsoRefuses` fails on its `HasPropertyBlock()` assertion, STOP** and escalate.
+The guard has a hole. Choosing a wider API is an architectural decision, not an implementation one.
 
 - [ ] **Step 5: Metadata checkpoint**
 
@@ -1081,10 +1069,9 @@ Nothing staged.
 - Consumes: everything from Task 3, plus `UnityAlphaFieldEvidence(IEnumerable<Texture>)` and its `TryGetAlphaField` method group, `AlphaSemanticsResolver.Resolve(SemanticOutput<ScalarSemanticValue>, AlphaFieldProvider) → AlphaResolution`, `AlphaResolution.IsResolved/Failure/Classify(TriangleAlphaInput)`, `TriangleAlphaInput.WithUv0/MissingUv0`, `SubmeshSeparationInput(int, IReadOnlyList<int>, IReadOnlyList<TriangleAlphaOutcome>)`, `MeshSeparationInput(int, IReadOnlyList<SubmeshSeparationInput>)`, `MeshSeparationPlanner.Create`.
 - Produces: `Analyze` returning `RendererAlphaAnalysis.Planned(...)` for every supported renderer.
 
-**Architectural questions this task proves:** that classifier outcomes compose into the
-unchanged planner without an impedance mismatch; that uncertainty stays scoped to the
-submesh or triangle that owns it; and that **unavailable UV0 invalidates only the
-conclusions that actually depend on it**.
+**Architectural questions this task proves:** that classifier outcomes compose into the unchanged planner without an impedance mismatch.
+That uncertainty stays scoped to the submesh or triangle that owns it.
+And that **unavailable UV0 invalidates only the conclusions that actually depend on it**.
 
 - [ ] **Step 1: Write the failing success-path, granularity, and UV-dependency tests**
 
@@ -1380,9 +1367,9 @@ Then the tests:
         }
 ```
 
-The complementary half of the dependency rule — that a **texture-sampled** equation *does*
-become `Unknown` without UV0 — needs a real imported texture and a real sampled resolution,
-so it lives in Task 5's integration file. Neither half alone proves the rule.
+The complementary half of the dependency rule states that a **texture-sampled** equation *does* become `Unknown` without UV0.
+That half needs a real imported texture and a real sampled resolution. So it lives in the integration file of Task 5.
+Neither half alone proves the rule.
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
