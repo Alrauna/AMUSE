@@ -2,23 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans by default. Use superpowers:subagent-driven-development only if the user separately authorizes subagents. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the approved minimum immutable normalized material-semantics core without implementing shader adapters or changing the existing alpha and separation contracts.
+**Goal:** Add the approved minimum immutable normalized material-semantics core. Do not implement shader adapters. Do not change the existing alpha and separation contracts.
 
-**Architecture:** One internal Editor-only semantic model describes one resolved effective material state through four independently complete or unknown outputs. Closed typed values support only constants, texture samples, texture-sample-times-constant, and the narrow normal forms justified by the UV-coupling case; later analyzers, adapters, content providers, and transformation evidence remain separate.
+**Architecture:** One internal Editor-only semantic model describes one resolved effective material state through four outputs. Each output is independently complete or unknown. Closed typed values support only constants, texture samples, texture-sample-times-constant, and the narrow normal forms that the UV-coupling case justifies. Later analyzers, adapters, content providers, and transformation evidence remain separate.
 
 **Tech Stack:** Unity 2022.3.22f1, C#, Unity `Vector2`/`Vector3`, NUnit EditMode tests, existing `Alrauna.Amuse.Editor` and `Alrauna.Amuse.Tests.Editor` assemblies.
 
 ## Global Constraints
 
 - The approved specification is `docs/superpowers/specs/2026-08-16-material-semantics-core-design.md`.
-- Work only on a fresh topic branch based on current `main`; the design branch is `feat/material-semantics-core` based on `dabf36e`.
-- Use red/green TDD and observe each requested test result before production changes.
+- Work only on a fresh topic branch based on current `main`. The design branch is `feat/material-semantics-core`, based on `dabf36e`.
+- Use red/green TDD. Observe each requested test result before you change production code.
 - Keep every new production type `internal` in `Alrauna.Amuse.Editor.Semantics`.
 - Keep tests in the existing friend assembly under `Alrauna.Amuse.Tests.Editor.Semantics`.
 - Do not add dependencies, assemblies, adapter interfaces, adapter registries/factories, shader names, property names, expression graphs, transformation capabilities, or public APIs.
 - Do not modify the classifier, exact geometry, separation planner, existing tests, fixture JSON, asmdefs, package metadata, manifests/locks, workflows, website, project settings, or private testbed.
 - Unknown output meaning must never become a default color, scalar, UV channel, sampling mode, normal, or opaque result.
-- Use ordinary constructors and static value factories; do not add dependency injection, builders, interning, canonicalization, reflection, or serialization.
+- Use ordinary constructors and static value factories. Do not add dependency injection, builders, interning, canonicalization, reflection, or serialization.
 - Create and retain Unity `.meta` files only as asset pairs for the new directories and C# files.
 - Do not commit, push, open a PR, publish, or change repository settings without separate authorization.
 
@@ -28,16 +28,16 @@
 
 **Create:**
 
-- `Packages/com.alrauna.amuse/Editor/Semantics.meta` — Unity folder metadata.
-- `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs` — the complete v1 semantic vocabulary and immutable resolved-state container.
-- `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs.meta` — Unity script metadata.
-- `Packages/com.alrauna.amuse/Tests/Editor/Semantics.meta` — Unity test-folder metadata.
-- `Packages/com.alrauna.amuse/Tests/Editor/Semantics/MaterialSemanticsTests.cs` — direct NUnit contract, thought-experiment, and adversarial tests.
-- `Packages/com.alrauna.amuse/Tests/Editor/Semantics/MaterialSemanticsTests.cs.meta` — Unity script metadata.
+- `Packages/com.alrauna.amuse/Editor/Semantics.meta`: Unity folder metadata.
+- `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs`: the complete v1 semantic vocabulary and immutable resolved-state container.
+- `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs.meta`: Unity script metadata.
+- `Packages/com.alrauna.amuse/Tests/Editor/Semantics.meta`: Unity test-folder metadata.
+- `Packages/com.alrauna.amuse/Tests/Editor/Semantics/MaterialSemanticsTests.cs`: direct NUnit contract, thought-experiment, and adversarial tests.
+- `Packages/com.alrauna.amuse/Tests/Editor/Semantics/MaterialSemanticsTests.cs.meta`: Unity script metadata.
 
 **Do not modify:** existing production, tests, asmdefs, metadata, fixtures, or project/package configuration.
 
-Keeping the vocabulary in one production file is deliberate. Split it only if the approved implementation becomes difficult to review as one coherent contract; a speculative type-per-file tree is out of scope.
+The vocabulary stays in one production file by design. Split it only if the approved implementation becomes difficult to review as one coherent contract. A speculative type-per-file tree is out of scope.
 
 ---
 
@@ -133,7 +133,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
 - [ ] **Step 2: Import and run the focused class to verify red**
 
-Use only the public AMUSE Unity project. Discover `mcpforunity://instances`, select the instance whose root is `E:/AI/Git/AMUSE`, wait for compilation, then run:
+Use only the public AMUSE Unity project. Discover `mcpforunity://instances`, select the instance whose root is `<repo-root>`, wait for compilation, then run:
 
 ```text
 mode: EditMode
@@ -141,7 +141,7 @@ test_names: Alrauna.Amuse.Tests.Editor.Semantics.MaterialSemanticsTests
 include_failed_tests: true
 ```
 
-Expected red: the test assembly fails to compile because the `Alrauna.Amuse.Editor.Semantics` types do not exist. If no public Unity Editor is running, open the public project through the user's normal Unity workflow; never select the private avatar testbed as a substitute.
+Expected red: the test assembly fails to compile because the `Alrauna.Amuse.Editor.Semantics` types do not exist. If no public Unity Editor runs, open the public project through the user's normal Unity workflow. Never select the private avatar testbed as a substitute.
 
 - [ ] **Step 3: Implement the minimal primitive API**
 
@@ -284,7 +284,7 @@ Do not add implicit conversions to Unity textures, GUID parsing, source registri
 
 - [ ] **Step 4: Run the primitive tests green**
 
-Expected: all four current `MaterialSemanticsTests` pass with zero skips. Read Unity Console errors after compilation; expect none related to the new files.
+Expected: all four current `MaterialSemanticsTests` pass with zero skips. Read Unity Console errors after compilation. Expect none related to the new files.
 
 ---
 
@@ -456,7 +456,7 @@ private static TextureSample Sample(
 
 - [ ] **Step 2: Run the focused class and verify red**
 
-Expected red: missing texture sample and semantic value types. The Task 1 tests remain compiled and green once the missing types are introduced.
+Expected red: the texture sample and semantic value types are missing. The Task 1 tests stay compiled and green after you add the missing types.
 
 - [ ] **Step 3: Implement immutable texture sample and typed closed forms**
 
@@ -549,7 +549,7 @@ internal sealed class ScalarSemanticValue : IEquatable<ScalarSemanticValue>
 Implementation rules are exact:
 
 - `TextureSample` rejects an empty/default `TextureSourceId`, assigns its three immutable values, and compares them structurally.
-- Each factory stores only the payload meaningful to its kind in private fields; inactive private storage is never exposed as semantic data.
+- Each factory stores only the payload meaningful to its kind in private fields. Inactive private storage never becomes semantic data.
 - `Constant` exposes only `GetConstantValue`.
 - `Texture` exposes only `GetTextureSample` plus `GetColorInterpretation` or `GetChannel`.
 - `TextureTimesConstant` stores the supplied finite multiplier.
@@ -559,14 +559,14 @@ Implementation rules are exact:
 - Every factory taking a sample throws `ArgumentNullException` for null.
 - Every enum factory parameter is checked with `Enum.IsDefined`.
 - Every scalar or vector constant/multiplier rejects NaN and infinity.
-- Equality first compares kind. It then compares only fields meaningful to that kind: constant only; sample plus interpretation/channel; or sample plus interpretation/channel plus multiplier.
+- Equality compares kind first. It then compares only the fields meaningful to that kind: constant only, sample plus interpretation/channel, or sample plus interpretation/channel plus multiplier.
 - Hash codes use the same meaningful fields as equality. Do not use object identity.
 
 Do not introduce subclasses, visitor interfaces, generic graph nodes, operator overloads, implicit constant folding, or `A * 1 == A` equivalence.
 
 - [ ] **Step 4: Run Tasks 1 and 2 green**
 
-Expected: all current semantic tests pass. Independently allocated equal values compare equal, plain texture and texture-times-one remain different kinds, and every wrong-kind payload access throws rather than exposing an inactive value.
+Expected: all current semantic tests pass. Independently allocated equal values compare equal. A plain texture and texture-times-one remain different kinds. Every wrong-kind payload access throws and does not expose an inactive value.
 
 ---
 
@@ -798,11 +798,11 @@ internal sealed class MaterialSemantics : IEquatable<MaterialSemantics>
 }
 ```
 
-Implement `NormalSemanticValue` as a two-factory immutable value. `Unmodified` means the incoming host-provided surface/shading normal is not perturbed by the material and exposes no sample; `GetTextureSample` throws `InvalidOperationException` for that kind. `TangentSpaceNormalMap` rejects null and returns its sample through the accessor. Equality compares kind and compares the sample only for the mapped kind. Do not add normal strength, inversion, encoding enums, or composition.
+Implement `NormalSemanticValue` as a two-factory immutable value. `Unmodified` means the material does not perturb the incoming host-provided surface/shading normal, and it exposes no sample. `GetTextureSample` throws `InvalidOperationException` for that kind. `TangentSpaceNormalMap` rejects null and returns its sample through the accessor. Equality compares kind, and it compares the sample only for the mapped kind. Do not add normal strength, inversion, encoding enums, or composition.
 
 - [ ] **Step 4: Run Tasks 1 through 3 green**
 
-Expected: all semantic tests pass. Explicit and default unknown retrieval throw, unmodified Normal exposes no sample, partial output knowledge remains independent, and two independently constructed resolved states compare structurally.
+Expected: all semantic tests pass. Explicit and default unknown retrieval throw. An unmodified Normal exposes no sample. Partial output knowledge stays independent. Two independently constructed resolved states compare structurally.
 
 ---
 
@@ -813,7 +813,7 @@ Expected: all semantic tests pass. Explicit and default unknown retrieval throw,
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/MaterialSemanticsTests.cs`
 - Modify only for a demonstrated contract defect: `Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs`
 
-**Interfaces:** No new production API. These tests prove the approved vocabulary is sufficient and no shader/host or transformation policy leaked into it.
+**Interfaces:** No new production API. These tests prove that the approved vocabulary is sufficient. No shader/host or transformation policy leaked into it.
 
 - [ ] **Step 1: Add the bakeable-tint representation test**
 
@@ -987,7 +987,7 @@ public void FilterAndWrapDifferencesRemainObservable()
 
 - [ ] **Step 5: Run the full semantic class green**
 
-Expected: every `MaterialSemanticsTests` case passes with zero failures/skips. If any test demonstrates the approved API cannot represent the case, stop and return to the design approval gate instead of adding a broader expression or capability system.
+Expected: every `MaterialSemanticsTests` case passes with zero failures/skips. If any test shows that the approved API cannot represent the case, stop and return to the design approval gate. Do not add a broader expression or capability system.
 
 ---
 
@@ -998,11 +998,11 @@ Expected: every `MaterialSemanticsTests` case passes with zero failures/skips. I
 - Modify only for demonstrated defects: the two new semantic C# files.
 - Do not change approved design semantics silently.
 
-**Interfaces:** No new API. This task proves that the milestone remained a semantic language only and preserved existing contracts.
+**Interfaces:** No new API. This task proves that the milestone stayed a semantic language only and preserved existing contracts.
 
 - [ ] **Step 1: Run the complete EditMode suite**
 
-Use the verified public `E:/AI/Git/AMUSE` Unity instance and run all EditMode tests. Record total, passed, failed, skipped, and duration. Expected: zero failures and no unexpected Console errors/warnings. This includes unchanged classifier, exact geometry, fixture integrity, separation planner, smoke tests, and the new semantic tests.
+Use the verified public Unity instance at `<repo-root>` and run all EditMode tests. Record total, passed, failed, skipped, and duration. Expected: zero failures and no unexpected Console errors/warnings. This includes unchanged classifier, exact geometry, fixture integrity, separation planner, smoke tests, and the new semantic tests.
 
 - [ ] **Step 2: Verify forbidden coupling is absent**
 
@@ -1080,7 +1080,7 @@ Record direct evidence for:
 
 - [ ] **Step 6: Leave publication actions gated**
 
-Do not stage or commit unless the user separately authorizes it. If authorization is later given, stage only the reviewed semantic files and their `.meta` pairs; keep the already reviewed design/plan documents in the same branch only if the user includes them in the authorized scope. Suggested coherent commit messages are:
+Do not stage or commit unless the user separately authorizes it. If the user later gives authorization, stage only the reviewed semantic files and their `.meta` pairs. Keep the already reviewed design/plan documents in the same branch only if the user includes them in the authorized scope. Suggested coherent commit messages are:
 
 ```text
 test: specify normalized material semantics

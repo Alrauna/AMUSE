@@ -2,29 +2,29 @@
 
 **Status: historical investigation. Several conclusions are materially superseded.**
 
-This note recorded the first survey of what an alpha-separation vertical slice would
-require. Its public-code, NDMF, mesh, slot, animation, lifecycle and mutation-boundary
-findings remain useful and are preserved below. Three things about it are no longer valid:
+This note is the first survey of what an alpha-separation vertical slice needs. Its
+findings about public code, NDMF, meshes, slots, animation, lifecycle, and the mutation
+boundary stay useful. This note keeps them below. Three things in it are no longer valid:
 
-1. **Its Census methodology was invalid.** It failed to locate the approved corpus and
-   substituted an arbitrary project-wide, asset-level scan. Every result derived from that
-   scan has been removed. **Those results are not valid evidence under current Census
-   policy** and must not be cited, restored, or relied on. Questions they appeared to
-   answer are open again until re-characterized against the approved corpus.
-2. **Its `_CENSUSLAB` premise was wrong.** The note claimed no approved Census root
-   existed. An approved root does exist (§9), and the claim has been corrected.
-3. **Its headline recommendation is superseded.** Geometry-only separation applying the
-   *same alpha material* to both slots does not accomplish the intended overdraw
-   optimization (§4).
+1. **Its Census methodology was invalid.** It did not find the approved corpus. Instead, it
+   used an arbitrary scan of the whole project at the asset level. This note removes every
+   result from that scan. Under current Census policy, those results are not valid
+   evidence. Do not cite them, restore them, or rely on them. The questions they seemed to
+   answer stay open again until a new characterization uses the approved corpus.
+2. **Its `_CENSUSLAB` premise was wrong.** The note claimed that no approved Census root
+   existed. An approved root exists (see §9). This note corrects that claim.
+3. **A later finding supersedes its headline recommendation.** Geometry-only separation
+   that applies the *same alpha material* to both slots does not give the intended
+   overdraw optimization (see §4).
 
-Census Lab observations are architectural pressure and validation evidence, never
-correctness authority.
+Census Lab observations serve as architectural pressure and validation evidence. They are
+never a correctness authority.
 
 ## 1. Repository baseline at the time
 
-Branch `feat/alpha-separation-vertical-slice` from `main` at `b48b4ff`, working tree clean,
-nothing committed. Unity 2022.3.22f1, NDMF 1.14.4, VRChat SDK 3.10.4 — all read from pinned
-local source.
+The branch is `feat/alpha-separation-vertical-slice`, from `main` at commit `b48b4ff`. The
+working tree is clean, with nothing committed. Unity is 2022.3.22f1. NDMF is 1.14.4.
+VRChat SDK is 3.10.4. This note reads all versions from pinned local source.
 
 ### Production alpha path as it actually exists
 
@@ -42,114 +42,115 @@ AmusePlatformFinishPlugin  (BuildPhase.PlatformFinish — NDMF's LAST phase)
              → returns plan.OpaqueTriangleCount   ← PLAN DISCARDED
 ```
 
-Three public-code findings shaped everything else, and all remain valid:
+Three findings from public code shaped everything else. All three remain valid:
 
-1. **The plan is computed and then thrown away.** `ClassifyRuntimeStates` builds a full
-   `MeshSeparationPlan` and returns only its opaque triangle count. Nothing retains the
-   plan at build scope. Retaining it is the first required change.
-2. **The Prepare/Apply boundary already exists and is unwired.**
+1. **The build computes the plan, then discards it.** `ClassifyRuntimeStates` builds a
+   full `MeshSeparationPlan` but returns only its opaque triangle count. Nothing keeps
+   the plan at build scope. Keeping the plan is the first required change.
+2. **The Prepare/Apply boundary exists but has no wiring.**
    `AmuseBuildOperation.Execute(lifecycle, assetSaver, prepare, apply)` is complete,
-   documented and tested, with zero production callers.
-3. **`UnityRendererMutationTarget` exists and is produced but never consumed**, carrying
-   the renderer, expected mesh and expected material-slot count.
+   documented, and tested. It has zero production callers.
+3. **`UnityRendererMutationTarget` exists.** The build produces it but never consumes it.
+   It carries the renderer, the expected mesh, and the expected material-slot count.
 
-The merged upload-conditional authorization design and the general-purpose transformation
-boundaries audit under `docs/superpowers/` remain the approved architecture for this area.
+The merged upload-conditional authorization design and the general-purpose
+transformation-boundaries audit under `docs/superpowers/` remain the approved
+architecture for this area.
 
 ## 2. The proof-to-plan contract
 
-`MeshSeparationPlan` preserves original submesh identity and is complete for its own
-purpose. The captured snapshot feeding it holds only vertex count, positions, UV0,
-per-submesh indices and the captured alpha materials. It therefore contains none of:
+`MeshSeparationPlan` preserves the original submesh identity. It is complete for its own
+purpose. The captured snapshot that feeds it holds only the vertex count, positions, UV0,
+per-submesh indices, and the captured alpha materials. So it holds none of the following:
 
-- vertex attributes beyond position/UV0 — normals, tangents, colors, UV1–UV7, bone weights,
-  bindposes;
-- blendshapes — names, frame counts, weights, per-frame deltas;
-- mesh-level state — index format, bounds, base vertex, submesh descriptors, name;
+- vertex attributes beyond position/UV0 — normals, tangents, colors, UV1–UV7, bone
+  weights, bindposes
+- blendshapes — names, frame counts, weights, per-frame deltas
+- mesh-level state — index format, bounds, base vertex, submesh descriptors, name
 - renderer-level state — bones, root bone, local bounds, blendshape weights, quality,
-  probe/shadow settings;
-- material identity beyond an opaque binding index (deliberately);
-- **any description of what an opaque output material should be** (§4).
+  probe/shadow settings
+- material identity beyond an opaque binding index (deliberately)
+- **any description of what an opaque output material should be** (§4)
 
-**Recommended boundary, still valid:** the plan stays proof/candidate output and feeds a
-separate prepared application object. The merged design explicitly rejected plans carrying
-host postconditions, and the boundaries audit requires the plan stay purpose-specific.
-**Do not modify `MeshSeparationPlan`'s public contract.**
+**Recommended boundary, still valid:** the plan stays as proof/candidate output and feeds
+a separate prepared application object. The merged design rejected plans that carry host
+postconditions. The boundaries audit requires the plan to stay purpose-specific.
+**Do not change `MeshSeparationPlan`'s public contract.**
 
 ## 3. Proposed supported case
 
 Structural constraints, still valid as a starting shape:
 
-- exactly one `SkinnedMeshRenderer`, handled independently;
-- slot count equal to submesh count (already enforced);
-- triangle topology only (already enforced);
+- exactly one `SkinnedMeshRenderer`, handled independently
+- slot count equal to submesh count (already enforced)
+- triangle topology only (already enforced)
 - **exactly one admitted material per affected slot** — a correctness requirement, not a
-  simplification (§6);
-- one source submesh dispositioned to split;
-- blendshapes and skinning preserved;
-- generated slot **appended at the end**, never inserted (§6);
-- one generated replacement mesh; the renderer component itself not replaced.
+  simplification (§6)
+- one source submesh set to split
+- blendshapes and skinning preserved
+- generated slot **appended at the end**, never inserted (§6)
+- one generated replacement mesh. AMUSE does not replace the renderer component itself.
 
-Whether blendshaped and shared meshes are common enough to be mandatory in the first slice
-was previously answered from the invalid scan. **That answer has been withdrawn.** The
-conservative engineering position stands on its own: shared input meshes are possible, so
-never mutate an input mesh; and blendshape/skinning preservation is required whenever
-present.
+Whether blendshaped and shared meshes are common enough to require support in the first
+slice was, before now, answered from the invalid scan. **This note withdraws that
+answer.** The conservative engineering position stands on its own. Shared input meshes
+are possible, so the slice must never change an input mesh. Blendshape and skinning
+preservation is required whenever present.
 
 ## 4. Material/output strategy — the blocking gate
 
 ### What the proof actually establishes
 
 `AdmittedMaterialStates` resolves only the alpha output. `MaterialSemantics` is exactly
-`{ BaseColor, Alpha, Emission, Normal }` — **AMUSE models no render state at all**: no
-render queue, depth write, blend factors, cull, alpha-to-coverage, stencil, keywords or
-shader passes.
+`{ BaseColor, Alpha, Emission, Normal }`. **AMUSE models no render state at all: no
+render queue, depth write, blend factors, cull, alpha-to-coverage, stencil, keywords, or
+shader passes.**
 
-So a proven-opaque result means precisely: *the material's alpha equation evaluates to
-opaque over these triangles under every admitted runtime state.* It does **not** establish
-that the same material rendered in an opaque render mode produces the same image.
+So a proven-opaque result means exactly this: *the material's alpha equation evaluates
+to opaque over these triangles, under every admitted runtime state.* It does **not** show
+that the same material, rendered in an opaque render mode, produces the same image.
 
 ### Structural shader findings (public vendor source, still valid)
 
-- **lilToon encodes render mode by switching the shader asset.** AMUSE's lilToon
-  attestation accepts one shader name and its opaque pass, so it attests only already-opaque
-  lilToon materials. Transparent and cutout lilToon variants — precisely the population
-  alpha separation targets — resolve as semantics-unknown. Converting them would mean
-  switching shader asset *and* reconciling a large set of render-state properties, none of
-  which is modeled.
-- **Poiyomi uses one shader with a mode property** plus depth-write, blend factors, blend
-  op, premultiplied alpha and per-material render-queue overrides.
-- **Locked Poiyomi is a correct, expected, conservative refusal**, never a defect: the
-  identity check rejects the optimized/locked state outright. No unlocking experiment is
-  needed and none was performed.
+- **lilToon encodes the render mode by switching the shader asset.** AMUSE's lilToon
+  attestation accepts one shader name and its opaque pass. So it attests only lilToon
+  materials that are already opaque. Transparent and cutout lilToon variants resolve as
+  semantics-unknown — and these variants are exactly the population that alpha separation
+  targets. Converting them would mean switching the shader asset, and also reconciling a
+  large set of render-state properties. AMUSE models none of these properties.
+- **Poiyomi uses one shader with a mode property**, plus depth-write, blend factors,
+  blend op, premultiplied alpha, and per-material render-queue overrides.
+- **A locked Poiyomi material is a correct, expected, conservative refusal**, never a
+  defect. The identity check rejects the optimized, locked state outright. No unlocking
+  experiment is needed, and this investigation ran none.
 
-Corpus population figures that previously accompanied these findings came from the invalid
-scan and have been removed.
+This note removes the corpus population figures that once went with these findings,
+because they came from the invalid scan.
 
 ### Conclusion — and what is superseded
 
-Nothing in AMUSE at the time could justify a render-mode conversion; cloning a material and
-flipping mode, depth-write and queue would have been an unproven transformation.
+At the time, nothing in AMUSE could justify a render-mode conversion. Cloning a material
+and flipping its mode, depth-write, and queue would have been an unproven transformation.
 
-That part stands. **What is superseded is the recommendation that followed it:**
+That part stands. **A later finding supersedes the recommendation that followed it:**
 
 > ~~Geometry-only separation in the first slice: split the submesh into two output
 > submeshes and assign the same original material to both slots.~~
 
-**Superseded.** Splitting geometry while applying the *same alpha material* to both slots
-does not accomplish the intended optimization. The target benefit is opaque rendering of
-the proven-opaque triangles — moving them out of transparent queue/blend/depth behavior.
-Two submeshes both drawn with the original alpha material render exactly as before, so the
-overdraw benefit is zero, and the split can add a draw call. It exercises mutation
-architecture, but it is not the optimization, and it should not be described as a
-first increment of one.
+**Superseded.** Splitting the geometry while applying the *same alpha material* to both
+slots does not give the intended optimization. The target benefit is opaque rendering of
+the proven-opaque triangles — moving them out of transparent queue, blend, and depth
+behavior. Two submeshes, both drawn with the original alpha material, render exactly as
+before. So the overdraw benefit is zero, and the split can add a draw call. This approach
+exercises the mutation architecture, but it is not the optimization. Do not describe it
+as a first increment of the optimization.
 
-The opaque-material conversion is a separate, independently-proven capability requiring
-render-state understanding. See §11 for the current dependency direction.
+The opaque-material conversion is a separate capability that needs its own proof and
+needs render-state understanding. See §11 for the current dependency direction.
 
 ## 5. Mesh transformation invariants
 
-No existing cloning facility: NDMF has none and the repository has none outside tests.
+No cloning facility exists yet: NDMF has none, and the repository has none outside tests.
 
 **Preservation checklist** — still valid as an engineering requirement:
 
@@ -158,82 +159,82 @@ No existing cloning facility: NDMF has none and the repository has none outside 
 | positions | copy exactly |
 | normals, tangents | copy exactly — do not recompute |
 | colors | copy exactly when present |
-| UV0–UV7 | copy every present channel exactly; presence is per-channel |
+| UV0–UV7 | copy every present channel exactly, presence is per-channel |
 | boneWeights, bindposes | copy exactly |
 | blendshape names / frame count / frame weights | preserve exactly and in order |
 | blendshape per-frame delta vertices/normals/tangents | copy exactly |
-| index format | preserve, or promote 16→32 only if required; never demote |
+| index format | preserve, or promote 16→32 only if required, never demote |
 | submesh count / descriptors | **changes by design** — this is the transformation |
 | topology | triangles only (enforced) |
-| baseVertex | index reads apply it by default; write absolute indices |
+| baseVertex | index reads apply it by default. Write absolute indices. |
 | bounds | recompute or copy — must be at least as large as the original |
 | mesh name | deterministic generated name |
 
-**Vertex duplication is not required.** Submeshes freely share vertices, so splitting an
-index buffer needs no vertex changes. Keeping vertex arrays byte-identical also keeps
-blendshapes and skinning trivially correct, because both are vertex-indexed. **Index-only
+**Vertex duplication is not required.** Submeshes can freely share vertices, so splitting
+an index buffer needs no vertex changes. Keeping the vertex arrays byte-identical also
+keeps blendshapes and skinning correct, because both index by vertex. **Index-only
 separation should be an explicit invariant.**
 
-**Open again:** whether the full reconstruction input set — bindposes, bone weights and
-blendshape frames — is reliably readable in the Editor from meshes marked non-readable. The
-previous affirmative answer came from the invalid scan and has been withdrawn. The existing
-public `MeshReadabilityCharacterizationTests` covers positions, UVs and index reads only.
-This needs public characterization before it can be assumed.
+**Open again:** whether the Editor can reliably read the full reconstruction input set —
+bindposes, bone weights, and blendshape frames — from a mesh marked non-readable. The
+earlier yes answer came from the invalid scan. **This note withdraws that answer.** The
+existing public `MeshReadabilityCharacterizationTests` covers only positions, UVs, and
+index reads. This needs public characterization before anyone can assume it holds.
 
 ## 6. Renderer, slot and animation invariants
 
-If only the shared mesh and shared materials change, everything else is preserved for free.
-Bones, root bone, local bounds, quality, blendshape weights, probe/shadow/light settings,
-enabled state and sorting order must remain untouched.
+If only the shared mesh and shared materials change, everything else stays preserved for
+free. Bones, root bone, local bounds, quality, blendshape weights, probe/shadow/light
+settings, enabled state, and sorting order must stay untouched.
 
-**Do not replace the renderer component.** Assigning a generated mesh suffices; replacement
-would break animation path bindings, component references and NDMF's object-registry
-entries. Blendshape *weights* live on the renderer and survive a shared-mesh swap only if
-blendshape order and count are preserved.
+**Do not replace the renderer component.** Assigning a generated mesh is enough.
+Replacement would break animation path bindings, component references, and NDMF's
+object-registry entries. Blendshape *weights* live on the renderer. They survive a
+shared-mesh swap only if the blendshape order and count stay the same.
 
-**Appended slots only — empirically demonstrated in the public project.** With a clip
-binding a material-array element, appending a generated slot preserved the existing
-addressing, while prepending redirected the existing material-swap animation onto AMUSE's
-generated slot. **Inserting or prepending silently breaks material-swap animation.**
+**Appended slots only — shown by test in the public project.** With a clip that binds a
+material-array element, appending a generated slot preserved the existing addressing.
+Prepending redirected the existing material-swap animation onto AMUSE's generated slot
+instead. **Inserting or prepending silently breaks material-swap animation.**
 
-**Renderer-wide material property curves carry no per-slot information**, per the existing
-AMUSE characterization that the generated material binding set does not vary with slot
-count. Such a curve therefore also applies to any new slot.
+**Renderer-wide material property curves carry no per-slot information.** The existing
+AMUSE characterization shows that the generated material binding set does not change
+with slot count. So such a curve also applies to any new slot.
 
 **A slot with more than one admitted material cannot be safely separated.** The proof
-constrains alpha only; base colour and emission are never compared across admitted states.
-After separation the swap still addresses the original slot while the appended slot keeps
-whatever AMUSE placed there, so the two halves diverge unless the admitted materials are
-RGB-identical. Hence the single-admitted-material requirement in §3.
+constrains alpha only. The proof never compares base color and emission across admitted
+states. After separation, the swap still addresses the original slot, while the appended
+slot keeps whatever AMUSE placed there. So the two halves diverge unless the admitted
+materials are RGB-identical. This is why §3 requires a single admitted material per slot.
 
-NDMF does not rescue this: replaced-object registration is error-report provenance only,
-and the animator services context has already committed the graph before AMUSE's barrier
-runs.
+NDMF does not rescue this. Replaced-object registration serves error-report provenance
+only. Also, the animator services context commits the graph before AMUSE's barrier runs.
 
 ## 7. NDMF lifecycle findings (pinned source, still valid)
 
-- **`IAssetSaver` is a plain `BuildContext` property, not an extension.** There is no
-  extension lifetime to hold open, so no pass-topology change is needed. The previously
-  suspected lifecycle issue dissolves.
-- **`BuildContext.Serialize()` auto-persists referenced generated assets.** It walks assets
-  reachable from the avatar root at build end; a skinned renderer's mesh and materials are
-  traversed. A generated mesh or material assigned to the build renderer is therefore saved
-  without an explicit call.
-- **Cleanup is asymmetric, and this is the trap.** The end-of-build cleanup destroys only
-  components and game objects among saved-but-unreferenced assets. A mesh or material that
-  AMUSE eagerly saves and then abandons is never cleaned up and is permanently welded into
-  the shipped generated-asset container.
-- **Therefore: do not save assets during Prepare.** Let assignment plus auto-serialization
-  own persistence, or save only after successful assignment. Saving also writes to the asset
-  database, which would make Prepare observably mutating and contradict the boundary's
-  purpose.
-- **No deterministic naming guarantee.** Container paths are uniquified and the object's own
-  name becomes the sub-asset name, so determinism is AMUSE's responsibility.
-- **PlatformFinish is the correct mutation stage.** It is NDMF's last phase, and the only
+- **`IAssetSaver` is a plain `BuildContext` property, not an extension.** No extension
+  lifetime needs to stay open, so the pass topology needs no change. This resolves the
+  lifecycle issue this investigation once suspected.
+- **`BuildContext.Serialize()` auto-persists referenced generated assets.** At build end,
+  it walks every asset reachable from the avatar root. This walk includes a skinned
+  renderer's mesh and materials. So `Serialize()` saves a generated mesh or material
+  assigned to the build renderer, with no explicit call needed.
+- **Cleanup is asymmetric, and this is the trap.** Among saved-but-unreferenced assets,
+  the end-of-build cleanup destroys only components and game objects. If AMUSE eagerly
+  saves a mesh or material and then abandons it, cleanup never removes it. The asset
+  stays permanently welded into the shipped generated-asset container.
+- **Therefore: do not save assets during Prepare.** Let assignment plus
+  auto-serialization own persistence, or save only after assignment succeeds. Saving also
+  writes to the asset database. That write would make Prepare observably mutating, which
+  contradicts the boundary's purpose.
+- **No deterministic naming guarantee.** Unity uniquifies container paths, and the
+  object's own name becomes the sub-asset name. So determinism is AMUSE's
+  responsibility.
+- **PlatformFinish is the correct mutation stage.** It is NDMF's last phase. The only
   other passes there touch neither meshes nor material slots.
 - **Replaced-object registration is error-report provenance only.** It rewrites no
-  animations and no component references. Call it for diagnostics; never rely on it for
-  correctness. No custom provenance framework is needed.
+  animations and no component references. Call it for diagnostics. Never rely on it for
+  correctness. AMUSE needs no custom provenance framework.
 
 ## 8. Prepare / Apply boundary and failure taxonomy
 
@@ -249,126 +250,145 @@ retained plan + widened immutable geometry/renderer capture
    Serialize() auto-persists both
 ```
 
-Constructing a mesh in memory is not observable mutation; saving an asset is, and is
-excluded from Prepare.
+Constructing a mesh in memory is not observable mutation. Saving an asset is observable
+mutation, and Prepare excludes it.
 
-**Failure taxonomy.** Unsupported renderer type, missing mesh, non-triangle topology,
-property blocks, slot/submesh mismatch, animated mesh or slot count, locked or unattested
-shaders, and transparent lilToon variants are all **expected renderer-scoped refusals**,
-most already named. A slot with more than one admitted material is a **new** condition
-needing a name. Having no opaque triangles is not a refusal at all.
+**Failure taxonomy.** The following are all **expected renderer-scoped refusals**, and
+most already have a name: unsupported renderer type, missing mesh, non-triangle topology,
+property blocks, slot/submesh mismatch, animated mesh or slot count, locked or
+unattested shaders, and transparent lilToon variants. A slot with more than one admitted
+material is a **new** condition that needs a name. Having no opaque triangles is not a
+refusal at all.
 
-**Defects**, which must reach NDMF as build-blocking errors: a plan referencing a triangle
-outside its source; opaque and transparent ordinals not summing to the triangle count; a
-generated index outside the vertex range; a missing asset saver despite lifecycle facts
-claiming one; or a Unity API throwing after validated preconditions. Any failure after the
-first Apply write must abort the build, because the clone may be partially transformed.
+**Defects** must reach NDMF as build-blocking errors. These include: a plan that
+references a triangle outside its source, opaque and transparent ordinals that do not sum
+to the triangle count, a generated index outside the vertex range, a missing asset saver
+despite lifecycle facts that claim one, or a Unity API call that throws after validated
+preconditions. Any failure after the first Apply write must abort the build, because the
+clone may be only partly transformed.
 
 **Keep the no-catch policy in the dry analysis loop.** It already returns a named refusal
-for every unsupported input, so an exception there *is* a defect. Converting defects into
-skipped renderers would produce silent coverage loss — the exact failure mode the
+for every unsupported input, so an exception there *is* a defect. Converting a defect
+into a skipped renderer would cause silent coverage loss — the exact failure mode the
 proof-first model forbids.
 
 **Do not add a refusal enum member yet.** Whether the multi-admitted-material condition
-belongs in the analysis refusal vocabulary or a new transformation vocabulary depends on
-decisions not yet made.
+belongs in the analysis refusal vocabulary or in a new transformation vocabulary depends
+on decisions nobody has made yet.
 
 ## 9. Census Lab — methodology correction
 
-**The approved private root is `Assets/!CENSUSLAB/`** and **the authoritative corpus is
-`Assets/!CENSUSLAB/Scenes/`**, with private launchers under
-`Assets/!CENSUSLAB/Scripts/Editor/`. The Lab's location on disk is discovered at runtime and
-is never recorded here.
+**The approved private root is `Assets/!CENSUSLAB/`.** **The authoritative corpus is
+`Assets/!CENSUSLAB/Scenes/`.** Private launchers live under
+`Assets/!CENSUSLAB/Scripts/Editor/`. The Lab's location on disk is found at runtime, and
+this note never records it.
 
-This investigation searched for the root under a wrong name, concluded no approved Census
-structure existed, and substituted an arbitrary project-wide, asset-level scan. Both the
-premise and the substitution were errors:
+This investigation searched for the root under the wrong name. It concluded that no
+approved Census structure existed. Then it substituted an arbitrary project-wide scan at
+the asset level. Both the premise and the substitution were errors:
 
-- the approved root does exist — the earlier claim that it did not, and that the wrongly
-  named folder was the proper location, are **corrected and withdrawn**;
-- substituting a project-wide corpus when the approved corpus is required is **not
-  permitted** under current Census policy.
+- The approved root does exist. This note **corrects and withdraws** the earlier claim
+  that it did not, and the earlier claim that the wrongly named folder was the proper
+  location.
+- Current Census policy **does not permit** substituting a project-wide corpus when the
+  approved corpus is required.
 
-**Every result derived from that scan has been removed from this note and is not valid
-evidence.** That includes all renderer, prefab, mesh, material, texture, shader-family,
-mode, slot, blendshape, index-format, sharing and candidate-population figures, and all
-ratios and distributions built from them. They are not replaced with substitute metrics.
-Any design question they appeared to settle is open until re-characterized against the
-approved corpus.
+**This note removes every result from that scan, and none of them is valid evidence.**
+The removed results include every renderer, prefab, mesh, material, texture,
+shader-family, mode, slot, blendshape, index-format, sharing, and candidate-population
+figure, plus every ratio and distribution built from them. This note does not replace
+them with substitute metrics. Any design question they seemed to settle stays open until
+the team re-characterizes it against the approved corpus.
 
-Also recorded for accuracy: Census Lab content was **not modified** during that
-investigation. No asset, scene, material, mesh, prefab or setting was written, no scene was
-opened or saved, and no folder was created. Instance identity was confirmed by exact
-data-path match rather than a hard-coded path. Package versions in the Lab matched AMUSE's
-pins. No private observation was written to disk; no per-entity or per-avatar row was
-produced; no new publishable Census metric was introduced.
+For the record: that investigation **did not change** any Census Lab content. It wrote no
+asset, scene, material, mesh, prefab, or setting. It opened or saved no scene, and it
+created no folder. It confirmed instance identity by an exact data-path match, not a
+hard-coded path. The package versions in the Lab matched AMUSE's pins. It wrote no
+private observation to disk, produced no per-entity or per-avatar row, and introduced no
+new publishable Census metric.
 
-Qualitative conclusions that survive, because they follow from public code and vendor source
-rather than from the invalid scan: transparent and cutout lilToon variants are unattestable
-today; locked Poiyomi materials are expected refusals; and real avatar content makes shared
-meshes, blendshapes and skinning realistic constraints the slice must handle rather than
-exclude.
+Some qualitative conclusions survive, because they follow from public code and vendor
+source, not from the invalid scan. Transparent and cutout lilToon variants are
+unattestable today. Locked Poiyomi materials are expected refusals. Real avatar content
+makes shared meshes, blendshapes, and skinning realistic constraints. The slice must
+handle them, not exclude them.
 
 ## 10. Census automation — proposed, not implemented
 
-The public research package already provides the observation, anonymization, aggregation and
-guard infrastructure, with load-bearing privacy tests. **It was not modified and must not be
-reinvented.** The intended division — reusable logic in the public research package, a thin
-private launcher under `Assets/!CENSUSLAB/Scripts/Editor/`, and no Census dependency in the
-product package — remains a proposal. No launcher was created, and creating one remains a
-controller decision rather than an implementation detail.
+The public research package already gives the observation, anonymization,
+aggregation, and guard infrastructure, with load-bearing privacy tests. **This
+investigation did not change it, and nobody should reinvent it.** The intended division
+stays a proposal: reusable logic in the public research package, a thin private launcher
+under `Assets/!CENSUSLAB/Scripts/Editor/`, and no Census dependency in the product
+package. This investigation created no launcher. Creating one stays a controller
+decision, not an implementation detail.
 
-No privacy-contract change was made, and none is proposed here.
+This note makes no privacy-contract change and proposes none.
 
 ## 11. Current dependency direction
 
 The vertical slice is the *consumer*, not the next task. Current order:
 
 1. **Poiyomi Replace / no-mask alpha semantics — merged (PR #22).**
-2. **Pinned Poiyomi opaque conversion** — investigated, not implemented; see the
+2. **Pinned Poiyomi opaque conversion** — investigated, not implemented. See the
    render-state note.
-3. **Real runtime texture-evidence investigation** — not started; gates assigned-mask alpha
-   and any texture-backed triangle proof on real avatars.
-4. **Alpha-separation vertical slice** — this note's subject; blocked on the above.
+3. **Real runtime texture-evidence investigation** — not started. It gates
+   assigned-mask alpha and any texture-backed triangle proof on real avatars.
+4. **Alpha-separation vertical slice** — this note's subject. It is blocked on the items
+   above.
 
-Nothing above item 1 is implemented, and this note should not be read as claiming otherwise.
+Nothing above item 1 is implemented. Do not read this note as a claim otherwise.
 
 ## 12. Findings that remain valid
 
-1. `MeshSeparationPlan` is host-independent, complete for its purpose, and must not change.
+1. `MeshSeparationPlan` is host-independent, complete for its purpose, and must not
+   change.
 2. It carries enough to derive output index buffers.
-3. The production pass discards the plan; retaining it is the first required change.
-4. `AmuseBuildOperation`'s Prepare/Apply boundary exists, is tested, and has no production
-   caller.
+3. The production pass discards the plan. Keeping it is the first required change.
+4. `AmuseBuildOperation`'s Prepare/Apply boundary exists, is tested, and has no
+   production caller.
 5. `IAssetSaver` is a `BuildContext` property — the suspected lifecycle issue dissolves.
 6. `Serialize()` auto-persists referenced generated meshes and materials.
-7. Eagerly saving then abandoning an asset leaks it permanently, so Prepare must not save.
-8. PlatformFinish is the correct mutation stage; no other pass there touches meshes or slots.
-9. Replaced-object registration is error-report provenance only, never an animation rewriter.
-10. Appending a material slot preserves existing addressing; inserting or prepending breaks
-    it — demonstrated in the public project.
-11. Renderer-wide material property curves are slot-count-invariant.
+7. Eagerly saving then abandoning an asset leaks it permanently, so Prepare must not
+   save.
+8. PlatformFinish is the correct mutation stage. No other pass there touches meshes or
+   slots.
+9. Replaced-object registration is error-report provenance only, never an animation
+   rewriter.
+10. Appending a material slot preserves existing addressing. Inserting or prepending
+    breaks it — shown by test in the public project.
+11. Renderer-wide material property curves do not change with slot count.
 12. A slot with more than one admitted material cannot be safely separated, because the
     proof constrains alpha only.
 13. Index-only separation needs no vertex duplication, keeping skinning and blendshapes
     correct.
-14. `MaterialSemantics` models no render state, so render-mode conversion was unprovable at
-    the time of writing.
+14. `MaterialSemantics` models no render state, so render-mode conversion was unprovable
+    at the time of writing.
 15. lilToon transparency is a different shader asset and is unattested today.
 16. Locked Poiyomi is a correct expected refusal, not a defect.
 
 ## 13. Open questions
 
-**Blocking:** the render-state and texture-evidence prerequisites in §11; the honest benefit
-story for any first increment, given §4; whether non-readable meshes expose the full
-reconstruction set (§5), which now needs public characterization.
+**Blocking:** the render-state and texture-evidence prerequisites in §11, the honest
+benefit story for any first increment given §4, and whether non-readable meshes expose
+the full reconstruction set (§5) — this last item now needs public characterization.
 
-**Deferrable to the slice's own design:** the widened-capture record shape, kept explicitly
-slice-scoped rather than becoming a universal mesh domain; deterministic generated-asset
-naming and logical output identity; bounds recompute versus copy; index-format promotion
-policy; where the retained plan lives in build state; and which refusal vocabulary the
-multi-admitted-material condition belongs to.
+**Deferrable to the slice's own design:**
 
-**Deferred beyond the slice:** lilToon transparent-variant attestation; multi-slot and
-multi-submesh separation; wholly-opaque candidate handling; profitability and cost modelling;
-cross-renderer planning; any Census launcher or schema extension.
+- the widened-capture record shape, kept explicitly slice-scoped rather than becoming a
+  universal mesh domain
+- deterministic generated-asset naming and logical output identity
+- bounds recompute versus copy
+- index-format promotion policy
+- where the retained plan lives in build state
+- which refusal vocabulary the multi-admitted-material condition belongs to
+
+**Deferred beyond the slice:**
+
+- lilToon transparent-variant attestation
+- multi-slot and multi-submesh separation
+- wholly-opaque candidate handling
+- profitability and cost modeling
+- cross-renderer planning
+- any Census launcher or schema extension
+</content>

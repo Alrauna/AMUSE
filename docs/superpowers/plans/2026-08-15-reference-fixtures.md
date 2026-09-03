@@ -2,24 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add thirteen public, deterministic texture/mesh reference fixtures and executable integrity specifications without adding an alpha classifier or production behavior.
+**Goal:** Add thirteen public, deterministic texture/mesh reference fixtures and executable integrity specifications. Do not add an alpha classifier or production behavior.
 
-**Architecture:** Store portable inputs and independent triangle-outcome oracles in two package-local JSON catalogs. Parse, validate, and build fresh disposable Unity objects entirely inside the existing EditMode test assembly; tests validate the fixture framework and fixed oracle contract, never derive outcomes through Unity sampling or classifier logic.
+**Architecture:** Store portable inputs and independent triangle-outcome oracles in two package-local JSON catalogs. Parse, validate, and build fresh disposable Unity objects entirely in the existing EditMode test assembly. Tests validate the fixture framework and fixed oracle contract. They never derive outcomes through Unity sampling or classifier logic.
 
 **Tech Stack:** Unity 2022.3.22f1, C# Editor tests, NUnit, `UnityEngine.JsonUtility`, `UnityEditor.AssetDatabase`, `Texture2D`, and `Mesh`.
 
 ## Global Constraints
 
 - Keep every new implementation file under `Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/`.
-- Add exactly thirteen approved cases and preserve the IDs and outcomes from `docs/superpowers/specs/2026-08-15-reference-fixtures-design.md`.
-- Keep `fixture-inputs.json` independent from `fixture-expectations.json`; no expected outcome may be calculated from Unity sampling or test-side classifier logic.
-- Alpha byte `255` is the only fully opaque value. Every value below `255`, including `254`, is `MustRemainTransparent` when the partial transparency is known.
+- Add exactly thirteen approved cases. Preserve the IDs and outcomes from `docs/superpowers/specs/2026-08-15-reference-fixtures-design.md`.
+- Keep `fixture-inputs.json` independent from `fixture-expectations.json`. Do not calculate expected outcomes from Unity sampling or test-side classifier logic.
+- Alpha byte `255` is the only fully opaque value. When partial transparency is known, every value below `255` is `MustRemainTransparent`, including `254`.
 - `Unknown` means “the analyzer cannot establish a safe supported classification from the available information.”
-- Interpret every nondegenerate triangle over its continuous closed barycentric UV domain, including interior, edges, vertices, and filter footprint.
-- Treat structural numeric array order as significant and texture, mesh, case, and expectation record collection order as insignificant.
-- Build fresh case-local `Texture2D` and `Mesh` objects, disable mipmaps, and prevent state leakage between cases.
+- Interpret every nondegenerate triangle over its continuous closed barycentric UV domain. Include the interior, edges, vertices, and filter footprint.
+- Treat structural numeric array order as significant. Treat texture, mesh, case, and expectation record collection order as insignificant.
+- Build fresh case-local `Texture2D` and `Mesh` objects. Disable mipmaps and prevent state leakage between cases.
 - Use only the existing Unity and NUnit dependencies. Do not add packages.
-- Do not add production classifier, transformation, NDMF, material, animation, shader-adapter, or private-avatar code.
+- Do not add a production classifier, transformation, NDMF, material, animation, shader-adapter, or private-avatar code.
 - Do not add mipmap cases, CI, or release/listing workflow changes.
 - Do not access or modify the private Unity testbed.
 
@@ -49,7 +49,7 @@
 
 ## Shared interfaces
 
-The following block describes the final test-assembly interfaces in `ReferenceFixtureData.cs`. Task 1 adds the catalog types and methods through `FindExpectation`; Task 2 adds `BuiltReferenceFixture` and `BuildCase`. Use the exact names throughout:
+The following block describes the final test-assembly interfaces in `ReferenceFixtureData.cs`. Task 1 adds the catalog types and methods through `FindExpectation`. Task 2 adds `BuiltReferenceFixture` and `BuildCase`. Use the exact names throughout:
 
 ```csharp
 [Serializable]
@@ -170,7 +170,7 @@ internal static class ReferenceFixtureData
 - Create: `Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/Data/fixture-expectations.json`
 - Create: `Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/ReferenceFixtureData.cs`
 - Create: `Packages/com.alrauna.alpha-material-optimizer/Tests/Editor/ReferenceFixtures/ReferenceFixtureIntegrityTests.cs`
-- Create through Unity import: matching `.meta` files
+- Create matching `.meta` files through Unity import
 
 **Interfaces:**
 
@@ -179,7 +179,7 @@ internal static class ReferenceFixtureData
 
 - [ ] **Step 1: Add failing catalog-contract tests**
 
-Create `ReferenceFixtureIntegrityTests.cs` with these tests before adding `ReferenceFixtureData.cs` or either JSON catalog:
+Create `ReferenceFixtureIntegrityTests.cs` with these tests before you add `ReferenceFixtureData.cs` or either JSON catalog:
 
 ```csharp
 using System;
@@ -278,12 +278,12 @@ namespace Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures
 Run from the repository root:
 
 ```powershell
-$unityExe = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
-$projectRoot = 'E:\AI\Git\alpha-material-optimizer-ndmf'
+$unityExe = '<unity-editor-path>\2022.3.22f1\Editor\Unity.exe'
+$projectRoot = '<repo-root>'
 & $unityExe -batchmode -nographics -projectPath $projectRoot -runTests -testPlatform EditMode -testFilter 'Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures.ReferenceFixtureIntegrityTests' -testResults "$projectRoot\Logs\reference-fixtures-red.xml" -logFile "$projectRoot\Logs\reference-fixtures-red.log"
 ```
 
-Expected: nonzero exit or compiler failure in `reference-fixtures-red.log` because `ReferenceFixtureData` does not exist. Unity may generate `.meta` files during this import; retain only metas paired with the intended new fixture files and directories.
+Expected: a nonzero exit or compiler failure in `reference-fixtures-red.log` because `ReferenceFixtureData` does not exist. Unity can generate `.meta` files during this import. Retain only metas paired with the intended new fixture files and directories.
 
 - [ ] **Step 3: Add the exact portable input catalog**
 
@@ -432,7 +432,7 @@ internal sealed class ReferenceFixtureCatalogs
 }
 ```
 
-`Load` must load each file as a `TextAsset`, parse with `JsonUtility.FromJson`, construct `ReferenceFixtureCatalogs`, call `Validate`, and return the validated catalogs:
+`Load` must load each file as a `TextAsset` and parse it with `JsonUtility.FromJson`. It must construct `ReferenceFixtureCatalogs`, call `Validate`, and return the validated catalogs:
 
 ```csharp
 using System;
@@ -475,23 +475,23 @@ private static void Require(bool condition, string message)
 }
 ```
 
-Implement `Validate` with all of these concrete checks and a failure message that includes the offending ID when one exists:
+Implement `Validate` with all the following concrete checks. When an offending ID exists, include it in the failure message:
 
-1. Both catalogs and every top-level array are non-null; both schema versions equal `1`.
-2. One ordinal `HashSet<string>` receives every texture, mesh, and input-case ID; reject empty IDs and any duplicate across those three collections.
-3. Every texture has positive dimensions, exactly `width * height` alpha values, and values in `[0, 255]`.
-4. Every mesh has a non-null position array with at least nine values and length divisible by three. Every position component is finite and every `z` component equals zero.
-5. `Present` UV0 has exactly two finite values per vertex; `Missing` UV0 has a non-null empty array; reject every other UV state.
-6. Every triangle-index array is non-null, non-empty, divisible by three, and contains only indices from zero through `vertexCount - 1`.
-7. For every indexed triangle, calculate the signed XY double area `(p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x)` and reject negative values. Positive values are counter-clockwise; zero is allowed for the deliberate degenerate fixture.
-8. Every case references an existing texture and mesh ID and uses a closed-set filter and wrap string.
-9. Expectation case IDs are non-empty and unique, correspond one-to-one with input case IDs, and do not depend on collection position.
-10. Each expected triangle index is unique within its case, lies in `[0, triangleCount - 1]`, and the set covers every triangle exactly once.
-11. Every outcome belongs to the closed outcome set; unknown strings fail rather than defaulting to `ProvenOpaque`.
+1. Both catalogs and every top-level array are non-null. Both schema versions equal `1`.
+2. One ordinal `HashSet<string>` receives every texture, mesh, and input-case ID. Reject empty IDs and duplicates across those three collections.
+3. Every texture has positive dimensions and exactly `width * height` alpha values. All values are in `[0, 255]`.
+4. Every mesh has a non-null position array with at least nine values and a length divisible by three. Every position component is finite. Every `z` component equals zero.
+5. `Present` UV0 has exactly two finite values per vertex. `Missing` UV0 has a non-null empty array. Reject every other UV state.
+6. Every triangle-index array is non-null, non-empty, and divisible by three. It contains only indices from zero through `vertexCount - 1`.
+7. For every indexed triangle, calculate the signed XY double area `(p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x)`. Reject negative values. Positive values are counter-clockwise. Allow zero for the deliberate degenerate fixture.
+8. Every case references an existing texture and mesh ID. Every case uses a closed-set filter and wrap string.
+9. Expectation case IDs are non-empty and unique. They correspond one-to-one with input case IDs and do not depend on collection position.
+10. Each expected triangle index is unique within its case and lies in `[0, triangleCount - 1]`. The set covers every triangle exactly once.
+11. Every outcome belongs to the closed outcome set. Reject unknown strings instead of defaulting to `ProvenOpaque`.
 
-Implement `FindCase` and `FindExpectation` with ordinal ID comparison and an `InvalidDataException` when no unique match exists. Do not index or join records by array position.
+Implement `FindCase` and `FindExpectation` with ordinal ID comparison. Use an `InvalidDataException` when no unique match exists. Do not index or join records by array position.
 
-Use one private lookup helper so the same uniqueness behavior applies everywhere:
+Use one private lookup helper. This helper must apply the same uniqueness behavior everywhere:
 
 ```csharp
 private static T FindUnique<T>(
@@ -535,15 +535,15 @@ internal static FixtureExpectationRecord FindExpectation(
 Run:
 
 ```powershell
-$unityExe = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
-$projectRoot = 'E:\AI\Git\alpha-material-optimizer-ndmf'
+$unityExe = '<unity-editor-path>\2022.3.22f1\Editor\Unity.exe'
+$projectRoot = '<repo-root>'
 & $unityExe -batchmode -nographics -projectPath $projectRoot -runTests -testPlatform EditMode -testFilter 'Alrauna.AlphaMaterialOptimizer.Tests.Editor.ReferenceFixtures.ReferenceFixtureIntegrityTests' -testResults "$projectRoot\Logs\reference-fixtures-task1.xml" -logFile "$projectRoot\Logs\reference-fixtures-task1.log"
 if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath "$projectRoot\Logs\reference-fixtures-task1.log" -Tail 200; exit $LASTEXITCODE }
 [xml]$results = Get-Content -Raw -LiteralPath "$projectRoot\Logs\reference-fixtures-task1.xml"
 if ([int]$results.'test-run'.failed -ne 0) { throw 'Reference fixture integrity tests failed.' }
 ```
 
-Expected: exit code `0`, result XML reports zero failures, and Unity imports every intended asset with a paired `.meta` file.
+Expected: exit code `0`, zero failures in the result XML, and a paired `.meta` file for every intended Unity asset.
 
 - [ ] **Step 7: Review asset and Git scope**
 
@@ -581,7 +581,7 @@ git commit -m "test: add deterministic reference fixture catalogs"
 
 - [ ] **Step 1: Add failing builder determinism, isolation, and mipmap tests**
 
-Append these tests to `ReferenceFixtureIntegrityTests` before adding `BuiltReferenceFixture` or `BuildCase`:
+Append these tests to `ReferenceFixtureIntegrityTests` before you add `BuiltReferenceFixture` or `BuildCase`:
 
 ```csharp
 [Test]
@@ -649,7 +649,7 @@ public void SharedLogicalDefinitionsDoNotShareMutableUnityObjects()
 }
 ```
 
-These calls inspect stored pixel data only. They do not use `GetPixel`, `GetPixelBilinear`, rendering, or any Unity sampling API to infer semantic outcomes.
+These calls inspect only stored pixel data. They do not use `GetPixel`, `GetPixelBilinear`, rendering, or any Unity sampling API to infer semantic outcomes.
 
 - [ ] **Step 2: Run the focused test and observe the expected failure**
 
@@ -720,7 +720,7 @@ internal static BuiltReferenceFixture BuildCase(FixtureInputCatalog inputs, stri
 }
 ```
 
-Implement the small conversion and closed-string parsers directly in `ReferenceFixtureData`; do not add interfaces, factories, caches, or new files:
+Implement the small conversion and closed-string parsers directly in `ReferenceFixtureData`. Do not add interfaces, factories, caches, or new files:
 
 ```csharp
 private static Vector3[] ToVector3Array(float[] values)
@@ -761,7 +761,7 @@ private static TextureWrapMode ParseWrapMode(string value)
 }
 ```
 
-`Validate` has already rejected every other string before builders run, and the parsers still fail closed when called independently. Do not cache either the logical lookup result as a mutable Unity object or the constructed Unity objects. The `Texture2D` constructor explicitly sets `mipChain: false`; `Apply(false, false)` must not generate mipmaps.
+`Validate` has already rejected every other string before builders run. The parsers still fail closed when called independently. Do not cache the logical lookup result as a mutable Unity object. Do not cache the constructed Unity objects. The `Texture2D` constructor explicitly sets `mipChain: false`. `Apply(false, false)` must not generate mipmaps.
 
 - [ ] **Step 4: Run focused fixture tests and inspect the observed result**
 
@@ -772,8 +772,8 @@ Expected: exit code `0`, all `ReferenceFixtureIntegrityTests` pass, and the log 
 - [ ] **Step 5: Run the complete EditMode suite**
 
 ```powershell
-$unityExe = 'C:\Program Files\Unity\Hub\Editor\2022.3.22f1\Editor\Unity.exe'
-$projectRoot = 'E:\AI\Git\alpha-material-optimizer-ndmf'
+$unityExe = '<unity-editor-path>\2022.3.22f1\Editor\Unity.exe'
+$projectRoot = '<repo-root>'
 & $unityExe -batchmode -nographics -projectPath $projectRoot -runTests -testPlatform EditMode -testResults "$projectRoot\Logs\editmode-results.xml" -logFile "$projectRoot\Logs\editmode.log"
 if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath "$projectRoot\Logs\editmode.log" -Tail 200; exit $LASTEXITCODE }
 [xml]$results = Get-Content -Raw -LiteralPath "$projectRoot\Logs\editmode-results.xml"
@@ -781,7 +781,7 @@ if ([int]$results.'test-run'.failed -ne 0) { throw 'Complete EditMode suite fail
 if (Select-String -LiteralPath "$projectRoot\Logs\editmode.log" -Pattern 'error CS\d+|Compilation failed') { throw 'Compiler error found in Unity log.' }
 ```
 
-Expected: the existing smoke test and every new fixture integrity test pass; result XML reports zero failures; the Unity log contains zero compiler errors.
+Expected: the existing smoke test and every new fixture integrity test pass. The result XML reports zero failures. The Unity log contains zero compiler errors.
 
 - [ ] **Step 6: Verify repository and Unity asset integrity**
 
@@ -795,10 +795,10 @@ git diff -- Packages/manifest.json Packages/packages-lock.json Packages/vpm-mani
 
 Expected:
 
-- only intended fixture JSON, C#, and paired `.meta` files differ from the Task 1 commit;
-- no manifest, lock, workflow, production, private, or generated Unity files differ;
-- every asset has exactly one stable `.meta` partner;
-- there is no classifier, transformation, NDMF pass, material rewriting, animation tracing, shader adapter, mipmap case, or private-avatar logic.
+- Only intended fixture JSON, C#, and paired `.meta` files differ from the Task 1 commit.
+- No manifest, lock, workflow, production, private, or generated Unity files differ.
+- Every asset has exactly one stable `.meta` partner.
+- There is no classifier, transformation, NDMF pass, material rewriting, animation tracing, shader adapter, mipmap case, or private-avatar logic.
 
 - [ ] **Step 7: Commit the verified builder and integrity tests**
 
@@ -811,4 +811,4 @@ git commit -m "test: validate deterministic Unity fixture construction"
 
 - [ ] **Step 8: Record final evidence**
 
-Run `git status --short --branch` and `git log -4 --oneline --decorate`. Report the exact EditMode test count and zero-failure result from `Logs/editmode-results.xml`, whether any validation was skipped, remaining unsupported cases such as mipmaps, and that the private Unity testbed was neither used nor modified.
+Run `git status --short --branch` and `git log -4 --oneline --decorate`. Report the exact EditMode test count and zero-failure result from `Logs/editmode-results.xml`. Report whether any validation was skipped. Report remaining unsupported cases, such as mipmaps. Report that the private Unity testbed was neither used nor modified.

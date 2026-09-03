@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a face classifiable `ProvenOpaque` only when it is proven opaque in every admitted runtime state, by observing the committed controller graph, conservatively enumerating a finite set of admitted material states, and re-running the existing alpha proof pipeline across all of them.
+**Goal:** A face classifies as `ProvenOpaque` only when it is proven opaque in every admitted runtime state. The plan observes the committed controller graph. It conservatively enumerates a finite set of admitted material states. It runs the existing alpha proof pipeline across all of them.
 
-**Architecture:** A capture pass declared with NDMF's real `WithRequiredExtension` mechanism retains `IPlatformAnimatorBindings`; the barrier pass declares no animator extension, so NDMF commits every controller before AMUSE reads it. AMUSE walks the committed real controller graph into a *transient* live observation, closes material-swap dependencies, converts everything to immutable evidence and discards the transient observation, admits only finite-exact singleton property values and exactly enumerable material swaps, and intersects `ProvenOpaque` per triangle using `AlphaSemanticsResolver` and `TriangleAlphaClassifier` unchanged.
+**Architecture:** A capture pass declared with the real NDMF `WithRequiredExtension` mechanism retains `IPlatformAnimatorBindings`. The barrier pass declares no animator extension. NDMF then commits every controller before AMUSE reads it.
+
+AMUSE walks the committed real controller graph into a *transient* live observation. It closes material-swap dependencies. It converts everything to immutable evidence and discards the transient observation. It admits only finite-exact singleton property values and exactly enumerable material swaps. It intersects `ProvenOpaque` per triangle with `AlphaSemanticsResolver` and `TriangleAlphaClassifier` unchanged.
 
 **Tech Stack:** Unity 2022.3.22f1, C# Editor-only code, NDMF 1.14.4 public APIs (`BuildContext`, `Sequence.WithRequiredExtension`, `AnimatorServicesContext`, `IPlatformAnimatorBindings`, `IVirtualizeAnimatorController`, `IVirtualizeMotion`), `UnityEditor.Animations`, `AnimationUtility`, `UnityEditor.PackageManager.PackageInfo`, NUnit EditMode tests, existing `Alrauna.Amuse.Editor` and `Alrauna.Amuse.Tests.Editor` assemblies. No new dependency, assembly, asmdef reference, runtime component, or reflection.
 
@@ -12,20 +14,20 @@
 
 ## Global Constraints
 
-- `AGENTS.md` and the normative spec apply to every task. The spec's *Non-goals* list is binding.
-- **Analysis only.** No AMUSE-authored mesh, material, or build-output mutation. Never modify the source scene or source assets. NDMF's own context lifecycle (re-clone, normalize first-layer weights, re-commit, save) is NDMF's operation, not AMUSE's.
+- `.omp/AGENTS.md` and the normative spec apply to every task. The *Non-goals* list in the spec is binding.
+- **Analysis only.** No AMUSE-authored mesh, material, or build-output mutation. Never modify the source scene or source assets. NDMF itself owns the context lifecycle (re-clone, normalize first-layer weights, re-commit, save). It is an NDMF operation, not an AMUSE operation.
 - No caching, fingerprints, or invalidation. No DAO cooperation. No exact Animator reachability solver. No generic animation or runtime-state IR. No provenance adapters.
 - **No direct VRChat SDK dependency**, and no reference to the `nadena.dev.ndmf.vrchat` assembly. Reopening this requires reopening the approved spec.
 - Never use the Census Lab. Every reported Unity result requires read-only instance discovery and exact normalized, case-sensitive `Application.dataPath == <repo-root>/Assets`.
 - **`AlphaSemanticsResolver` and `TriangleAlphaClassifier` remain behaviorally unchanged** unless concrete implementation evidence proves the spec impossible. If that happens, STOP and return to design.
 - `MaterialSemantics`, `ExactUvGeometry`, and `MeshSeparationPlanner` also remain behaviorally unchanged.
 - **Unsupported or unknown domain behavior returns a named refusal. Unexpected implementation defects propagate.** `catch (Exception) -> skip renderer` is forbidden.
-- **The live-to-immutable boundary is one-way and closes inside host capture.** Transient host observations may hold live Unity references; nothing downstream of Task 10 may. Proof, admitted-state construction, and classification never call back into `AnimatorController`, `AnimationClip`, `AnimationCurve`, `Material`, `Renderer`, or `Mesh`.
-- **V1 property animation authorization supports re-assertion of an already-admitted value, not a proven transition to a different value.** For every proof-relevant property, the admitted set is `{every animated value from every contributing source} ∪ {that admitted material's captured serialized default}`, and admission requires that set to contain exactly one exact value. An animated value never overrides a differing default; a value differing from the admitted material's captured default requires stronger future reachability and blending analysis and is **refused**. This applies equally to scalar, colour, vector, and texture-scale/offset component admission, and is evaluated per admitted material, so the same binding may be admitted against one admitted material and refused against another.
-- The admitted-state cap (`4096`) is an **internal bounded-work parameter**, never a public semantic constant. It must not be `public`, must not appear in any public or `internal` API signature, and must not be asserted as a specific number in any test that is not specifically about the budget.
+- **The live-to-immutable boundary is one-way and closes inside host capture.** Transient host observations may hold live Unity references. Nothing downstream of Task 10 may. Proof, admitted-state construction, and classification never call back into `AnimatorController`, `AnimationClip`, `AnimationCurve`, `Material`, `Renderer`, or `Mesh`.
+- **V1 property animation authorization supports re-assertion of an already-admitted value, not a proven transition to a different value.** For every proof-relevant property, the admitted set is `{every animated value from every contributing source} ∪ {that admitted material's captured serialized default}`, and admission requires that set to contain exactly one exact value. An animated value never overrides a differing default. A value that differs from the captured default of the admitted material requires stronger future reachability and blending analysis. The plan **refuses** such a value. This applies equally to scalar, colour, vector, and texture-scale/offset component admission. The plan evaluates the rule per admitted material. So the plan may admit the same binding against one admitted material and refuse it against another.
+- The admitted-state cap (`4096`) is an **internal bounded-work parameter**, never a public semantic constant. It must not be `public`. It must not appear in any public or `internal` API signature. Tests that are not specifically about the budget must not assert it as a specific number.
 - No reflection over NDMF internals, and no private/internal field access to force a positive path.
 - Retain every Unity-generated `.meta` sidecar and inspect GUIDs.
-- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore; restore only prohibited host-only churn under `AGENTS.md`.
+- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore. Restore only prohibited host-only churn under `.omp/AGENTS.md` §Unity package and MCP safety.
 - No package manifest, asmdef, research package, CI workflow, project setting, or release file changes.
 - Do not commit, push, or open a PR without the authorization required by the implementation session.
 
@@ -59,9 +61,9 @@
 
 Verification obligation 6 and the **first architecture gate**. The whole two-pass observation route depends on it.
 
-**If this task's verification fails, STOP. Do not proceed to Task 2. Do not substitute a mock, a fixture workaround, or a re-activated context. Report the failure as an architectural blocker and return to design.**
+**If verification of this task fails, STOP. Do not proceed to Task 2. Do not substitute a mock, a fixture workaround, or a re-activated context. Report the failure as an architectural blocker and return to design.**
 
-The gate is only valid if the capture pass declares the extension through **the same real NDMF mechanism production will use**: `Sequence.WithRequiredExtension` ([Editor/API/Fluent/Sequence/Extensions.cs:153](Packages/nadena.dev.ndmf/Editor/API/Fluent/Sequence/Extensions.cs:153)), which feeds `SolverPass.RequiredExtensions` and therefore the resolver's activate/deactivate plan. Calling `context.Extension<T>()` without declaring is not a declaration and would prove nothing.
+The gate is valid under exactly one declaration path: **the same real NDMF mechanism production will use**, `Sequence.WithRequiredExtension`. See [Editor/API/Fluent/Sequence/Extensions.cs:153](Packages/nadena.dev.ndmf/Editor/API/Fluent/Sequence/Extensions.cs:153). It feeds `SolverPass.RequiredExtensions` and therefore the activate/deactivate plan of the resolver. Calling `context.Extension<T>()` without declaring is not a declaration and would prove nothing.
 
 **Files:**
 - Test: `Packages/com.alrauna.amuse/Tests/Editor/Host/AnimatorBindingsLifetimeGateTests.cs`
@@ -227,11 +229,11 @@ Add only the `IsArmed` property if missing. No production code.
 
 Expected: PASS.
 
-**If any gate assertion FAILS, STOP HERE.** Record which assertion and the exact exception. Do not adapt the test. Do not re-activate the context in the observe pass — that restores the marker blind spot the spec exists to remove. Report as an architectural blocker; the design must be revised.
+**If any gate assertion FAILS, STOP HERE.** Record which assertion and the exact exception. Do not adapt the test. Do not re-activate the context in the observe pass — that restores the marker blind spot the spec exists to remove. Report as an architectural blocker. The design must change.
 
-- [ ] **Step 5: Record the outcome in the spec's obligation 6**
+- [ ] **Step 5: Record the outcome in obligation 6 of the spec**
 
-Append one sentence stating it was verified, the date, and the test. Do not restructure the spec.
+Append one sentence that records the verification, the date, and the test. Do not restructure the spec.
 
 - [ ] **Step 6: Commit**
 
@@ -246,7 +248,7 @@ git commit -m "test: prove animator bindings survive context deactivation"
 
 ## Task 2: Discover the material bindings Unity actually generates
 
-Verification obligation 2. **This must not be a round-trip test.** Writing an `EditorCurveBinding` you guessed and reading it back proves only that `AnimationUtility` stores what you gave it; it proves nothing about the names Unity actually generates or how they target material slots. Discovery must come from Unity itself.
+Verification obligation 2. **This must not be a round-trip test.** Writing an `EditorCurveBinding` you guessed and reading it back proves only that `AnimationUtility` stores what you gave it. It proves nothing about the names Unity actually generates or how they target material slots. Discovery must come from Unity itself.
 
 The public discovery API is `AnimationUtility.GetAnimatableBindings(GameObject targetObject, GameObject root)`, which returns the bindings Unity generates for a real component. **Verify it exists and returns material bindings before relying on it.** If it does not surface material properties in this Unity version, do not fall back to a round trip: leave obligation 2 unknown and take the conservative branch named in Step 5.
 
@@ -339,7 +341,7 @@ Expected: FAIL — the file does not exist.
 
 - [ ] **Step 3: Run, read the generated names, and convert to an exact specification**
 
-Record from the output: the scalar form, the colour-component form and its suffixes, the vector-component form and its suffixes, and **how the second material slot is expressed** — whether as an indexed `material[1].` prefix, as a separate binding set, or not at all. Replace the placeholder assertion with exact expected values, for example:
+Record the scalar form, the colour-component form and its suffixes, and the vector-component form and its suffixes from the output. Record also **how the second material slot is expressed**. It may be an indexed `material[1].` prefix, a separate binding set, or nothing. Replace the placeholder assertion with exact expected values, for example:
 
 ```csharp
                 Assert.That(materialBindings, Contains.Item("material._Color.r"));
@@ -347,11 +349,11 @@ Record from the output: the scalar form, the colour-component form and its suffi
                 Assert.That(materialBindings, Contains.Item("material._MainTex_ST.x"));
 ```
 
-plus an exact assertion for whatever slot-1 form was observed. **The `Is.GreaterThan(0)` assertion must be gone when this task completes.**
+plus an exact assertion for whatever slot-1 form the output shows. **The `Is.GreaterThan(0)` assertion must be gone when this task completes.**
 
 - [ ] **Step 4: Add a separate parser-storage test, clearly labelled**
 
-A round-trip test is still useful for pinning `AnimationUtility` storage behavior, but it must not be read as host semantics. Add it with an explicit header comment:
+A round-trip test is still useful for pinning `AnimationUtility` storage behavior, but do not read it as host semantics. Add it with an explicit header comment:
 
 ```csharp
         // STORAGE TEST ONLY. This pins that AnimationUtility round-trips the
@@ -360,11 +362,11 @@ A round-trip test is still useful for pinning `AnimationUtility` storage behavio
         // that, and it is the only test that may close obligation 2.
 ```
 
-- [ ] **Step 5: Update the spec's obligation 2**
+- [ ] **Step 5: Update obligation 2 of the spec**
 
 Record the generated forms and the slot-targeting semantics observed.
 
-**Conservative branch.** If `GetAnimatableBindings` is unavailable or surfaces no material bindings, record obligation 2 as **unobserved**, and change Task 11 so that a `material` binding whose slot cannot be positively determined resolves to a new refusal `RendererAnalysisRefusal.UnresolvedAnimatedMaterialSlot` rather than defaulting to slot 0. Guessing a slot is a false-positive risk; refusing is not.
+**Conservative branch.** If `GetAnimatableBindings` is unavailable or surfaces no material bindings, record obligation 2 as **unobserved**. Change Task 11 as well. A `material` binding whose slot the plan cannot positively determine must resolve to `RendererAnalysisRefusal.UnresolvedAnimatedMaterialSlot`. This is a new refusal. The binding must not default to slot 0. Guessing a slot is a false-positive risk. Refusing is not.
 
 - [ ] **Step 6: Commit**
 
@@ -388,16 +390,16 @@ git commit -m "test: discover the material bindings Unity generates"
 > rule for unrecognized material-binding syntax. Step 5 now selects Task 11's
 > mapping rule strictly from what Step 4b observes.
 
-Verification obligation 3, plus the category question Task 16 depends on. Discovery again comes from Unity, and where the plan **relies on an effect**, the effect is sampled rather than assumed.
+Verification obligation 3, plus the category question Task 16 depends on. Discovery again comes from Unity. Where the plan **relies on an effect**, the plan samples the effect rather than assumes it.
 
-Sampling uses `AnimationMode.StartAnimationMode()` / `BeginSampling()` / `SampleAnimationClip(GameObject, AnimationClip, float)` / `EndSampling()` / `StopAnimationMode()`, all public `UnityEditor` APIs. **Verify they exist and that sampling actually applies material state before relying on them.** All sampling happens on a throwaway `GameObject` built in the test; no project asset is touched.
+Sampling uses `AnimationMode.StartAnimationMode()` / `BeginSampling()` / `SampleAnimationClip(GameObject, AnimationClip, float)` / `EndSampling()` / `StopAnimationMode()`, all public `UnityEditor` APIs. **Verify they exist and that sampling actually applies material state before relying on them.** All sampling happens on a throwaway `GameObject` built in the test. The sampling touches no project asset.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: whether texture-reference object curves on materials exist; which curve category carries `m_Materials.Array.size`; and the observed effect of a material-slot object curve.
+- Produces: whether texture-reference object curves on materials exist, which curve category carries `m_Materials.Array.size`, and the observed effect of a material-slot object curve.
 
 - [ ] **Step 1: Write the failing discovery test**
 
@@ -497,13 +499,13 @@ Expected: FAIL — methods not defined.
 
 - [ ] **Step 3: Run, read the output, and convert to exact specifications**
 
-Replace the placeholder assertion in `StructuralBindingCategoriesAreDiscovered` with exact expected entries including each binding's `isPPtrCurve` flag. **No non-specific assertion may survive this task.**
+Replace the placeholder assertion in `StructuralBindingCategoriesAreDiscovered` with exact expected entries including the `isPPtrCurve` flag of each binding. **No non-specific assertion may survive this task.**
 
-If `MaterialSlotObjectCurveActuallySwapsTheSlot` cannot be made to pass because `AnimationMode` sampling does not apply object curves in EditMode, do **not** weaken it to a round trip. Delete it, record slot-swap effect as **unobserved** in the spec, and take the conservative branch in Step 5.
+If `AnimationMode` sampling does not apply object curves in EditMode, `MaterialSlotObjectCurveActuallySwapsTheSlot` cannot pass. Do **not** weaken it to a round trip. Delete it, record slot-swap effect as **unobserved** in the spec, and take the conservative branch in Step 5.
 
 - [ ] **Step 4: Determine whether texture-reference object curves exist**
 
-Search the generated bindings for a PPtr binding whose property name begins with `material` and names a texture property. Assert exactly what was found — present or absent.
+Search the generated bindings for a PPtr binding whose property name starts with `material` and names a texture property. Assert exactly what the run found — present or absent.
 
 - [ ] **Step 4b: Observe the application semantics of a bare material binding on a multi-slot renderer**
 
@@ -527,7 +529,9 @@ to a third distinctive value (for example `0.42f`), and sample it with
 `SampleAnimationClip(root, clip, 0f)` / `EndSampling()`.
 
 **A control is mandatory.** Without one, a "neither slot changed" result is vacuous —
-indistinguishable from sampling never having run. Put a second, independently
+indistinguishable from sampling never having run.
+
+Put a second, independently
 observable curve in the same clip (for example `m_LocalScale.x` on the `Body`
 transform) and assert it took its animated value. If the control fails, the sampling
 observation is void: record the semantics as unobserved rather than reporting a
@@ -536,22 +540,22 @@ negative result.
 Observe **inside** the sampling scope, before `StopAnimationMode()` restores state,
 and record all of the following verbatim:
 
-- `renderer.sharedMaterials[0].GetFloat("_Cutoff")` and `sharedMaterials[1]`;
-- `renderer.HasPropertyBlock()`;
-- renderer-wide `renderer.GetPropertyBlock(block)` — whether `_Cutoff` is present and its value;
-- per-index `renderer.GetPropertyBlock(block, 0)` and `renderer.GetPropertyBlock(block, 1)` — the public per-material-index overload — whether `_Cutoff` is present and its value in each;
+- `renderer.sharedMaterials[0].GetFloat("_Cutoff")` and `sharedMaterials[1]`.
+- `renderer.HasPropertyBlock()`.
+- renderer-wide `renderer.GetPropertyBlock(block)` — whether `_Cutoff` is present and its value.
+- per-index `renderer.GetPropertyBlock(block, 0)` and `renderer.GetPropertyBlock(block, 1)` — the public per-material-index overload — whether `_Cutoff` is present and its value in each.
 - whether any observed mutation persists after `StopAnimationMode()`.
 
-Do not use `renderer.materials`; it instantiates copies and would corrupt the
+Do not use `renderer.materials`. It instantiates copies and would corrupt the
 observation.
 
 The observation must distinguish at least these four outcomes, and the test must
 assert whichever one actually occurred:
 
-1. slot 0 only is affected;
-2. every material slot is affected;
-3. the change is carried by renderer-wide or per-material-index `MaterialPropertyBlock`
-   state rather than by mutation of the material objects;
+1. the binding affects slot 0 only.
+2. the binding affects every material slot.
+3. renderer-wide or per-material-index `MaterialPropertyBlock` state carries the
+   change rather than mutation of the material objects.
 4. no observable effect, or behavior that does not distinguish the above.
 
 Record the outcome exactly. Do not reshape the fixture until it produces a
@@ -559,27 +563,28 @@ convenient answer.
 
 - [ ] **Step 4c: Add the fail-closed rule for unrecognized material-binding syntax**
 
-`GetAnimatableBindings` establishes what Unity *generates* in this fixture. It does
-not establish that every clip in the ecosystem contains only those forms — clips are
-authored, generated, and rewritten by many tools, and AMUSE reads whatever the
+`GetAnimatableBindings` establishes what Unity *generates* in this fixture.
+
+It does not establish that every clip in the ecosystem contains only those forms. Many tools
+author, generate, and rewrite clips, and AMUSE reads whatever the
 committed graph actually holds.
 
-Record the rule here so Task 11 implements it: during capture, a renderer
-material-property binding whose syntax AMUSE does not recognize, and which could name
-a proof-relevant material property, MUST produce a named conservative refusal. It must
-never be silently classified as irrelevant. Silently ignoring an unparsed binding that
-in fact drives a proof input is a false-positive, which this project treats as a
-correctness bug rather than a tradeoff.
+Record the rule here so Task 11 implements it. During capture, a renderer
+material-property binding with unrecognized syntax MUST produce a named conservative
+refusal. The rule applies when the binding could name a proof-relevant material
+property. The plan must never silently classify such a binding as irrelevant. Silently
+ignoring an unparsed binding that in fact drives a proof input is a false-positive.
+This project treats it as a correctness bug, not a tradeoff.
 
-- [ ] **Step 5: Update the spec's obligation 3**
+- [ ] **Step 5: Update obligation 3 of the spec**
 
-If texture-reference object curves **exist**, stop and raise it with the user before Task 10: texture assignment would become an admitted-state dimension the spec's admitted-state construction does not cover, which is a design change, not a plan change.
+If texture-reference object curves **exist**, stop and raise it with the user before Task 10. Texture assignment would become an admitted-state dimension that the admitted-state construction in the spec does not cover. That is a design change, not a plan change.
 
-**Conservative branch.** If the slot-swap effect could not be observed, Task 10 must treat every `m_Materials.Array.data[n]` object curve as affecting an **undetermined** slot, which conservatively admits its keyframe materials into **every** slot of that renderer. That over-approximates, which is the safe direction, and it is recorded as a coverage cost rather than an assumption.
+**Conservative branch.** The plan may fail to observe the slot-swap effect. Task 10 must then treat every `m_Materials.Array.data[n]` object curve as affecting an **undetermined** slot. That rule conservatively admits the keyframe materials of such a curve into **every** slot of that renderer. That over-approximates, which is the safe direction. The plan records it as a coverage cost, not as an assumption.
 
 Update the spec with **only** what Step 4b actually established, and no more.
 
-**Selecting Task 11's mapping rule.** Task 11 is then amended strictly from the Step 4b
+**Selecting the Task 11 mapping rule.** The plan then amends Task 11 strictly from the Step 4b
 observation, by this table — never by syntax alone:
 
 ```text
@@ -599,7 +604,7 @@ unresolved / ambiguous semantics
 ```
 
 **Do not default to slot 0 merely because the syntax lacks an index.** A single-slot
-renderer is unambiguous regardless of the outcome, so the refusal is reserved for the
+renderer is unambiguous regardless of the outcome. The plan reserves the refusal for the
 multi-slot case under genuinely unresolved semantics.
 
 - [ ] **Step 6: Commit**
@@ -672,14 +677,14 @@ git commit -m "test: characterize curve interpolation bounds"
 
 ## Task 5: Observe animation of a property absent from a material
 
-Determines the presence semantics Task 18's substitution must preserve. **`Material.SetFloat` does not characterize this**: it exercises the material API, not the Animator applying a material-property curve. The observation must sample an actual clip.
+Determines the presence semantics that the Task 18 substitution must preserve. **`Material.SetFloat` does not characterize this**: it exercises the material API, not the Animator applying a material-property curve. The observation must sample an actual clip.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationCharacterizationTests.cs`
 
 **Interfaces:**
 - Consumes: the sampling approach verified in Task 3.
-- Produces: the recorded rule for "a clip binds `material._X`, the renderer's material has no `_X`".
+- Produces: the recorded rule for "a clip binds `material._X` and the material on the renderer has no `_X`".
 
 - [ ] **Step 1: Write the failing observation test**
 
@@ -750,15 +755,15 @@ Expected: FAIL — method not defined.
 
 Replace the placeholder with the exact observed behavior. Three outcomes are possible and each selects a different Task 18 branch:
 
-1. **The property stays absent and the sample has no effect.** Record that; Task 18 preserves `HasValue == false` and ignores the substituted value.
-2. **The property becomes present or otherwise takes effect.** Record that; Task 18 must add `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and refuse that admitted state.
-3. **The behavior cannot be observed soundly here** — sampling does not apply material float curves in EditMode, or the result is not deterministic. Then obligation 4 stays **unknown**, and Task 18 takes the refusal branch anyway, because a conservative refusal is the correct response to an unobserved runtime effect.
+1. **The property stays absent and the sample has no effect.** Record that. Task 18 preserves `HasValue == false` and ignores the substituted value.
+2. **The property becomes present or otherwise takes effect.** Record that. Task 18 must add `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and refuse that admitted state.
+3. **The plan cannot observe the behavior soundly here** — sampling does not apply material float curves in EditMode, or the result is not deterministic. Then obligation 4 stays **unknown**. Task 18 takes the refusal branch anyway. A conservative refusal is the correct response to an unobserved runtime effect.
 
-Do not use `Material.SetFloat` to decide between these. If a `SetFloat` test is kept at all, mark it a storage test as in Task 2 Step 4, and state in its comment that it does not close this obligation.
+Do not use `Material.SetFloat` to decide between these. If the plan keeps a `SetFloat` test at all, mark it a storage test as in Task 2 Step 4. State in its comment that it does not close this obligation.
 
 - [ ] **Step 4: Run and verify it passes**
 
-Expected: PASS with whichever behavior was observed, or the test deleted and outcome 3 recorded.
+Expected: PASS with whichever behavior the run observed. Or the plan deletes the test and records outcome 3.
 
 - [ ] **Step 5: Record the rule and the selected Task 18 branch in the spec**
 
@@ -781,7 +786,7 @@ Verification obligation 1. **Equal counts are not evidence.** This task compares
 
 **Interfaces:**
 - Consumes: the retained bindings from Task 1.
-- Produces: the decision of where `GetInnateControllers` may be called, which Task 7 obeys.
+- Produces: the decision about where Task 7 may call `GetInnateControllers`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -885,13 +890,15 @@ Expected: PASS.
 
 **If either assertion fails, STOP and return to design.**
 
-The tempting fallback — have the capture pass record the innate `(key, controller)` pairs and have the barrier "re-resolve each key" after commit — is not usable as written, because **no concrete public re-resolution mechanism has been identified**. The keys are opaque (`VRCAvatarDescriptor.AnimLayerType` values, `Animator` components, `IVirtualizeAnimatorController` instances), and mapping a key back to its *committed* controller without the VRChat SDK reference or `IPlatformAnimatorBindings` is exactly the problem the two-pass design exists to solve. Recording pre-commit controllers instead would reintroduce the staleness the design rejects.
+The tempting fallback is not usable as written. It would have the capture pass record the innate `(key, controller)` pairs and have the barrier "re-resolve each key" after commit. The reason: **no concrete public re-resolution mechanism exists**.
 
-Do not proceed on that phrase. If a concrete, public, tested re-resolution mechanism is found during this task, report it and let the user decide; otherwise this is an architectural blocker like Task 1's.
+The keys are opaque (`VRCAvatarDescriptor.AnimLayerType` values, `Animator` components, `IVirtualizeAnimatorController` instances). Mapping a key back to its *committed* controller is exactly the problem the two-pass design exists to solve. The mapping must work without the VRChat SDK reference or `IPlatformAnimatorBindings`. Recording pre-commit controllers instead would reintroduce the staleness the design rejects.
 
-Note the scope limit honestly in the spec: this fixture has no VRChat avatar descriptor, so it exercises the generic bindings path. Record that the descriptor-specific side effects noted in obligation 1 (`customizeAnimationLayers`, descriptor editor instantiation) remain unverified here and are covered only by the conservative path.
+Do not proceed on that phrase. If the task finds a concrete, public, tested re-resolution mechanism, report it and let the user decide. Otherwise this is an architectural blocker like the Task 1 blocker.
 
-- [ ] **Step 5: Update the spec's obligation 1**
+Note the scope limit honestly in the spec. This fixture has no VRChat avatar descriptor, so it exercises the generic bindings path. Record that the descriptor-specific side effects noted in obligation 1 (`customizeAnimationLayers`, descriptor editor instantiation) remain unverified here. Only the conservative path covers them.
+
+- [ ] **Step 5: Update obligation 1 of the spec**
 
 - [ ] **Step 6: Commit**
 
@@ -997,13 +1004,13 @@ Expected: FAIL with "CommittedControllerGraph does not exist".
 
 - [ ] **Step 3: Implement enumeration**
 
-Walk the innate controllers, plus `GetComponentsInChildren<IVirtualizeAnimatorController>(true)` and `GetComponentsInChildren<IVirtualizeMotion>(true)`. Any `RuntimeAnimatorController` that is not an `AnimatorController` returns `UnsupportedAnimatorControllerForm`. Any layer with `syncedLayerIndex >= 0` returns `UnsupportedSyncedLayerOverrides`. Otherwise collect every reachable `AnimationClip` through state machines, child state machines, states, and blend trees, and collect state and state-machine behaviours. Set `HasUnnormalizedDirectBlendTree` when a reachable `BlendTree` has `blendType == BlendTreeType.Direct` with normalization off; read normalization through the serialized `m_NormalizedBlendValues` property if no public accessor exists in this Unity version, and re-check for a public accessor first. Deduplicate clips by reference. A refusal returns empty `Layers` so no partial result can be consumed.
+Walk the innate controllers, plus `GetComponentsInChildren<IVirtualizeAnimatorController>(true)` and `GetComponentsInChildren<IVirtualizeMotion>(true)`. Any `RuntimeAnimatorController` that is not an `AnimatorController` returns `UnsupportedAnimatorControllerForm`. Any layer with `syncedLayerIndex >= 0` returns `UnsupportedSyncedLayerOverrides`. Otherwise collect every reachable `AnimationClip` through state machines, child state machines, states, and blend trees, and collect state and state-machine behaviours. Set `HasUnnormalizedDirectBlendTree` when a reachable `BlendTree` has `blendType == BlendTreeType.Direct` with normalization off. Read normalization through the serialized `m_NormalizedBlendValues` property if no public accessor exists in this Unity version. Re-check for a public accessor first. Deduplicate clips by reference. A refusal returns empty `Layers`. No code may consume a partial result.
 
 - [ ] **Step 4: Run and verify it passes**
 
 Expected: PASS.
 
-- [ ] **Step 5: Update the spec's obligation 5**
+- [ ] **Step 5: Update obligation 5 of the spec**
 
 - [ ] **Step 6: Commit**
 
@@ -1018,7 +1025,7 @@ git commit -m "feat: enumerate the committed controller graph"
 
 ## Task 8: Transient live animation observation
 
-The first half of the eager-capture boundary. This type is **allowed** to hold live object-reference keyframe values, because admitted materials do not exist yet. It is discarded in Task 10.
+The first half of the eager-capture boundary. This type may **hold live object-reference keyframe values**, because admitted materials do not exist yet. Task 10 discards it.
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse/Editor/Host/LiveAnimationObservation.cs`
@@ -1032,7 +1039,7 @@ The first half of the eager-capture boundary. This type is **allowed** to hold l
   - `internal sealed class LiveClipObservation { internal string Name { get; } internal bool IsSpecialMotion { get; } internal IReadOnlyList<LiveFloatObservation> Floats { get; } internal IReadOnlyList<LiveObjectObservation> Objects { get; } }`
   - `internal static LiveClipObservation LiveAnimationObservation.ObserveClip(AnimationClip clip, bool isSpecialMotion)`
 
-The file carries a header comment: *this type intentionally holds live `UnityEngine.Object` references, exists only inside host capture, and must never be referenced from `Analysis` or from any captured-evidence type.*
+The file carries a header comment: *this type intentionally holds live `UnityEngine.Object` references and exists only inside host capture.* It also says *code in `Analysis` or any captured-evidence type must never reference the type.*
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1154,10 +1161,10 @@ Expected: FAIL — `LiveAnimationObservation` does not exist.
 
 Read `AnimationUtility.GetCurveBindings` and `GetObjectReferenceCurveBindings`, copying every keyframe value. Wrap collections in `ReadOnlyCollection<T>`.
 
-`IsFiniteExact` must be **positively proven**, never inferred from endpoint values alone. Equal endpoints do not make a segment constant: a segment from `(0, 1)` to `(1, 1)` with `outTangent = 5` and `inTangent = -5` leaves the value 1 in between and returns to it. Accept only:
+`IsFiniteExact` must be **positively proven**, never inferred from endpoint values alone. Equal endpoints do not make a segment constant. A segment from `(0, 1)` to `(1, 1)` with `outTangent = 5` and `inTangent = -5` leaves the value 1 in between and returns to it. Accept only:
 
-- a curve with a **single key**; or
-- a **true stepped segment**, where `outTangent` of the left key and `inTangent` of the right key are both `float.PositiveInfinity`; or
+- a curve with a **single key**, or
+- a **true stepped segment**, where `outTangent` of the left key and `inTangent` of the right key are both `float.PositiveInfinity`, or
 - an **equal-value segment with both tangents exactly zero** — `left.value == right.value`, `left.outTangent == 0f`, and `right.inTangent == 0f`.
 
 Any other segment sets `IsFiniteExact` false, and any key whose `weightedMode` is not `WeightedMode.None` sets it false regardless of tangents. When in doubt, false.
@@ -1236,7 +1243,7 @@ git commit -m "feat: discover animated material slot assignments"
 
 ## Task 10: Dependency closure and the one-way live-to-immutable conversion
 
-**This task closes the eager-capture boundary and carries the ordering the spec makes normative.** Its central test must fail if relevance is derived from the initially assigned material's family.
+**This task closes the eager-capture boundary and carries the ordering the spec makes normative.** Its central test must fail if the plan derives relevance from the family of the initially assigned material.
 
 The full pipeline, all inside one eager host-capture phase:
 
@@ -1256,7 +1263,7 @@ committed controllers
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs`
 
 **Interfaces:**
-- Consumes: `LiveClipObservation` and `TryParseMaterialSlotBinding`; `UnityMaterialSemantics.CaptureAlphaMaterials`; `MaterialEvidenceRequest.Combine`.
+- Consumes: `LiveClipObservation` and `TryParseMaterialSlotBinding`, `UnityMaterialSemantics.CaptureAlphaMaterials`, `MaterialEvidenceRequest.Combine`.
 - Produces:
   - `internal sealed class CapturedFloatBinding { internal string Path { get; } internal string TypeName { get; } internal string PropertyName { get; } internal bool IsFiniteExact { get; } internal IReadOnlyList<float> Values { get; } }`
   - `internal sealed class CapturedObjectBinding { internal string Path { get; } internal string TypeName { get; } internal string PropertyName { get; } internal IReadOnlyList<int> AdmittedMaterialIndices { get; } }`
@@ -1264,11 +1271,11 @@ committed controllers
   - `internal sealed class CapturedAnimationEvidence { internal bool IsClosed { get; } internal MaterialEvidenceRequest RelevanceRequest { get; } internal IReadOnlyList<CapturedClipEvidence> Clips { get; } internal IReadOnlyList<CapturedAlphaMaterial> AdmittedMaterials { get; } internal IReadOnlyList<string> BehaviourIdentities { get; } internal bool HasUnnormalizedDirectBlendTree { get; } internal bool HasAdditiveLayer { get; } }`
   - `internal static CapturedAnimationEvidence UnityAnimationEvidenceCapture.Capture(IReadOnlyList<LiveClipObservation> observations, IReadOnlyList<Material> currentSlots, CommittedControllerGraphResult graph)`
 
-`AdmittedMaterialIndices` indexes into `AdmittedMaterials`, which is populated **before** any `CapturedObjectBinding` is constructed. `IsSpecialMotion` is diagnostic only and must never gate a decision.
+`AdmittedMaterialIndices` indexes into `AdmittedMaterials`. The plan populates `AdmittedMaterials` **before** it constructs any `CapturedObjectBinding`. `IsSpecialMotion` is diagnostic only and must never gate a decision.
 
 - [ ] **Step 1: Write the failing closure-ordering test**
 
-The decisive case: slot 0 currently holds a material of family A; animation can assign a material of family B. The relevance request must contain properties that **only** B requests.
+The decisive case: slot 0 currently holds a material of family A. Animation can assign a material of family B. The relevance request must contain properties that **only** B requests.
 
 ```csharp
         [Test]
@@ -1367,7 +1374,7 @@ The decisive case: slot 0 currently holds a material of family A; animation can 
         }
 ```
 
-Write `ObservationWithMaterialSwap`, `ObservationWithUnresolvableSwap`, and `EmptyGraph` as private helpers in this test file. If the attested fixture helpers do not currently expose a `CreateAttestedMaterial` entry point, add the smallest internal helper to `PoiyomiFixtureTestBase` and `LilToonFixtureTestBase` rather than duplicating attestation setup.
+Write `ObservationWithMaterialSwap`, `ObservationWithUnresolvableSwap`, and `EmptyGraph` as private helpers in this test file. If the attested fixture helpers do not currently expose a `CreateAttestedMaterial` entry point, add the smallest internal helper to `PoiyomiFixtureTestBase` and `LilToonFixtureTestBase`. Do not duplicate attestation setup.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1377,15 +1384,15 @@ Expected: FAIL — `UnityAnimationEvidenceCapture` does not exist.
 
 Each step completes before the next begins:
 
-1. from the transient observations, collect every slot binding and its live keyframe `Material` values;
-2. enumerate admitted materials per slot as the current assignment plus every keyframe value;
-3. attest each admitted material's family through `UnityMaterialSemantics`;
-4. `MaterialEvidenceRequest.Combine` the alpha requests of every attested family;
-5. capture every admitted material's evidence through the closed union;
-6. build `CapturedObjectBinding` values holding **indices** into the captured list;
-7. return; the transient observations go out of scope and are never stored.
+1. from the transient observations, collect every slot binding and its live keyframe `Material` values.
+2. enumerate admitted materials per slot as the current assignment plus every keyframe value.
+3. attest the family of each admitted material through `UnityMaterialSemantics`.
+4. `MaterialEvidenceRequest.Combine` the alpha requests of every attested family.
+5. capture the evidence of every admitted material through the closed union.
+6. build `CapturedObjectBinding` values holding **indices** into the captured list.
+7. return. The transient observations go out of scope, and no code stores them.
 
-`IsClosed` is false when any slot's admitted set cannot be fully enumerated, or when any admitted material's family cannot be attested. When false, `RelevanceRequest` is the empty request, `Clips` is empty, and the caller refuses. A partially closed union must never be used as a filter.
+`IsClosed` is false in two cases. The plan cannot fully enumerate the admitted set of some slot. Or the plan cannot attest the family of some admitted material. When false, `RelevanceRequest` is the empty request, `Clips` is empty, and the caller refuses. The plan must never use a partially closed union as a filter.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1426,16 +1433,16 @@ vector requests
 texture-evidence-derived animated inputs, especially ScaleOffset
 ```
 
-The fourth is load-bearing and easy to miss. `_MainTex_ST` is **not** in any frontend's `VectorProperties` — Poiyomi's vector request is `_MainTexPan`. The `_ST` dependency exists only because `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`, and `AlphaSemanticsResolver.IsSupportedMapping` proves opacity only when scale is exactly `(1,1)` and offset exactly `(0,0)`. An animated `_MainTex_ST.x` therefore changes a proof input while appearing in no vector request. Relevance must derive it.
+The fourth is load-bearing and easy to miss. `_MainTex_ST` is **not** in the `VectorProperties` of any frontend — the vector request of Poiyomi is `_MainTexPan`. The `_ST` dependency exists only because the request asks for `_MainTex` with `TextureEvidenceKinds.ScaleOffset`. `AlphaSemanticsResolver.IsSupportedMapping` proves opacity only when scale is exactly `(1,1)` and offset is exactly `(0,0)`. An animated `_MainTex_ST.x` therefore changes a proof input while appearing in no vector request. Relevance must derive it.
 
-`_Color.a` and `_MainTex_ST.x` must resolve to their parent properties, never fall through scalar-only handling. A resolved binding is renderer-wide and is associated with every admitted material slot before per-slot admission.
+`_Color.a` and `_MainTex_ST.x` must resolve to their parent properties, never fall through scalar-only handling. A resolved binding is renderer-wide. The plan associates it with every admitted material slot before per-slot admission.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityAnimationEvidenceCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs`
 
 **Interfaces:**
-- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10; the generated forms recorded in Task 2; the renderer-wide application semantics recorded in Task 3.
+- Consumes: `CapturedAnimationEvidence.RelevanceRequest` from Task 10, the generated forms recorded in Task 2, the renderer-wide application semantics recorded in Task 3.
 - Produces:
   - `internal enum AnimatedPropertyKind { Scalar, ColorComponent, VectorComponent, TextureScaleOffsetComponent }`
   - `internal enum ProofRelevantBindingResolution { Irrelevant, RendererWide, UnrecognizedMaterialBinding }`
@@ -1444,7 +1451,7 @@ The fourth is load-bearing and easy to miss. `_MainTex_ST` is **not** in any fro
   - `internal static ProofRelevantBindingResolution UnityAnimationEvidenceCapture.ResolveProofRelevant(CapturedFloatBinding binding, string rendererPath, MaterialEvidenceRequest relevance, out AnimatedPropertyRef reference)`
   - `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding`
 
-`ComponentIndex` is 0–3 in the suffix order Task 2 recorded, and `-1` for scalars. For `TextureScaleOffsetComponent`, `PropertyName` is the derived `<texture>_ST` name. `RendererWide` means the caller associates the binding/reference pair with every admitted material slot; no slot identity is inferred from the binding syntax.
+`ComponentIndex` is 0–3 in the suffix order Task 2 recorded, and `-1` for scalars. For `TextureScaleOffsetComponent`, `PropertyName` is the derived `<texture>_ST` name. `RendererWide` means the caller associates the binding/reference pair with every admitted material slot. The plan infers no slot identity from the binding syntax.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1607,17 +1614,17 @@ Expected: FAIL — the type and methods are not defined.
 
 `DeriveTextureScaleOffsetProperties` returns `<PropertyName> + "_ST"` for every `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`, and nothing for the others.
 
-`ResolveProofRelevant` first matches `Path` against the renderer's avatar-relative path with `StringComparison.Ordinal`; a different path is `Irrelevant`. On the renderer's own path, it accepts only the exact bare `material.` prefix Task 2 generated and then classifies the remaining name in this order:
+`ResolveProofRelevant` first matches `Path` against the avatar-relative path of the renderer with `StringComparison.Ordinal`. A different path is `Irrelevant`. On the path of the renderer itself, it accepts only the exact bare `material.` prefix Task 2 generated. It then classifies the remaining name in this order:
 
-1. a recorded component suffix whose stem is a derived `_ST` name → `TextureScaleOffsetComponent`;
-2. a recorded component suffix whose stem is in `ColorProperties` → `ColorComponent`;
-3. a recorded component suffix whose stem is in `VectorProperties` → `VectorComponent`;
-4. the whole name in `ScalarProperties` → `Scalar`;
+1. a recorded component suffix whose stem is a derived `_ST` name → `TextureScaleOffsetComponent`.
+2. a recorded component suffix whose stem is in `ColorProperties` → `ColorComponent`.
+3. a recorded component suffix whose stem is in `VectorProperties` → `VectorComponent`.
+4. the whole name in `ScalarProperties` → `Scalar`.
 5. otherwise `Irrelevant`.
 
-A recognized proof-relevant name returns `RendererWide`; before per-slot admission the caller associates that binding/reference pair with **every** admitted material slot. A component suffix whose stem is not requested returns `Irrelevant` and must never degrade into a scalar match.
+A recognized proof-relevant name returns `RendererWide`. Before per-slot admission the caller associates that binding/reference pair with **every** admitted material slot. A component suffix whose stem is not requested returns `Irrelevant` and must never degrade into a scalar match.
 
-If the binding is on the renderer's path and its syntax is not one of the exact generated forms, but parsing can identify a scalar, colour, vector, or derived texture-scale/offset property in the closed relevance request, return `UnrecognizedMaterialBinding`. The capture caller maps that outcome to `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding` and refuses the renderer. It must not silently discard the binding as irrelevant. This includes indexed forms such as `material[2]._Cutoff`, which were not generated by the characterized Unity environment.
+The binding may sit on the path of the renderer with syntax outside the exact generated forms. If parsing can then identify a scalar, colour, vector, or derived texture-scale/offset property in the closed relevance request, return `UnrecognizedMaterialBinding`. The capture caller maps that outcome to `RendererAnalysisRefusal.UnrecognizedAnimatedMaterialBinding` and refuses the renderer. It must not silently discard the binding as irrelevant. This includes indexed forms such as `material[2]._Cutoff`. The characterized Unity environment did not generate them.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1716,7 +1723,7 @@ Expected: FAIL — `AdmittedMaterialStates` does not exist.
 
 - [ ] **Step 3: Implement the singleton rule**
 
-Return `NotFiniteExact` if any binding is not finite-exact. Otherwise form `{every keyframe value} ∪ {the serialized default}`; if that set is not a single bit-identical value, return `SourcesDisagree`; otherwise `Singleton`. There is no override path: an animated value that differs from the default is a disagreement, not a replacement. Compare with `==` on `float`, never a tolerance — approximate equality would merge genuinely different states.
+Return `NotFiniteExact` if any binding is not finite-exact. Otherwise form `{every keyframe value} ∪ {the serialized default}`. If that set is not a single bit-identical value, return `SourcesDisagree`. Otherwise return `Singleton`. There is no override path: an animated value that differs from the default is a disagreement, not a replacement. Compare with `==` on `float`, never a tolerance — approximate equality would merge genuinely different states.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1734,16 +1741,16 @@ git commit -m "feat: admit only singleton finite-exact scalar values"
 
 ## Task 13: Colour and vector reconstruction and singleton analysis
 
-A colour or vector is animated component-wise. **Each animated component obeys the same singleton rule as a scalar**, applied per component: the component's animated values *together with that component of the admitted material's serialized default* must contain exactly one value. An animated component does **not** override a differing default — that is a disagreement, and it refuses.
+A colour or vector is animated component-wise. **Each animated component obeys the same singleton rule as a scalar.** The rule applies per component. The animated values of the component plus the matching component of the serialized default of the material form one set. That set must contain exactly one value. An animated component does **not** override a differing default — that is a disagreement, and it refuses.
 
-Unanimated components come from the serialized default. Animated components are admitted only when their finite-exact singleton **equals** that component of the default, in which case the reconstructed value is simply the default. Any component that disagrees refuses the whole property.
+Unanimated components come from the serialized default. The plan admits an animated component only when its finite-exact singleton **equals** that component of the default. The reconstructed value is then simply the default. Any component that disagrees refuses the whole property.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
 
 **Interfaces:**
-- Consumes: `AdmitScalar` from Task 12; `AnimatedPropertyRef` from Task 11.
+- Consumes: `AdmitScalar` from Task 12, `AnimatedPropertyRef` from Task 11.
 - Produces:
   - `internal static AdmittedPropertyOutcome AdmittedMaterialStates.AdmitColor(IReadOnlyDictionary<int, IReadOnlyList<CapturedFloatBinding>> componentBindings, Color serializedDefault, out Color admittedValue)`
   - `internal static AdmittedPropertyOutcome AdmittedMaterialStates.AdmitVector(IReadOnlyDictionary<int, IReadOnlyList<CapturedFloatBinding>> componentBindings, Vector4 serializedDefault, out Vector4 admittedValue)`
@@ -1863,7 +1870,7 @@ Expected: FAIL — `AdmitColor` and `AdmitVector` not defined.
 
 - [ ] **Step 3: Implement reconstruction**
 
-Start from the serialized default. For each present component index 0–3, call `AdmitScalar` with that component's bindings and **that component of the default** as the serialized value. `AdmitScalar` already enforces that the animated values and the default form a singleton, so a differing animated value returns `SourcesDisagree` without any extra logic here — do not add an override path. Any component returning `NotFiniteExact` returns `NotFiniteExact` for the property; any returning `SourcesDisagree` returns `SourcesDisagree`; otherwise write the admitted component value, which necessarily equals the default component, and return `Singleton`. Component indices outside 0–3 are a defect: throw `ArgumentOutOfRangeException`.
+Start from the serialized default. For each present component index 0–3, call `AdmitScalar`. Pass the bindings of that component and **that component of the default** as the serialized value. `AdmitScalar` already enforces that the animated values and the default form a singleton. A differing animated value therefore returns `SourcesDisagree` without extra logic here. Do not add an override path. Any component returning `NotFiniteExact` makes the property `NotFiniteExact`. Any component returning `SourcesDisagree` makes the property `SourcesDisagree`. Otherwise write the admitted component value, which necessarily equals the default component, and return `Singleton`. Component indices outside 0–3 are a defect: throw `ArgumentOutOfRangeException`.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1960,7 +1967,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 }
 ```
 
-Implement `BuildDuplicateInAnotherAssembly()` with `System.Reflection.Emit` to define a dynamic assembly containing a type whose full name equals `SpoofProbe.Duplicate`, and declare a matching `SpoofProbe.Duplicate` class in the test assembly. This is test-only reflection to build a fixture, not reflection used to authorize a production path, and is permitted. If `Reflection.Emit` is unavailable in this Unity's scripting backend, fall back to asserting that `BehaviourIdentity.Of` includes the assembly name and that two different assembly names yield different identities, and record the limitation in the test file header.
+Implement `BuildDuplicateInAnotherAssembly()` with `System.Reflection.Emit`. Define a dynamic assembly containing a type whose full name equals `SpoofProbe.Duplicate`, and declare a matching `SpoofProbe.Duplicate` class in the test assembly. This is test-only reflection to build a fixture, not reflection to authorize a production path. The plan permits it. If `Reflection.Emit` is unavailable in the scripting backend of this Unity version, fall back to these assertions. Assert that `BehaviourIdentity.Of` includes the assembly name. Assert that two different assembly names yield different identities. Record the limitation in the test file header.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1968,7 +1975,7 @@ Expected: FAIL — `BehaviourIdentity` does not exist.
 
 - [ ] **Step 3: Implement identity and the empty allowlist**
 
-`AllowedIdentities` is an empty `IReadOnlyCollection<string>` with a file-level comment stating that an identity may be added only with a recorded justification that the type's effect is confined to parameters, layer or playable weights, or state selection, and that this is verification obligation 7. `IsAllowed` returns false for null, empty, and anything not in the set, comparing with `StringComparison.Ordinal`.
+`AllowedIdentities` is an empty `IReadOnlyCollection<string>`. A file-level comment must state the rule: the plan may add an identity only with a recorded justification. The justification must say the type confines its effect to parameters, layer or playable weights, or state selection. The comment also names verification obligation 7. `IsAllowed` returns false for null, empty, and anything not in the set, comparing with `StringComparison.Ordinal`.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -1976,7 +1983,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Wire the avatar-scoped refusal**
 
-In `CommittedControllerGraph.Enumerate`, return `AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour` when any collected behaviour's identity is not allowed, with empty `Layers`. Add a test in `CommittedControllerGraphTests` that attaches a locally declared `StateMachineBehaviour` subclass to a state and asserts that refusal.
+In `CommittedControllerGraph.Enumerate`, return `AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour` with empty `Layers` when the plan does not allow the identity of some collected behaviour. Add a test in `CommittedControllerGraphTests` that attaches a locally declared `StateMachineBehaviour` subclass to a state and asserts that refusal.
 
 - [ ] **Step 6: Run and commit**
 
@@ -1992,16 +1999,16 @@ git commit -m "feat: authorize behaviours by assembly-qualified identity"
 
 ## Task 15: AnimationEvents as an unbounded runtime writer
 
-An `AnimationEvent` is not a curve binding, so nothing earlier in this plan sees it. It invokes a method by name on the animated hierarchy, which is a runtime code path outside the animation value model entirely. Silently ignoring events would leave a proof surface unexamined.
+An `AnimationEvent` is not a curve binding, so nothing earlier in this plan sees it. It invokes a method by name on the animated hierarchy. That is a runtime code path outside the animation value model entirely. Silently ignoring events would leave a proof surface unexamined.
 
-Two facts are established locally and must be carried into the code as comments:
+The plan establishes two facts locally, and the code must carry them as comments:
 
-- NDMF **drops** animation events when it clones a clip that has them: the `VirtualClip` constructor builds a fresh `AnimationClip` and copies only curves, because Unity provides no way to delete events ([VirtualClip.cs:229-233](Packages/nadena.dev.ndmf/Editor/API/AnimatorServices/VirtualObjects/VirtualClip.cs:229)). So most committed clips carry no events.
-- **Marker clips are the exception.** They are committed by identity and never cloned, so any events on them survive verbatim.
+- NDMF **drops** animation events when it clones a clip that has them. The `VirtualClip` constructor builds a fresh `AnimationClip` and copies only curves, because Unity offers no way to delete events. See [VirtualClip.cs:229-233](Packages/nadena.dev.ndmf/Editor/API/AnimatorServices/VirtualObjects/VirtualClip.cs:229). So most committed clips carry no events.
+- **Marker clips are the exception.** NDMF commits them by identity and never clones them, so any events on them survive verbatim.
 
-Whether such an event can execute in the supported VRChat avatar runtime **cannot be established in this environment** — the VRChat SDK is not installed and no public API here characterizes it. Under the spec's fail-closed rule an uncharacterized runtime writer refuses.
+This environment **cannot establish** whether such an event can execute in the supported VRChat avatar runtime. The VRChat SDK is not installed, and no public API here characterizes it. Under the fail-closed rule of the spec, an uncharacterized runtime writer refuses.
 
-**Scope.** An event's target method is resolved by name against the animated hierarchy and its effect is unbounded, so no layer-, clip-, or renderer-scope containment is sound. The refusal is **avatar-scoped**, matching the unallowlisted-behaviour rule for the same reason.
+**Scope.** The runtime resolves the target method of an event by name against the animated hierarchy. The effect of the event is unbounded. No layer-, clip-, or renderer-scope containment is sound. The refusal is **avatar-scoped**, matching the unallowlisted-behaviour rule for the same reason.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs`
@@ -2080,7 +2087,7 @@ Expected: FAIL — the enum member does not exist.
 
 - [ ] **Step 3: Implement**
 
-Add `AnimationEventPresent` to `AvatarAnimationRefusal`. In `Enumerate`, after collecting reachable clips, return that refusal with empty `Layers` when any clip has `events.Length > 0`. Add a code comment recording the NDMF clone-drop behavior, the marker-clip exception, and that the runtime executability of events is uncharacterized in this environment — so the refusal is conservative rather than a claim that events do execute.
+Add `AnimationEventPresent` to `AvatarAnimationRefusal`. In `Enumerate`, after collecting reachable clips, return that refusal with empty `Layers` when any clip has `events.Length > 0`. Add a code comment recording the NDMF clone-drop behavior and the marker-clip exception. The comment must also say the runtime executability of events is uncharacterized in this environment. The refusal is therefore conservative, not a claim that events do execute.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2105,9 +2112,9 @@ Uses the binding **category** recorded in Task 3 for `m_Materials.Array.size`. D
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityRendererAlphaAnalysisTests.cs`
 
 **Interfaces:**
-- Consumes: `CapturedFloatBinding` and `CapturedObjectBinding` from Task 10; Task 3's recorded category.
+- Consumes: `CapturedFloatBinding` and `CapturedObjectBinding` from Task 10, and the recorded category of Task 3.
 - Produces:
-  - two new `RendererAnalysisRefusal` members, `AnimatedMeshReplacement` and `AnimatedMaterialSlotCount`;
+  - two new `RendererAnalysisRefusal` members, `AnimatedMeshReplacement` and `AnimatedMaterialSlotCount`.
   - `internal static RendererAnalysisRefusal UnityRendererAlphaAnalysis.StructuralRefusalFor(IReadOnlyList<CapturedFloatBinding> floats, IReadOnlyList<CapturedObjectBinding> objects, string rendererPath)`
 
 Passing both lists is what lets the slot-count check live in whichever category Task 3 observed.
@@ -2186,7 +2193,7 @@ Expected: FAIL — enum members and method not defined.
 
 - [ ] **Step 3: Implement**
 
-Append the two members to `RendererAnalysisRefusal`, preserving the documented rule that declaration order is check order. Match `m_Mesh` and `m_Materials.Array.size` on the renderer's own path in **both** lists, so the check is correct under whichever category Task 3 recorded.
+Append the two members to `RendererAnalysisRefusal`, preserving the documented rule that declaration order is check order. Match `m_Mesh` and `m_Materials.Array.size` on the path of the renderer itself, in **both** lists. The check then holds under whichever category Task 3 recorded.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2212,7 +2219,7 @@ git commit -m "feat: refuse renderers with animated structural invalidation"
 - Consumes: nothing new.
 - Produces: `internal static bool AdmittedMaterialStates.TryBudgetProduct(IReadOnlyList<int> perSlotAdmittedCounts, out int productSize)`
 
-The cap is a `private const int` inside `AdmittedMaterialStates`. It must not be `public` or `internal`, must not appear in any signature, and must not be asserted as a number outside this task.
+The cap is a `private const int` inside `AdmittedMaterialStates`. It must not be `public` or `internal`. It must not appear in any signature. No code outside this task may assert it as a number.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2260,7 +2267,7 @@ Expected: FAIL — method not defined.
 
 - [ ] **Step 3: Implement**
 
-Multiply into a `long` accumulator and return false as soon as it exceeds the cap, so no oversized product is materialized and no overflow occurs.
+Multiply into a `long` accumulator and return false as soon as it exceeds the cap. The code then never materializes an oversized product, and no overflow occurs.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2285,22 +2292,22 @@ git commit -m "feat: bound the admitted state product before materialization"
 
 The single new pure operation the spec allows. **Substitution must never invent a property that the captured material does not have.**
 
-Substitution is a **primitive**, not an authorization path: it will write whatever value it is given, and its unit tests exercise it with arbitrary values. Whether a value may be substituted at all is decided upstream by admission (Tasks 12, 13, 19), which under the V1 rule admits only a value equal to that admitted material's captured default. Nothing here may be read as permitting an animated value to override a differing default.
+Substitution is a **primitive**, not an authorization path. It will write whatever value the caller gives it. Its unit tests exercise it with arbitrary values. Admission (Tasks 12, 13, 19) decides upstream whether the plan may substitute a value. Under the V1 rule, admission allows only a value equal to the captured default of that admitted material. Nothing here permits an animated value to override a differing default.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/UnityMaterialEvidenceCapture.cs`
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityMaterialEvidenceCaptureTests.cs`
 
 **Interfaces:**
-- Consumes: `CapturedMaterialEvidence`; Task 5's recorded absent-property rule.
+- Consumes: `CapturedMaterialEvidence`, and the recorded absent-property rule of Task 5.
 - Produces:
   - `internal CapturedMaterialEvidence CapturedMaterialEvidence.WithScalar(string name, float value)`
   - `internal CapturedMaterialEvidence CapturedMaterialEvidence.WithColor(string name, Color value)`
   - `internal CapturedMaterialEvidence CapturedMaterialEvidence.WithVector(string name, Vector4 value)`
 
 **Presence rule.** Each entry carries both a requested-ness and a captured `HasValue`. Substitution:
-- **throws `ArgumentException`** when the name was never requested — substituting an unrequested property would invent a fact, which is a defect, not a domain outcome;
-- when the name was requested but the captured entry has `HasValue == false` (the material does not have the property), **follow the branch Task 5 recorded**: if absent stays absent and the binding is ineffective, leave `HasValue` false and ignore the substituted value; if Task 5 observed that assignment makes the property effective, do not silently flip the flag — instead add `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and refuse that admitted state;
+- **throws `ArgumentException`** when the name was never requested. Substituting an unrequested property would invent a fact. That is a defect, not a domain outcome.
+- when the name was requested but the captured entry has `HasValue == false`, **follow the branch Task 5 recorded**. This case means the material does not have the property. If absent stays absent and the binding is ineffective, leave `HasValue` false and ignore the substituted value. If Task 5 observed that assignment makes the property effective, do not silently flip the flag. Instead add `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and refuse that admitted state.
 - when the entry has `HasValue == true`, replace the value and keep `HasValue` true.
 
 Setting `HasValue = true` merely because a substitution occurred is never acceptable.
@@ -2421,11 +2428,11 @@ Expected: FAIL — `WithScalar` not defined.
 
 - [ ] **Step 3: Implement**
 
-Copy the private entry arrays, replace the matching entry's value while **preserving its `HasValue` flag exactly**, and construct a new `CapturedMaterialEvidence` over the copies. Throw `ArgumentException` for an unrequested name, reusing the existing `Unrequested(name)` message convention.
+Copy the private entry arrays. Replace the value of the matching entry while **preserving its `HasValue` flag exactly**. Construct a new `CapturedMaterialEvidence` over the copies. Throw `ArgumentException` for an unrequested name, reusing the existing `Unrequested(name)` message convention.
 
 - [ ] **Step 4: Run and verify it passes**
 
-Expected: PASS. If `SubstitutionDoesNotInventPresenceOnAMaterialWithoutTheProperty` cannot pass because Task 5 recorded that assignment makes a property effective, implement the refusal branch instead and change this test to assert that refusal.
+Expected: PASS. If `SubstitutionDoesNotInventPresenceOnAMaterialWithoutTheProperty` cannot pass, check the Task 5 record. Assignment may make a property effective. Then implement the refusal branch instead and change this test to assert that refusal.
 
 - [ ] **Step 5: Commit**
 
@@ -2455,11 +2462,15 @@ per renderer slot
   -> return all conservative AlphaResolutions for that slot
 ```
 
-**Texture scale/offset is texture-owned evidence, not vector evidence.** Three of the four `AnimatedPropertyKind` members line up one-to-one with a typed evidence category: `Scalar` with the scalar entries, `ColorComponent` with the colour entries, `VectorComponent` with the vector entries. `TextureScaleOffsetComponent` does not. Its `PropertyName` is a **derived** `<texture>_ST` name that exists only because `<texture>` was requested with `TextureEvidenceKinds.ScaleOffset`; it is deliberately **not** a member of `MaterialEvidenceRequest.VectorProperties`, and Task 18's `WithVector` is category-strict — it throws `ArgumentException` for any name that was not requested as a vector. Calling `WithVector("_MainTex_ST", …)` on the real frontend path would therefore throw, not substitute. Presence, the serialized default, and (in V1) the resolved evidence for this kind all come from `CapturedTextureAssignment`. Step 3 below states the rule; do not weaken Task 18's category boundary, do not add `_ST` names to `VectorProperties`, and do not fake an `_ST` vector entry during capture.
+**Texture scale/offset is texture-owned evidence, not vector evidence.** Three of the four `AnimatedPropertyKind` members line up one-to-one with a typed evidence category: `Scalar` with the scalar entries, `ColorComponent` with the colour entries, `VectorComponent` with the vector entries. `TextureScaleOffsetComponent` does not. Its `PropertyName` is a **derived** `<texture>_ST` name.
+
+The name exists only because the request asked for `<texture>` with `TextureEvidenceKinds.ScaleOffset`. It is deliberately **not** a member of `MaterialEvidenceRequest.VectorProperties`. The `WithVector` of Task 18 is category-strict and throws `ArgumentException` for any name that was not requested as a vector. Calling `WithVector("_MainTex_ST", …)` on the real frontend path would therefore throw, not substitute.
+
+Presence, the serialized default, and (in V1) the resolved evidence for this kind all come from `CapturedTextureAssignment`. Step 3 below states the rule. Do not weaken the category boundary of Task 18. Do not add `_ST` names to `VectorProperties`, and do not fake an `_ST` vector entry during capture.
 
 The defaults must come from **each admitted material individually**. A renderer-wide default would be wrong the moment two admitted materials disagree, and that error is in the false-positive direction.
 
-Admission is per admitted material, so the same animated binding may be admitted against one admitted material and refused against another. That is correct: the singleton set is `{animated values} ∪ {that material's captured default}`.
+Admission is per admitted material. The plan may admit the same animated binding against one admitted material and refuse it against another. That is correct: the singleton set is `{animated values} ∪ {that material's captured default}`.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/CapturedAnimationEvidence.cs`
@@ -2467,13 +2478,14 @@ Admission is per admitted material, so the same animated binding may be admitted
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`
 
 **Interfaces:**
-- Consumes: `AdmitScalar`/`AdmitColor`/`AdmitVector` (Tasks 12–13), `AnimatedPropertyRef` (Task 11), `WithScalar`/`WithColor`/`WithVector` (Task 18, for the three categorised kinds only), `CapturedMaterialEvidence.TryGetTexture`/`CapturedTextureAssignment` (Task 10, for `TextureScaleOffsetComponent`), `DeriveTextureScaleOffsetProperties` and `MaterialEvidenceRequest.TextureProperties` (Tasks 10–11, to invert the derived `_ST` name), `AlphaSemanticsResolver.Resolve` (unchanged).
+- Consumes: `AdmitScalar`/`AdmitColor`/`AdmitVector` (Tasks 12–13), `AnimatedPropertyRef` (Task 11), `WithScalar`/`WithColor`/`WithVector` (Task 18, for the three categorised kinds only),
+  `CapturedMaterialEvidence.TryGetTexture`/`CapturedTextureAssignment` (Task 10, for `TextureScaleOffsetComponent`), `DeriveTextureScaleOffsetProperties` and `MaterialEvidenceRequest.TextureProperties` (Tasks 10–11, to invert the derived `_ST` name), `AlphaSemanticsResolver.Resolve` (unchanged).
 - Produces:
   - `internal sealed class CapturedMaterialSlotEvidence { internal int SlotIndex { get; } internal IReadOnlyList<int> AdmittedMaterialIndices { get; } }`
   - `internal sealed class SlotResolutionResult { internal bool IsResolved { get; } internal RendererAnalysisRefusal Refusal { get; } internal IReadOnlyList<AlphaResolution> Resolutions { get; } }`
   - `internal static SlotResolutionResult AdmittedMaterialStates.ResolveSlot(CapturedMaterialSlotEvidence slot, IReadOnlyList<CapturedAlphaMaterial> admittedMaterials, IReadOnlyList<(CapturedFloatBinding Binding, AnimatedPropertyRef Reference)> slotBindings, AlphaFieldProvider alphaFields)`
 
-`CapturedMaterialSlotEvidence` is built for **every** slot, animated or not. An unanimated slot has exactly one admitted material index — its current assignment — so current materials are preserved rather than dropped.
+The plan builds `CapturedMaterialSlotEvidence` for **every** slot, animated or not. An unanimated slot has exactly one admitted material index — its current assignment — so the slot keeps its current materials.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2607,19 +2619,19 @@ Admission is per admitted material, so the same animated binding may be admitted
         }
 ```
 
-Write `SlotFixture`, `AttestedOpaqueMaterial`, `AttestedTransparentMaterial`, `AttestedMaterialWithForcedOpaque`, `AnyTriangle`, and the binding/reference helpers in the test file, building materials through the existing attested Poiyomi and lilToon fixture helpers so every resolution runs through a real frontend. A stock Unity shader resolves all-Unknown and would make these tests pass vacuously.
+Write `SlotFixture`, `AttestedOpaqueMaterial`, `AttestedTransparentMaterial`, `AttestedMaterialWithForcedOpaque`, `AnyTriangle`, and the binding/reference helpers in the test file. Build materials through the existing attested Poiyomi and lilToon fixture helpers, so every resolution runs through a real frontend. A stock Unity shader resolves all-Unknown and would make these tests pass vacuously.
 
-**Required texture scale/offset tests.** The tests above exercise only the three categorised kinds. Step 1 MUST additionally cover the derived `_ST` path, because that is the path where the category boundary bites, and none of the tests above would fail an implementation that reached for `WithVector("_MainTex_ST", …)`. All four are mandatory:
+**Required texture scale/offset tests.** The tests above exercise only the three categorised kinds. Step 1 MUST additionally cover the derived `_ST` path. That is the path where the category boundary bites. None of the tests above would fail an implementation that reached for `WithVector("_MainTex_ST", …)`. All four are mandatory:
 
-1. **Real derived scale/offset relevance.** Build relevance from the **real frontend request** — the same premise Task 11 established — where `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`. Assert as a fixture precondition that `relevance.VectorProperties` does **not** contain `"_MainTex_ST"`. Then resolve (or construct through `ResolveProofRelevant`) the proof-relevant binding for `material._MainTex_ST.x` and assert its `Kind` is `AnimatedPropertyKind.TextureScaleOffsetComponent`. A hand-authored `VectorProperties` entry containing `"_MainTex_ST"` is a workaround, not a fixture: it would make the whole group pass vacuously and is forbidden.
+1. **Real derived scale/offset relevance.** Build relevance from the **real frontend request** — the same premise Task 11 established — where `_MainTex` is requested with `TextureEvidenceKinds.ScaleOffset`. Assert as a fixture precondition that `relevance.VectorProperties` does **not** contain `"_MainTex_ST"`. Then resolve (or construct through `ResolveProofRelevant`) the proof-relevant binding for `material._MainTex_ST.x` and assert its `Kind` is `AnimatedPropertyKind.TextureScaleOffsetComponent`. A hand-authored `VectorProperties` entry containing `"_MainTex_ST"` is a workaround, not a fixture. It would make the whole group pass vacuously. The plan forbids it.
 
-2. **A re-asserted scale/offset component resolves.** Using an admitted material whose captured texture assignment has `HasScaleOffset == true`, animate one derived `_ST` component to exactly its captured default. `ResolveSlot` must succeed, and the semantic outcome must equal the outcome for the same material with no animation at all. Critically, the test must pass **without** `"_MainTex_ST"` appearing in `VectorProperties` — this is the test that fails an implementation still calling `WithVector` on the derived name.
+2. **A re-asserted scale/offset component resolves.** Using an admitted material whose captured texture assignment has `HasScaleOffset == true`, animate one derived `_ST` component to exactly its captured default. `ResolveSlot` must succeed, and the semantic outcome must equal the outcome for the same material with no animation at all. Critically, the test must pass **without** `"_MainTex_ST"` appearing in `VectorProperties`. This is the test that fails an implementation still calling `WithVector` on the derived name.
 
-3. **A differing scale/offset component refuses.** Animate one derived `_ST` component to a value differing from that admitted material's captured default. Expect `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`, with no substitution and no alternate scale/offset state resolved. Cover **one scale component and one offset component** (for example `.y` and `.z`) so the `ComponentIndex` 0–3 → `Scale.x`/`Scale.y`/`Offset.x`/`Offset.y` mapping is proven rather than assumed; an implementation that swaps the scale and offset halves must fail here. The existing immutable representation and Task 11's `"xyzw"` convention make this deterministic, so no new host characterization work is needed.
+3. **A differing scale/offset component refuses.** Animate one derived `_ST` component to a value differing from the captured default of that admitted material. Expect `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`, with no substitution and no alternate scale/offset state resolved. Cover **one scale component and one offset component** (for example `.y` and `.z`). The test then proves the `ComponentIndex` 0–3 → `Scale.x`/`Scale.y`/`Offset.x`/`Offset.y` mapping instead of assuming it. An implementation that swaps the scale and offset halves must fail here. The existing immutable representation and the `"xyzw"` convention of Task 11 make this deterministic. The plan needs no new host characterization work.
 
-4. **Absent scale/offset evidence refuses.** For a proof-relevant `TextureScaleOffsetComponent` binding whose admitted material lacks the required captured `ScaleOffset` evidence (the texture assignment absent, or present with `HasScaleOffset == false`), expect `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial`. The test must prove Task 19 checks `CapturedTextureAssignment` presence directly; an implementation that calls `TryGetVector("_MainTex_ST", …)` and reinterprets its `ArgumentException` as this domain refusal must not pass.
+4. **Absent scale/offset evidence refuses.** For a proof-relevant `TextureScaleOffsetComponent` binding whose admitted material lacks the required captured `ScaleOffset` evidence (the texture assignment absent, or present with `HasScaleOffset == false`), expect `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial`. The test must prove Task 19 checks `CapturedTextureAssignment` presence directly. An implementation that calls `TryGetVector("_MainTex_ST", …)` and reinterprets its `ArgumentException` as this domain refusal must not pass.
 
-Task 18's cross-category tests stay as they are. Task 19 preserves, and must not rewrite, the premise that `WithVector("_MainTex_ST", …)` throwing is **correct** when `_MainTex_ST` was never requested as vector evidence.
+The cross-category tests of Task 18 stay as they are. Task 19 preserves, and must not rewrite, the premise that `WithVector("_MainTex_ST", …)` throwing is **correct** when `_MainTex_ST` was never requested as vector evidence.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -2629,21 +2641,21 @@ Expected: FAIL — `ResolveSlot` and `CapturedMaterialSlotEvidence` are not defi
 
 For each admitted material index in the slot:
 
-1. take that material's own `CapturedMaterialEvidence`;
-2. group the slot's proof-relevant bindings by `AnimatedPropertyRef.PropertyName` and `Kind`;
-3. read the serialized default for that property **from that material's own captured evidence**. **If that material's captured evidence has no value for the property, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and stop — do not admit, substitute, or resolve.** For a scalar, colour, or vector binding that means the captured entry's `HasValue` is false; for a `TextureScaleOffsetComponent` binding it means the texture assignment is absent or its `HasScaleOffset` is false, because presence for a texture's scale/offset is carried by `CapturedTextureAssignment`, not by a vector entry — and note that an `_ST` vector that was never requested throws `ArgumentException` from `TryGetVector` rather than returning false. Task 18 added this refusal as vocabulary with no producer, and Task 18's substitution primitive deliberately preserves `HasValue == false`; that preservation is a property of the primitive, never authorization to ignore the binding. Task 5 observed the bare curve is genuinely sampled into a renderer-wide `MaterialPropertyBlock` but could not establish whether an undeclared property affects rendering, so the design took the fail-closed branch. **A Step 1 test must pin this refusal**;
-4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `Scalar` → `AdmitScalar`, `ColorComponent` → `AdmitColor`, `VectorComponent` → `AdmitVector`. `TextureScaleOffsetComponent` is handled by the separate rule below. Admission requires the animated values **and that material's own default** to be one exact value; an animated value never overrides a differing default;
-5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; on `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`;
-6. for `Scalar`, `ColorComponent`, and `VectorComponent` only, derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one; the substitution path is retained so the admitted state is constructed uniformly and so a future widening of admission has one place to change. `TextureScaleOffsetComponent` never calls any `With*` method — see below;
+1. take the `CapturedMaterialEvidence` of that material.
+2. group the proof-relevant bindings of the slot by `AnimatedPropertyRef.PropertyName` and `Kind`.
+3. read the serialized default for that property **from the captured evidence of that material itself**. **If that captured evidence has no value for the property, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` and stop — do not admit, substitute, or resolve.** For a scalar, colour, or vector binding, the captured entry has `HasValue == false`. For a `TextureScaleOffsetComponent` binding, the texture assignment is absent or its `HasScaleOffset` is false. Presence for the scale/offset of a texture lives in `CapturedTextureAssignment`, not in a vector entry. Note that an `_ST` vector that was never requested throws `ArgumentException` from `TryGetVector` rather than returning false. Task 18 added this refusal as vocabulary with no producer. The substitution primitive of Task 18 deliberately preserves `HasValue == false`. That preservation is a property of the primitive, never authorization to ignore the binding. Task 5 observed that sampling genuinely applies the bare curve to a renderer-wide `MaterialPropertyBlock`. It could not establish whether an undeclared property affects rendering, so the design took the fail-closed branch. **A Step 1 test must pin this refusal.**
+4. run `AdmitScalar`, `AdmitColor`, or `AdmitVector` as the `Kind` dictates — `Scalar` → `AdmitScalar`, `ColorComponent` → `AdmitColor`, `VectorComponent` → `AdmitVector`. The separate rule below handles `TextureScaleOffsetComponent`. Admission requires the animated values **and the default of that material itself** to be one exact value. An animated value never overrides a differing default.
+5. on `NotFiniteExact` return `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`. On `SourcesDisagree` return `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`.
+6. for `Scalar`, `ColorComponent`, and `VectorComponent` only, derive the substituted evidence with `WithScalar`/`WithColor`/`WithVector`, preserving presence per Task 18. Because admission required equality with the default, the substituted value equals the captured one. The plan retains the substitution path so the plan constructs the admitted state uniformly. A future widening of admission then has one place to change. `TextureScaleOffsetComponent` never calls any `With*` method — see below.
 7. resolve semantics for the substituted evidence and call `AlphaSemanticsResolver.Resolve`.
 
 **The `TextureScaleOffsetComponent` rule.** For a binding whose `Kind` is `TextureScaleOffsetComponent`, replace points 3, 4, and 6 with:
 
-1. **Identify the owning texture property.** Do not write a generic suffix parser. `UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties` produced the derived name as `texture.PropertyName + "_ST"` for each `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`; invert that exact relationship by scanning `relevance.TextureProperties` for the single request satisfying `request.PropertyName + "_ST" == reference.PropertyName` with `ScaleOffset` requested. If no such request exists the binding was never proof-relevant and must not have reached this point.
+1. **Identify the owning texture property.** Do not write a generic suffix parser. `UnityAnimationEvidenceCapture.DeriveTextureScaleOffsetProperties` produced the derived name as `texture.PropertyName + "_ST"` for each `TexturePropertyEvidenceRequest` whose `Evidence` includes `TextureEvidenceKinds.ScaleOffset`. Invert that exact relationship by scanning `relevance.TextureProperties` for the single request satisfying `request.PropertyName + "_ST" == reference.PropertyName` with `ScaleOffset` requested. If no such request exists, the binding was never proof-relevant and must not reach this point.
 
-2. **Read presence and the serialized default from `CapturedTextureAssignment`, not from vector evidence.** Call `TryGetTexture(<texture>, out var assignment)` on that admitted material's own evidence. Presence requires **both** that `TryGetTexture` returned `true` **and** `assignment.HasScaleOffset == true`. If either is false, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` **before** any admission or semantic resolution. Never call `TryGetVector("<texture>_ST", …)`: that name was never requested as a vector, so it throws `ArgumentException` — a programming defect — rather than reporting absence, and an exception must never be reinterpreted as this domain refusal.
+2. **Read presence and the serialized default from `CapturedTextureAssignment`, not from vector evidence.** Call `TryGetTexture(<texture>, out var assignment)` on the captured evidence of that admitted material itself. Presence requires **both** that `TryGetTexture` returned `true` **and** `assignment.HasScaleOffset == true`. If either is false, return `RendererAnalysisRefusal.AnimatedPropertyAbsentFromAdmittedMaterial` **before** any admission or semantic resolution. Never call `TryGetVector("<texture>_ST", …)`. That name was never requested as a vector, so the call throws `ArgumentException` — a programming defect — rather than reporting absence. No code may reinterpret that exception as this domain refusal.
 
-3. **Reconstruct the logical four-component `_ST` value.** `CapturedTextureAssignment` stores `Vector2 Scale` and `Vector2 Offset`, captured from `Material.GetTextureScale`/`GetTextureOffset`. Task 11 assigns `ComponentIndex` from the `"xyzw"` suffix order, so the logical vector is Unity's `_ST` convention:
+3. **Reconstruct the logical four-component `_ST` value.** `CapturedTextureAssignment` stores `Vector2 Scale` and `Vector2 Offset`, captured from `Material.GetTextureScale`/`GetTextureOffset`. Task 11 assigns `ComponentIndex` from the `"xyzw"` suffix order, so the logical vector follows the `_ST` convention of Unity:
 
    | `ComponentIndex` | suffix | captured source |
    |---|---|---|
@@ -2652,19 +2664,21 @@ For each admitted material index in the slot:
    | 2 | `.z` | `assignment.Offset.x` |
    | 3 | `.w` | `assignment.Offset.y` |
 
-   That is `new Vector4(Scale.x, Scale.y, Offset.x, Offset.y)`. This ordering is Unity's documented `_ST` packing rather than an in-tree characterization; the required test at (3) in Step 1 pins at least one scale component and one offset component so an implementation that transposes the halves fails.
+   That is `new Vector4(Scale.x, Scale.y, Offset.x, Offset.y)`. This ordering is the documented `_ST` packing of Unity, not an in-tree characterization. The required test at (3) in Step 1 pins at least one scale component and one offset component. So an implementation that transposes the halves fails.
 
-4. **Admit with `AdmitVector` over that logical value.** `AdmitVector` (Task 13) is a pure component-wise finite-exact singleton primitive keyed on `ComponentIndex` 0–3 — exactly the mathematical problem here — and it neither reads nor writes vector evidence. Reusing it does **not** mean `_ST` is stored as vector evidence.
+4. **Admit with `AdmitVector` over that logical value.** `AdmitVector` (Task 13) is a pure component-wise finite-exact singleton primitive keyed on `ComponentIndex` 0–3. That is exactly the mathematical problem here. The primitive neither reads nor writes vector evidence. Reusing it does **not** mean the plan stores `_ST` as vector evidence.
 
-5. **Map refusals identically:** `NotFiniteExact` → `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`; `SourcesDisagree` → `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`.
+5. **Map refusals identically:** `NotFiniteExact` → `RendererAnalysisRefusal.UnsupportedAnimationCurveForm`. `SourcesDisagree` → `RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton`.
 
-6. **On success, contribute no substitution — carry the evidence forward unchanged.** Do **not** call `WithVector("<texture>_ST", …)`, and do not manufacture any new evidence entry. Under V1 admission, `Singleton` proves the animated components equal this admitted material's captured `Scale`/`Offset` default, so the captured texture assignment already *is* the one admitted value; this binding is fully discharged and adds nothing. "Unchanged" means unchanged **by this binding**: where the same slot also carries admitted scalar, colour, or vector bindings, their `With*` derivations still accumulate as in point 6 above, and the evidence object reaching `AlphaSemanticsResolver.Resolve` is that accumulated one. A `TextureScaleOffsetComponent` binding must never reset, discard, or re-derive the accumulated evidence — the slot with only `_ST` bindings simply resolves against the original capture. Passing that evidence to the resolver is exact, not an approximation — it is the same reasoning as proving `runtime value == captured value` and then keeping the captured value.
+6. **On success, contribute no substitution — carry the evidence forward unchanged.** Do **not** call `WithVector("<texture>_ST", …)`, and do not manufacture any new evidence entry. Under V1 admission, `Singleton` proves the animated components equal the captured `Scale`/`Offset` default of this admitted material. The captured texture assignment already *is* the one admitted value. This binding then discharges fully and adds nothing. "Unchanged" means unchanged **by this binding**. Where the same slot carries admitted scalar, colour, or vector bindings, their `With*` derivations still accumulate as in point 6 above. The evidence object reaching `AlphaSemanticsResolver.Resolve` is that accumulated one. A `TextureScaleOffsetComponent` binding must never reset, discard, or re-derive the accumulated evidence. The slot with only `_ST` bindings simply resolves against the original capture. Passing that evidence to the resolver is exact, not an approximation. The reasoning matches proving `runtime value == captured value` and then keeping the captured value.
 
-**Why this is sound, and exactly what it depends on.** V1 authorization permits only **re-assertion of an already captured admitted value**; it does not admit a transition to a different texture scale or offset. Successful `ScaleOffset` admission therefore adds no new semantic state to `CapturedMaterialEvidence`, which is the sole reason keeping the original evidence is exact. This is load-bearing: the shortcut is valid **only** because V1 admission requires exact equality with the captured default.
+**Why this is sound, and exactly what it depends on.** V1 authorization permits only **re-assertion of an already captured admitted value**. It does not admit a transition to a different texture scale or offset. Successful `ScaleOffset` admission therefore adds no new semantic state to `CapturedMaterialEvidence`, which is the sole reason keeping the original evidence is exact. This is load-bearing: the shortcut is valid **only** because V1 admission requires exact equality with the captured default.
 
-**Future widening.** If admission is ever widened to permit a texture scale/offset value *different* from the captured default, this shortcut becomes insufficient, because the resolver would then need evidence carrying a value that was never captured. At that point AMUSE needs a dedicated presence-preserving texture-evidence derivation — conceptually `WithTextureScaleOffset(...)` — designed for the texture category. **Do not implement such an API now.** When it is implemented, it MUST NOT be done by adding derived `_ST` names to `VectorProperties`, bypassing `WithVector`'s requestedness check, weakening Task 18's category boundary, or otherwise pretending texture `ScaleOffset` evidence is ordinary vector evidence.
+**Future widening.** Admission may one day permit a texture scale/offset value *different* from the captured default. Then this shortcut becomes insufficient, because the resolver would need evidence carrying a value that was never captured. At that point AMUSE needs a dedicated presence-preserving texture-evidence derivation — conceptually `WithTextureScaleOffset(...)` — designed for the texture category.
 
-Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already; `AnimatedPropertyAbsentFromAdmittedMaterial` already exists from Task 18 and needs only its producer.
+**Do not implement such an API now.** When someone implements it later, the implementation MUST NOT add derived `_ST` names to `VectorProperties`. It MUST NOT bypass the requestedness check of `WithVector`. It MUST NOT weaken the category boundary of Task 18. It MUST NOT pretend texture `ScaleOffset` evidence is ordinary vector evidence.
+
+Collect one `AlphaResolution` per admitted material and return them all. Add the two refusal members to `RendererAnalysisRefusal` if Task 16 has not already. `AnimatedPropertyAbsentFromAdmittedMaterial` already exists from Task 18 and needs only its producer.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2683,7 +2697,7 @@ git commit -m "feat: resolve admitted material states per renderer slot"
 
 ## Task 20: Deduplicate admitted resolutions
 
-Dedup is **performance-only**. Correctness is defined over all distinct semantic resolutions produced by Task 19; failing to deduplicate costs work and can never change the proof.
+Dedup is **performance-only**. Correctness covers all distinct semantic resolutions produced by Task 19. Failing to deduplicate costs work and can never change the proof.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Analysis/AlphaSemanticsResolver.cs`
@@ -2700,10 +2714,10 @@ Dedup is **performance-only**. Correctness is defined over all distinct semantic
 assumed `AlphaResolution` already exposed enough state to name its Uniform case.
 It does not. `AlphaResolution` is a sealed, non-partial class whose only
 consumer-visible surface is `IsResolved`, `Failure`, the three factories, and
-`Classify`; the two discriminants the Uniform merge rule needs — `_isUniform` and
+`Classify`. The two discriminants the Uniform merge rule needs — `_isUniform` and
 `_uniformOutcome` — are `private`, and `InternalsVisibleTo` does not reach
 `private`. The Refused merge rule was always implementable from `IsResolved` plus
-`Failure`; the Uniform merge rule was not implementable at all.
+`Failure`. The Uniform merge rule was not implementable at all.
 
 Task 20 therefore adds exactly one minimal read-only accessor exposing state the
 type already stores:
@@ -2712,24 +2726,24 @@ type already stores:
 internal bool TryGetUniformOutcome(out TriangleAlphaOutcome outcome)
 ```
 
-`true` with the exact stored outcome for Uniform; `false` for Refused and for
-Classified. A separate `IsUniform` is deliberately *not* added — `TryGet...`
-alone answers every question Task 20 asks, and Refused stays distinguishable
-through the pre-existing `IsResolved`/`Failure` surface. `_field`, `_sampling`,
-`AlphaTextureData`, a general resolution-kind discriminant, `Equals`,
-`GetHashCode`, `IEquatable`, fingerprints, hashes, and shared comparers remain
-unexposed and unimplemented.
+`true` with the exact stored outcome for Uniform. `false` for Refused and for
+Classified. The plan deliberately does *not* add a separate `IsUniform`.
+`TryGet...` alone answers every question Task 20 asks. Refused stays
+distinguishable through the pre-existing `IsResolved`/`Failure` surface.
+`_field`, `_sampling`, `AlphaTextureData`, a general resolution-kind discriminant,
+`Equals`, `GetHashCode`, `IEquatable`, fingerprints, hashes, and shared comparers
+remain unexposed and unimplemented.
 
-The alternative — inferring uniformity from `Classify` — is rejected as unsound,
-not merely inelegant: a Classified resolution can return `ProvenOpaque` for a
-sampled triangle, so sampling would merge Classified into Uniform. That is an
+The plan rejects inferring uniformity from `Classify` as unsound, not merely
+inelegant. A Classified resolution can return `ProvenOpaque` for a sampled
+triangle. Sampling would then merge Classified into Uniform. That is an
 over-deduplication, which shrinks the later intersection set without proof and is
 a false-positive-direction defect.
 
 The resulting V1 equivalence relation is exactly:
 
-- both `!IsResolved` → merge only when `Failure` values are equal;
-- else both `TryGetUniformOutcome` → merge only when the outcomes are equal;
+- both `!IsResolved` → merge only when `Failure` values are equal.
+- else both `TryGetUniformOutcome` → merge only when the outcomes are equal.
 - otherwise → never merge.
 
 This is a scope correction to Task 20, not new architecture and not Task 21 work.
@@ -2801,7 +2815,7 @@ Expected: FAIL — method not defined.
 
 - [ ] **Step 3: Implement conservative dedup**
 
-Merge only when both resolutions are uniform with the same outcome, or both refused with the same failure. **Never merge two classified resolutions**, even when their fields look equal: reference-distinct `AlphaTextureData` cannot be proven equivalent cheaply, and keeping them separate costs work but never correctness. State exactly that in a code comment.
+Merge only when both resolutions are uniform with the same outcome, or both refused with the same failure. **Never merge two classified resolutions**, even when their fields look equal. Reference-distinct `AlphaTextureData` cannot be proven equivalent cheaply. Keeping them separate costs work but never correctness. State exactly that in a code comment.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2824,7 +2838,7 @@ git commit -m "feat: deduplicate admitted resolutions conservatively"
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Host/UnityRendererAlphaAnalysisTests.cs`
 
 **Interfaces:**
-- Consumes: `DistinctResolutions` from Task 20; the existing private `Classify` helper.
+- Consumes: `DistinctResolutions` from Task 20, the existing private `Classify` helper.
 - Produces: `internal static TriangleAlphaOutcome[] UnityRendererAlphaAnalysis.IntersectOutcomes(IReadOnlyList<TriangleAlphaOutcome[]> perResolutionOutcomes)`
 
 - [ ] **Step 1: Write the failing test**
@@ -2894,7 +2908,7 @@ Expected: FAIL — method not defined.
 
 - [ ] **Step 3: Implement**
 
-A triangle is `ProvenOpaque` only when every array reports `ProvenOpaque` at that index; `MustRemainTransparent` when every array agrees on that; `Unknown` otherwise. Throw `ArgumentException` for an empty list and for arrays of differing length — both are defects, and an empty list must never yield `ProvenOpaque` by vacuous truth.
+A triangle is `ProvenOpaque` only when every array reports `ProvenOpaque` at that index. It is `MustRemainTransparent` when every array agrees on that. It is `Unknown` otherwise. Throw `ArgumentException` for an empty list and for arrays of differing length. Both are defects. An empty list must never yield `ProvenOpaque` by vacuous truth.
 
 - [ ] **Step 4: Run and verify it passes**
 
@@ -2999,8 +3013,8 @@ PlatformFinish barrier deliberately declares no extension (Task 1), so at barrie
 no bindings exist. Task 23 therefore depended on the *first lifecycle primitive*
 originally written under Task 24, and the only alternatives — injecting a refusal,
 fabricating a `CommittedControllerGraphResult`, or adding a test-only refusal provider —
-would make Task 23's required test vacuous. That primitive is extracted here and landed
-first. **Everything else in Task 24 is unchanged and remains Task 24's.**
+would make the required test of Task 23 vacuous. That primitive is extracted here and landed
+first. **Everything else in Task 24 is unchanged and remains in Task 24.**
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse/Editor/Build/AmuseAnimatorBindingsCapture.cs`
@@ -3010,14 +3024,14 @@ first. **Everything else in Task 24 is unchanged and remains Task 24's.**
 **Interfaces:**
 - Consumes: the lifecycle characterized in Task 1 and the enumeration safety
   characterized in Task 6.
-- Produces: `AmusePlatformFinishState.AnimatorBindings` — the host's exact retained
-  `IPlatformAnimatorBindings` — and the two-pass `Configure` shell.
+- Produces: `AmusePlatformFinishState.AnimatorBindings` — the exact retained
+  `IPlatformAnimatorBindings` of the host — and the two-pass `Configure` shell.
 
 **Host capability, not proof evidence.** The retained reference is a *live, transient
 host capability*, deliberately held across NDMF extension deactivation so the barrier
 can later build immutable evidence from it. It is not `CapturedAnimationEvidence`, it is
-never proof evidence, and it is deliberately **not** subject to Task 22's
-no-live-Unity-object evidence theorem, which governs the captured-evidence graph only.
+never proof evidence. The no-live-Unity-object evidence theorem of Task 22 does
+not govern it, because that theorem covers the captured-evidence graph only.
 The reference is stored exactly as the host supplied it: never cloned, wrapped,
 reconstructed, or re-resolved.
 
@@ -3025,19 +3039,19 @@ reconstructed, or re-resolved.
 
 Four focused tests, before any production code:
 
-1. **The capture pass stores the host's exact bindings.** Non-null, and reference-equal
+1. **The capture pass stores the exact bindings of the host.** Non-null, and reference-equal
    to what the *active* `AnimatorServicesContext` exposes. No `StubBindings`.
-2. **The barrier runs after deactivation.** Reusing Task 1's non-perturbing inactivity
-   probe: requesting `AnimatorServicesContext` in the barrier's phase position throws,
+2. **The barrier runs after deactivation.** Reusing the Task 1 non-perturbing inactivity
+   probe: requesting `AnimatorServicesContext` in the phase position of the barrier throws,
    while the retained state reference is still present.
 3. **The retained bindings remain operational at the barrier.** Using only the narrowest
    non-mutating read already approved by Tasks 1 and 6.
 4. **The restructure does not suppress the existing barrier.** The barrier pass still
    executes through the real `Configure` path. Note the limit honestly: the public
    project has no VRChat SDK, so `HostLifecycleCapability` refuses on the only platform
-   where the plugin runs, and `AnalyzedRendererCount` therefore cannot be driven above
-   zero through `Configure` here. Renderer-analysis counts stay pinned by the existing
-   injected-facts tests, which call the barrier directly.
+   where the plugin runs. The plan therefore cannot drive `AnalyzedRendererCount` above
+   zero through `Configure` here. The existing injected-facts tests pin the
+   renderer-analysis counts, and they call the barrier directly.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -3067,8 +3081,8 @@ store it on `AmusePlatformFinishState`. `Configure` becomes:
 **Explicitly out of scope here.** No `CommittedControllerGraph.Enumerate` call, no
 `LiveAnimationObservation`, no `UnityAnimationEvidenceCapture.Capture`, no
 `AvatarRefusal`, no renderer-refusal counters, no exception-propagation policy, and none
-of Task 24's runtime-state pipeline. Task 23A provides *capability*; Task 23 provides the
-refusal boundary; Task 24 provides the analysis. This split gives a clean test boundary:
+of the runtime-state pipeline of Task 24. Task 23A provides *capability*. Task 23 provides the
+refusal boundary. Task 24 provides the analysis. This split gives a clean test boundary:
 Task 23A proves "the real bindings are available at the barrier", Task 23 proves "a real
 unallowlisted behaviour produces an avatar refusal".
 

@@ -2,28 +2,28 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prove, through AMUSE's production analysis path, that an installed vendor shader can actually reach `ProvenOpaque`, `MustRemainTransparent`, `MissingTextureEvidence`, and `SemanticsUnknown` — so that a future census aborts on an environment that cannot reach them instead of publishing a misleading near-total `SemanticsUnknown`.
+**Goal:** Prove, through the AMUSE production analysis path, that an installed vendor shader can actually reach `ProvenOpaque`, `MustRemainTransparent`, `MissingTextureEvidence`, and `SemanticsUnknown`. A future census then aborts on an environment that cannot reach these outcomes. It does not publish a misleading near-total `SemanticsUnknown`.
 
-**Architecture:** A probe locates installed attested vendor packages and compares their versions to AMUSE's pinned constants. A set of EditMode tests builds in-memory vendor materials and drives them through `RendererObservationBuilder.Build(renderer, path, families)` — the three-argument production overload, never the semantics seam. Where the vendor package is absent, the probe reports absence and the vendor cases assert nothing, so public CI stays green and honest. Everything lives in the research **test** assembly; no production assembly gains a line.
+**Architecture:** A probe locates installed attested vendor packages and compares their versions to the pinned AMUSE constants. A set of EditMode tests builds in-memory vendor materials and drives them through `RendererObservationBuilder.Build(renderer, path, families)`. This is the three-argument production overload, never the semantics seam. Where the vendor package is absent, the probe reports absence, and the vendor cases assert nothing. Public CI stays green and honest. Everything lives in the research **test** assembly, and no production assembly gains a line.
 
 **Tech Stack:** Unity 2022.3.22f1, C#, NUnit EditMode tests, Unity Test Framework, `UnityEditor.PackageManager.PackageInfo`.
 
 ## Global Constraints
 
-Copied from `docs/superpowers/specs/2026-08-20-census-lab-preparation-design.md`. Every task's requirements implicitly include these.
+Copied from `docs/superpowers/specs/2026-08-20-census-lab-preparation-design.md`. Every task implicitly includes these requirements.
 
-- **No production code changes.** Nothing under `Packages/com.alrauna.amuse/` and nothing under `Packages/com.alrauna.amuse.research/Editor/` is modified. All new code lands under `Packages/com.alrauna.amuse.research/Tests/Editor/`.
+- **No production code changes.** No task modifies anything under `Packages/com.alrauna.amuse/` or under `Packages/com.alrauna.amuse.research/Editor/`. All new code lands under `Packages/com.alrauna.amuse.research/Tests/Editor/`.
 - **No attestation change**, including any relaxation for locked materials.
-- **No new `InternalsVisibleTo` grant.** The two existing grants in `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` already give the research test assembly access to `Alrauna.Amuse.Editor` internals. Use them; add none.
+- **No new `InternalsVisibleTo` grant.** The two existing grants in `Packages/com.alrauna.amuse/Editor/AssemblyInfo.cs` already give the research test assembly access to `Alrauna.Amuse.Editor` internals. Use them. Add none.
 - **No public API promotion** in `com.alrauna.amuse`.
 - **No new census category, field, or schema change.**
-- **No reflection.** Vendor pins are `internal const` and reachable at compile time; name them directly. The probe references the constants rather than retyping them, so an adapter version bump moves the probe with it. A *test* may pin a literal deliberately — that is what makes a silent pin change visible.
+- **No reflection.** Vendor pins are `internal const` and reachable at compile time. Name them directly. The probe references the constants rather than retyping them, so an adapter version bump moves the probe with it. A *test* may pin a literal deliberately — that is what makes a silent pin change visible.
 - **The gate uses the production overload** `RendererObservationBuilder.Build(renderer, hierarchyPath, families)`. Never the four-argument `BaseMaterialSemanticsProvider` overload — that one proves counting, this gate proves reachability.
-- **No fixture asset.** Every material and mesh is built in memory and destroyed in teardown. Nothing is imported, saved, or written to either project.
-- **No persistent Lab mutation.** No saved scene, no generated shader, no imported asset, no project settings change. Never invoke Poiyomi's shader locker.
+- **No fixture asset.** The tests build every material and mesh in memory. Teardown destroys them. The tests import nothing, save nothing, and write nothing to either project.
+- **No persistent Lab mutation.** No saved scene, no generated shader, no imported asset, no project settings change. Never invoke the Poiyomi shader locker.
 - **`Assert.Ignore` is forbidden** for vendor absence. Absence is a reported value that a case asserts on, never a skipped test.
 - **No telemetry, networking, cloud reporting, avatar discovery, or persistent analytics store.**
-- **Unity instance identity must be confirmed before every test run whose result is reported.** `Application.dataPath` must equal `<repo-root>/Assets` for the public project. Case-only matches are unconfirmed identity: stop and report.
+- **You must confirm Unity instance identity before every test run with a reported result.** `Application.dataPath` must equal `<repo-root>/Assets` for the public project. A case-only match does not confirm identity. Stop and report.
 - Pinned constants, for reference — never retype the literals, reference the constants:
   - `Alrauna.Amuse.Editor.Semantics.Poiyomi.PoiyomiMaterialSemantics.PoiyomiToonShaderName` = `.poiyomi/Poiyomi Toon`
   - `…PoiyomiMaterialSemantics.PoiyomiPackageName` = `com.poiyomi.toon`
@@ -43,7 +43,7 @@ Two environments, and the difference is the whole point.
 | Operative cases | Case 6 (absence) | Cases 1–5 |
 | Used in | Tasks 1–5 for compile and absence behavior | Task 6 only |
 
-Tasks 1 through 5 are developed and run against the **public project**, where all vendor cases take their absence branch. Task 6 is the Lab run that produces the actual reachability evidence.
+You develop and run Tasks 1 through 5 against the **public project**, where all vendor cases take their absence branch. Task 6 is the Lab run that produces the actual reachability evidence.
 
 ## File Structure
 
@@ -53,7 +53,7 @@ Tasks 1 through 5 are developed and run against the **public project**, where al
 | Create `Packages/com.alrauna.amuse.research/Tests/Editor/Calibration/VendorReachabilityTests.cs` | The six gate cases. |
 | Modify `Packages/com.alrauna.amuse.research/Tests/Editor/Collection/CollectorTestScene.cs` | Add one `NewMaterial(Shader, string)` helper. Reuse rather than duplicate the tracked-and-destroyed scene builder. |
 
-Two files, one helper method. If a third production-side file appears necessary, that is a stop condition — see the spec's §9.
+Two files, one helper method. If a third production-side file appears necessary, that is a stop condition — see §9 of the spec.
 
 ---
 
@@ -137,7 +137,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
 
 Confirm Unity instance identity first, then run the EditMode suite filtered to `VendorReachabilityTests`.
 
-Expected: **compile error**, `CensusVendorProbe` does not exist. A compile failure is the correct first failure here; do not proceed until you have seen it.
+Expected: **compile error**, `CensusVendorProbe` does not exist. A compile failure is the correct first failure here. Do not proceed until you see it.
 
 - [ ] **Step 3: Write the probe**
 
@@ -295,7 +295,7 @@ git commit -m "test(research): probe for attested vendor shader installs"
 - Consumes: `CensusVendorProbe.ProbeAll()`, `CensusVendorPresence` from Task 1.
 - Produces: nothing new.
 
-This is gate case 1. A VPM update in the Lab that moves Poiyomi off 9.3.64 turns every subsequent census into a measurement of the mismatch. It must fail loudly, here, rather than quietly downstream.
+This is gate case 1. A VPM update in the Lab that moves Poiyomi off 9.3.64 makes every later census measure the mismatch. It must fail loudly, here, rather than quietly downstream.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -334,7 +334,7 @@ Append to `VendorReachabilityTests.cs`:
 
 Expected: PASS. Both families are absent, so the loop body never runs.
 
-A vacuous pass is not evidence. Prove the assertion is live before trusting it: temporarily change the `Probe` switch's Poiyomi arm to use shader name `"Standard"`, which resolves in any project, and re-run. Expected: the test now FAILS, naming `com.poiyomi.toon` and reporting a null installed version. **Revert the probe change immediately.**
+A vacuous pass is not evidence. Prove the assertion is live before trusting it. Temporarily change the Poiyomi arm of the `Probe` switch to use shader name `"Standard"`, which resolves in any project, and re-run. Expected: the test now FAILS, naming `com.poiyomi.toon` and reporting a null installed version. **Revert the probe change immediately.**
 
 - [ ] **Step 3: Commit**
 
@@ -402,7 +402,7 @@ In `CollectorTestScene.cs`, directly below `NewStandardMaterial()`:
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Expected: PASS. Re-run the full EditMode suite as well — `CollectorTestScene` is shared with the collector tests and must not regress.
+Expected: PASS. Re-run the full EditMode suite as well — the collector tests share `CollectorTestScene`, so it must not regress.
 
 - [ ] **Step 5: Commit**
 
@@ -422,7 +422,9 @@ git commit -m "test(research): track materials on an arbitrary shader in the sce
 - Consumes: `CensusVendorProbe`, `CollectorTestScene.NewMaterial`, `CollectorTestScene.NewTriangleMesh`, `CollectorTestScene.NewMeshRenderer`, `CollectorTestScene.NewRoot`, and `RendererObservationBuilder.Build(Renderer, string, CensusShaderFamily)`.
 - Produces: nothing new.
 
-These are gate cases 2 through 5. **Expected outcomes are recorded as observed in Task 6, not predicted here.** Write them now with the assertions stated; Task 6 either confirms them in the Lab or replaces them with what was actually observed, and reports the difference.
+These are gate cases 2 through 5.
+
+**Record the expected outcomes as observed in Task 6, not as predicted here.** Write them now with the assertions stated. Task 6 either confirms them in the Lab or replaces them with the observed outcome, and reports the difference.
 
 - [ ] **Step 1: Add the shared observation helper**
 
@@ -590,7 +592,7 @@ Written before case 3 because it needs no texture at all.
         }
 ```
 
-The texture is created and destroyed inline rather than tracked by `CollectorTestScene`, because it must never be an asset and the helper's contract is scene objects. `Object` here is `UnityEngine.Object`.
+The test creates and destroys the texture inline rather than tracking it in `CollectorTestScene`. It must never be an asset, and the helper contract covers scene objects. `Object` here is `UnityEngine.Object`.
 
 - [ ] **Step 5: Write case 5 — the locked-material characterization**
 
@@ -637,7 +639,7 @@ The texture is created and destroyed inline rather than tracked by `CollectorTes
 
 - [ ] **Step 6: Run the whole file in the public project**
 
-Expected: every case PASSES vacuously — both families absent, so each loop body is skipped and the locked case takes its `IsInstalled == false` branch. Confirm there are no compile errors and no Console errors matching `Alrauna`.
+Expected: every case PASSES vacuously — both families are absent, so each loop skips its body. The locked case takes its `IsInstalled == false` branch. Confirm there are no compile errors and no Console errors matching `Alrauna`.
 
 - [ ] **Step 7: Commit**
 
@@ -710,13 +712,15 @@ This case cannot fail by construction — it reports rather than asserts. That i
 
 - [ ] **Step 2: Run it in the public project**
 
-Expected: PASS, with the message beginning `VENDOR REACHABILITY NOT PROVEN` and naming zero installed families. **Read the message in the test output.** If it names a family, the public project has acquired a vendor package and that is itself a finding to report.
+Expected: PASS, with the message beginning `VENDOR REACHABILITY NOT PROVEN` and naming zero installed families. **Read the message in the test output.**
+
+If it names a family, the public project gained a vendor package, and that is itself a finding to report.
 
 - [ ] **Step 3: Run the complete EditMode suite**
 
-Confirm Unity instance identity, then run everything. Expected: the pre-existing 802 tests still pass, plus the tests added by Tasks 1–5, with zero failures and zero Console entries matching `Alrauna`.
+Confirm Unity instance identity, then run everything. Expected: the pre-existing 802 tests still pass, plus the tests added by Tasks 1–5. Zero failures. Zero Console entries matching `Alrauna`.
 
-Record the exact before/after counts. A count that does not increase by the number of tests added means tests are not being discovered — investigate before continuing.
+Record the exact before/after counts. A count that does not increase by the number of tests added means the runner found no new tests. Investigate before continuing.
 
 - [ ] **Step 4: Commit**
 
@@ -730,21 +734,23 @@ git commit -m "test(research): make a vendorless gate run visibly vacuous"
 ### Task 6: Run the gate in the Census Lab
 
 **Files:**
-- Modify (Lab-side, **not** in this repository): the Lab's `Packages/manifest.json`
+- Modify (Lab-side, **not** in this repository): `Packages/manifest.json` in the Lab
 - Modify, only if Task 6 observes different outcomes: `Packages/com.alrauna.amuse.research/Tests/Editor/Calibration/VendorReachabilityTests.cs`
 - Create: `docs/superpowers/plans/2026-08-20-census-lab-preparation-results.md`
 
 **Interfaces:**
 - Consumes: the complete gate from Tasks 1–5.
-- Produces: the observed reachability record — the first actual evidence that AMUSE's production path reaches its success outcomes.
+- Produces: the observed reachability record — the first actual evidence that the AMUSE production path reaches its success outcomes.
 
-This is the only task that touches the Lab. **Everything before it was preparation; this is the measurement.**
+This is the only task that touches the Lab. **Everything before it was preparation. This is the measurement.**
 
 - [ ] **Step 1: Add the research package reference to the Lab**
 
-The Lab currently references `com.alrauna.amuse` but **not** `com.alrauna.amuse.research`, so the gate's code is not loaded there at all.
+The Lab currently references `com.alrauna.amuse` but **not** `com.alrauna.amuse.research`, so the gate code does not load there at all.
 
-In the Lab's `Packages/manifest.json`, add a second `file:` dependency pointing at `Packages/com.alrauna.amuse.research` in the same working tree the existing `com.alrauna.amuse` entry points at. **Derive that path on this machine from the existing entry; never copy a path from a document.**
+In the `Packages/manifest.json` of the Lab, add a second `file:` dependency. Point it at `Packages/com.alrauna.amuse.research` in the same working tree the existing `com.alrauna.amuse` entry points at.
+
+**Derive that path on this machine from the existing entry. Never copy a path from a document.**
 
 Also add a `testables` entry, so the Test Framework discovers tests in a non-embedded local package:
 
@@ -757,13 +763,13 @@ Also add a `testables` entry, so the Test Framework discovers tests in a non-emb
 
 `testables` is a sibling of `dependencies`, not a member of it.
 
-This is a Lab configuration change, not a repository change. It is permitted, minimal, and reversible: it adds a package reference and changes no asset, scene, prefab, material, or project setting.
+This is a Lab configuration change, not a repository change. The constraints permit it. It is minimal and reversible. It adds a package reference and changes no asset, scene, prefab, material, or project setting.
 
-- [ ] **Step 2: Confirm which Unity instance you are talking to**
+- [ ] **Step 2: Confirm which Unity instance you talk to**
 
 Before any run whose result you will report, enumerate the reachable Unity instances read-only and check `Application.dataPath`.
 
-For this task you want the **Lab**, identified by elimination: its data path is **not** `<repo-root>/Assets`. Derive `<repo-root>` from `git rev-parse --show-toplevel`, normalize both sides — resolve relative and symbolic segments, unify separators to `/`, drop any trailing separator — and compare exactly. A match that differs only by letter case is unconfirmed identity: **stop and report** rather than guessing.
+For this task you want the **Lab**, identified by elimination: its data path is **not** `<repo-root>/Assets`. Derive `<repo-root>` from `git rev-parse --show-toplevel`, normalize both sides — resolve relative and symbolic segments, unify separators to `/`, drop any trailing separator — and compare exactly. A match that differs only by letter case does not confirm identity: **stop and report** rather than guessing.
 
 If the Lab instance is not reachable, stop. Do not substitute the public project.
 
@@ -773,7 +779,7 @@ Run only `VendorReachabilityTests`.
 
 Record, verbatim, for each test: pass or fail, and the message. In particular record what `TheGateReportsWhichFamiliesItActuallyExercised` names — it should name both `com.poiyomi.toon 9.3.64` and `jp.lilxyzw.liltoon 2.3.4`.
 
-**Do not fix a failure by weakening an assertion.** The expected outcomes in Task 4 were stated in advance and are unproven predictions about vendor default property state. A mismatch is a finding.
+**Do not fix a failure by weakening an assertion.** Task 4 stated the expected outcomes in advance. They are unproven predictions about vendor default property state. A mismatch is a finding.
 
 - [ ] **Step 4: Reconcile predictions with observations**
 
@@ -790,23 +796,23 @@ For each case that failed, decide which of these it is, and say so explicitly:
 
 Confirm, and state as observed rather than assumed:
 
-- no scene was saved;
-- no asset was created, imported, or deleted — in particular no generated Poiyomi shader, which would mean the locker ran;
-- no project setting changed;
-- the only Lab change is Step 1's `manifest.json` edit;
-- `Packages/packages-lock.json` in the Lab may have changed as a consequence of Step 1. That is expected. It is a Lab file and is not committed anywhere.
+- the run saved no scene.
+- the run created, imported, or deleted no asset — in particular, no generated Poiyomi shader, which would mean the locker ran.
+- no project setting changed.
+- the only Lab change is the Step 1 `manifest.json` edit.
+- `Packages/packages-lock.json` in the Lab may change because of Step 1. That is expected. It is a Lab file, and no commit contains it.
 
 - [ ] **Step 6: Write the results record**
 
 Create `docs/superpowers/plans/2026-08-20-census-lab-preparation-results.md` containing:
 
-- the observed result of every gate case, per vendor family, recorded as observed **before** any assertion is reconciled;
-- the installed vendor versions as reported by the probe;
-- the full EditMode suite counts before and after, from both projects;
-- every prediction that was wrong, and what replaced it;
-- whether `ProvenOpaque` is reachable — the single number that decides whether a census may ever run;
-- confirmation that the Lab was not mutated beyond the manifest reference;
-- what the locked-material case actually showed, as evidence for the design's deferred investigation.
+- the observed result of every gate case, per vendor family, recorded as observed **before** you reconcile any assertion.
+- the installed vendor versions as reported by the probe.
+- the full EditMode suite counts before and after, from both projects.
+- every prediction that was wrong, and what replaced it.
+- whether `ProvenOpaque` is reachable — the single number that decides whether a census may ever run.
+- confirmation that the run did not mutate the Lab beyond the manifest reference.
+- what the locked-material case actually showed, as evidence for the deferred investigation in the design.
 
 - [ ] **Step 7: Commit**
 
@@ -821,12 +827,12 @@ git commit -m "test(research): record observed vendor reachability from the Cens
 
 Before claiming this plan complete:
 
-- [ ] `git status` shows only intended files; no Unity host-toolchain churn in `Packages/manifest.json` or `Packages/packages-lock.json`. If those two files contain **nothing but** generated entries, restore them with `git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json` and report it. Never run that restore if anything else changed in either file.
+- [ ] `git status` shows only intended files, with no Unity host-toolchain churn in `Packages/manifest.json` or `Packages/packages-lock.json`. If those two files contain **nothing but** generated entries, restore them with `git checkout HEAD -- Packages/manifest.json Packages/packages-lock.json` and report it. Never run that restore if anything else changed in either file.
 - [ ] Unstaged and staged diffs inspected separately.
 - [ ] Nothing under `Packages/com.alrauna.amuse/` changed.
 - [ ] Nothing under `Packages/com.alrauna.amuse.research/Editor/` changed.
 - [ ] No new `InternalsVisibleTo` grant.
-- [ ] The full EditMode suite ran in the public project and its result was observed, not inferred.
-- [ ] The gate ran in the Lab and its result was observed.
-- [ ] The Lab was not mutated beyond the `manifest.json` package reference.
-- [ ] The results record states what was skipped and why, and names remaining risks.
+- [ ] You ran the full EditMode suite in the public project and observed the result directly.
+- [ ] The gate ran in the Lab, and you observed its result.
+- [ ] The gate run did not mutate the Lab beyond the `manifest.json` package reference.
+- [ ] The results record states what the run skipped and why, and names remaining risks.
