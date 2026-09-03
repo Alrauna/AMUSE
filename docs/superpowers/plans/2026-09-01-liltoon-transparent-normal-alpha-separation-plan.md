@@ -8,15 +8,15 @@
 third alpha-separation source family, converting triangles proven visually opaque onto the
 existing AMUSE-generated canonical `lilToon` opaque material.
 
-**Architecture:** One new pinned identity inside the existing lilToon frontend. The current
-`LilToonOpaqueConversion` is first split by ownership into a target module, a shared
-result/constant support file, and one source-eligibility module per source family; the
+**Architecture:** One new pinned identity inside the existing lilToon frontend. This plan first
+splits the current `LilToonOpaqueConversion` by ownership into a target module, a shared
+result/constant support file, and one source-eligibility module per source family. The
 transparent family then adds a fourth production module plus an alpha-semantics module. No
 interface, registry, IR, planner, or mode-parameterized engine. The mesh, planning, apply,
-dedup, and curve-rewrite layers are untouched.
+dedup, and curve-rewrite layers stay untouched.
 
 **Tech Stack:** Unity 2022.3.22f1 EditMode tests (NUnit), C# 9, NDMF 1.14.8, no new dependency.
-lilToon 2.3.4 is **not** installed in this project and must not be; every test runs against
+lilToon 2.3.4 is **not** installed in this project and must not be. Every test runs against
 public deterministic synthetic stand-in shaders.
 
 **Spec:** `docs/superpowers/specs/2026-09-01-liltoon-transparent-normal-alpha-separation-design.md`
@@ -28,18 +28,18 @@ public deterministic synthetic stand-in shaders.
 
 ## Global Constraints
 
-Every task's requirements implicitly include this section.
+The requirements of every task implicitly include this section.
 
 **Authorization**
 
 - Implementation requires a **separate, explicitly authorized branch**. This plan does not
-  authorize creating it. Do not begin Task 1 until the controller names the branch.
+  authorize creating it. Do not start Task 1 until the controller names the branch.
 - Base: `a3c547b6064b20709289a1062c11b7fd72818568` (merge commit of PR #42).
 - **Not authorized by this plan:** staging, committing, amending, pushing, opening or merging a
   PR, rebasing, stashing, discarding changes, deleting branches, rewriting history, changing
-  remotes or repository settings, publishing. Each task ends with a commit step; execute it
-  **only** if the controller has separately granted commit authorization. Otherwise stop at the
-  task's verification step and report.
+  remotes or repository settings, publishing. Each task ends with a commit step. Execute it
+  **only** after the controller separately grants commit authorization. Otherwise stop at the
+  verification step of the task and report.
 - `Packages/manifest.json` and `Packages/packages-lock.json` carry pre-existing user-owned Unity
   toolchain/sysroot modifications. **Never** touch, stage, or include them.
 - Never commit Unity-generated state: `Library/`, `Temp/`, `Logs/`, `UserSettings/`.
@@ -65,7 +65,7 @@ Every task's requirements implicitly include this section.
 
 **Gate bounds (§2, §9)**
 
-`_Cutoff <= 1` (transparent; **not** cutout's `0.9999`) · `_AlphaBoostFA >= 1` ·
+`_Cutoff <= 1` (transparent, **not** the cutout bound `0.9999`) · `_AlphaBoostFA >= 1` ·
 `_DistanceFade.z == 0` · finite `_SubpassCutoff <= 1` · `_MainTex_ST == (1,1,0,0)` exact per
 binary32 component · `_MainTex_ScrollRotate == (0,0,0,0)` exact.
 
@@ -76,22 +76,21 @@ The **type** `LilToonOpaqueConversion` and both **old asset paths** disappear. N
 The cutout gate list, cutout request, and cutout bound are never parameterized, widened, or
 shared. The opaque lilToon and Poiyomi paths stay byte-for-byte unaffected.
 
-Clean cutover is a *type and namespace* requirement, not an instruction to churn Unity asset
-identity. Two assets are **renamed** rather than deleted so their GUIDs survive; see File
-Structure.
+identity. The plan **renames** two assets rather than deleting them, so their GUIDs survive.
+See File Structure.
 
 **Stop conditions (§18)**
 
 Stop, preserve evidence, and return to the controller — do not work around — if:
 
 1. Re-derived digests disagree with the two pinned constants.
-2. A `_DitherMaskLOD` slice-15 alpha below `1` is observed on any supported target path.
+2. Any supported target path shows a `_DitherMaskLOD` slice-15 alpha below `1`.
 3. Any of gates 1–11 needs a different rule for transparent than for cutout.
 4. The clone path needs any change for a transparent source.
-5. The §11 split cannot be done without an interface, a registry, or a mode parameter.
+5. The §11 split cannot happen without an interface, a registry, or a mode parameter.
 6. A proof-relevant fact turns out not to be expressible by the existing capture and
    exact-singleton admission.
-7. Any §14 falsifier cannot be written as a deterministic public synthetic test.
+7. A §14 falsifier cannot take the form of a deterministic public synthetic test.
 
 **Unity run protocol — REQUIRED before and during every Unity operation**
 
@@ -107,14 +106,14 @@ and never substitute a shell-invoked Unity command: the MCP call supplies the op
    identity.
 5. If more than one instance is reachable, **pin** only that public AMUSE instance for the
    session.
-6. **Stop** if identity is ambiguous, or if no instance matches exactly. Do not guess, and do not
-   fall back to a single reachable instance without the exact match.
-7. Never target, name, or report another instance's name, path, hash, or port — not in a test,
-   not in a comment, not in the Task 7 report.
+6. **Stop** if identity is ambiguous, or if no instance matches exactly. Do not guess. Do not
+   select a single reachable instance without the exact match.
+7. Never target, name, or report the name, path, hash, or port of another instance — not in a
+   test, not in a comment, not in the Task 7 report.
 
 *After any script change:*
 
-8. Refresh Unity's asset database and request compilation.
+8. Refresh the Unity asset database and request compilation.
 9. Wait for compilation and the domain reload to finish before any further call.
 10. Read the Console.
 
@@ -134,7 +133,7 @@ class filters.
 
 - Do not run project-wide formatters or linters. Task 7 owns the full-suite runs.
 - Every Unity operation follows the Unity run protocol above, including the Console read.
-- A successful compile is never validation. Never claim a run passed unless it was observed.
+- A successful compile is never validation. Never claim a run passed without observing it.
 
 ---
 
@@ -149,8 +148,8 @@ class filters.
 
 Move both assets with a mechanism that does **not** touch the Git index: the harness Edit `MV`
 operation, or an equivalent plain filesystem move. `git mv` is forbidden here because it stages,
-and staging is outside this plan's authorization. Without an index update Git reports the old
-tracked path as deleted and the new path as untracked; that status shape is expected and
+and staging is not authorized by this plan. Without an index update Git reports the old
+tracked path as deleted and the new path as untracked. That status shape is expected and
 acceptable. Identity is therefore validated by path absence, path presence, file content, and
 `.meta` hash — never by Git rename detection.
 
@@ -196,8 +195,8 @@ to genuinely new assets.
 
 **Deleted**
 
-None. Both original assets are renamed, not deleted. The obsolete *type* and both obsolete
-*paths* still disappear, which is what §13's clean cutover requires.
+None. The plan renames both original assets instead of deleting them. The obsolete *type* and
+both obsolete *paths* still disappear, which is what the clean cutover in §13 requires.
 
 **Modified**
 
@@ -215,7 +214,7 @@ None. Both original assets are renamed, not deleted. The obsolete *type* and bot
 `Tests/Editor/Build/AlphaSeparationPersistenceTests.cs` ·
 `docs/architecture/shader-frontend-comparison.md`
 
-A Unity `.meta` file is part of its asset and moves with it in the same change; never delete or
+A Unity `.meta` file is part of its asset and moves with it in the same change. Never delete or
 regenerate the `.meta` of a renamed asset. `LilToonOpaqueConversionTest.shader` keeps its name
 and GUID: it is a fixture identity, and renaming it would churn a GUID for no behavioral gain.
 
@@ -223,8 +222,8 @@ and GUID: it is a fixture identity, and renaming it would churn a GUID for no be
 
 ## Task 1: Split the conversion module by ownership
 
-Behavior-preserving. Nothing about capture, eligibility, or the clone changes; only where the
-code lives and which module owns which request. The existing suites are the regression oracle.
+Behavior-preserving. Nothing about capture, eligibility, or the clone changes. Only the location
+of the code and the ownership of each request change. The existing suites are the regression oracle.
 
 **Files:**
 - Rename (non-index move, `.meta` moved with it, GUID `b60b82aa490a24e929afd693ed059d96` and
@@ -272,25 +271,26 @@ code lives and which module owns which request. The existing suites are the regr
   - `LilToonCutoutSourceEligibility.EligibilitySchemaProperties` → `IReadOnlyCollection<string>`, 19 entries
   - `LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility(CapturedMaterialEvidence, int, string)`
 
-**Implementation decision, recorded for review.** §8 says preparation's
-`ConversionRequestForFamily` returns "a once-built `Combine(RecipeEvidenceRequest,
-SourceEvidenceRequest)`", and `UnityMaterialSemantics`'s capture schema needs the same
+**Implementation decision, recorded for review.** §8 says `ConversionRequestForFamily` on
+preparation returns "a once-built `Combine(RecipeEvidenceRequest,
+SourceEvidenceRequest)`", and the capture schema of `UnityMaterialSemantics` needs the same
 *definition*. Capture and derived admission must resolve against one decision-specific request:
 the properties captured for a family and the properties its conversion decision reads have to be
 the same set, or a gate reads evidence nobody gathered. Building the combination twice would let
-two `Combine` call sites drift apart silently. The combined object is therefore built **once, on
-the source module** as `ConversionEvidenceRequest`, and both consumers read that one property.
-This respects §11's ownership rules: the source module owns its own conversion request and reads
-the target's public recipe request; nothing source-specific enters `LilToonOpaqueTarget`.
+two `Combine` call sites drift apart silently. The implementation therefore builds the combined
+object **once, on the source module** as `ConversionEvidenceRequest`, and both consumers read
+that one property. This respects the ownership rules of §11: the source module owns its own
+conversion request and reads the public recipe request of the target. Nothing source-specific
+enters `LilToonOpaqueTarget`.
 
 This is a single-definition rule, not an object-identity rule. Do not add a test that asserts
-reference equality and nothing else — assert the request's *contents*, which is what the schema
-tests below already do.
+reference equality and nothing else — assert the *contents* of the request, which is what the
+schema tests below already do.
 
 - [ ] **Step 1: Write the failing ownership tests**
 
-Before touching anything, record the two current `.meta` hashes so the moves can be checked
-against them:
+Before touching anything, record the two current `.meta` hashes. Check both moves against
+them:
 
 ```bash
 sha256sum \
@@ -313,11 +313,10 @@ require `21830037034d0e27683718b101e8bba7c97d751b494f3d91b10a6fb92f1153b0` uncha
 confirm the file still carries GUID `86eedea91214449ecb959f6d50ab64b0`. If the hash differs,
 **stop** and inspect the complete `.meta` diff.
 
-Then leave the target-facing tests in
-place; move the result-vocabulary and cutout-eligibility tests out into the two new test files
-(mechanical). Then add these two genuinely new cases to `LilToonOpaqueTargetTests.cs` — the
-recipe request must now be exactly 18 properties, and the `_Cutoff` property must have left the
-target:
+Then leave the target-facing tests in place. Move the result-vocabulary and cutout-eligibility
+tests out into the two new test files (mechanical). Then add these two genuinely new cases to
+`LilToonOpaqueTargetTests.cs` — the recipe request must now be exactly 18 properties, and the
+`_Cutoff` property must no longer appear in the target:
 
 ```csharp
         /// <summary>
@@ -485,13 +484,13 @@ Move `Editor/Semantics/LilToon/LilToonOpaqueConversion.cs` to
 `b60b82aa490a24e929afd693ed059d96` is still present. If the hash differs, **stop** and inspect
 the complete `.meta` diff.
 
-That renamed asset — the same asset as the old `LilToonOpaqueConversion.cs` — is now edited
-down to the target. Rename the type to `LilToonOpaqueTarget`. **Keep** (line numbers are the
-pre-rename ones): the class doc `:108-135`, dropping the sentence about deciding whether a cutout
-material may be normalized, because the module no longer decides eligibility;
-`CanonicalOpaqueTuple` `:140-174`; `CanonicalOpaqueProperties` `:176-178`; the three canonical
-constants `:180-182`; `ReadEffectiveRenderState` `:487-506`; `TryFindNonCanonicalFact`
-`:508-547`; and both `PrepareCanonicalOpaqueClone` overloads `:551-700`. **Cut** (moving to the
+Now edit that renamed asset — the same asset as the old `LilToonOpaqueConversion.cs` — down
+to the target. Rename the type to `LilToonOpaqueTarget`. **Keep** (line numbers are the
+pre-rename ones): the class doc `:108-135`, dropping the sentence about whether the module may
+normalize a cutout material, because the module no longer decides eligibility,
+`CanonicalOpaqueTuple` `:140-174`, `CanonicalOpaqueProperties` `:176-178`, the three canonical
+constants `:180-182`, `ReadEffectiveRenderState` `:487-506`, `TryFindNonCanonicalFact`
+`:508-547`, and both `PrepareCanonicalOpaqueClone` overloads `:551-700`. **Cut** (moving to the
 two modules created in Steps 3 and 5): `SupportedCutoutRenderQueue`,
 `SupportedCutoutRenderType`, `MaxProvableCutoff`, `CutoffProperty`, `ConversionSchema`,
 `ConversionRequiredSchemaProperties`, `ConversionEvidenceRequest`, `EvaluateVerifiedEligibility`,
@@ -538,7 +537,7 @@ two modules created in Steps 3 and 5): `SupportedCutoutRenderQueue`,
         }
 ```
 
-`RecipeSchema` must be declared textually **after** `CanonicalOpaqueTuple`: C# runs static field
+`RecipeSchema` must appear textually **after** `CanonicalOpaqueTuple`: C# runs static field
 initializers in declaration order.
 
 - [ ] **Step 5: Create the cutout source-eligibility module**
@@ -622,18 +621,18 @@ Production:
 
 - `UnityMaterialSemantics.cs:324`: `LilToonOpaqueConversion.ConversionEvidenceRequest` →
   `LilToonCutoutSourceEligibility.ConversionEvidenceRequest`.
-- `AlphaSeparationPreparation.cs:476-477` → `LilToonCutoutSourceEligibility.ConversionEvidenceRequest`;
-  `:535` → `LilToonOpaqueTarget.ReadEffectiveRenderState`;
-  `:553-555` → `LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility`;
-  `:567-568` → `LilToonOpaqueTarget.PrepareCanonicalOpaqueClone`;
-  `:711` → `LilToonCutoutSourceEligibility.ConversionEvidenceRequest`;
-  `:732` → `LilToonOpaqueTarget.CanonicalOpaqueProperties`;
+- `AlphaSeparationPreparation.cs:476-477` → `LilToonCutoutSourceEligibility.ConversionEvidenceRequest`,
+  `:535` → `LilToonOpaqueTarget.ReadEffectiveRenderState`,
+  `:553-555` → `LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility`,
+  `:567-568` → `LilToonOpaqueTarget.PrepareCanonicalOpaqueClone`,
+  `:711` → `LilToonCutoutSourceEligibility.ConversionEvidenceRequest`,
+  `:732` → `LilToonOpaqueTarget.CanonicalOpaqueProperties`,
   `:22` doc `<see cref="LilToonOpaqueConversion"/>` → `<see cref="LilToonOpaqueTarget"/>`.
 - `AmusePlatformFinishPlugin.cs:215` doc text `LilToonOpaqueConversion` → `LilToonOpaqueTarget`.
 
 Tests:
 
-- `VerifiedLilToonTestSeams.cs:56,197,199,213` → the split types; `:179` doc text.
+- `VerifiedLilToonTestSeams.cs:56,197,199,213` → the split types, `:179` doc text.
 - `AlphaSeparationApplyTests.cs:2217,2225,2228,2230,2232,2275` → `LilToonOpaqueTarget`.
 - `AlphaSeparationPreparationTests.cs:1579` → `LilToonCutoutSourceEligibility.MaxProvableCutoff`.
 - `AlphaSeparationPersistenceTests.cs:451-452`: replace the single audited entry with four, so a
@@ -648,7 +647,7 @@ Tests:
                     "class LilToonCutoutSourceEligibility"),
 ```
 
-  (the fourth, `LilToonTransparentSourceEligibility.cs`, is added in Task 4.)
+  (Task 4 adds the fourth, `LilToonTransparentSourceEligibility.cs`.)
 
 - `UnityMaterialSemanticsTests.cs:388-392`: the assertion currently reads its expectation from
   the production constant, which would let a wrong split test itself. Replace with a literal:
@@ -688,7 +687,7 @@ Required:
 | `LilToonOpaqueTargetTests.cs.meta` SHA-256 | `21830037034d0e27683718b101e8bba7c97d751b494f3d91b10a6fb92f1153b0` |
 | GUIDs inside those `.meta` files | `b60b82aa490a24e929afd693ed059d96`, `86eedea91214449ecb959f6d50ab64b0` |
 
-Either hash differing means the `.meta` was rewritten rather than moved: **stop** and inspect the
+Either hash differing means the `.meta` changed content rather than only its path: **stop** and
 complete metadata diff. The identifier `LilToonOpaqueConversion` must no longer appear anywhere
 in the package.
 
@@ -704,7 +703,7 @@ Expected: PASS, with the same test count as before the split plus the three new 
 - [ ] **Step 8: Mechanical ownership review**
 
 Not a test — §14 asserts no source text. Read `LilToonOpaqueTarget.cs` and confirm it contains
-no occurrence of `Refusal`, `BlendFactor`, `Eligibility`, or `_Cutoff`. Confirm neither source
+none of `Refusal`, `BlendFactor`, `Eligibility`, or `_Cutoff`. Confirm neither source
 module contains a recipe value, a clone operation, or a read-back check. If either check fails,
 the split is wrong — fix it before Task 2.
 
@@ -1053,9 +1052,9 @@ git commit -m "feat: pin the lilToon Transparent Normal source identity"
 
 ## Task 3: Transparent alpha semantics and its stand-in fixture
 
-Implements §7, §8 and §14 rows 1–4, 6–10, 14, plus the §7.1 neutral-claim parity site. The
-stand-in shader and fixture-base accessor are scaffolding this task's deliverable needs, so they
-are folded in here.
+Implements §7, §8 and §14 rows 1–4, 6–10, 14, plus the §7.1 neutral-claim parity site. The plan
+folds in the stand-in shader and the fixture-base accessor here because the deliverable of this
+task needs that scaffolding.
 
 **Files:**
 - Create: `Packages/com.alrauna.amuse/Editor/Semantics/LilToon/LilToonTransparentMaterialSemantics.cs`
@@ -1203,9 +1202,9 @@ Add the fixture-base accessors, mirroring `:82-85` and `:102-105`:
 - [ ] **Step 2: Write the failing alpha tests**
 
 Create `Tests/Editor/Semantics/LilToon/LilToonTransparentAlphaTests.cs`. Its helper block is a
-deliberate duplicate of the cutout suite's (`LilToonCutoutAlphaTests.cs:116-340`) — §F of
-`docs/architecture/shader-frontend-comparison.md` records duplicated fixture infrastructure as
-the standing convention. The file header and helpers:
+deliberate duplicate of the cutout-suite helper block (`LilToonCutoutAlphaTests.cs:116-340`) —
+§F of `docs/architecture/shader-frontend-comparison.md` records duplicated fixture
+infrastructure as the standing convention. The file header and helpers:
 
 ```csharp
 using System;
@@ -1467,8 +1466,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 ```
 
-Then the rows. §14 row 15's animation coverage and rows 12–13, 16–21 belong to later tasks; this
-step writes rows 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 14 and the request-shape case:
+Then the rows. The animation coverage of §14 row 15 and rows 12–13, 16–21 belong to later
+tasks. This step writes rows 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 14 and the request-shape case:
 
 ```csharp
         [Test]
@@ -2022,7 +2021,7 @@ texture arm, same `Texture` / `TextureTimesConstant` result shape. Four deltas:
 4. The request adds `_AlphaBoostFA` and `_SubpassCutoff` scalars and `_DistanceFade` vector, and
    drops `_UseDither`.
 
-The gate sequence — every gate evaluated before any value is constructed (§7.1):
+The gate sequence — every gate evaluated before the code constructs any value (§7.1):
 
 ```csharp
         /// <summary>
@@ -2056,7 +2055,7 @@ The gate sequence — every gate evaluated before any value is constructed (§7.
         private const float MaxProvableSubpassCutoff = 1f;
 ```
 
-and, inserted between the cutout function's step (4) and step (5):
+and, inserted between step (4) and step (5) of the cutout function:
 
 ```csharp
             // (5) ForwardAdd premultiply. Unlike the base pass, the
@@ -2120,10 +2119,10 @@ Expected: PASS, Console clean.
 - [ ] **Step 6: Extend the neutral-claim parity site**
 
 In `NeutralClaimGatingTests.cs`, add a `LilToonTransparentNeutralClaimGatingTests` class beside
-`LilToonNeutralClaimGatingTests` (`:143-239`), following that class's shape exactly. Its gate
+`LilToonNeutralClaimGatingTests` (`:143-239`), following the shape of that class exactly. Its gate
 list is an explicit test-local copy of the 17 reviewed transparent gate names plus the three
-transparent-only writers — never read from production, which would pass vacuously if the
-production list were emptied:
+transparent-only writers — never read from production, which would pass vacuously if production
+emptied the list:
 
 ```csharp
     public sealed class LilToonTransparentNeutralClaimGatingTests
@@ -2176,8 +2175,8 @@ Expected: PASS, including the pre-existing Poiyomi and lilToon classes.
 
 - [ ] **Step 8: Record the settled animated-`_UseDither` contract**
 
-No experiment. Current source settles it, so the contract is fixed here and the end-to-end test
-lands in Task 6 Step 1, after Task 5 wires the family:
+No experiment. Current source settles it, so this plan pins the contract here and the end-to-end
+test lands in Task 6 Step 1, after Task 5 wires the family:
 
 - `UnityAnimationEvidenceCapture.ResolveProofRelevant` returns `Irrelevant` when
   `TryResolveGeneratedProperty` fails and `CouldAddressRelevantProperty` finds no requested
@@ -2188,13 +2187,14 @@ lands in Task 6 Step 1, after Task 5 wires the family:
   compiles the runtime dither path out.
 
 Therefore an animated `material._UseDither` binding on a transparent-only renderer resolves to
-`Irrelevant` and is **ignored as provably inert**. That is the shipped contract, and it is
-correct rather than merely conservative: the property cannot affect this family's output.
+`Irrelevant` and the family **ignores it as provably inert**. That is the shipped contract, and
+it is correct rather than merely conservative: the property cannot affect the output of this
+family.
 
 Write nothing in this task beyond the static `_UseDither = 1` positive falsifier already in
-row 7 above, which stays exactly as written. If Task 6's end-to-end test observes anything other
-than `Irrelevant` for a transparent-only renderer, **stop** under stop condition 6; do not change
-the contract to match the observation.
+row 7 above, which stays exactly as written. If the end-to-end test of Task 6 observes anything
+other than `Irrelevant` for a transparent-only renderer, **stop** under stop condition 6. Do not
+change the contract to match the observation.
 
 A cutout source keeps its existing `_UseDither` request entry and its existing gate. Nothing in
 this contract touches the cutout family.
@@ -2234,9 +2234,9 @@ Implements §9 and §14 rows 5, 8, 11 (eligibility side), 15 and 17.
 
 **Implementation decision, recorded for review.** §9 gate 1 says "every conversion-read scalar
 present" and gate 14 says "`_DistanceFade.z == 0` (vector finite)". `_DistanceFade` is a vector,
-not a scalar. To keep §9's stated gate-order rationale intact — *a NaN capture must never dress
-itself up as a plausible named refusal* — gate 1 also checks the vector's **presence**
-(→ `ConversionPropertyAbsent`) and gate 2 also checks all four of its **components** for
+not a scalar. To keep the stated gate-order rationale of §9 intact — *a NaN capture must never
+dress itself up as a plausible named refusal* — gate 1 also checks the **presence** of the
+vector (→ `ConversionPropertyAbsent`) and gate 2 also checks all four of its **components** for
 finiteness (→ `ConversionPropertyNotFinite`). Gate 14 then tests only `z != 0`. This is strictly
 the rationale §9 gives, applied to the one non-scalar property.
 
@@ -2668,14 +2668,14 @@ In `LilToonOpaqueConversionResult.cs`, after `ClipThresholdDiscardsOpaqueAlpha`:
 - `MaxProvableCutoff = 1f`, `MinProvableAlphaBoostFa = 1f`, `MaxProvableSubpassCutoff = 1f`,
   each carrying the justification comment from Task 3 Step 4.
 - `SourceSchema = { "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" }` and
-  `SourceVectorSchema = { "_DistanceFade" }`; `SourceEvidenceRequest` passes the vector array as
+  `SourceVectorSchema = { "_DistanceFade" }`. `SourceEvidenceRequest` passes the vector array as
   `vectorProperties`.
-- Gate 1 additionally requires `evidence.TryGetVector(DistanceFadeProperty, out var
+- Gate 1 also requires `evidence.TryGetVector(DistanceFadeProperty, out var
   distanceFade)`, refusing `ConversionPropertyAbsent`.
-- Gate 2 additionally sweeps `distanceFade.x/y/z/w`, refusing `ConversionPropertyNotFinite`.
-- Gates 3–12 are byte-identical to the cutout module's, reading
-  `SupportedTransparentRenderQueue` / `SupportedTransparentRenderType` / this module's
-  `MaxProvableCutoff`.
+- Gate 2 also sweeps `distanceFade.x/y/z/w`, refusing `ConversionPropertyNotFinite`.
+- Gates 3–12 are byte-identical to those of the cutout module, reading
+  `SupportedTransparentRenderQueue` / `SupportedTransparentRenderType` / the
+  `MaxProvableCutoff` of this module.
 - Three new gates after gate 12:
 
 ```csharp
@@ -2747,7 +2747,7 @@ git commit -m "feat: gate lilToon Transparent Normal source eligibility"
 
 ## Task 5: Wire the family through selection, capture, and preparation
 
-Implements §5, §11's "what stays where it is", and §14 rows 12, 13, 15, 20, 21.
+Implements §5, the "what stays where it is" rule of §11, and §14 rows 12, 13, 15, 20, 21.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Semantics/UnityMaterialSemantics.cs:11-17,200-235,244-280,291-306,308-340,342-362,364-417`
@@ -2773,7 +2773,7 @@ exactly three expressions: the gather wrapper, the verify wrapper, and the eligi
 Implement them as **one shared case label pair** —
 `case LilToonCutout: case LilToonTransparent:` — with three per-family conditionals, rather than
 duplicating ~60 lines of admission, overwrite-rule, and seam logic. The request and the recipe
-already come from the family lookups. If this cannot be done without a fourth conditional, stop
+already come from the family lookups. If the implementation needs a fourth conditional, stop
 and report: that would be the mode-parameterized dispatch §11 forbids.
 
 - [ ] **Step 1: Write the failing wiring tests**
@@ -2805,8 +2805,8 @@ Add to `LilToonTransparentAlphaTests.cs` (rows 12, 13, 20 selection side):
         }
 ```
 
-(where `TransparentEvidenceNamed` is a small local builder mirroring Task 2's
-`TransparentEvidence`, or the test lives in `LilToonAttestationTests` beside it — put it wherever
+(where `TransparentEvidenceNamed` is a small local builder mirroring the `TransparentEvidence`
+builder of Task 2, or the test lives in `LilToonAttestationTests` beside it — put it wherever
 the evidence builder already exists and do not duplicate the builder.)
 
 Add to `UnityMaterialSemanticsTests.cs`, mirroring
@@ -2998,7 +2998,7 @@ frontends (`docs/architecture/shader-frontend-comparison.md`, last row of the pr
 ```
 
 Inside the body: replace the hard-coded request at `:476-477` with
-`ConversionRequestForFamily(captured.Family)`; replace the gather at `:540-543` and verify at
+`ConversionRequestForFamily(captured.Family)`. Replace the gather at `:540-543` and verify at
 `:544-546` with
 
 ```csharp
@@ -3080,7 +3080,7 @@ git commit -m "feat: route the lilToon Transparent Normal family end to end"
 
 ## Task 6: End-to-end contract, mutation audit, locality, and the architecture record
 
-Implements §14 rows 15, 18, 19, 20, 21 and §12's documentation row.
+Implements §14 rows 15, 18, 19, 20, 21 and the documentation row of §12.
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Build/AlphaSeparationPreparationTests.cs`
@@ -3098,8 +3098,8 @@ Add to `AlphaSeparationPreparationTests.cs`, mirroring the existing cutout end-t
 
 - **Row 18 — prepared-clone contract.** A transparent stand-in source converts to a clone
   carrying the opaque target shader, all 18 canonical values read back, queue 2000,
-  `RenderType=Opaque`; a target shader missing a recipe property throws
-  `InvalidOperationException` before any clone exists; a read-back disagreement throws after
+  `RenderType=Opaque`. A target shader missing a recipe property throws
+  `InvalidOperationException` before any clone exists. A read-back disagreement throws after
   `DestroyImmediate`. Assert the exception type and that no clone leaked, exactly as the cutout
   cases do.
 - **Row 15 — animation closure.** For **each** of `_Color`, `_Cutoff`, `_AlphaBoostFA`,
@@ -3130,18 +3130,18 @@ Add to `AlphaSeparationPreparationTests.cs`, mirroring the existing cutout end-t
   | Clone recipe | all 18 canonical values equal, read back property by property |
   | Source preservation | the same source material, mesh, and animation assets unchanged |
 
-  Additionally, the bound scenario carries no unrecognized-binding refusal. Do **not** require
-  the two runs to return the same clone object. `Is.SameAs` is permitted only *within* a single
+  The bound scenario also carries no unrecognized-binding refusal. Do **not** require
+  the two runs to return the same clone object. Use `Is.SameAs` only *within* a single
   run, and only where within-run deduplication requires two references to share one clone. Also
   assert in the same test that a cutout source with the same animated binding still resolves
   through the cutout `_UseDither` request and still hits the cutout gate, so the transparent
   omission does not remove cutout `_UseDither` relevance.
   Falsifies: a transparent request that quietly carries `_UseDither`, and a relevance pass that
-  refuses an inert binding. If the transparent-only resolution is anything other than
+  refuses an inert binding. If the transparent-only resolution differs from
   `Irrelevant`, **stop** under stop condition 6 rather than adjusting the assertion.
 - **Row 20 — locality.** One refused transparent slot on a renderer that also carries an
-  admitted Poiyomi slot and an admitted lilToon-cutout slot leaves both siblings converted; and
-  an all-`Unknown` transparent outcome never becomes `ProvenOpaque` for each of: unsupported
+  admitted Poiyomi slot and an admitted lilToon-cutout slot leaves both siblings converted. An
+  all-`Unknown` transparent outcome never becomes `ProvenOpaque` for each of: unsupported
   texture format, streamed mips, missing readback, degenerate triangle, NaN UV, region overflow.
 - **Row 21 — regression parity.** Assert the Poiyomi and cutout conversion paths produce
   byte-identical results to their pre-existing expectations with a transparent sibling present.
@@ -3149,10 +3149,10 @@ Add to `AlphaSeparationPreparationTests.cs`, mirroring the existing cutout end-t
 Add to `AlphaSeparationPersistenceTests.cs`:
 
 - **Row 19 — mutation audit.** Extend the existing NDMF-build source-preservation test to a
-  transparent source: SHA of the source material's serialized properties, the source mesh, every
-  texture and its import settings, every animation clip, every prefab, and the scene are
-  unchanged; only `CreatedClones` and the generated mesh differ. Verify teardown destroys only
-  `CreatedClones`.
+  transparent source: the SHA of the serialized properties of the source material, the source
+  mesh, every texture and its import settings, every animation clip, every prefab, and the scene
+  must stay unchanged. Only `CreatedClones` and the generated mesh differ. Verify teardown
+  destroys only `CreatedClones`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -3160,14 +3160,14 @@ Unity run protocol: refresh Unity → wait for compilation and domain reload →
 EditMode → poll `get_test_job` to completion → read the Console → record the filter, passed,
 failed, skipped, and every Console error or warning.
 Class filter: `AlphaSeparationPreparationTests`, `AlphaSeparationPersistenceTests`.
-Expected: FAIL on the new cases only. If any new case passes before the wiring is exercised, the
+Expected: FAIL on the new cases only. If any new case passes before the wiring runs, the
 case is not falsifying anything — rewrite it.
 
 - [ ] **Step 3: Make them pass**
 
 No production change should be required: Tasks 1–5 deliver the behavior. If a production change
-*is* required, it means a gate or a wiring arm is missing — add it and record which §14 row
-caught it. If it requires a change to the clone path, **stop** (stop condition 4).
+*is* required, it means the implementation lacks a gate or a wiring arm — add it and record
+which §14 row caught it. If it requires a change to the clone path, **stop** (stop condition 4).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -3222,7 +3222,7 @@ Record errors and warnings, or their absence, for every run above.
 
 - [ ] **Step 4: Verify source preservation and teardown (§15.5)**
 
-Confirm falsifier 19's evidence was produced and observed, not merely compiled.
+Confirm the falsifier 19 evidence came from an observed run, not merely a compile.
 
 - [ ] **Step 5: Inspect the diffs separately (§15.6)**
 
@@ -3233,13 +3233,13 @@ git diff --check
 git status --porcelain=v1
 ```
 
-Confirm: `Packages/manifest.json` and `Packages/packages-lock.json` are modified but **unstaged
-and untouched by this work**; no `Library/`, `Temp/`, `Logs/`, `UserSettings/` entry appears; and
-no asset changed GUID.
+Confirm: `Packages/manifest.json` and `Packages/packages-lock.json` carry modifications but
+**stay unstaged and untouched by this work**. No `Library/`, `Temp/`, `Logs/`, `UserSettings/`
+entry appears. No asset changed GUID.
 
 Because the two moves deliberately never touch the index, `git status` will report each old path
-as a deleted tracked file and each new path as untracked. That is the expected shape; do **not**
-require a rename classification and do **not** stage anything to obtain one. Verify identity
+as a deleted tracked file and each new path as untracked. That is the expected shape. Do **not**
+require a rename classification and do **not** stage anything to get one. Verify identity
 from the files instead:
 
 ```bash
@@ -3253,26 +3253,27 @@ sha256sum \
 | `…/Editor/Semantics/LilToon/LilToonOpaqueTarget.cs.meta` | `b60b82aa490a24e929afd693ed059d96` | `eadc3b7413f2143bfa3e3bceb3dd3752dc9727ceb5bfc017170292fa5550aa6f` |
 | `…/Tests/Editor/Semantics/LilToon/LilToonOpaqueTargetTests.cs.meta` | `86eedea91214449ecb959f6d50ab64b0` | `21830037034d0e27683718b101e8bba7c97d751b494f3d91b10a6fb92f1153b0` |
 
-A moved `.meta` must be byte-identical to the file it came from; a changed hash means it was
-rewritten rather than moved, so **stop** and inspect the complete metadata diff. Also confirm
-both old `.cs` paths and both old `.meta` paths are absent, and that the number of `.meta` files
-in the package rose by exactly the number of new assets — no `.meta` disappeared without its
-asset.
+A moved `.meta` must be byte-identical to the file it came from. A changed hash means the content
+changed rather than only the path, so **stop** and inspect the complete metadata diff.
+Also confirm both old `.cs` paths and both old `.meta` paths are absent, and that the number of
+`.meta` files in the package rose by exactly the number of new assets — no `.meta` disappeared
+without its asset.
 
 - [ ] **Step 6: Write the implementation report (§21)**
 
-State: the branch and base SHA; that the §18 constants were transcribed exactly as measured; the
-exact supported and refused profile as shipped; the file map actually produced, including both
+State: the branch and base SHA · the §18 constants copied exactly as measured · the
+exact supported and refused profile as shipped · the file map actually produced, including both
 non-index moves with their verified GUIDs **and** their verified `.meta` SHA-256 hashes, and
-every migrated call site; per-class test
-counts — filter, passed, failed, skipped — with the Unity Console state for each run; the
-source-preservation and teardown evidence from falsifier 19; separately inspected staged and
-unstaged diffs plus `git diff --check`; confirmation that the two package files are untouched and
-unstaged and that no Unity-generated state is included; the pinned Unity instance's exact
-`Application.dataPath` match, with no other instance's name, path, hash, or port mentioned; the
-observed result of `AnimatedUseDither_IsIgnoredAsProvablyInert`; the two recorded implementation
-decisions (the combined request's single definition and its home, the shared lilToon case
-label); and an explicit statement that Census Lab and private avatar data were not used.
+every migrated call site · per-class test
+counts — filter, passed, failed, skipped — with the Unity Console state for each run · the
+source-preservation and teardown evidence from falsifier 19 · separately inspected staged and
+unstaged diffs plus `git diff --check` · confirmation that the two package files stay untouched
+and unstaged and that the report includes no Unity-generated state · the exact
+`Application.dataPath` match of the pinned Unity instance, with no mention of any other
+instance name, path, hash, or port · the observed result of
+`AnimatedUseDither_IsIgnoredAsProvablyInert` · the two recorded implementation
+decisions (the combined request defined once and its home, the shared lilToon case
+label) · and an explicit statement that the work used no Census Lab and no private avatar data.
 
 ---
 
@@ -3304,15 +3305,15 @@ label); and an explicit statement that Census Lab and private avatar data were n
 | §20 git boundary | Global Constraints |
 | §21 report | Task 7 Step 6 |
 
-Two gaps found in §12's file map and closed here: the **transparent stand-in shader** is required
-(the cutout stand-in is queue 2450 and cannot serve a 2460 source) and is added in Task 3; and
-the **old `LilToonOpaqueConversionTests.cs` path** must disappear while its asset identity
+Two gaps found in the file map of §12 and closed here: the **transparent stand-in shader** is
+required (the cutout stand-in is queue 2450 and cannot serve a 2460 source) and Task 3 adds it.
+The **old `LilToonOpaqueConversionTests.cs` path** must disappear while its asset identity
 survives, so the File Structure section names it as a non-index move that preserves both the
 GUID and the `.meta` bytes, rather than as a new asset.
 
 **2. Placeholder scan.** No `TBD`, no "handle edge cases", no "write tests for the above", no
-"similar to Task N". Task 6's rows are described rather than quoted because they extend existing
-test classes whose helper vocabulary the implementer will be reading in the same file; each row
+"similar to Task N". Task 6 describes its rows rather than quoting them because the rows extend
+existing test classes whose helper vocabulary the implementer reads in the same file. Each row
 names its exact falsifier, assertion target, and refusal member.
 
 **3. Type consistency.** `LilToonOpaqueTarget.RecipeEvidenceRequest` /
@@ -3323,6 +3324,6 @@ names its exact falsifier, assertion target, and refusal member.
 `InterpretVerifiedTransparentAlpha` / `InterpretVerifiedTransparentMaterial`,
 `LilToonSourceAttestation.TryVerifyLilToonTransparentIdentity` /
 `GatherTransparentSourceEvidence`, and
-`CapturedAlphaMaterialFamily.LilToonTransparent` are spelled identically in every task that
+`CapturedAlphaMaterialFamily.LilToonTransparent` appear with identical spelling in every task that
 names them. `MaxProvableCutoff` deliberately exists on both source modules with different values
 (`0.9999f` cutout, `1f` transparent) and is never shared.
