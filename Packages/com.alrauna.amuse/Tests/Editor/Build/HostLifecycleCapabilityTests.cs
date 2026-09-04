@@ -39,13 +39,94 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(result.MayUsePositiveMutation, Is.True);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
             StringAssert.Contains("Unity 2022.3.22f1", result.SupportedAssumption);
+            StringAssert.Contains("NDMF 1.14.4", result.SupportedAssumption);
         }
 
         [Test]
         public void DifferentUnityVersionRefusesWithUnityReason()
         {
             var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "2022.3.21f1"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedUnityVersion));
+        }
+
+        [Test]
+        public void UnityAtPatchFloorPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "2022.3.22f1"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        /// <summary>
+        /// The policy admits any 2022.3 f-release at or above patch 22. A
+        /// leftover exact-equality branch beside the range check refuses
+        /// this input.
+        /// </summary>
+        [Test]
+        public void UnityAbovePatchFloorPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "2022.3.23f1"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        [Test]
+        public void DifferentUnityStreamRefusesWithUnityReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "2023.1.0f1"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedUnityVersion));
+        }
+
+        /// <summary>
+        /// The digits after the release-type letter are part of the admitted
+        /// grammar, so 2022.3.22f2 admits like 2022.3.22f1. A residual
+        /// full-string equality refuses it.
+        /// </summary>
+        [Test]
+        public void UnitySamePatchNewerRevisionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(unityVersion: "2022.3.22f2"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        [Test]
+        public void UnityNonFReleaseTypeRefusesWithUnityReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "2022.3.22b"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedUnityVersion));
+        }
+
+        [Test]
+        public void UnparseableUnityVersionRefusesWithUnityReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: "not-a-version"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedUnityVersion));
+        }
+
+        [Test]
+        public void NullUnityVersionRefusesWithUnityReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: null));
 
             Assert.That(result.MayUsePositiveMutation, Is.False);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedUnityVersion));
@@ -55,10 +136,104 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void DifferentNdmfVersionRefusesWithNdmfReason()
         {
             var result = HostLifecycleCapability.Evaluate(
-                SupportedFacts(ndmfVersion: "1.14.5"));
+                SupportedFacts(ndmfVersion: "1.14.3"));
 
             Assert.That(result.MayUsePositiveMutation, Is.False);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        [Test]
+        public void NdmfAtFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.14.4"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        [Test]
+        public void NdmfBelowMinorFloorRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.13.9"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        [Test]
+        public void NdmfPrereleaseSuffixRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.15.0-beta.1"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        [Test]
+        public void NdmfAtExclusiveUpperBoundRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "2.0.0"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        [Test]
+        public void NdmfPrereleaseAtUpperBoundRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "2.0.0-a"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        /// <summary>
+        /// 1.9.0 refuses only under numeric per-component comparison; an
+        /// ordinal text sort places "1.9.0" above "1.14.4" and would admit it.
+        /// </summary>
+        [Test]
+        public void NdmfNumericPerComponentCompareRefusesWithNdmfReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.9.0"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+        }
+
+        /// <summary>
+        /// A two-component input names its series head and compares against
+        /// the floor and the bound truncated to two components: 1.14 admits
+        /// because absent trailing components are not compared, while 1.14.0
+        /// would refuse below the 1.14.4 floor.
+        /// </summary>
+        [Test]
+        public void NdmfTwoComponentSeriesVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.14"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        /// <summary>
+        /// A version above the floor admits without any residual exact
+        /// equality at the floor value.
+        /// </summary>
+        [Test]
+        public void NdmfAboveFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: "1.15.0"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
         }
 
         /// <summary>
@@ -89,7 +264,68 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void DifferentVrchatSdkBaseVersionRefusesWithBaseReason()
         {
             var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: "3.10.3"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
+        }
+
+        [Test]
+        public void VrchatSdkBaseAtFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: "3.10.4"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        /// <summary>
+        /// The SDK range admits every version at or above the 3.10.4 floor
+        /// and below 4.0.0. A residual exact equality at the floor refuses
+        /// this input.
+        /// </summary>
+        [Test]
+        public void VrchatSdkBaseAboveFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(vrchatSdkBaseVersion: "3.10.5"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        [Test]
+        public void VrchatSdkBaseAtExclusiveUpperBoundRefusesWithBaseReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: "4.0.0"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
+        }
+
+        [Test]
+        public void VrchatSdkBasePrereleaseSuffixRefusesWithBaseReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: "3.11.0-beta"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
+        }
+
+        [Test]
+        public void NullVrchatSdkBaseVersionRefusesWithBaseReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: null));
 
             Assert.That(result.MayUsePositiveMutation, Is.False);
             Assert.That(
@@ -101,7 +337,68 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void DifferentVrchatSdkAvatarsVersionRefusesWithAvatarsReason()
         {
             var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: "3.10.3"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
+        }
+
+        [Test]
+        public void VrchatSdkAvatarsAtFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: "3.10.4"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        /// <summary>
+        /// The SDK range admits every version at or above the 3.10.4 floor
+        /// and below 4.0.0. A residual exact equality at the floor refuses
+        /// this input.
+        /// </summary>
+        [Test]
+        public void VrchatSdkAvatarsAboveFloorVersionPermitsPositiveMutation()
+        {
+            var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(vrchatSdkAvatarsVersion: "3.10.5"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        [Test]
+        public void VrchatSdkAvatarsAtExclusiveUpperBoundRefusesWithAvatarsReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: "4.0.0"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
+        }
+
+        [Test]
+        public void VrchatSdkAvatarsPrereleaseSuffixRefusesWithAvatarsReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: "3.11.0-beta"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
+        }
+
+        [Test]
+        public void NullVrchatSdkAvatarsVersionRefusesWithAvatarsReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: null));
 
             Assert.That(result.MayUsePositiveMutation, Is.False);
             Assert.That(
