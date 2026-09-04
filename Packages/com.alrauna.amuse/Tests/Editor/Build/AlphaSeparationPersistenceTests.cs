@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using NUnit.Framework;
@@ -306,9 +307,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE source preservation");
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
+            var lilFixtures = new LilToonTransparentConversionFixtures();
+            IReadOnlyList<UnityEngine.Object> teardownSources = null;
             try
             {
                 AlphaSeparationSplitTests.EnsureSplitFolder();
+                lilFixtures.BaseSetUp();
                 try
                 {
                     var texture = Track(
@@ -324,6 +328,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var renderer = AddRenderer(
                         root, "body", sourceMesh, first, split);
 
+                    // The transparent extension: a second renderer whose
+                    // one slot is a transparent conversion source over a
+                    // fully-opaque mip chain, so the feature converts it
+                    // and the audit covers the transparent source family.
+                    var transparentTexture =
+                        lilFixtures.ImportFullyOpaqueMipmap(
+                            "preservation_transparent");
+                    var transparentMaterial = Track(
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial());
+                    transparentMaterial.SetTexture(
+                        "_MainTex", transparentTexture);
+                    var transparentMesh = Track(CreateSingleTriangleMesh());
+                    var transparentRenderer = AddRenderer(
+                        root, "alphaTransparent", transparentMesh,
+                        transparentMaterial);
+
                     var sourceClip = Track(new AnimationClip
                     {
                         name = "AMUSE preservation swap",
@@ -334,6 +355,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     controller = Track(NewController(
                         root, "AMUSE preservation graph", sourceClip));
 
+                    teardownSources = new UnityEngine.Object[]
+                    {
+                        transparentMaterial,
+                        transparentMesh,
+                        split,
+                        first,
+                        second,
+                        sourceMesh,
+                        sourceClip,
+                        controller,
+                    };
+
                     // --- Source state captured before the build. These are
                     // the original objects; the build copy does not exist
                     // yet.
@@ -343,6 +376,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var secondDigest = DescribeMaterial(second);
                     var clipDigest = DescribeClip(sourceClip);
                     var controllerDigest = DescribeController(controller);
+                    var transparentMaterialDigest =
+                        DescribeMaterial(transparentMaterial);
+                    var transparentMeshDigest = DescribeMesh(transparentMesh);
+                    var transparentTexturePath =
+                        AssetDatabase.GetAssetPath(transparentTexture);
+                    var transparentTextureHash =
+                        AssetDatabase.GetAssetDependencyHash(
+                            transparentTexturePath);
 
                     var context = AvatarProcessor.ProcessAvatar(
                         root,
@@ -354,11 +395,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // mutation path and not a no-op path.
                     Assert.That(context.Successful, Is.True,
                         "fixture precondition: the build must complete");
-                    Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
-                        "fixture precondition: the renderer must analyze");
-                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1),
+                    Assert.That(state.AnalyzedRendererCount, Is.EqualTo(2),
+                        "fixture precondition: both renderers must " +
+                        "analyze — the cutout/Poiyomi fixture renderer " +
+                        "and the transparent extension renderer");
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(2),
                         "fixture precondition: the feature must actually " +
-                        "mutate the build copy");
+                        "mutate both build renderers");
                     Assert.That(state.Separation, Is.Not.Null);
                     Assert.That(state.Separation.CreatedClones,
                         Is.Not.Empty,
@@ -398,6 +441,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "so its digest below is read on the exact object " +
                         "the build renderer references");
 
+                    // --- The transparent slot converted onto its clone,
+                    // so the audit below reads the exact object the build
+                    // renderer references — and the slot kept the source
+                    // mesh itself, because a wholly opaque slot splits
+                    // nothing.
+                    Assert.That(
+                        state.Separation.TryGetOpaque(
+                            transparentMaterial, out var transparentClone),
+                        Is.True,
+                        "fixture precondition: the transparent source " +
+                        "must convert, or the transparent extension " +
+                        "audits nothing");
+                    Assert.That(
+                        transparentRenderer.sharedMaterials[0],
+                        Is.EqualTo(transparentClone),
+                        "the built transparent renderer must carry the " +
+                        "opaque clone, not the source material");
+                    Assert.That(
+                        transparentRenderer.sharedMesh,
+                        Is.SameAs(transparentMesh),
+                        "a wholly opaque slot splits nothing, so the " +
+                        "renderer must keep the source mesh itself");
+
                     // --- The sources themselves are unchanged.
                     Assert.That(DescribeMesh(sourceMesh),
                         Is.EqualTo(meshDigest),
@@ -418,18 +484,82 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Assert.That(DescribeController(controller),
                         Is.EqualTo(controllerDigest),
                         "the source controller must be unchanged");
+
+                    // --- The transparent source family is unchanged too:
+                    // the material's full property state, the mesh layout,
+                    // and the texture asset together with its import
+                    // settings (the dependency hash covers both).
+                    Assert.That(DescribeMaterial(transparentMaterial),
+                        Is.EqualTo(transparentMaterialDigest),
+                        "the source transparent material must be " +
+                        "unchanged");
+                    Assert.That(DescribeMesh(transparentMesh),
+                        Is.EqualTo(transparentMeshDigest),
+                        "the source transparent mesh must be unchanged");
+                    Assert.That(
+                        AssetDatabase.GetAssetDependencyHash(
+                            transparentTexturePath),
+                        Is.EqualTo(transparentTextureHash),
+                        "the source texture and its import settings must " +
+                        "be unchanged");
                 }
                 finally
                 {
                     AlphaSeparationSplitTests.DeleteSplitFolder();
+                    lilFixtures.BaseTearDown();
                 }
             }
             finally
             {
                 DestroyCommittedClone(root, controller);
                 DestroyGenerated(state);
-                DestroyTracked();
+
+                // The avatar root leaves the scene before the audit: a
+                // failing audit below must not leak a root whose
+                // renderers reference objects later teardown destroys.
                 UnityEngine.Object.DestroyImmediate(root);
+
+                if (state?.Separation != null && teardownSources != null)
+                {
+                    // --- Teardown evidence (row 19): destroying the
+                    // feature's output destroys exactly the created clones
+                    // and mesh clones and nothing else — every source
+                    // object is still alive right here, after
+                    // DestroyGenerated ran and before the test's own
+                    // tracker runs.
+                    foreach (var clone in state.Separation.CreatedClones)
+                    {
+                        Assert.That(clone == null, Is.True,
+                            "teardown must destroy every created clone");
+                    }
+
+                    foreach (var prepared in state.Separation.Renderers)
+                    {
+                        Assert.That(prepared.MeshClone == null, Is.True,
+                            "teardown must destroy every generated mesh");
+                    }
+
+                    for (var index = 0;
+                         index < teardownSources.Count;
+                         index++)
+                    {
+                        // Unity-null semantics: a destroyed
+                        // UnityEngine.Object is not .NET null, and the
+                        // message must not touch a possibly-dead
+                        // reference, so no .name here. The two imported
+                        // textures are absent from this list on purpose:
+                        // their preservation is proved by the dependency
+                        // hash while the asset exists, and their deletion
+                        // afterwards is the fixture's own cleanup, not
+                        // the feature's teardown.
+                        Assert.That(teardownSources[index] == null,
+                            Is.False,
+                            "teardown must not destroy source asset #" +
+                            index);
+                    }
+                }
+
+                DestroyTracked();
             }
         }
 
@@ -448,8 +578,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "class AmusePlatformFinishPlugin"),
                 ("Semantics/LilToon/LilToonCutoutMaterialSemantics.cs",
                     "class LilToonCutoutMaterialSemantics"),
-                ("Semantics/LilToon/LilToonOpaqueConversion.cs",
-                    "class LilToonOpaqueConversion"),
+                ("Semantics/LilToon/LilToonOpaqueConversionResult.cs",
+                    "class LilToonOpaqueConversionFactors"),
+                ("Semantics/LilToon/LilToonOpaqueTarget.cs",
+                    "class LilToonOpaqueTarget"),
+                ("Semantics/LilToon/LilToonCutoutSourceEligibility.cs",
+                    "class LilToonCutoutSourceEligibility"),
+                ("Semantics/LilToon/LilToonTransparentSourceEligibility.cs",
+                    "class LilToonTransparentSourceEligibility"),
+                ("Semantics/LilToon/LilToonTransparentMaterialSemantics.cs",
+                    "class LilToonTransparentMaterialSemantics"),
             };
 
         /// <summary>
@@ -499,6 +637,54 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             return material;
+        }
+
+        /// <summary>
+        /// A single UV'd triangle for the transparent extension renderer:
+        /// the transparent proof is texture-backed, so the candidate
+        /// triangle needs a UV0 domain over the fully-opaque chain.
+        /// </summary>
+        private static Mesh CreateSingleTriangleMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                },
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.uv = new[]
+            {
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.25f, 0.75f),
+            };
+            return mesh;
+        }
+
+        /// <summary>
+        /// Texture importer for the transparent extension. The importers
+        /// are family-agnostic — schema, format and sampler vocabulary
+        /// only — so this reuses the cutout fixture class under the
+        /// transparent name. The base's SetUp/TearDown are driven manually
+        /// by the test that owns the instance.
+        /// </summary>
+        private sealed class LilToonTransparentConversionFixtures
+            : LilToonFixtureTestBase
+        {
+            internal Texture2D ImportFullyOpaqueMipmap(string name)
+            {
+                var pixels = new Color32[4 * 4];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                return ImportMipmapTexture(name, 4, 4, pixels);
+            }
         }
 
         private static SkinnedMeshRenderer AddRenderer(

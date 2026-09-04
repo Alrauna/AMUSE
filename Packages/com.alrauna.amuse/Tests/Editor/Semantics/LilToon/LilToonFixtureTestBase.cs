@@ -27,6 +27,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
         protected const string OpaqueConversionShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonOpaqueConversionTest";
+        protected const string TransparentConversionShaderName =
+            "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest";
 
         /// <summary>Every feature symbol a fully compiled lilToon exposes.</summary>
         protected static readonly string[] AllFeatures =
@@ -84,6 +86,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return Track(CreateCutoutConversionMaterial());
         }
 
+        protected Material NewTransparentFixtureMaterial()
+        {
+            return Track(CreateTransparentConversionMaterial());
+        }
+
         protected Material NewOpaqueConversionMaterial()
         {
             return Track(CreateOpaqueConversionMaterial());
@@ -102,6 +109,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         internal static Material CreateCutoutConversionMaterial()
         {
             return CreateFixtureMaterial(CutoutConversionShaderName);
+        }
+
+        /// <summary>
+        /// Creates a transparent-stand-in material for the
+        /// transparent-to-opaque conversion tests by shader name, without
+        /// subclassing this base. The caller owns destruction.
+        /// </summary>
+        internal static Material CreateTransparentConversionMaterial()
+        {
+            return CreateFixtureMaterial(TransparentConversionShaderName);
         }
 
         /// <summary>

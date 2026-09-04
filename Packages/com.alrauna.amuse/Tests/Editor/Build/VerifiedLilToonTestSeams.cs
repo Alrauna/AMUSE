@@ -33,11 +33,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     {
         /// <summary>
         /// Family selection across all fixture families. The schema-complete
-        /// cutout source stand-in selects <c>LilToonCutout</c> with the
-        /// combined alpha/conversion capture schema. Both opaque stand-ins
-        /// select ordinary <c>LilToon</c> with its alpha-only request. The
-        /// Poiyomi stand-in delegates to the existing Poiyomi seam; anything
-        /// else selects nothing.
+        /// cutout source stand-in selects <c>LilToonCutout</c> and the
+        /// schema-complete transparent source stand-in selects
+        /// <c>LilToonTransparent</c>, each with the combined
+        /// alpha/conversion capture schema. Both opaque stand-ins select
+        /// ordinary <c>LilToon</c> with its alpha-only request. The Poiyomi
+        /// stand-in delegates to the existing Poiyomi seam; anything else
+        /// selects nothing.
         /// </summary>
         internal static bool SelectVerifiedFixtureRequest(
             Material material,
@@ -53,7 +55,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest;
                 captureSchema = MaterialEvidenceRequest.Combine(
                     alphaRelevance,
-                    LilToonOpaqueConversion.ConversionEvidenceRequest);
+                    LilToonCutoutSourceEligibility.ConversionEvidenceRequest);
+                return true;
+            }
+
+            if (UsesFixtureShader(
+                    material, LilToonFixtureShaderNames.Transparent))
+            {
+                family = CapturedAlphaMaterialFamily.LilToonTransparent;
+                alphaRelevance =
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest;
+                captureSchema = MaterialEvidenceRequest.Combine(
+                    alphaRelevance,
+                    LilToonTransparentSourceEligibility
+                        .ConversionEvidenceRequest);
                 return true;
             }
 
@@ -127,6 +142,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .GatherCutoutSourceEvidence(
                                 shaders[index], evidence[index]);
                         break;
+                    case CapturedAlphaMaterialFamily.LilToonTransparent:
+                        lilToon = LilToonSourceAttestation
+                            .GatherTransparentSourceEvidence(
+                                shaders[index], evidence[index]);
+                        break;
                 }
 
                 result[index] = new CapturedAlphaMaterial(
@@ -138,9 +158,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Alpha-only resolution routed per family to the three production
-        /// interpreters; a material no fixture family attests is all-Unknown,
-        /// the conservative answer.
+        /// Alpha-only resolution routed per family to the four production
+        /// interpreters; a material no fixture family attests is
+        /// all-Unknown, the conservative answer.
         /// </summary>
         internal static MaterialSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
@@ -168,6 +188,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .InterpretVerifiedCutoutAlpha(material.Evidence),
                         SemanticOutput<ColorSemanticValue>.Unknown(),
                         SemanticOutput<NormalSemanticValue>.Unknown());
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        LilToonTransparentMaterialSemantics
+                            .InterpretVerifiedTransparentAlpha(
+                                material.Evidence),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown());
                 default:
                     return UnityMaterialSemantics.AllUnknown();
             }
@@ -176,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The fifth verified-fixture seam, substituting only the
         /// cutout-family opaque-conversion step for one admitted material:
-        /// effective render state, real <c>LilToonOpaqueConversion</c>
+        /// effective render state, real <c>LilToonCutoutSourceEligibility</c>
         /// eligibility, and the real canonical clone recipe with the
         /// tuple-carrying opaque stand-in shader passed as the attested
         /// target. Only the source-identity check and the production
@@ -194,9 +222,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out Material opaque,
             out LilToonOpaqueConversionRefusal refusal)
         {
-            LilToonOpaqueConversion.ReadEffectiveRenderState(
+            LilToonOpaqueTarget.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
-            var eligibility = LilToonOpaqueConversion
+            var eligibility = LilToonCutoutSourceEligibility
                 .EvaluateVerifiedEligibility(derived, queue, renderType);
             if (eligibility.Outcome !=
                 LilToonOpaqueConversionOutcome.Convertible)
@@ -210,7 +238,47 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // only a first conversion creates the canonical clone. The
             // tuple-carrying opaque stand-in is the attested target.
             opaque = preparedOpaque ??
-                LilToonOpaqueConversion.PrepareCanonicalOpaqueClone(
+                LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                    live, Shader.Find(
+                        LilToonFixtureShaderNames.OpaqueTarget));
+            refusal = LilToonOpaqueConversionRefusal.None;
+            return true;
+        }
+
+        /// <summary>
+        /// The verified-fixture seam for the transparent conversion family
+        /// — the exact shape of <see cref="VerifiedConversion"/> with the
+        /// transparent eligibility substituted: effective render state,
+        /// real <c>LilToonTransparentSourceEligibility</c> eligibility, and
+        /// the same canonical clone recipe with the tuple-carrying opaque
+        /// stand-in shader passed as the attested target. Only the
+        /// source-identity check and the production target-asset resolution
+        /// are skipped, exactly as for the cutout seam.
+        /// </summary>
+        internal static bool VerifiedTransparentConversionStep(
+            Material live,
+            CapturedMaterialEvidence derived,
+            Material preparedOpaque,
+            out Material opaque,
+            out LilToonOpaqueConversionRefusal refusal)
+        {
+            LilToonOpaqueTarget.ReadEffectiveRenderState(
+                live, out var queue, out var renderType);
+            var eligibility = LilToonTransparentSourceEligibility
+                .EvaluateVerifiedEligibility(derived, queue, renderType);
+            if (eligibility.Outcome !=
+                LilToonOpaqueConversionOutcome.Convertible)
+            {
+                opaque = null;
+                refusal = eligibility.Refusal;
+                return false;
+            }
+
+            // An already-prepared artifact for this source is reused here;
+            // only a first conversion creates the canonical clone. The
+            // tuple-carrying opaque stand-in is the attested target.
+            opaque = preparedOpaque ??
+                LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
                     live, Shader.Find(
                         LilToonFixtureShaderNames.OpaqueTarget));
             refusal = LilToonOpaqueConversionRefusal.None;
@@ -242,6 +310,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             /// <summary>The schema-complete cutout source stand-in.</summary>
             internal const string Cutout = CutoutConversionShaderName;
+
+            /// <summary>The schema-complete transparent source stand-in.</summary>
+            internal const string Transparent = TransparentConversionShaderName;
 
             /// <summary>The distinct canonical opaque target stand-in.</summary>
             internal const string OpaqueTarget = OpaqueConversionShaderName;
