@@ -207,19 +207,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// A two-component input names its series head and compares against
-        /// the floor and the bound truncated to two components: 1.14 admits
-        /// because absent trailing components are not compared, while 1.14.0
-        /// would refuse below the 1.14.4 floor.
+        /// A two-component input is unparseable: Unity requires the
+        /// MAJOR.MINOR.PATCH form for package versions, so 1.14 refuses
+        /// with the NDMF cause instead of naming the 1.14 series.
         /// </summary>
         [Test]
-        public void NdmfTwoComponentSeriesVersionPermitsPositiveMutation()
+        public void NdmfTwoComponentVersionRefusesWithNdmfReason()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(ndmfVersion: "1.14"));
 
-            Assert.That(result.MayUsePositiveMutation, Is.True);
-            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
         }
 
         /// <summary>
@@ -297,6 +296,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
         }
 
+        /// <summary>
+        /// A two-component input is unparseable: Unity requires the
+        /// MAJOR.MINOR.PATCH form for package versions, so 3.10 refuses
+        /// with the Base cause instead of naming the 3.10 series.
+        /// </summary>
+        [Test]
+        public void VrchatSdkBaseTwoComponentVersionRefusesWithBaseReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkBaseVersion: "3.10"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
+        }
+
         [Test]
         public void VrchatSdkBaseAtExclusiveUpperBoundRefusesWithBaseReason()
         {
@@ -368,6 +384,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(result.MayUsePositiveMutation, Is.True);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+        }
+
+        /// <summary>
+        /// A two-component input is unparseable: Unity requires the
+        /// MAJOR.MINOR.PATCH form for package versions, so 3.10 refuses
+        /// with the Avatars cause instead of naming the 3.10 series.
+        /// </summary>
+        [Test]
+        public void VrchatSdkAvatarsTwoComponentVersionRefusesWithAvatarsReason()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(vrchatSdkAvatarsVersion: "3.10"));
+
+            Assert.That(result.MayUsePositiveMutation, Is.False);
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
         }
 
         [Test]
