@@ -14,6 +14,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         Poiyomi,
         LilToon,
         LilToonCutout,
+        LilToonTransparent,
     }
 
     internal sealed class CapturedAlphaMaterial
@@ -48,8 +49,13 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// selection is an exclusive trial rather than a dispatch table: a second
     /// place deciding "is this a Poiyomi material" could only disagree with the
     /// first. This is deliberately not an adapter interface, a registry, or a
-    /// provider framework; with a third family it becomes a third branch, and
-    /// that is when a registry earns its first honest argument.
+    /// provider framework. The transparent normal family that joined
+    /// cutout is not a third frontend: it is a second identity inside
+    /// the existing lilToon frontend, and the fourth exact-name branch
+    /// is still one map with two consumers — nothing dispatches
+    /// polymorphically over the frontends
+    /// (docs/architecture/shader-frontend-comparison.md, last row of
+    /// the promotion table).
     /// </summary>
     internal static class UnityMaterialSemantics
     {
@@ -226,6 +232,13 @@ namespace Alrauna.Amuse.Editor.Semantics
                         .GatherCutoutSourceEvidence(
                             shaders[index], evidence[index]);
                 }
+                else if (families[index] ==
+                    CapturedAlphaMaterialFamily.LilToonTransparent)
+                {
+                    lilToon = LilToonSourceAttestation
+                        .GatherTransparentSourceEvidence(
+                            shaders[index], evidence[index]);
+                }
 
                 results[index] = new CapturedAlphaMaterial(
                     families[index], evidence[index], poiyomi, lilToon);
@@ -237,9 +250,11 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// The exact shader-name map selection and batch capture must agree
         /// on. One map, two consumers: a second place deciding "is this a
-        /// cutout material" could only drift away from the first. The cutout
-        /// name is exact like the others; near-miss vendor names stay
-        /// Unsupported and are refused downstream.
+        /// supported lilToon material" could only drift away from the
+        /// first. Every supported name is exact, the transparent normal
+        /// one included; near-miss vendor names (the transparent one-pass,
+        /// two-pass, and outline variants among them) stay Unsupported
+        /// and are refused downstream.
         /// </summary>
         private static (
             CapturedAlphaMaterialFamily family,
@@ -276,6 +291,16 @@ namespace Alrauna.Amuse.Editor.Semantics
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
             }
 
+            if (string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.TransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
+            }
+
             return (CapturedAlphaMaterialFamily.Unsupported, null);
         }
 
@@ -300,17 +325,21 @@ namespace Alrauna.Amuse.Editor.Semantics
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     return LilToonCutoutMaterialSemantics
                         .AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return LilToonTransparentMaterialSemantics
+                        .AlphaEvidenceRequest;
                 default:
                     return null;
             }
         }
 
         /// <summary>
-        /// Poiyomi's capture schema is its alpha request plus conversion's own
-        /// request, so one capture serves both readers. The cutout frontend
-        /// widens its alpha request the same way: one capture serves both the
-        /// cutout alpha proof and the lilToon conversion. Opaque lilToon has
-        /// no opaque-conversion request, so its schema is its alpha request
+        /// Poiyomi's capture schema is its alpha request plus conversion's
+        /// own request, so one capture serves both readers. The cutout and
+        /// transparent lilToon frontends widen their alpha requests the
+        /// same way: one capture serves both the family's alpha proof and
+        /// the lilToon conversion. Opaque lilToon has no
+        /// opaque-conversion request, so its schema is its alpha request
         /// and nothing widens it.
         /// </summary>
         private static readonly MaterialEvidenceRequest PoiyomiCaptureRequest =
@@ -321,7 +350,14 @@ namespace Alrauna.Amuse.Editor.Semantics
         private static readonly MaterialEvidenceRequest LilToonCaptureRequest =
             MaterialEvidenceRequest.Combine(
                 LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
-                LilToonOpaqueConversion.ConversionEvidenceRequest);
+                LilToonCutoutSourceEligibility.ConversionEvidenceRequest);
+
+        private static readonly MaterialEvidenceRequest
+            LilToonTransparentCaptureRequest =
+                MaterialEvidenceRequest.Combine(
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonTransparentSourceEligibility
+                        .ConversionEvidenceRequest);
 
         private static MaterialEvidenceRequest CaptureRequestForFamily(
             CapturedAlphaMaterialFamily family)
@@ -334,6 +370,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     return LilToonCaptureRequest;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return LilToonTransparentCaptureRequest;
                 default:
                     return null;
             }
@@ -355,6 +393,11 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return material.LilToonEvidence != null &&
                         LilToonSourceAttestation
                             .TryVerifyLilToonCutoutIdentity(
+                                material.LilToonEvidence, out _);
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    return material.LilToonEvidence != null &&
+                        LilToonSourceAttestation
+                            .TryVerifyLilToonTransparentIdentity(
                                 material.LilToonEvidence, out _);
                 default:
                     return false;
@@ -404,6 +447,18 @@ namespace Alrauna.Amuse.Editor.Semantics
 
                     alpha = LilToonCutoutMaterialSemantics
                         .InterpretVerifiedCutoutAlpha(captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    if (captured.LilToonEvidence == null ||
+                        !LilToonSourceAttestation
+                            .TryVerifyLilToonTransparentIdentity(
+                                captured.LilToonEvidence, out _))
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = LilToonTransparentMaterialSemantics
+                        .InterpretVerifiedTransparentAlpha(captured.Evidence);
                     break;
                 default:
                     return AllUnknown();
