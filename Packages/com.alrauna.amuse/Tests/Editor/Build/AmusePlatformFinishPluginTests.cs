@@ -146,7 +146,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 AmusePlatformFinishPass.Execute(
                     context,
-                    SupportedFacts(unityVersion: "2022.3.22f2"));
+                    SupportedFacts(unityVersion: "2022.3.21f1"));
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.Lifecycle.MayUsePositiveMutation, Is.False);
