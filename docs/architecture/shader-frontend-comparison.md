@@ -183,6 +183,7 @@ absorbed by a return of `Unknown`.
 | Declarative gate schema | 2 superficially | — | falsified | The function is byte-identical. What the lists must express is not. lilToon needs "equals `(0,1,1,1)`", "is unassigned", "equals exactly 1", "is provably in `[0,1]`", "`.a == 0`", "`.x == 0`". **No schema.** |
 | Premultiplied alpha, non-additive blend modes, layered emission | 2, 1, 2 | 0 | chose not to support | All refuse. |
 | Gamma color workflow | 2 | — | chose not to support | Both refuse. |
+| Opaque-conversion target shared by two source families in one frontend | **2** (lilToon cutout, lilToon Transparent Normal) | **1** (`LilToonOpaqueTarget`) | measured: one identical 18-property recipe, one identical clone path, byte-identical referenced pass sets | **Extracted** — the target only. The two source eligibilities stay separate: 11 shared predicates, 4 divergent gates, two different cutoff bounds, and no polymorphic call site. Extraction passed the second-consumer test on measurement, not anticipation. |
 
 ## What remains duplicated, and until when
 
