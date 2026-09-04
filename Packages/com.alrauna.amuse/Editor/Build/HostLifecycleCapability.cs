@@ -306,25 +306,24 @@ namespace Alrauna.Amuse.Editor.Build
         private static bool PackageVersionAdmitted(
             string version, int[] floor, int[] exclusiveUpperBound)
         {
-            return TryParsePackageVersion(
-                       version, out var components, out var count, out var hasPrereleaseSuffix)
+            return TryParsePackageVersion(version, out var components, out var hasPrereleaseSuffix)
                 && !hasPrereleaseSuffix
-                && PackageVersionInRange(components, count, floor, exclusiveUpperBound);
+                && PackageVersionInRange(components, floor, exclusiveUpperBound);
         }
 
         /// <summary>
         /// Parses the package grammar <c>M.m.p</c> with an optional
-        /// <c>-</c> prerelease suffix. Two or three dot-separated digit runs
-        /// are valid; one component, four or more, an empty part, and any
-        /// foreign character (including <c>+</c>) are unparseable. The
-        /// <c>-</c> suffix is reported separately because it refuses as a
-        /// prerelease rather than as unparseable input.
+        /// <c>-</c> prerelease suffix. Exactly three dot-separated digit
+        /// runs are valid; one component, a fourth component, a missing
+        /// separator, an empty part, and any foreign character (including
+        /// <c>+</c>) are unparseable. The <c>-</c> suffix is reported
+        /// separately because it refuses as a prerelease rather than as
+        /// unparseable input.
         /// </summary>
         private static bool TryParsePackageVersion(
-            string version, out int[] components, out int count, out bool hasPrereleaseSuffix)
+            string version, out int[] components, out bool hasPrereleaseSuffix)
         {
             components = null;
-            count = 0;
             hasPrereleaseSuffix = false;
             if (string.IsNullOrEmpty(version))
             {
@@ -333,64 +332,53 @@ namespace Alrauna.Amuse.Editor.Build
 
             var parsed = new int[3];
             var pos = 0;
-            while (true)
+            for (var index = 0; index < parsed.Length; index++)
             {
-                if (!TryReadDigitRun(version, ref pos, out var value) || count == parsed.Length)
+                if (index > 0 && !TryReadExpected(version, ref pos, '.'))
                 {
                     return false;
                 }
 
-                parsed[count++] = value;
-                if (pos == version.Length)
+                if (!TryReadDigitRun(version, ref pos, out parsed[index]))
                 {
-                    break;
+                    return false;
                 }
-
-                if (version[pos] == '-')
-                {
-                    hasPrereleaseSuffix = true;
-                    break;
-                }
-
-                if (version[pos] != '.')
-                {
-                    return false; // any other foreign character, including '+'
-                }
-
-                pos++;
             }
 
-            if (count < 2)
+            if (pos == version.Length)
             {
-                return false;
+                components = parsed;
+                return true;
             }
 
-            components = parsed;
-            return true;
+            if (version[pos] == '-')
+            {
+                hasPrereleaseSuffix = true;
+                return true;
+            }
+
+            return false; // a fourth component or a foreign character, including '+'
         }
 
         /// <summary>
-        /// The design's truncation rule: with n the input's component count,
-        /// the floor and the bound compare truncated to their first n
-        /// components, so absent trailing components are not compared.
-        /// 1.14 admits against a 1.14.4 floor, while 1.14.0 refuses below it.
+        /// The parsed version sits in <c>[floor, exclusiveUpperBound)</c>:
+        /// at or above the floor and strictly below the exclusive bound.
         /// </summary>
         private static bool PackageVersionInRange(
-            int[] components, int count, int[] floor, int[] exclusiveUpperBound)
+            int[] components, int[] floor, int[] exclusiveUpperBound)
         {
-            return CompareComponents(components, floor, count) >= 0
-                && CompareComponents(components, exclusiveUpperBound, count) < 0;
+            return CompareComponents(components, floor) >= 0
+                && CompareComponents(components, exclusiveUpperBound) < 0;
         }
 
         /// <summary>
-        /// Lexicographic integer comparison over the first
-        /// <paramref name="count"/> components: the first differing component
-        /// decides, and inputs that agree throughout compare equal. Numeric
-        /// parts never compare as strings.
+        /// Lexicographic integer comparison over the full arrays: the first
+        /// differing component decides, and inputs that agree throughout
+        /// compare equal. Numeric parts never compare as strings.
         /// </summary>
-        private static int CompareComponents(int[] left, int[] right, int count)
+        private static int CompareComponents(int[] left, int[] right)
         {
-            for (var i = 0; i < count; i++)
+            for (var i = 0; i < left.Length; i++)
             {
                 if (left[i] != right[i])
                 {

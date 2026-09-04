@@ -151,17 +151,31 @@ Grammar: `M.m.p` with an optional `-` prerelease suffix.
 
 1. A `-` prerelease suffix refuses: `1.15.0-beta.1` and `3.11.0-a` refuse.
    Any other foreign character, including `+`, is unparseable and refuses.
-2. Split the numeric part on `.`. Two or three components are valid.
-   One component, four or more, or an empty part is unparseable and refuses.
+2. Split the numeric part on `.`. Exactly three components are valid.
+   One component, two components, four or more, or an empty part is
+   unparseable and refuses. A registered package always carries three
+   components. The Unity 2022.3 package manifest makes `version` a required
+   property and states its format as "MAJOR.MINOR.PATCH", which "must
+   respect Semantic Versioning". Without the required properties, "either
+   the registry refuses the package when it's published, or the Package
+   Manager can't fetch or load the package"
+   (https://docs.unity3d.com/2022.3/Documentation/Manual/upm-manifestPkg.html).
+   The Unity 2022.3 versioning page states the same contract: "Packages
+   must follow Semantic Versioning (SemVer)", and SemVer "expresses
+   versions as MAJOR.MINOR.PATCH"
+   (https://docs.unity3d.com/2022.3/Documentation/Manual/upm-semver.html).
 3. Compare against the floor `F` and the exclusive bound `U` — NDMF: 1.14.4 and 2.0.0; SDK: 3.10.4 and 4.0.0.
-   Let n be the component count of the input. Truncate `F` and `U` to their first n components.
-   Admit iff `F[:n] <= input` component-wise and `input < U[:n]` component-wise.
-4. `[DECISION]` Chosen rule for short inputs: absent trailing components are not compared, so `1.14`
-   names the 1.14 series and admits, and `2.0` equals the excluded bound truncated and refuses.
-   The alternative "pad absent trailing components with zeros" was rejected: padding makes `1.14` equal
-   `1.14.0`, which sits below floor 1.14.4 and refuses, but the falsifier table requires `1.14` to admit.
-   Stated consequence: `1.14.0` refuses while `1.14` admits. Real package versions carry three
-   components, so a short input is a defensive case only.
+   Both sides carry exactly three components, so admit iff `F <= input`
+   component-wise and `input < U` component-wise.
+4. `[DECISION]` D7 — short input is unparseable and refuses: `1.14` and
+   `3.10` refuse with the family's named cause. The earlier truncation
+   rule failed open. It admitted `1.14`, which sits below the attested
+   1.14.4 floor, while it refused `1.14.0`, the three-component form of
+   the same version. The fail-closed invariant decides this rule: more
+   uncertainty must never make optimization more aggressive. The evidence
+   for the three-component grammar is the Unity SemVer contract (item 2).
+   A rule may not take its justification from a falsifier table written in
+   the same run — the table is not evidence.
 
 ### 4.4 Numeric proof
 
@@ -216,7 +230,7 @@ Rows 18 to 23 run twice, once for `com.vrchat.base` and once for `com.vrchat.ava
 | 13 | `2.0.0` | refuse | missing exclusive upper bound |
 | 14 | `2.0.0-a` | refuse | suffix stripped, or missing upper bound |
 | 15 | `1.9.0` | refuse | text sort of numeric parts, because `"1.9.0"` sorts above `"1.14.4"`; this row proves numeric per-component comparison |
-| 16 | `1.14` | admit | parser that demands exactly three components, so a two-component input throws or refuses |
+| 16 | `1.14` | refuse | the fail-open truncation rule that admits the two-component short form below the attested floor |
 | 17 | `1.15.0` | admit | residual exact equality at the floor |
 
 ### SDK Base and Avatars, causes `UnsupportedVrchatSdkBaseVersion` / `UnsupportedVrchatSdkAvatarsVersion`
@@ -229,9 +243,12 @@ Rows 18 to 23 run twice, once for `com.vrchat.base` and once for `com.vrchat.ava
 | 21 | `4.0.0` | refuse | missing exclusive upper bound |
 | 22 | `3.11.0-beta` | refuse | prerelease suffix stripped |
 | 23 | null | refuse | null coalesced to admit |
+| 24 | `3.10` | refuse | the fail-open truncation rule, as row 16, on both SDK causes (Base and Avatars) |
 
 Row 17 is an addition beyond the required set. It exists because the current test file uses `1.14.5`
 as a refusal case (`HostLifecycleCapabilityTests.cs:58`), and that case flips to admit under this policy.
+
+A controller review on 2026-09-04 found the earlier short-input rows unsound.
 
 ## 7. Scope and non-goals
 
