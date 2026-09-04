@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
@@ -1576,7 +1577,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            "AMUSE cutoff at bound",
                            material => material.SetFloat(
                                "_Cutoff",
-                               LilToonOpaqueConversion.MaxProvableCutoff),
+                               LilToonCutoutSourceEligibility.MaxProvableCutoff),
                            null,
                            null))
                 {
@@ -1939,6 +1940,1461 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 fixtures.BaseTearDown();
             }
+        }
+
+        // --- Task 6: the transparent family end to end -----------------------
+
+        /// <summary>
+        /// Routes the family-agnostic lilToon conversion seam parameter to
+        /// the family-specific verified seam function by fixture shader
+        /// reference — the transparent stand-in to
+        /// <see cref="VerifiedLilToonTestSeams.VerifiedTransparentConversionStep"/>,
+        /// everything else (the cutout stand-in first of all) to
+        /// <see cref="VerifiedLilToonTestSeams.VerifiedConversion"/>, whose
+        /// behavior for those materials is unchanged. Preparation dispatches
+        /// on the closed family enum internally and passes one seam function
+        /// through; the fixtures are distinguished by shader reference,
+        /// never by name, matching the seams file's own rule.
+        /// </summary>
+        private static bool VerifiedFamilyConversion(
+            Material live,
+            CapturedMaterialEvidence derived,
+            Material preparedOpaque,
+            out Material opaque,
+            out LilToonOpaqueConversionRefusal refusal)
+        {
+            if (live != null && live.shader == Shader.Find(
+                    LilToonFixtureNames.Transparent))
+            {
+                return VerifiedLilToonTestSeams
+                    .VerifiedTransparentConversionStep(
+                        live, derived, preparedOpaque,
+                        out opaque, out refusal);
+            }
+
+            return VerifiedLilToonTestSeams.VerifiedConversion(
+                live, derived, preparedOpaque, out opaque, out refusal);
+        }
+
+        /// <summary>
+        /// Row 18 — the prepared-clone contract for a transparent stand-in
+        /// source, through the real capture and preparation path.
+        /// <para>
+        /// (a) A transparent fixture slot over a fully-opaque mip chain
+        /// converts to one clone carrying the attested opaque stand-in
+        /// target shader, all 18 canonical recipe values read back, queue
+        /// 2000, <c>RenderType=Opaque</c>, no non-canonical fact, while the
+        /// source material keeps every observed fact.
+        /// </para>
+        /// <para>
+        /// (b) A target shader missing one recipe property throws
+        /// <see cref="InvalidOperationException"/> — a compatibility
+        /// failure, never a refusal — before any clone exists, and no
+        /// material leaks.
+        /// </para>
+        /// <para>
+        /// The third throw checkpoint (a read-back disagreement after
+        /// <c>DestroyImmediate</c>) is a defensive invariant against Unity
+        /// breaking its own material write contract: the material property
+        /// bag is name-keyed and round-trips every <c>SetFloat</c>
+        /// regardless of how the target shader declares the property
+        /// (verified empirically against Float/2D/Vector declarations), and
+        /// the queue and tag writes round-trip likewise, so no deterministic
+        /// public synthetic shader can drive that checkpoint to fire. The
+        /// checkpoint's detector is exercised positively by the read-backs
+        /// below and its policy (throw, not refusal) by (b). Recorded as a
+        /// plan defect for the implementation report.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TransparentFixtureSlotPreparesAndCarriesTheOpaqueCloneContract()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // (a) The end-to-end prepared-clone contract.
+                var root = new GameObject(
+                    "AMUSE transparent clone contract");
+                Material material = null;
+                Mesh mesh = null;
+                AmusePlatformFinishState amuse = null;
+                try
+                {
+                    material =
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial();
+                    material.SetTexture(
+                        "_MainTex",
+                        fixtures.ImportFullyOpaqueMipmap(
+                            "transparent_clone_contract"));
+                    var renderer = AddSingleTriangleRenderer(
+                        root, material, out mesh);
+                    mesh.uv = new[]
+                    {
+                        new Vector2(0.25f, 0.25f),
+                        new Vector2(0.75f, 0.25f),
+                        new Vector2(0.25f, 0.75f),
+                    };
+
+                    var sourceDigest =
+                        TransparentSourceDigest(material);
+
+                    amuse = RunBarrier(
+                        root,
+                        selectRequest: VerifiedLilToonTestSeams
+                            .SelectVerifiedFixtureRequest,
+                        capturer: VerifiedLilToonTestSeams
+                            .CaptureVerifiedFixtureMaterials,
+                        resolveSemantics: VerifiedLilToonTestSeams
+                            .VerifiedAlphaOnly,
+                        lilToonConversion: VerifiedFamilyConversion);
+
+                    Assert.That(
+                        amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: the transparent slot over " +
+                        "a fully-opaque mip chain must prove one opaque " +
+                        "candidate triangle");
+                    foreach (
+                        AlphaSeparationSlotRefusal reason in Enum
+                            .GetValues(typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the transparent slot must convert: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(
+                        amuse.Separation.CreatedClones, Has.Count.EqualTo(1),
+                        "exactly one canonical opaque clone must be " +
+                        "created for the transparent source");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            material, out var opaque),
+                        Is.True,
+                        "the prepared record must carry the transparent " +
+                        "source-to-opaque mapping");
+                    Assert.That(
+                        opaque, Is.SameAs(amuse.Separation.CreatedClones[0]),
+                        "the mapped opaque result must be the one created " +
+                        "clone");
+                    AssertPreparedCloneCarriesTheCanonicalOpaqueTarget(
+                        opaque);
+                    Assert.That(
+                        TransparentSourceDigest(material),
+                        Is.EqualTo(sourceDigest),
+                        "the transparent source material must be " +
+                        "unchanged by its own conversion");
+                }
+                finally
+                {
+                    DestroyGenerated(amuse);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh);
+                    }
+
+                    UnityEngine.Object.DestroyImmediate(root);
+                    if (material != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(material);
+                    }
+                }
+
+                // (b) A target shader missing one recipe property throws
+                // before any clone exists.
+                var cloneContractFolder =
+                    TransparentCloneContractTempFolder;
+                if (!AssetDatabase.IsValidFolder(cloneContractFolder))
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", "AmuseTests_AlphaCloneContract");
+                }
+
+                try
+                {
+                    var missingTarget = ImportShaderWithoutRecipeProperty();
+                    var source =
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial();
+                    try
+                    {
+                        var materialsBefore = LoadedMaterialCount();
+
+                        Assert.Throws<InvalidOperationException>(
+                            () => LilToonOpaqueTarget
+                                .PrepareCanonicalOpaqueClone(
+                                    source, missingTarget),
+                            "a target that cannot declare the recipe is a " +
+                            "compatibility failure, which must throw rather " +
+                            "than refuse or half-convert");
+
+                        Assert.That(
+                            LoadedMaterialCount(),
+                            Is.EqualTo(materialsBefore),
+                            "the property check runs before any clone " +
+                            "exists, so no material may leak");
+                    }
+                    finally
+                    {
+                        UnityEngine.Object.DestroyImmediate(source);
+                    }
+                }
+                finally
+                {
+                    AssetDatabase.DeleteAsset(cloneContractFolder);
+                    Assert.That(
+                        AssetDatabase.IsValidFolder(cloneContractFolder),
+                        Is.False,
+                        "the test-owned clone-contract directory must be " +
+                        "deleted even when an assertion fails");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Row 15 — the animation closure over the transparent slot. For
+        /// each proof-relevant binding the plan names — the color alpha,
+        /// the theorem scalar, both transparent-only scalars, the distance
+        /// fade, the dissolve parameters, the alpha mask gate, the scroll
+        /// rotation, the main scale-offset, and one clause-2 recipe gate —
+        /// a curve disagreeing with the serialized value refuses, and the
+        /// refusal is asserted at its own named member: the alpha-request
+        /// inputs at
+        /// <see cref="RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton"/>,
+        /// the recipe input at
+        /// <see cref="AlphaSeparationSlotRefusal.ConversionStateNotAdmitted"/>.
+        /// <para>
+        /// Falsifies live-value admission and any transparent request that
+        /// omits a proof-relevant property: an omitted property makes its
+        /// binding unrecognized or invisible, which fails the member
+        /// assertion — the case is asserted to be recognized
+        /// (<c>ConversionBindingUnrecognized</c> stays zero) and refused at
+        /// its own layer, never merely "not converted".
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TransparentNonSingletonAnimationRefusesAtItsRelevanceLayer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_animation");
+                using var probe = TransparentArmFixture.Create(
+                    texture, "AMUSE transparent defaults probe",
+                    null, null, null);
+
+                foreach (var animated in
+                         TransparentAnimatedPropertyCases(probe.Material))
+                {
+                    using var arm = TransparentArmFixture.Create(
+                        texture,
+                        "AMUSE transparent non-singleton " + animated.Label,
+                        null,
+                        animated.Binding,
+                        animated.Refused);
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None),
+                        animated.Label);
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .ConversionBindingUnrecognized),
+                        Is.Zero,
+                        animated.Label + ": the binding must be recognized " +
+                        "by the transparent requests; unrecognized would be " +
+                        "the signature of an omitted proof-relevant " +
+                        "property");
+                    if (animated.AlphaRelevant)
+                    {
+                        Assert.That(
+                            amuse.RendererRefusalCount(
+                                RendererAnalysisRefusal
+                                    .AnimatedMaterialPropertyNotSingleton),
+                            Is.EqualTo(1),
+                            animated.Label + ": every transparent alpha " +
+                            "input must refuse at alpha admission when its " +
+                            "curve disagrees with the serialized value");
+                        Assert.That(
+                            amuse.SemanticallyRefusedRendererCount,
+                            Is.EqualTo(1), animated.Label);
+                        Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                            animated.Label);
+                    }
+                    else
+                    {
+                        Assert.That(amuse.SemanticallyRefusedRendererCount,
+                            Is.Zero, animated.Label);
+                        Assert.That(
+                            amuse.SlotRefusalCount(
+                                AlphaSeparationSlotRefusal
+                                    .ConversionStateNotAdmitted),
+                            Is.EqualTo(1),
+                            animated.Label + ": every conversion recipe " +
+                            "input must refuse at conversion admission when " +
+                            "its curve disagrees with the serialized value");
+                        Assert.That(amuse.AnalyzedRendererCount,
+                            Is.EqualTo(1), animated.Label);
+                        Assert.That(amuse.OpaqueCandidateTriangleCount,
+                            Is.EqualTo(1), animated.Label);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Null,
+                        animated.Label +
+                        ": no non-singleton proof input may prepare");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The transparent slot's animated property cases: exactly the row
+        /// 15 list, with the vector inputs at component granularity like
+        /// the cutout suite. <c>_UseDither</c> is deliberately absent from
+        /// this table — it is not a transparent proof input, and its inert
+        /// binding has its own test.
+        /// </summary>
+        private static IReadOnlyList<(
+            string Label,
+            string Binding,
+            float Serialized,
+            float Refused,
+            bool AlphaRelevant)> TransparentAnimatedPropertyCases(
+                Material material)
+        {
+            var cases = new List<(
+                string Label,
+                string Binding,
+                float Serialized,
+                float Refused,
+                bool AlphaRelevant)>();
+
+            foreach (var scalar in new[]
+                     {
+                         "_Cutoff",
+                         "_AlphaBoostFA",
+                         "_SubpassCutoff",
+                         "_AlphaMaskMode",
+                     })
+            {
+                var serialized = material.GetFloat(scalar);
+                cases.Add((
+                    scalar,
+                    "material." + scalar,
+                    serialized,
+                    serialized + 1f,
+                    true));
+            }
+
+            var colorAlpha = material.GetColor("_Color").a;
+            cases.Add((
+                "_Color.a",
+                "material._Color.a",
+                colorAlpha,
+                colorAlpha + 1f,
+                true));
+
+            AddVectorCases(
+                cases,
+                "_DistanceFade",
+                material.GetVector("_DistanceFade"));
+            AddVectorCases(
+                cases,
+                "_DissolveParams",
+                material.GetVector("_DissolveParams"));
+            AddVectorCases(
+                cases,
+                "_MainTex_ScrollRotate",
+                material.GetVector("_MainTex_ScrollRotate"));
+
+            var scale = material.GetTextureScale("_MainTex");
+            var offset = material.GetTextureOffset("_MainTex");
+            AddComponentCase(cases, "_MainTex_ST", "x", scale.x);
+            AddComponentCase(cases, "_MainTex_ST", "y", scale.y);
+            AddComponentCase(cases, "_MainTex_ST", "z", offset.x);
+            AddComponentCase(cases, "_MainTex_ST", "w", offset.y);
+
+            // One representative clause-2 gate: a canonical recipe scalar
+            // that conversion writes and the runtime could overwrite.
+            var zWrite = material.GetFloat("_ZWrite");
+            cases.Add((
+                "_ZWrite",
+                "material._ZWrite",
+                zWrite,
+                zWrite + 1f,
+                false));
+
+            return cases;
+        }
+
+        /// <summary>
+        /// The settled animated-<c>_UseDither</c> contract (design §8, Task
+        /// 3 Step 8). <c>LIL_RENDER 2</c> compiles the runtime dither path
+        /// out entirely, so an animated <c>material._UseDither</c> binding
+        /// on a transparent-only renderer is provably inert: it resolves
+        /// <see cref="ProofRelevantBindingResolution.Irrelevant"/> against
+        /// the family's own relevance requests, and the real capture and
+        /// preparation path converts the renderer into a result observably
+        /// equivalent to the same renderer without the binding.
+        /// <para>
+        /// The two scenarios are two independent preparation runs, so the
+        /// equivalence table asserts observable facts — triangle outcome,
+        /// the absence of every refusal member, clone count, the attested
+        /// target shader, queue and <c>RenderType</c>, all 18 canonical
+        /// values, and source preservation — never object identity across
+        /// runs. <c>Is.SameAs</c> appears only within one run, between the
+        /// mapping's clone and the run's own created clone.
+        /// </para>
+        /// <para>
+        /// The same test drives a cutout source with the same disagreeing
+        /// binding and asserts it still resolves through the cutout
+        /// <c>_UseDither</c> request and still hits the cutout gate, so the
+        /// transparent omission did not remove cutout relevance. A
+        /// transparent-only resolution other than <c>Irrelevant</c> is
+        /// stop condition 6, not an assertion to adjust.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void AnimatedUseDither_IsIgnoredAsProvablyInert()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_use_dither");
+
+                // The settled resolution, asserted directly against the
+                // family's own relevance objects: a dither binding on the
+                // analyzed renderer is irrelevant under both the alpha
+                // request and the conversion request.
+                var ditherBinding = new CapturedFloatBinding(
+                    "body",
+                    typeof(SkinnedMeshRenderer).FullName,
+                    "material._UseDither",
+                    true,
+                    new[] { 1f });
+                Assert.That(
+                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                        ditherBinding,
+                        "body",
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest,
+                        out _),
+                    Is.EqualTo(ProofRelevantBindingResolution.Irrelevant),
+                    "the transparent alpha request must not recognize the " +
+                    "dither binding: recognizing it would refuse an inert " +
+                    "binding");
+                Assert.That(
+                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                        ditherBinding,
+                        "body",
+                        LilToonTransparentSourceEligibility
+                            .ConversionEvidenceRequest,
+                        out _),
+                    Is.EqualTo(ProofRelevantBindingResolution.Irrelevant),
+                    "the transparent conversion request must not recognize " +
+                    "the dither binding: carrying _UseDither quietly would " +
+                    "make the binding conversion-relevant");
+
+                // The bound scenario: the real relevance pass and the real
+                // preparation entry over a transparent-only renderer whose
+                // one clip animates material._UseDither away from its
+                // serialized default.
+                var bound = TransparentDitherScenario.Run(
+                    fixtures, texture, withBinding: true);
+                var unbound = default(TransparentDitherScenario);
+                try
+                {
+                    unbound = TransparentDitherScenario.Run(
+                        fixtures, texture, withBinding: false);
+
+                    Assert.That(bound.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "the bound scenario's triangle must prove opaque");
+                    Assert.That(unbound.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(bound.OpaqueCandidateTriangleCount),
+                        "the unbound scenario must prove the same triangle " +
+                        "outcome");
+
+                    Assert.That(bound.HasAnyRefusal, Is.False,
+                        "the bound scenario must complete with no refusal " +
+                        "member of any kind, including the unrecognized-" +
+                        "binding refusal");
+                    Assert.That(unbound.HasAnyRefusal,
+                        Is.EqualTo(bound.HasAnyRefusal));
+
+                    Assert.That(bound.CloneCount, Is.EqualTo(1),
+                        "exactly one canonical opaque clone must exist in " +
+                        "the bound scenario");
+                    Assert.That(unbound.CloneCount,
+                        Is.EqualTo(bound.CloneCount));
+
+                    Assert.That(bound.CloneShaderName,
+                        Is.EqualTo(LilToonFixtureNames.OpaqueTarget),
+                        "the bound scenario's clone must carry the " +
+                        "attested opaque target stand-in");
+                    Assert.That(unbound.CloneShaderName,
+                        Is.EqualTo(bound.CloneShaderName));
+
+                    Assert.That(bound.CloneQueue,
+                        Is.EqualTo(LilToonOpaqueTarget
+                            .CanonicalOpaqueRenderQueue));
+                    Assert.That(bound.CloneRenderType,
+                        Is.EqualTo(LilToonOpaqueTarget
+                            .CanonicalOpaqueRenderType));
+                    Assert.That(unbound.CloneQueue,
+                        Is.EqualTo(bound.CloneQueue));
+                    Assert.That(unbound.CloneRenderType,
+                        Is.EqualTo(bound.CloneRenderType));
+
+                    Assert.That(bound.CloneRecipe,
+                        Is.EqualTo(unbound.CloneRecipe),
+                        "all 18 canonical values must be equal across the " +
+                        "two scenarios, read back property by property");
+                    Assert.That(
+                        LilToonOpaqueTarget.TryFindNonCanonicalFact(
+                            bound.Clone, out _),
+                        Is.False,
+                        "the bound scenario's clone must read back wholly " +
+                        "canonical");
+
+                    Assert.That(bound.SourceDigest,
+                        Is.EqualTo(bound.SourceDigestBefore),
+                        "the bound scenario's source material, mesh and " +
+                        "clip must be unchanged");
+                    Assert.That(unbound.SourceDigest,
+                        Is.EqualTo(unbound.SourceDigestBefore),
+                        "the unbound scenario's source material and mesh " +
+                        "must be unchanged");
+                    Assert.That(
+                        bound.SourceDigest, Is.EqualTo(unbound.SourceDigest),
+                        "both scenarios must start from the same source " +
+                        "facts");
+                }
+                finally
+                {
+                    unbound.Dispose();
+                }
+
+                bound.Dispose();
+
+                // The cutout control: the same disagreeing binding still
+                // resolves through the cutout _UseDither request and still
+                // hits the cutout gate at alpha admission.
+                using (var arm = CutoutArmFixture.Create(
+                           texture,
+                           "AMUSE cutout animated dither gate",
+                           null,
+                           "material._UseDither",
+                           1f))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.RendererRefusalCount(
+                            RendererAnalysisRefusal
+                                .AnimatedMaterialPropertyNotSingleton),
+                        Is.EqualTo(1),
+                        "the cutout family must still treat an animated " +
+                        "_UseDither as a proof input and refuse the " +
+                        "disagreeing curve at its own gate");
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.EqualTo(1));
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.Zero);
+                    Assert.That(amuse.Separation, Is.Null);
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// One transparent-only dither scenario: a single-triangle renderer
+        /// over the fully-opaque chain, optionally carrying one clip that
+        /// animates <c>material._UseDither</c> to 1 against the serialized
+        /// default 0, run through the real capture and preparation path
+        /// with the family-routing conversion seam.
+        /// </summary>
+        private sealed class TransparentDitherScenario : IDisposable
+        {
+            private GameObject root;
+            private Mesh mesh;
+            private AnimationClip clip;
+            private AnimatorController controller;
+            private AmusePlatformFinishState amuse;
+
+            internal Material Source { get; private set; }
+            internal string SourceDigestBefore { get; private set; }
+            internal string SourceDigest { get; private set; }
+            internal int OpaqueCandidateTriangleCount { get; private set; }
+            internal bool HasAnyRefusal { get; private set; }
+            internal int CloneCount { get; private set; }
+            internal Material Clone { get; private set; }
+            internal string CloneShaderName { get; private set; }
+            internal int CloneQueue { get; private set; }
+            internal string CloneRenderType { get; private set; }
+            internal float[] CloneRecipe { get; private set; }
+
+            internal static TransparentDitherScenario Run(
+                LilToonTransparentConversionFixtures fixtures,
+                Texture texture,
+                bool withBinding)
+            {
+                var scenario = new TransparentDitherScenario
+                {
+                    root = new GameObject(
+                        "AMUSE transparent dither " +
+                        (withBinding ? "bound" : "unbound")),
+                    Source = LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial(),
+                };
+                scenario.Source.SetTexture("_MainTex", texture);
+
+                scenario.mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                scenario.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(scenario.mesh);
+
+                var renderer =
+                    scenario.root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = scenario.mesh;
+                renderer.sharedMaterials = new[] { scenario.Source };
+
+                if (withBinding)
+                {
+                    scenario.clip = NewFloatClip(
+                        scenario.root.name + " clip", string.Empty,
+                        "material._UseDither", 1f);
+                    scenario.controller = NewController(
+                        scenario.root, scenario.root.name + " graph",
+                        scenario.clip);
+                }
+
+                scenario.SourceDigestBefore =
+                    TransparentSourceDigest(scenario.Source);
+
+                scenario.amuse = RunBarrier(
+                    scenario.root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+
+                scenario.SourceDigest =
+                    TransparentSourceDigest(scenario.Source);
+                scenario.OpaqueCandidateTriangleCount =
+                    scenario.amuse.OpaqueCandidateTriangleCount;
+                scenario.HasAnyRefusal =
+                    scenario.amuse.AvatarRefusal !=
+                        AvatarAnimationRefusal.None ||
+                    scenario.amuse.SemanticallyRefusedRendererCount != 0 ||
+                    scenario.amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .UnrecognizedAnimatedMaterialBinding) != 0 ||
+                    Enum.GetValues(typeof(AlphaSeparationSlotRefusal))
+                        .Cast<AlphaSeparationSlotRefusal>()
+                        .Where(reason =>
+                            reason != AlphaSeparationSlotRefusal.None)
+                        .Any(reason =>
+                            scenario.amuse.SlotRefusalCount(reason) != 0);
+
+                if (scenario.amuse.Separation != null)
+                {
+                    scenario.CloneCount =
+                        scenario.amuse.Separation.CreatedClones.Count;
+                    if (scenario.amuse.Separation.TryGetOpaque(
+                            scenario.Source, out var clone))
+                    {
+                        scenario.Clone = clone;
+                        scenario.CloneShaderName = clone.shader.name;
+                        scenario.CloneQueue = clone.renderQueue;
+                        scenario.CloneRenderType =
+                            clone.GetTag(
+                                LilToonOpaqueTarget.RenderTypeTagName,
+                                false);
+                        scenario.CloneRecipe = LilToonOpaqueTarget
+                            .CanonicalOpaqueProperties
+                            .Select(recipe => clone.GetFloat(recipe.Property))
+                            .ToArray();
+                    }
+                }
+
+                return scenario;
+            }
+
+            public void Dispose()
+            {
+                DestroyGenerated(amuse);
+                if (root != null)
+                {
+                    DestroyControllerGraph(root, controller);
+                }
+
+                if (controller != null)
+                {
+                    DestroyControllerGraph(controller);
+                }
+
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (Source != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(Source);
+                }
+
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Row 20 — locality. A renderer whose transparent slot refuses at
+        /// conversion (an eligibility violation the alpha proof does not
+        /// touch) or at alpha resolution (an interpretation refusal)
+        /// keeps both admitted siblings — the Poiyomi slot and the
+        /// lilToon-cutout slot — fully converted, and the refusal never
+        /// spreads renderer-wide.
+        /// <para>
+        /// Falsifies family uncertainty spreading renderer-wide: a barrier
+        /// that refuses or drops the whole renderer because one slot's
+        /// transparent family could not convert.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void RefusedTransparentSlotLeavesItsAdmittedSiblingsConverted()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_locality");
+
+                // (a) Conversion-stage refusal: the transparent slot's
+                // triangle is proven, but eligibility refuses the depth
+                // comparison, so only that slot is dropped.
+                using (var arm = LocalityArmFixture.Create(
+                           fixtures, opaqueTexture,
+                           transparent => transparent.SetFloat("_ZTest", 8f)))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        "a conversion-stage slot refusal must never " +
+                        "refuse the renderer");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(3),
+                        "fixture precondition: all three slots must " +
+                        "prove their triangles before conversion");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.EqualTo(1),
+                        "the transparent slot's eligibility violation " +
+                        "must refuse exactly its own slot");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the two admitted siblings must still prepare");
+                    Assert.That(
+                        amuse.Separation.Renderers[0].CandidateSlots,
+                        Has.Count.EqualTo(2),
+                        "exactly the two admitted sibling slots must " +
+                        "survive preparation");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.PoiyomiMaterial, out _),
+                        Is.True, "the Poiyomi sibling must convert");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.CutoutMaterial, out _),
+                        Is.True, "the lilToon-cutout sibling must convert");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.TransparentMaterial, out _),
+                        Is.False,
+                        "the refused transparent slot must map nothing");
+                    Assert.That(amuse.Separation.CreatedClones,
+                        Has.Count.EqualTo(2),
+                        "exactly the two admitted siblings may clone");
+                }
+
+                // (b) Alpha-resolution refusal: the transparent slot's
+                // interpretation is Unknown, which unproves only its own
+                // triangles while the siblings resolve, classify, convert
+                // and prepare.
+                using (var arm = LocalityArmFixture.Create(
+                           fixtures, opaqueTexture,
+                           transparent => transparent.SetFloat(
+                               "_SubpassCutoff", 2f)))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        "a slot-local interpretation refusal must never " +
+                        "refuse the renderer while a sibling slot " +
+                        "resolves");
+                    Assert.That(amuse.AnalyzedRendererCount,
+                        Is.EqualTo(1),
+                        "the renderer must still be analyzed over its " +
+                        "resolving slots");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(2),
+                        "exactly the two sibling triangles may prove " +
+                        "opaque; the Unknown transparent triangle must " +
+                        "not become ProvenOpaque");
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(
+                        amuse.Separation.Renderers[0].CandidateSlots,
+                        Has.Count.EqualTo(2));
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.PoiyomiMaterial, out _),
+                        Is.True);
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.CutoutMaterial, out _),
+                        Is.True);
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            arm.TransparentMaterial, out _),
+                        Is.False,
+                        "the all-Unknown transparent outcome must not " +
+                        "prepare");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
+        /// slot and a configurable transparent slot over one mesh, run
+        /// through the real barrier with the family-routing conversion
+        /// seam.
+        /// </summary>
+        private sealed class LocalityArmFixture : IDisposable
+        {
+            private readonly LilToonTransparentConversionFixtures fixtures;
+            private GameObject root;
+            private Mesh mesh;
+            private AmusePlatformFinishState amuse;
+
+            internal Material PoiyomiMaterial { get; private set; }
+            internal Material CutoutMaterial { get; private set; }
+            internal Material TransparentMaterial { get; private set; }
+
+            private LocalityArmFixture(
+                LilToonTransparentConversionFixtures owner)
+            {
+                fixtures = owner;
+            }
+
+            internal static LocalityArmFixture Create(
+                LilToonTransparentConversionFixtures fixtures,
+                Texture opaqueTexture,
+                Action<Material> configureTransparent)
+            {
+                var arm = new LocalityArmFixture(fixtures)
+                {
+                    root = new GameObject("AMUSE transparent locality"),
+                    PoiyomiMaterial = VerifiedOpaqueMaterial(),
+                    CutoutMaterial =
+                        LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
+                    TransparentMaterial =
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial(),
+                };
+                arm.CutoutMaterial.SetTexture("_MainTex", opaqueTexture);
+                arm.TransparentMaterial.SetTexture(
+                    "_MainTex", opaqueTexture);
+                configureTransparent(arm.TransparentMaterial);
+
+                arm.mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                        new Vector3(2f, 0f, 0f),
+                        new Vector3(3f, 0f, 0f),
+                        new Vector3(2f, 1f, 0f),
+                        new Vector3(4f, 0f, 0f),
+                        new Vector3(5f, 0f, 0f),
+                        new Vector3(4f, 1f, 0f),
+                    },
+                    subMeshCount = 3,
+                };
+                arm.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                arm.mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+                arm.mesh.SetTriangles(new[] { 6, 7, 8 }, 2);
+                FillInBoundsUvs(arm.mesh);
+
+                var renderer = arm.root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = arm.mesh;
+                renderer.sharedMaterials = new[]
+                {
+                    arm.PoiyomiMaterial,
+                    arm.CutoutMaterial,
+                    arm.TransparentMaterial,
+                };
+
+                return arm;
+            }
+
+            internal AmusePlatformFinishState Run()
+            {
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+                return amuse;
+            }
+
+            public void Dispose()
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (PoiyomiMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(PoiyomiMaterial);
+                }
+
+                if (CutoutMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(CutoutMaterial);
+                }
+
+                if (TransparentMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(TransparentMaterial);
+                }
+
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Row 20 — an all-<c>Unknown</c> transparent outcome never becomes
+        /// <c>ProvenOpaque</c>, for each named cause: an unsupported texture
+        /// format, streamed mips, a texture whose alpha chain cannot be
+        /// produced (missing readback), a degenerate triangle, a NaN UV,
+        /// and a support-region overflow. Nothing is proven, so nothing is
+        /// retained and nothing could ever be applied from these slots.
+        /// </summary>
+        [Test]
+        public void TransparentAllUnknownOutcomesNeverBecomeProvenOpaque()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            var renderTexture = new RenderTexture(4, 4, 0);
+            try
+            {
+                fixtures.BaseSetUp();
+
+                var regionOverflowTexture =
+                    fixtures.ImportMostlyOpaqueMipmapWithOneLesserTexel(
+                        "transparent_region_overflow");
+                var standardTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_unknown_causes");
+
+                var cases = new (string Label, Texture Texture,
+                    Action<Mesh> ConfigureMesh)[]
+                {
+                    ("unsupported-format",
+                        fixtures.ImportUnsupportedFormatTexture(
+                            "transparent_unsupported_format"),
+                        null),
+                    ("streamed-mips",
+                        fixtures.ImportStreamingMipmap(
+                            "transparent_streaming"),
+                        null),
+                    ("missing-readback", renderTexture, null),
+                    ("degenerate-triangle", standardTexture,
+                        mesh =>
+                        {
+                            mesh.vertices = new[]
+                            {
+                                Vector3.zero,
+                                Vector3.right,
+                                new Vector3(2f, 0f, 0f),
+                            };
+                        }),
+                    ("nan-uv", standardTexture,
+                        mesh =>
+                        {
+                            var uv = mesh.uv;
+                            uv[0] = new Vector2(float.NaN, 0f);
+                            mesh.uv = uv;
+                        }),
+                    ("region-overflow", regionOverflowTexture,
+                        mesh =>
+                        {
+                            mesh.uv = new[]
+                            {
+                                new Vector2(0f, 0f),
+                                new Vector2(31.9375f, 0f),
+                                new Vector2(0f, 31.9375f),
+                            };
+                        }),
+                };
+
+                foreach (var unknownCase in cases)
+                {
+                    var root = new GameObject(
+                        "AMUSE transparent unknown " + unknownCase.Label);
+                    Material material = null;
+                    Mesh mesh = null;
+                    AmusePlatformFinishState amuse = null;
+                    try
+                    {
+                        material =
+                            LilToonFixtureTestBase
+                                .CreateTransparentConversionMaterial();
+                        material.SetTexture("_MainTex", unknownCase.Texture);
+                        var renderer = AddSingleTriangleRenderer(
+                            root, material, out mesh);
+                        FillInBoundsUvs(mesh);
+                        unknownCase.ConfigureMesh?.Invoke(mesh);
+
+                        amuse = RunBarrier(
+                            root,
+                            selectRequest: VerifiedLilToonTestSeams
+                                .SelectVerifiedFixtureRequest,
+                            capturer: VerifiedLilToonTestSeams
+                                .CaptureVerifiedFixtureMaterials,
+                            resolveSemantics: VerifiedLilToonTestSeams
+                                .VerifiedAlphaOnly,
+                            lilToonConversion: VerifiedFamilyConversion);
+
+                        Assert.That(
+                            amuse.OpaqueCandidateTriangleCount, Is.Zero,
+                            unknownCase.Label +
+                            ": an all-Unknown transparent outcome must " +
+                            "never become ProvenOpaque");
+                        // Where the evidence-level refusals land (the
+                        // capture's format/sampler gates or the slot's
+                        // resolution) can vary across Unity versions, so
+                        // the assertion mirrors the cutout twin: the
+                        // uncertainty may refuse resolution or analyze to
+                        // no candidate, but never prove opaque.
+                        var unknownRefusals = amuse.RendererRefusalCount(
+                            RendererAnalysisRefusal
+                                .AdmittedMaterialSemanticsUnknown);
+                        Assert.That(
+                            unknownRefusals,
+                            Is.EqualTo(0).Or.EqualTo(1),
+                            unknownCase.Label +
+                            ": unsupported evidence may refuse resolution " +
+                            "or analyze to no candidate, but never prove " +
+                            "opaque");
+                        if (unknownRefusals == 0)
+                        {
+                            Assert.That(amuse.AnalyzedRendererCount,
+                                Is.EqualTo(1), unknownCase.Label);
+                        }
+                        Assert.That(amuse.Separation, Is.Null,
+                            unknownCase.Label +
+                            ": nothing may be retained for an unproven " +
+                            "slot, so nothing can ever be applied from it");
+                    }
+                    finally
+                    {
+                        DestroyGenerated(amuse);
+                        if (mesh != null)
+                        {
+                            UnityEngine.Object.DestroyImmediate(mesh);
+                        }
+
+                        UnityEngine.Object.DestroyImmediate(root);
+                        if (material != null)
+                        {
+                            UnityEngine.Object.DestroyImmediate(material);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(renderTexture);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        // --- Task 6 transparent helpers ---------------------------------------
+
+        private const string TransparentCloneContractTempFolder =
+            "Assets/AmuseTests_AlphaCloneContract";
+
+        private const string TransparentCloneContractMissingShaderName =
+            "Hidden/Alrauna/AmuseTests/TransparentCloneContractMissingBlendOpFA";
+
+        /// <summary>
+        /// Writes and imports the clone-contract target stand-in: the
+        /// canonical opaque recipe's properties minus
+        /// <c>_BlendOpFA</c>, so the shader-level property check fires
+        /// before any clone exists.
+        /// </summary>
+        private static Shader ImportShaderWithoutRecipeProperty()
+        {
+            if (!AssetDatabase.IsValidFolder(
+                    TransparentCloneContractTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_AlphaCloneContract");
+            }
+
+            var path = TransparentCloneContractTempFolder +
+                       "/TransparentCloneContractMissingBlendOpFA.shader";
+            File.WriteAllText(
+                path,
+                "Shader \"" +
+                TransparentCloneContractMissingShaderName + "\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        _Cutoff (\"Cutoff\", Range(0,1)) = 0.5\n" +
+                "        _SrcBlend (\"SrcBlend\", Float) = 1\n" +
+                "        _DstBlend (\"DstBlend\", Float) = 0\n" +
+                "        _AlphaToMask (\"AlphaToMask\", Float) = 0\n" +
+                "        _ZWrite (\"ZWrite\", Float) = 1\n" +
+                "        _ZTest (\"ZTest\", Float) = 4\n" +
+                "        _OffsetFactor (\"OffsetFactor\", Float) = 0\n" +
+                "        _OffsetUnits (\"OffsetUnits\", Float) = 0\n" +
+                "        _ColorMask (\"ColorMask\", Float) = 15\n" +
+                "        _SrcBlendAlpha (\"SrcBlendAlpha\", Float) = 1\n" +
+                "        _DstBlendAlpha (\"DstBlendAlpha\", Float) = 10\n" +
+                "        _BlendOp (\"BlendOp\", Float) = 0\n" +
+                "        _BlendOpAlpha (\"BlendOpAlpha\", Float) = 0\n" +
+                "        _SrcBlendFA (\"SrcBlendFA\", Float) = 1\n" +
+                "        _DstBlendFA (\"DstBlendFA\", Float) = 1\n" +
+                "        _SrcBlendAlphaFA (\"SrcBlendAlphaFA\", Float) = 0\n" +
+                "        _DstBlendAlphaFA (\"DstBlendAlphaFA\", Float) = 1\n" +
+                "        // _BlendOpFA deliberately absent.\n" +
+                "    }\n" +
+                "\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags { \"RenderType\" = \"Opaque\" }\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            CGPROGRAM\n" +
+                "            #pragma vertex vert\n" +
+                "            #pragma fragment frag\n" +
+                "            #include \"UnityCG.cginc\"\n" +
+                "            float4 vert(float4 vertex : POSITION) : " +
+                "SV_POSITION\n" +
+                "            { return UnityObjectToClipPos(vertex); }\n" +
+                "            fixed4 frag() : SV_Target\n" +
+                "            { return fixed4(1, 1, 1, 1); }\n" +
+                "            ENDCG\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n");
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+
+            var shader = Shader.Find(
+                TransparentCloneContractMissingShaderName);
+            Assert.That(
+                shader, Is.Not.Null,
+                "The clone-contract target stand-in must import.");
+            return shader;
+        }
+
+        /// <summary>
+        /// Reads back the whole prepared-clone contract on a generated
+        /// transparent-source clone: the attested opaque stand-in target,
+        /// the eighteen canonical recipe scalars, queue 2000,
+        /// <c>RenderType=Opaque</c>, and no non-canonical fact anywhere.
+        /// </summary>
+        private static void AssertPreparedCloneCarriesTheCanonicalOpaqueTarget(
+            Material clone)
+        {
+            foreach (var (property, value) in
+                         LilToonOpaqueTarget.CanonicalOpaqueProperties)
+            {
+                Assert.That(
+                    clone.GetFloat(property), Is.EqualTo(value),
+                    "canonical recipe '" + property + "'");
+            }
+
+            Assert.That(
+                clone.renderQueue,
+                Is.EqualTo(
+                    LilToonOpaqueTarget.CanonicalOpaqueRenderQueue),
+                "the clone must carry the canonical opaque queue");
+            Assert.That(
+                clone.GetTag(
+                    LilToonOpaqueTarget.RenderTypeTagName, false),
+                Is.EqualTo(
+                    LilToonOpaqueTarget.CanonicalOpaqueRenderType),
+                "the clone must carry the canonical opaque RenderType");
+            Assert.That(
+                LilToonOpaqueTarget.TryFindNonCanonicalFact(clone, out _),
+                Is.False,
+                "every canonical fact must read back on the clone");
+            Assert.That(
+                clone.shader,
+                Is.SameAs(Shader.Find(LilToonFixtureNames.OpaqueTarget)),
+                "the clone must carry the attested opaque stand-in " +
+                "target");
+        }
+
+        /// <summary>
+        /// The observed facts of a transparent source material — the state
+        /// a plausible conversion could falsify: identity, shader, queue,
+        /// RenderType, tint, the theorem and boost scalars, the distance
+        /// fade, and the assigned main texture.
+        /// </summary>
+        private static string TransparentSourceDigest(Material material)
+        {
+            var culture = CultureInfo.InvariantCulture;
+            var parts = new List<string>
+            {
+                material.name,
+                material.shader.name,
+                material.renderQueue.ToString(culture),
+                material.GetTag("RenderType", false),
+                material.mainTexture == null
+                    ? "<none>"
+                    : material.mainTexture.GetInstanceID().ToString(culture),
+                string.Join(
+                    ",",
+                    material.GetColor("_Color").r.ToString("R", culture),
+                    material.GetColor("_Color").g.ToString("R", culture),
+                    material.GetColor("_Color").b.ToString("R", culture),
+                    material.GetColor("_Color").a.ToString("R", culture)),
+                material.GetFloat("_Cutoff").ToString("R", culture),
+                material.GetFloat("_AlphaBoostFA").ToString("R", culture),
+                material.GetFloat("_SubpassCutoff").ToString("R", culture),
+                material.GetVector("_DistanceFade").x.ToString("R", culture),
+                material.GetVector("_DistanceFade").y.ToString("R", culture),
+                material.GetVector("_DistanceFade").z.ToString("R", culture),
+                material.GetVector("_DistanceFade").w.ToString("R", culture),
+            };
+            return string.Join("|", parts);
+        }
+
+        /// <summary>
+        /// One transparent conversion arm: a transient single-triangle
+        /// renderer fixture over a caller-owned texture plus the barrier
+        /// run over it, mirroring <see cref="CutoutArmFixture"/> with the
+        /// transparent stand-in material and the family-routing conversion
+        /// seam.
+        /// </summary>
+        private sealed class TransparentArmFixture : IDisposable
+        {
+            private GameObject root;
+            private Mesh mesh;
+            private AnimationClip clip;
+            private AnimatorController controller;
+            private AmusePlatformFinishState amuse;
+
+            private TransparentArmFixture() { }
+
+            internal Material Material { get; private set; }
+
+            internal static TransparentArmFixture Create(
+                Texture mainTex,
+                string rootName,
+                Action<Material> configure,
+                string animatedBinding,
+                float? animatedValue)
+            {
+                var fixture = new TransparentArmFixture
+                {
+                    root = new GameObject(rootName),
+                    Material = LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial(),
+                };
+                fixture.Material.SetTexture("_MainTex", mainTex);
+                configure?.Invoke(fixture.Material);
+
+                fixture.mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(fixture.mesh);
+
+                var renderer =
+                    fixture.root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = fixture.mesh;
+                renderer.sharedMaterials = new[] { fixture.Material };
+
+                if (animatedBinding != null)
+                {
+                    fixture.clip = NewFloatClip(
+                        rootName + " clip", string.Empty,
+                        animatedBinding, animatedValue ?? 0f);
+                    fixture.controller = NewController(
+                        fixture.root, rootName + " graph", fixture.clip);
+                }
+
+                return fixture;
+            }
+
+            internal AmusePlatformFinishState Run()
+            {
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+                return amuse;
+            }
+
+            public void Dispose()
+            {
+                DestroyGenerated(amuse);
+                if (root != null)
+                {
+                    DestroyControllerGraph(root, controller);
+                }
+
+                if (controller != null)
+                {
+                    DestroyControllerGraph(controller);
+                }
+
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (Material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(Material);
+                }
+
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Texture importer for the transparent conversion fixtures. The
+        /// importers are family-agnostic — schema, format and sampler
+        /// vocabulary only — so this reuses the cutout fixture class under
+        /// the transparent name and adds the two transparent-only fixtures:
+        /// the region-overflow chain and the unsupported-format asset.
+        /// </summary>
+        private sealed class LilToonTransparentConversionFixtures
+            : LilToonCutoutConversionFixtures
+        {
+            internal Texture2D ImportMostlyOpaqueMipmapWithOneLesserTexel(
+                string name)
+            {
+                const int size = 8;
+                var pixels = new Color32[size * size];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                // One texel below full opacity: the chain is neither fully
+                // opaque nor fully non-opaque, so classification reaches
+                // the support-region budget instead of short-circuiting.
+                pixels[0] = new Color32(255, 255, 255, 254);
+                return ImportMipmapTexture(
+                    name,
+                    size,
+                    size,
+                    pixels,
+                    FilterMode.Point,
+                    UnityEngine.TextureWrapMode.Repeat);
+            }
+
+            internal Texture2D ImportUnsupportedFormatTexture(string name)
+            {
+                // Directly allocatable in a format outside the alpha
+                // evidence's closed allowlist, producing no console error:
+                // the producer refuses it at the format gate, before any
+                // GPU work.
+                var texture = new Texture2D(
+                    8, 8, TextureFormat.ARGB4444, false);
+                var path = TempFolder + "/" + name + ".asset";
+                AssetDatabase.CreateAsset(texture, path);
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Imported texture '{path}' must load.");
+                Assert.That(
+                    loaded.format, Is.EqualTo(TextureFormat.ARGB4444),
+                    "fixture precondition: the format must be outside " +
+                    "the alpha evidence allowlist");
+                return loaded;
+            }
+        }
+
+
+        private static int LoadedMaterialCount()
+        {
+            return Resources.FindObjectsOfTypeAll<Material>().Length;
         }
         private static readonly string[] ExpectedLilToonCutoutAlphaScalars =
         {
@@ -2878,6 +4334,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private sealed class LilToonFixtureNames : LilToonFixtureTestBase
         {
             internal const string ShaderName = FixtureShaderName;
+
+            /// <summary>The schema-complete transparent source stand-in.</summary>
+            internal const string Transparent = TransparentConversionShaderName;
+
+            /// <summary>The distinct canonical opaque target stand-in.</summary>
+            internal const string OpaqueTarget = OpaqueConversionShaderName;
         }
 
         /// <summary>
@@ -2885,7 +4347,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// fixture assigns to <c>_MainTex</c>. The base's SetUp/TearDown are
         /// driven manually: NUnit never instantiates this helper.
         /// </summary>
-        private sealed class LilToonCutoutConversionFixtures
+        private class LilToonCutoutConversionFixtures
             : LilToonFixtureTestBase
         {
             internal Texture2D ImportFullyOpaqueMipmap(string name)
