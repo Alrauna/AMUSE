@@ -30,7 +30,7 @@ Labels:
   start.
 - Host-generated `Packages/manifest.json` and `packages-lock.json` toolchain churn
   appeared before setup. The investigation inspected the churn (it matched exactly the
-  toolchain/sysroot package set of `.omp/AGENTS.md` §Unity package and MCP safety) and
+  toolchain/sysroot package set of `AGENTS.md` §Unity package and MCP safety) and
   restored the files to HEAD with controller approval. The churn did not reappear
   during the investigation.
 - The investigation inspected lilToon 2.3.4 from the official upstream repository, tag
@@ -251,7 +251,7 @@ source-and-target attestation plus a recipe extension (§13, §15).
 | `_SrcBlendFA` / `_DstBlendFA` | 1 / 1 | common tail |
 | `_SrcBlendAlphaFA` / `_DstBlendAlphaFA` | 0 / 1 | common tail |
 | `_BlendOpFA` / `_BlendOpAlphaFA` | Max / Max | common tail |
-| `renderQueue` | `2000` (the opaque asset's declared `Geometry`) — AMUSE sets it explicitly | `[DECISION]`: the vendor restores the pre-call queue for non-Multi (`:266-267`), so its own utility does *not* produce a canonical queue. AMUSE's contract (`.omp/AGENTS.md` §Correctness and uncertainty authorizes a queue move under an opacity proof) wants the canonical value, and read-back validation must check it |
+| `renderQueue` | `2000` (the opaque asset's declared `Geometry`) — AMUSE sets it explicitly | `[DECISION]`: the vendor restores the pre-call queue for non-Multi (`:266-267`), so its own utility does *not* produce a canonical queue. AMUSE's contract (`AGENTS.md` §Correctness and uncertainty authorizes a queue move under an opacity proof) wants the canonical value, and read-back validation must check it |
 | `RenderType` override tag | `Opaque` — AMUSE sets it explicitly | `[DECISION]`: AMUSE sets and validates the canonical effective tag. `[MEASURED]` probe B1 found that, in Unity 2022.3.22f1 with the installed 2.3.4 package, assigning the opaque shader to a cloned material cleared a unique effective source override and read back the target's declared `Opaque` tag even on the vendor path. The explicit AMUSE write is still a deterministic canonical-state contract, not a fix for that measured stale override (`2026-08-30-liltoon-opaque-characterization.md` §§8, 10) |
 | `_Cutoff` / `_AlphaMask*` / dither / dissolve properties | **not written** | `[SOURCE]`: the utility writes none of them. On the opaque asset, `LIL_RENDER 0` excludes the alpha/clip path at compile time (`LilToonMaterialSemantics.cs:472-480`), so these properties cannot affect the proven-opaque triangles. `[INFERENCE]` they are not recipe properties and must not enter the conversion evidence request as read-plus-write facts. Whether any of them is an eligibility gate is a §7 open question |
 
