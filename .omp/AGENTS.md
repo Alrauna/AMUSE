@@ -114,3 +114,31 @@ Do not stage, commit, amend, push, open or merge a PR, delete branches, rewrite 
 
 Checked-out source and observed results have priority over agent reports. Never claim a test, build, reproduction, benchmark, or validation passed unless you ran and observed it.
 
+## Working discipline
+
+These rules bind every session.
+
+Brief implementation work in a written prompt. The prompt states:
+
+- the base branch and commit
+- the exact scope and the allowed mutations
+- the required RED/GREEN evidence
+- the validation steps and the expected report
+- the stop conditions and the Git authorization boundary
+
+Never hide an unresolved decision inside an implementation prompt.
+
+Stop and return evidence, options, and a recommendation when work reveals a broader abstraction, a new subsystem, a changed correctness contract, significant scope expansion, or a contradiction in the approved plan. A stop line limits production scope. It does not limit the investigation that explains the blocker.
+
+Respect approval gates. Never use another tool to bypass a denied operation.
+
+Before an important decision, test the assumptions. Name whether the assumed Unity, VRChat, NDMF, or shader behavior is verified or inferred. Check whether a mature ecosystem tool exposes a missing practical constraint. Check whether the requested guarantee is stricter than the product needs. Check whether uncertainty has too broad a scope, whether build ordering could make captured evidence stale, and whether the proposed tests fail with a plausible wrong implementation.
+
+When a plan or design is infeasible, unnecessarily strict, too general, misaligned with Unity or NDMF reality, or debt-creating, say so directly.
+
+Use the narrowest validation layer that can disprove the behavior. Then expand validation with the blast radius. Applicable layers include unit and semantic tests, characterization, Unity EditMode tests, NDMF build tests, public synthetic fixtures, source-preservation checks, and authorized Census validation. Unsupported cases must clearly show conservative refusal.
+
+Empirical evidence is not automatically universal proof. Do not demand mathematical proof when the declared product contract needs a well-characterized compatibility guarantee.
+
+When you find an independent prerequisite, do not mix it into the current work. Park the current work. Complete the prerequisite separately from fresh `main`. Resume the consumer from updated `main`.
+
