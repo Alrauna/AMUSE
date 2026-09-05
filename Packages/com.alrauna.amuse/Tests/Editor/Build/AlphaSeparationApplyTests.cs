@@ -134,7 +134,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     typeof(AnimatorServicesContext),
                     inner => inner.Run(
                         AlphaSeparationApply.PassName,
-                        AlphaSeparationApply.Execute));
+                        ctx => AlphaSeparationApply.Execute(ctx)));
             }
         }
 
