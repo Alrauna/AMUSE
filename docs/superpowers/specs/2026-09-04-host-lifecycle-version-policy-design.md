@@ -85,18 +85,17 @@ Reason: the build-path check reads Unity state (`HostLifecycleCapability.cs:138-
 platform check reads NDMF's qualified name (`:113-116`). Neither reads an SDK version.
 The SDK pins guard only the task-6 theorem scope (section 2).
 
-### D3-RESIDUAL
+### D3-RESIDUAL — closed on 2026-09-04
 
-A pre-flight stop-condition review found the conflict this widening creates.
-`Editor/Host/CommittedControllerGraph.cs:96` makes exactly the retained post-commit
-`GetInnateControllers` re-entry call that the task-6 audit pinned to SDK exactly 3.10.4.
-The theorem rests on the `AvatarDescriptorEditor3.OnEnable` fixed point, and the expression and
-collider initializers are empty in 3.10.4 (task-6 audit sections 2, 5, 6, and 11). `[SOURCE]`
-
-The controller reviewed this evidence and re-decided on 2026-09-04 to widen the SDK range anyway. `[DECISION]`
-The widening admits SDK versions where the re-entry write set is unverified.
-A bounded re-attestation investigation of the task-6 theorem for SDK versions above 3.10.4 is
-REQUIRED before any AMUSE release ships the widened range. `[DECISION]`
+The REQUIRED re-attestation ran the same day and shipped in PR #50. See
+`docs/superpowers/investigations/2026-09-04-host-range-reattestation.md`.
+Result: the task-6 fixed-point theorem HOLDS for every version the gate admits.
+Admitted and attested: NDMF 1.14.4 through 1.14.8, SDK Base and Avatars
+3.10.4 and 3.10.5. The 1.14.7 `VirtualControllerContext` hunk and the
+3.10.5 Colliders inspector change each required a new class (a) argument.
+The commit path and the OnEnable write set stayed byte-identical or
+equivalent in every admitted version. No release blocker remains from this
+section.
 
 Recorded residuals:
 
@@ -118,6 +117,22 @@ Reason: the grammar in section 4 is three short rules. A library adds surface fo
 `PackageVersion` returns null on a package miss (`HostLifecycleCapability.cs:161-180`), and the
 null-refusal test stays (`HostLifecycleCapabilityTests.cs:71-79`).
 A missing package is not a permissive case.
+
+`[DECISION] D8 — the declared upper bounds stay. NDMF admits any 1.x below 2.0.0, and the
+SDK admits any 3.x below 4.0.0. The bounds do not narrow to the attested maxima.`
+The controller first chose option 2 of the re-attestation note: narrow the ceilings to
+`{1,14,9}` and `{3,10,6}`. The user overruled on 2026-09-04. Reason: a minor or patch
+bump declares no API change, and AMUSE must not add brittleness against semver without
+evidence of breakage in practice.
+Recorded counter-argument: semver covers API surface, not the write set. NDMF 1.14.7
+changed a pinned file's behavior in a patch bump (re-attestation note section 5).
+Rejected option: narrow ceilings to `{1,14,9}` and `{3,10,6}` (re-attestation note section 7).
+Reversing falsifier: a patch or minor release inside the bounds changes a pinned file's
+write set in a semantic class. That event re-opens this bounds decision.
+Consent layer, added 2026-09-05: every build warns and asks before it classifies against
+an unattested version of any integration (host or attested shader family), and a major
+beyond the declared bounds also asks. Decline means refuse. Batch mode refuses without
+asking. The per-release re-attestation obligation moves versions out of the warning set.
 
 ## 4. Comparison rules
 
