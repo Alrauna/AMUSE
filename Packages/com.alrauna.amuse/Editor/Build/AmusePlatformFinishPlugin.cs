@@ -371,6 +371,11 @@ namespace Alrauna.Amuse.Editor.Build
                     consentPresenter ?? VersionConsentDialog.Present))
             {
                 state.ConsentDeclined = true;
+                ErrorReport.ReportError(
+                    AmuseReports.Localizer,
+                    ErrorSeverity.Information,
+                    "amuse.consent.Declined");
+                AmuseReports.ConsentDeclined(subjects);
                 return;
             }
 
@@ -406,6 +411,7 @@ namespace Alrauna.Amuse.Editor.Build
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     state.RecordRendererRefusal(refusal);
+                    AmuseReports.RendererRefusal(renderer, refusal);
                     continue;
                 }
 
@@ -489,6 +495,7 @@ namespace Alrauna.Amuse.Editor.Build
                     // exception here is an implementation defect and must reach
                     // NDMF as a build-blocking internal failure.
                     state.RecordRendererRefusal(refusal);
+                    AmuseReports.RendererRefusal(renderer, refusal);
                     continue;
                 }
 
@@ -496,6 +503,12 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
+
+            AmuseReports.AvatarSummary(
+                context.AvatarRootObject,
+                state.AnalyzedRendererCount,
+                state.OpaqueCandidateTriangleCount,
+                state.SemanticallyRefusedRendererCount);
         }
 
         /// <summary>

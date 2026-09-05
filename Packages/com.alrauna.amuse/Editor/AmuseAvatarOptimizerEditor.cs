@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
+using Alrauna.Amuse.Editor.Build;
 
 namespace Alrauna.Amuse.Editor
 {
@@ -29,6 +30,12 @@ namespace Alrauna.Amuse.Editor
                     "Move it to the top object. " +
                     "The optimizer does not run while the component sits on a child.",
                     MessageType.Error);
+            }
+
+            if (AmuseBuildStatusStore.TryGet(
+                    component.gameObject.GetInstanceID(), out var status))
+            {
+                EditorGUILayout.HelpBox(status, MessageType.None);
             }
         }
     }
