@@ -375,6 +375,54 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
+            // --- Registration (B5, decision V9). Every material mapping
+            // and mesh clone that survives the sweep is registered with
+            // NDMF's object registry, so later passes and error reports
+            // resolve AMUSE outputs back to their sources. The mapping
+            // source of truth is the surviving slots' admitted-material
+            // maps, the same iteration that built the sweep's survivor
+            // set: a swept transient is destroyed, and NDMF's registry
+            // throws on a destroyed object, so a candidate slot that was
+            // refused or invalidated late contributes nothing here. No
+            // generated asset is saved through the build's asset saver:
+            // NDMF persists every referenced temporary at the end of the
+            // build, which the persistence suite proves, and an eager save
+            // during prepare would re-import the very objects the
+            // finalization is about to assign.
+            var expectedMeshByRenderer = new Dictionary<Renderer, Mesh>();
+            foreach (var prepared in separation.Renderers)
+            {
+                expectedMeshByRenderer[prepared.Target.Renderer] =
+                    prepared.Target.ExpectedMesh;
+            }
+
+            foreach (var survivors in rendererSurvivors)
+            {
+                foreach (var slot in survivors)
+                {
+                    foreach (var pair in slot.OpaqueOfAdmitted)
+                    {
+                        if (ReferenceEquals(pair.Key, pair.Value))
+                        {
+                            continue;
+                        }
+
+                        ObjectRegistry.RegisterReplacedObject(
+                            pair.Key, pair.Value);
+                    }
+                }
+            }
+
+            foreach (var write in writes)
+            {
+                if (write.Mesh == null)
+                {
+                    continue;
+                }
+
+                ObjectRegistry.RegisterReplacedObject(
+                    expectedMeshByRenderer[write.Renderer], write.Mesh);
+            }
             finalization = new AlphaSeparationFinalization(writes);
             return writes.Count > 0
                 ? AmusePreparationDecision.Ready()
