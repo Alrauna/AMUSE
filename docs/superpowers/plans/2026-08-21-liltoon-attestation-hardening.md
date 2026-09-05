@@ -29,7 +29,7 @@
 - Do not commit, push, or open a PR without separate authorization.
 - Before every reported Unity test result, discover instances read-only. Select only the instance whose normalized, case-exact `Application.dataPath` equals the normalized `<repo-root>/Assets`.
 - Never use or modify the Census Lab for this plan.
-- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before you restore any Unity-generated host toolchain/sysroot churn. Restore only when the entire relevant diff is exactly the prohibited machine-generated state that `.omp/AGENTS.md` §Unity package and MCP safety describes.
+- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before you restore any Unity-generated host toolchain/sysroot churn. Restore only when the entire relevant diff is exactly the prohibited machine-generated state that `AGENTS.md` §Unity package and MCP safety describes.
 
 ## File map
 
