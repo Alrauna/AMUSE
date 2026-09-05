@@ -1055,7 +1055,7 @@ mergeable: it separates capture schema from proof relevance narrowly (shape 2), 
 evidence is captured once without widening ordinary alpha refusal. Every later increment
 depends on it.
 
-Per the prerequisite rule in `.omp/roles/controller/AGENTS.md` §Controller workflow, the
+Per the independent-prerequisite rule of the OMP policy at the time, the
 developer should start each from fresh `main`, complete and review it, and resume the
 consumer from updated `main` afterwards.
 
