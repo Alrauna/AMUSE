@@ -368,7 +368,7 @@ as **future coverage requiring separate characterization**.
 **No production mechanism may mutate importer settings, global quality settings, or
 streaming state** to make a level resident. `ignoreMipmapLimit`, `globalTextureMipmapLimit`
 and streaming state are project and asset state owned by the user. Writing them to satisfy
-an analysis would violate the evidence/mutation boundary in `.omp/AGENTS.md`
+an analysis would violate the evidence/mutation boundary in `AGENTS.md`
 §NDMF and mutation boundary exactly as flipping `isReadable` would. Code may
 **read** them as gates and diagnostics.
 
@@ -786,7 +786,7 @@ is no implementation to adopt as proof.
 
 | Project | Route **[S]** | Relevance |
 | --- | --- | --- |
-| **d4rkAvatarOptimizer** | `Editor/TextureCompressionAnalyzer.cs:74` sets `textureImporter.isReadable = true`; 1x1 `ReadPixels` probes at `:276`, `:308` | **Mutates the source importer** — what `.omp/AGENTS.md` §NDMF and mutation boundary forbids. AMUSE cannot follow this. |
+| **d4rkAvatarOptimizer** | `Editor/TextureCompressionAnalyzer.cs:74` sets `textureImporter.isReadable = true`; 1x1 `ReadPixels` probes at `:276`, `:308` | **Mutates the source importer** — what `AGENTS.md` §NDMF and mutation boundary forbids. AMUSE cannot follow this. |
 | **Avatar Optimizer** | `Internal/Utils/Utils.TextureGraphicsFormat.cs:44` gates on `SystemInfo.GetCompatibleFormat(..., FormatUsage.ReadPixels)` and documents avoiding precision loss; `Editor/Processors/TraceAndOptimize/OptimizeTexture.cs:1061` blits then `ReadPixels`; `Editor/Inspector/RemoveMeshByMaskEditor.cs:92,241` set `importer.isReadable = true` | **Independently validates the precision concern** and uses the same `ReadPixels` capability gate measured in §3.2. Its goal is a transformation-preserving copy for atlasing/resizing, and it re-encodes into a `TextureFormat`, reintroducing quantization. Notes at `:854` that crunched textures return an empty `GetRawTextureData`. Not a predicate. |
 | **Modular Avatar** | `Editor/ReactiveObjects/MeshFiltering/VertexFilterByMask.cs:126,141` — on `!isReadable`, blit into an `ARGB32` linear RT, `ReadPixels`, then `GetPixels32` | **The closest structural analogue**, and it is candidate 3. Sound *for its own predicate*, a black/white **threshold** tolerant of 8-bit quantization. Reads **mip 0 only**. Neither property transfers to an exact-`1` proof. |
 | **VRCFury** | `Editor-Common/Utils/Texture2DExtensions.cs:62` blit + `ReadPixels` for rescaling; toggles `isReadable` | Same importer mutation as d4rk, for transformation rather than proof. |

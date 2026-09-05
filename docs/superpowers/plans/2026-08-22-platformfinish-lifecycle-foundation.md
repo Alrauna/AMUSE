@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- The repository policy in `.omp/AGENTS.md` and the normative spec apply to every task.
+- The repository policy in `AGENTS.md` and the normative spec apply to every task.
 - The supported foundation contract is exact: Unity `2022.3.22f1`, NDMF `1.14.4`, VRChat SDK Base `3.10.4`, VRChat SDK Avatars `3.10.4`, and NDMF platform `nadena.dev.ndmf.vrchat.avatar3`.
 - `Application.unityVersion`, `PackageInfo.FindForPackageName`, `BuildContext.PlatformProvider`, `EditorApplication.isPlayingOrWillChangePlaymode`, and public `BuildContext` services are the only lifecycle inputs. Do not infer upload-attempt identity or inspect call stacks/callback inventories.
 - NDMF 1.14.4 exposes no public token that separates SDK preprocessing from manual non-Play processing. The supported observable bucket is therefore named `NonPlayNdmfBuild`. It authorizes only this bounded NDMF operation and does not claim any upload attempt. Exact SDK `3.10.4` remains required for the normal-host build-abort contract.
@@ -31,7 +31,7 @@
 - Generated assets use only the current `BuildContext.AssetSaver`. Add no production `AssetDatabase.CreateAsset` call or custom temporary directory.
 - Retain every Unity-generated `.meta` sidecar and inspect GUIDs.
 - Every reported Unity result requires read-only instance discovery and exact normalized, case-sensitive `Application.dataPath == <repo-root>/Assets`. Never use the Census Lab.
-- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore. Restore only prohibited host-only churn under `.omp/AGENTS.md` §Unity package and MCP safety.
+- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore. Restore only prohibited host-only churn under `AGENTS.md` §Unity package and MCP safety.
 - No package manifest, asmdef, research package, CI workflow, project setting, or release file should change. Existing CI is release/listing-only.
 - Do not commit, push, open a PR, or execute another task without the authorization required by the implementation session.
 
