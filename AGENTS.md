@@ -42,7 +42,6 @@ Data flow: live avatar, then immutable captured evidence, then exact classificat
 | `docs/superpowers/plans/` | Dated implementation plans with RED/GREEN tasks |
 | `docs/superpowers/investigations/` | Dated read-only characterization notes |
 | `Tools/` | `Bootstrap-NdmfStandalone.ps1` |
-| `Assets/!CENSUSLAB/` | Private research corpus. See the Census Lab policy below. |
 
 ## Development Commands
 
@@ -173,11 +172,11 @@ A case-only match does not confirm identity. Stop instead of guessing.
 
 ## Census Lab
 
-Private root: `Assets/!CENSUSLAB/`
+Private root: a separate Unity project outside this repository (the Census Lab project).
 
-Authoritative scene corpus: `Assets/!CENSUSLAB/Scenes/`
+Authoritative scene corpus: the `!CENSUSLAB/Scenes/` folder of the Census Lab project.
 
-Private launcher location: `Assets/!CENSUSLAB/Scripts/Editor/`
+Private launcher location: `!CENSUSLAB/Scripts/Editor/` in the Census Lab project.
 
 Census Lab is for characterization and validation, not the correctness oracle. Prefer read-only use. Reduce failures to public synthetic fixtures where practical. Tests create and delete folders under `Assets/`, so they must never run in the private Lab project.
 
