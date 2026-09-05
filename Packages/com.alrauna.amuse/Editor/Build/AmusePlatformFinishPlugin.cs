@@ -333,6 +333,17 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
+            // V1 trigger: the pipeline runs only when the avatar root
+            // carries the opt-in component. Absence is a total silent
+            // no-op: nothing is observed and nothing is reported. This
+            // check precedes the bindings invariant because an unopted
+            // avatar does no work at all. A component on a child does not
+            // count; the avatar root is the only switch.
+            if (!TriggerActivated(context))
+            {
+                return;
+            }
+
             // Reaching positive lifecycle permission without the bindings the
             // capture pass retains is an integration defect in the caller, not a
             // domain refusal: nothing about the avatar has been observed yet.
@@ -429,6 +440,20 @@ namespace Alrauna.Amuse.Editor.Build
                     opaqueCandidateTriangleCount;
             }
         }
+
+        /// <summary>
+        /// The V1 trigger: true only when the avatar root itself carries
+        /// <see cref="Alrauna.Amuse.Runtime.AmuseAvatarOptimizer"/>. A
+        /// component on any child transform does not activate the pipeline.
+        /// </summary>
+        private static bool TriggerActivated(BuildContext context)
+        {
+            var root = context.AvatarRootObject;
+            return root != null
+                && root.GetComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>() != null;
+        }
+
 
         /// <summary>
         /// Exercises the PlatformFinish-owned runtime-state orchestration with
