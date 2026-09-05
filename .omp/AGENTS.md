@@ -1,13 +1,6 @@
-# AGENTS.md — AMUSE / OMP shared context
+# AGENTS.md — AMUSE / OMP
 
-Every OMP session in this repository shares this file. It defines project facts and safety boundaries, not the active role.
-
-The Desktop launchers append exactly one role overlay:
-
-- `.omp/roles/controller/AGENTS.md`
-- `.omp/roles/implementation/AGENTS.md`
-
-If neither overlay is in the session context, do not assume either role or start consequential work. Ask the user which role is intended.
+One file defines every OMP session in this repository. It holds the shared project context.
 
 ## Repository and product
 
@@ -120,3 +113,4 @@ Treat existing changes as user-owned unless proven otherwise. Do not discard, ov
 Do not stage, commit, amend, push, open or merge a PR, delete branches, rewrite history, publish, or change remotes/settings without explicit authorization.
 
 Checked-out source and observed results have priority over agent reports. Never claim a test, build, reproduction, benchmark, or validation passed unless you ran and observed it.
+
