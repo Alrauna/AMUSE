@@ -24,7 +24,7 @@ Every claim below is tagged:
 
 The complete manifest diff contains nothing but the documented macOS
 toolchain/sysroot churn. No intentional change shared those files, so this branch
-applied the restore that `.omp/AGENTS.md` §Unity package and MCP safety
+applied the restore that `AGENTS.md` §Unity package and MCP safety
 prescribes. Unity re-added the churn during the compile/test cycles below, and
 the restore ran again at the end.
 
@@ -150,7 +150,7 @@ strict superset of the materials `MaterialSlotsFor` will ever reference for this
    capture gathers evidence no local proof consumes. A naive mapping built over the whole
    `AdmittedMaterials` list would generate opaque clones for materials this renderer never
    references.
-5. **It violates the local-refusal direction of AMUSE.** `.omp/AGENTS.md` §Correctness and
+5. **It violates the local-refusal direction of AMUSE.** `AGENTS.md` §Correctness and
    uncertainty: "Unknown information should invalidate only conclusions that depend on it. Do
    not expand a local unsupported fact into renderer-wide or avatar-wide refusal unless the
    dependency requires that scope."
@@ -459,7 +459,7 @@ a second test pins that confinement.
   steps may directly modify the serialized animator controllers."
 - Worse, it is unsound for **marker clips**: `FromMarker` commits the *original SDK asset* by
   identity, so a direct `AnimationUtility.SetObjectReferenceCurve` would mutate a source
-  asset — exactly the boundary `.omp/AGENTS.md` §NDMF and mutation boundary and
+  asset — exactly the boundary `AGENTS.md` §NDMF and mutation boundary and
   `.omp/RULES.md` rule 3 prohibit.
 - And it is fragile against reactivation: if any later context reactivates,
   the dirty hook of `Revalidate` fires and NDMF re-clones, silently discarding or duplicating the
@@ -478,7 +478,7 @@ supplies binding-keyed and path-keyed lookup with identity semantics and increme
 re-caching — the exact query AMUSE needs, and NDMF maintains it.
 
 Building a general curve-remapping framework would (a) duplicate `AnimationIndex`,
-(b) violate the YAGNI rule in `.omp/AGENTS.md` §Repository reality and scope with one
+(b) violate the YAGNI rule in `AGENTS.md` §Repository reality and scope with one
 consumer and no materially different second case, and (c) expand the proof surface from "these
 material values on this binding" to
 "the animation graph of the avatar." It is not justified. AAO and d4rk remain useful as evidence
@@ -1055,7 +1055,7 @@ mergeable: it separates capture schema from proof relevance narrowly (shape 2), 
 evidence is captured once without widening ordinary alpha refusal. Every later increment
 depends on it.
 
-Per the prerequisite rule in `.omp/roles/controller/AGENTS.md` §Controller workflow, the
+Per the independent-prerequisite rule in `AGENTS.md` §Working discipline, the
 developer should start each from fresh `main`, complete and review it, and resume the
 consumer from updated `main` afterwards.
 

@@ -35,7 +35,7 @@ byte comparison of the mesh. An earlier draft of this note wrongly called this s
 host-generated churn during the compile and test cycles. Only three packages changed:
 `com.unity.toolchain.macos-arm64-linux-x86_64`, `com.unity.sysroot`, and
 `com.unity.sysroot.linux-x86_64`. The complete diff was inspected. No intentional change
-touches those files. The restore that `.omp/AGENTS.md` §Unity package and MCP safety
+touches those files. The restore that `AGENTS.md` §Unity package and MCP safety
 prescribes was applied.
 
 No fetch, pull, push, stage, commit, PR, or history change happened. No other branch was
@@ -92,7 +92,7 @@ a property no supported input can show. If a future requirement admits non-reada
 add that measurement then.
 
 **This correction covers meshes only.** The established requirement to analyze ordinary
-non-readable, mipmapped, and compressed **textures** stays untouched. `.omp/AGENTS.md`
+non-readable, mipmapped, and compressed **textures** stays untouched. `AGENTS.md`
 §Alpha and texture direction still governs.
 
 ---
@@ -167,7 +167,7 @@ keep the live `Renderer` reference out of the immutable half.
 under-built for mesh output. It was never meant to be an output-construction source. Adding
 normals, tangents, colors, UV channels, bone weights, bindposes, blend shape frames, **and now
 submesh descriptors**, would turn analysis evidence into a mesh IR (intermediate
-representation). `.omp/AGENTS.md` §Repository reality and scope forbids broad
+representation). `AGENTS.md` §Repository reality and scope forbids broad
 infrastructure without a present requirement, and a general mesh IR is that kind of
 infrastructure. A native clone already holds all of that data, in Unity's own
 representation.
@@ -443,7 +443,7 @@ barrier-to-second-window span a late live read would expose. A late read (route 
 needed a real guard this check does not give. Route 1 does not need one.
 
 The residual risk is the ordinary coexistence question of another optimizer mutating the same
-renderer's mesh in the same phase. `.omp/AGENTS.md` §NDMF and mutation boundary already
+renderer's mesh in the same phase. `AGENTS.md` §NDMF and mutation boundary already
 treats that as an ordering and exclusion concern. **This note proposes no new mechanism for
 it.**
 
@@ -514,7 +514,7 @@ The narrow production design, with the exact existing seams to use:
 |---|---|---|
 | Generic mesh cloning service | one call site. `Object.Instantiate` is the whole mechanism | a second, materially different consumer with different fidelity needs |
 | Custom full-fidelity mesh copier | measured unnecessary for the characterized state, descriptors included (§7.1) | a measured field that `Instantiate` does not preserve |
-| Universal mesh snapshot / mesh IR | would turn analysis evidence into an output format. `.omp/AGENTS.md` §Repository reality and scope forbids broad infrastructure without a present requirement | a consumer that must reason about mesh data *after* the live object is gone |
+| Universal mesh snapshot / mesh IR | would turn analysis evidence into an output format. `AGENTS.md` §Repository reality and scope forbids broad infrastructure without a present requirement | a consumer that must reason about mesh data *after* the live object is gone |
 | Exhaustive vertex-format matrix | the descriptor characterization exposed no concrete need (§7.1) | a measured loss in a layout the fixture omits |
 | Mutation IR | nothing needs it | — |
 | Mesh fingerprint / hash framework | the residual same-instance risk (§8.1) is narrowed by construction, not by detection | a real coexistence failure with a named optimizer, reduced to a public fixture |
