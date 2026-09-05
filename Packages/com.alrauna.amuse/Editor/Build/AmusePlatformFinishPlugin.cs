@@ -15,6 +15,10 @@ namespace Alrauna.Amuse.Editor.Build
     internal sealed class AmusePlatformFinishState
     {
         internal bool HasExecuted { get; set; }
+        /// <summary>True when the build stopped because the user declined
+        /// the unverified-version consent dialog (D8 consent layer). The
+        /// report channel consumes this in the report slice.</summary>
+        internal bool ConsentDeclined { get; set; }
         internal HostLifecycleCapability Lifecycle { get; set; }
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
@@ -179,12 +183,14 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
+                null,
                 null);
         }
 
         internal static void Execute(
             BuildContext context,
-            HostLifecycleFacts facts)
+            HostLifecycleFacts facts,
+            VersionConsentPresenter consentPresenter = null)
         {
             if (facts == null)
             {
@@ -199,7 +205,8 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
-                null);
+                null,
+                consentPresenter);
         }
 
         /// <summary>
@@ -225,7 +232,8 @@ namespace Alrauna.Amuse.Editor.Build
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion = null,
-            VerifiedLilToonConversion lilToonConversion = null)
+            VerifiedLilToonConversion lilToonConversion = null,
+            VersionConsentPresenter consentPresenter = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -246,7 +254,8 @@ namespace Alrauna.Amuse.Editor.Build
                 capturer,
                 resolveSemantics,
                 poiyomiConversion,
-                lilToonConversion);
+                lilToonConversion,
+                consentPresenter);
         }
 
         /// <summary>
@@ -324,7 +333,8 @@ namespace Alrauna.Amuse.Editor.Build
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion,
-            VerifiedLilToonConversion lilToonConversion)
+            VerifiedLilToonConversion lilToonConversion,
+            VersionConsentPresenter consentPresenter)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -343,6 +353,22 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 return;
             }
+
+            // D8 consent layer: range-admitted versions beyond the last
+            // re-attested maximum, and majors at or beyond the declared
+            // bound, need an explicit click-through on every build. Batch
+            // mode has no user to ask and refuses. Declining is a total
+            // no-op after the trigger: an opted-out avatar never asks.
+            if (lifecycle.ConsentRequired
+                && !VersionConsentDialog.ShouldProceed(
+                    lifecycle.ConsentSubjects,
+                    UnityEngine.Application.isBatchMode,
+                    consentPresenter ?? VersionConsentDialog.Present))
+            {
+                state.ConsentDeclined = true;
+                return;
+            }
+
 
             // Reaching positive lifecycle permission without the bindings the
             // capture pass retains is an integration defect in the caller, not a
