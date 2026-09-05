@@ -354,20 +354,27 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
-            // D8 consent layer: range-admitted versions beyond the last
-            // re-attested maximum, and majors at or beyond the declared
-            // bound, need an explicit click-through on every build. Batch
-            // mode has no user to ask and refuses. Declining is a total
-            // no-op after the trigger: an opted-out avatar never asks.
-            if (lifecycle.ConsentRequired
+            // D8 consent layer: one consolidated click-through per build
+            // covers host versions beyond the attested maxima and shader
+            // names collected from the avatar's assigned materials whose
+            // source is not a verified version. Batch mode has no user to
+            // ask and refuses. Declining is a total no-op after the
+            // trigger: an opted-out avatar never asks.
+            var shaderTransfer = UnityMaterialSemantics
+                .CollectTransferConsent(AllAssignedMaterials(context));
+            var subjects = new List<string>(lifecycle.ConsentSubjects);
+            subjects.AddRange(shaderTransfer.Subjects);
+            if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
-                    lifecycle.ConsentSubjects,
+                    subjects,
                     UnityEngine.Application.isBatchMode,
                     consentPresenter ?? VersionConsentDialog.Present))
             {
                 state.ConsentDeclined = true;
                 return;
             }
+
+            var transferShaders = shaderTransfer.GrantedShaderNames.Count > 0;
 
 
             // Reaching positive lifecycle permission without the bindings the
@@ -408,13 +415,32 @@ namespace Alrauna.Amuse.Editor.Build
                 // set, index-aligned with evidence.AdmittedMaterials. Held as a
                 // local transient host capability, never inside the evidence.
                 IReadOnlyList<Material> admittedLiveMaterials;
+                ClosedAlphaMaterialCapturer effectiveCapturer = null;
+                if (transferShaders)
+                {
+                    var granted = shaderTransfer.GrantedShaderNames;
+                    effectiveCapturer = (
+                        IReadOnlyList<Material> materials,
+                        IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                        MaterialEvidenceRequest request,
+                        out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                        UnityMaterialSemantics
+                            .TryCaptureClosedAlphaMaterialsTransferred(
+                                materials,
+                                families,
+                                request,
+                                granted,
+                                out transferred);
+                }
+
                 var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
-                        out admittedLiveMaterials)
+                        out admittedLiveMaterials,
+                        effectiveCapturer)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
                         renderer.sharedMaterials,
@@ -423,8 +449,13 @@ namespace Alrauna.Amuse.Editor.Build
                         selectRequest,
                         capturer,
                         out admittedLiveMaterials);
+                var effectiveResolver = resolveSemantics
+                    ?? (transferShaders
+                        ? (CapturedAlphaMaterialSemanticsResolver)
+                            UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
+                        : null);
                 var resolved = ResolveRuntimeStates(
-                    rendererPath, evidence, resolveSemantics);
+                    rendererPath, evidence, effectiveResolver);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -478,6 +509,26 @@ namespace Alrauna.Amuse.Editor.Build
             return root != null
                 && root.GetComponent<
                     Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>() != null;
+        }
+
+        /// <summary>
+        /// Every non-null assigned material on the avatar, for the D8
+        /// shader-transfer pre-scan. Distinctness is the collector's job.
+        /// </summary>
+        private static IEnumerable<Material> AllAssignedMaterials(
+            BuildContext context)
+        {
+            foreach (var renderer in context.AvatarRootObject
+                         .GetComponentsInChildren<Renderer>(true))
+            {
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material != null)
+                    {
+                        yield return material;
+                    }
+                }
+            }
         }
 
 
