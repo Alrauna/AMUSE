@@ -10,7 +10,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void ComponentWithoutParentIsOnHierarchyRoot()
         {
             var root = new GameObject("placement-root");
-            var component = root.AddComponent<AmuseAvatarOptimizerStubHolder>();
+            var component = root.AddComponent<AmuseAvatarOptimizer>();
             Assert.That(AmuseComponentPlacement.IsOnHierarchyRoot(component), Is.True);
         }
 
@@ -20,7 +20,7 @@ namespace Alrauna.Amuse.Tests.Editor
             var root = new GameObject("placement-parent");
             var child = new GameObject("placement-child");
             child.transform.SetParent(root.transform);
-            var component = child.AddComponent<AmuseAvatarOptimizerStubHolder>();
+            var component = child.AddComponent<AmuseAvatarOptimizer>();
             Assert.That(AmuseComponentPlacement.IsOnHierarchyRoot(component), Is.False);
         }
 
@@ -28,10 +28,6 @@ namespace Alrauna.Amuse.Tests.Editor
         public void NullComponentIsRefused()
         {
             Assert.That(AmuseComponentPlacement.IsOnHierarchyRoot(null), Is.False);
-        }
-
-        private sealed class AmuseAvatarOptimizerStubHolder : MonoBehaviour
-        {
         }
     }
 }
