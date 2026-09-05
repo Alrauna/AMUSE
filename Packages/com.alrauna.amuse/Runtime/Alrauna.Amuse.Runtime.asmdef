@@ -1,0 +1,16 @@
+{
+    "name": "Alrauna.Amuse.Runtime",
+    "rootNamespace": "Alrauna.Amuse.Runtime",
+    "references": [
+        "nadena.dev.ndmf.runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
