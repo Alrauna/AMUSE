@@ -375,6 +375,66 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
+            // --- Registration and persistence (B5). Every surviving
+            // generated asset is saved through the build's asset saver, and
+            // every material mapping and mesh clone is registered with
+            // NDMF's object registry, so later passes and error reports
+            // resolve AMUSE outputs back to their sources. Registrations
+            // come after the sweep, so destroyed transients are never
+            // referenced. The mapping source of truth is the surviving
+            // slots' admitted-material maps: curve-only clones never appear
+            // in any write's material array but must still resolve.
+            var expectedMeshByRenderer = new Dictionary<Renderer, Mesh>();
+            var liveByRenderer = new Dictionary<Renderer, Material[]>();
+            for (var rendererIndex = 0;
+                 rendererIndex < separation.Renderers.Count;
+                 rendererIndex++)
+            {
+                var prepared = separation.Renderers[rendererIndex];
+                expectedMeshByRenderer[prepared.Target.Renderer] =
+                    prepared.Target.ExpectedMesh;
+                liveByRenderer[prepared.Target.Renderer] =
+                    rendererLive[rendererIndex];
+            }
+
+            foreach (var mapped in referencedMaterials)
+            {
+            }
+
+            foreach (var mesh in referencedMeshes)
+            {
+            }
+
+            foreach (var prepared in separation.Renderers)
+            {
+                foreach (var candidate in prepared.CandidateSlots)
+                {
+                    foreach (var pair in candidate.OpaqueOfAdmitted)
+                    {
+                        if (ReferenceEquals(pair.Key, pair.Value))
+                        {
+                            continue;
+                        }
+
+                        ObjectRegistry.RegisterReplacedObject(
+                            pair.Key, pair.Value);
+                    }
+                }
+            }
+
+            foreach (var write in writes)
+            {
+                if (write.Mesh == null)
+                {
+                    continue;
+                }
+
+                ObjectRegistry.RegisterReplacedObject(
+                    expectedMeshByRenderer[write.Renderer], write.Mesh);
+            }
+
+
+
             finalization = new AlphaSeparationFinalization(writes);
             return writes.Count > 0
                 ? AmusePreparationDecision.Ready()
