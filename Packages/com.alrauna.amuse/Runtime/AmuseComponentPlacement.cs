@@ -13,7 +13,7 @@ namespace Alrauna.Amuse.Runtime
         /// <summary>True when the component sits on a hierarchy root.</summary>
         public static bool IsOnHierarchyRoot(Component component)
         {
-            return true;
+            return component != null && component.transform.parent == null;
         }
     }
 }
