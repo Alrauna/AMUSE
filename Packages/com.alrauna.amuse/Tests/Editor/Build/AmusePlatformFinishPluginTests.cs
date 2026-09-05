@@ -230,6 +230,68 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+
+        [Test]
+        public void DeclinedConsentStopsThePipelineWithoutAnalysis()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE consent declined fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(unityVersion: "2022.3.23f1"),
+                    subjects => false);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.ConsentDeclined, Is.True);
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                    "a declined consent must analyze nothing");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void GrantedConsentLetsThePipelineRun()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE consent granted fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(unityVersion: "2022.3.23f1"),
+                    subjects => true);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.ConsentDeclined, Is.False);
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1),
+                    "granted consent reaches the renderer loop, where the " +
+                    "unfamilyed LineRenderer refuses semantically");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void CapturePassRetainsTheHostsExactAnimatorBindings()
         {
