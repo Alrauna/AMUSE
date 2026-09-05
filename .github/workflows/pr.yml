@@ -1,0 +1,21 @@
+# Placeholder gate for branch protection / auto-merge.
+# Intentionally does nothing: real CI lands with the 0.1.0 release candidate.
+name: PR Check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# No secrets are exposed to pull_request runs; this caps the token read-only
+# regardless of repo defaults.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      # No checkout: nothing from the PR is ever executed.
+      - name: Placeholder gate
+        run: echo "No-op check; real CI arrives with the 0.1.0 release candidate."
