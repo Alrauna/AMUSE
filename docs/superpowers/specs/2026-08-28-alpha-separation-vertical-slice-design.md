@@ -171,8 +171,8 @@ so no one mistakes it for something the prerequisite fixes.
 
 **[DECISION]** Recorded as an independently mergeable **prerequisite**,
 `fix/scope-slot-alpha-refusal-to-slot`, completed and merged **before** vertical-slice
-implementation starts. The prerequisite rule in `.omp/roles/controller/AGENTS.md`
-§Controller workflow applies: park this branch → start the prerequisite from fresh `main` →
+implementation starts. The independent-prerequisite rule in `AGENTS.md` §Working discipline
+applies: park this branch → start the prerequisite from fresh `main` →
 complete, review and merge it → resume the vertical slice from updated `main`.
 
 What this design requires of that branch, and nothing more: the per-slot `ResolveSlot` loop must

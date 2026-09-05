@@ -14,7 +14,7 @@ AMUSE walks the committed real controller graph into a *transient* live observat
 
 ## Global Constraints
 
-- `.omp/AGENTS.md` and the normative spec apply to every task. The *Non-goals* list in the spec is binding.
+- `AGENTS.md` and the normative spec apply to every task. The *Non-goals* list in the spec is binding.
 - **Analysis only.** No AMUSE-authored mesh, material, or build-output mutation. Never modify the source scene or source assets. NDMF itself owns the context lifecycle (re-clone, normalize first-layer weights, re-commit, save). It is an NDMF operation, not an AMUSE operation.
 - No caching, fingerprints, or invalidation. No DAO cooperation. No exact Animator reachability solver. No generic animation or runtime-state IR. No provenance adapters.
 - **No direct VRChat SDK dependency**, and no reference to the `nadena.dev.ndmf.vrchat` assembly. Reopening this requires reopening the approved spec.
@@ -27,7 +27,7 @@ AMUSE walks the committed real controller graph into a *transient* live observat
 - The admitted-state cap (`4096`) is an **internal bounded-work parameter**, never a public semantic constant. It must not be `public`. It must not appear in any public or `internal` API signature. Tests that are not specifically about the budget must not assert it as a specific number.
 - No reflection over NDMF internals, and no private/internal field access to force a positive path.
 - Retain every Unity-generated `.meta` sidecar and inspect GUIDs.
-- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore. Restore only prohibited host-only churn under `.omp/AGENTS.md` §Unity package and MCP safety.
+- Inspect the complete `Packages/manifest.json` and `Packages/packages-lock.json` diff before any restore. Restore only prohibited host-only churn under `AGENTS.md` §Unity package and MCP safety.
 - No package manifest, asmdef, research package, CI workflow, project setting, or release file changes.
 - Do not commit, push, or open a PR without the authorization required by the implementation session.
 
