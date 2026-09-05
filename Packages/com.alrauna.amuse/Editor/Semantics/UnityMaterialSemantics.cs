@@ -203,6 +203,172 @@ namespace Alrauna.Amuse.Editor.Semantics
             return true;
         }
 
+        /// <summary>
+        /// The D8 transfer capture: identical to
+        /// <see cref="TryCaptureClosedAlphaMaterials"/> except that a batch
+        /// member whose shader name is in <paramref name="grantedShaderNames"/>
+        /// skips source-identity verification — the user accepted the
+        /// unverified-version risk for exactly that name this build. A batch
+        /// member outside the granted set still fails the whole batch, so an
+        /// unconsented discovery keeps the fail-closed renderer refusal.
+        /// </summary>
+        internal static bool TryCaptureClosedAlphaMaterialsTransferred(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            IReadOnlyCollection<string> grantedShaderNames,
+            out IReadOnlyList<CapturedAlphaMaterial> captured)
+        {
+            if (materials == null) throw new ArgumentNullException(nameof(materials));
+            if (families == null) throw new ArgumentNullException(nameof(families));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (materials.Count != families.Count)
+            {
+                throw new ArgumentException(
+                    "Material and family counts must match.", nameof(families));
+            }
+
+            var shaders = new Shader[materials.Count];
+            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            for (var index = 0; index < materials.Count; index++)
+            {
+                shaders[index] = materials[index] == null
+                    ? null
+                    : materials[index].shader;
+                inputs[index] = new MaterialEvidenceCaptureInput(
+                    materials[index], request);
+            }
+
+            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var result = BuildCapturedAlphaMaterials(
+                materials, families, shaders, evidence);
+            for (var index = 0; index < result.Count; index++)
+            {
+                if (IsAttestedAlphaMaterial(result[index]))
+                {
+                    continue;
+                }
+
+                var shaderName = shaders[index] == null ? null : shaders[index].name;
+                if (shaderName == null
+                    || !System.Linq.Enumerable.Contains(
+                        grantedShaderNames, shaderName))
+                {
+                    captured = null;
+                    return false;
+                }
+            }
+
+            captured = result;
+            return true;
+        }
+
+        /// <summary>
+        /// The transferred resolver: the mirror of
+        /// <see cref="AnalyzeAlphaMaterial"/> without identity verification.
+        /// Only materials the granted capture admitted reach this path; a
+        /// missing family-specific evidence still answers all-Unknown, which
+        /// keeps the fail-closed direction inside the transferred mode.
+        /// </summary>
+        internal static MaterialSemantics AnalyzeAlphaMaterialTransferred(
+            CapturedAlphaMaterial captured)
+        {
+            if (captured == null)
+            {
+                throw new ArgumentNullException(nameof(captured));
+            }
+
+            SemanticOutput<ScalarSemanticValue> alpha;
+            switch (captured.Family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    // PoiyomiSourceEvidence is a struct: the gather always
+                    // produced one. The consent covers the identity risk.
+                    alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                        captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.LilToon:
+                    if (captured.LilToonEvidence == null)
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
+                        captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.LilToonCutout:
+                    if (captured.LilToonEvidence == null)
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = LilToonCutoutMaterialSemantics
+                        .InterpretVerifiedCutoutAlpha(captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.LilToonTransparent:
+                    if (captured.LilToonEvidence == null)
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = LilToonTransparentMaterialSemantics
+                        .InterpretVerifiedTransparentAlpha(captured.Evidence);
+                    break;
+                default:
+                    return AllUnknown();
+            }
+
+            return new MaterialSemantics(
+                SemanticOutput<ColorSemanticValue>.Unknown(),
+                alpha,
+                SemanticOutput<ColorSemanticValue>.Unknown(),
+                SemanticOutput<NormalSemanticValue>.Unknown());
+        }
+
+        /// <summary>
+        /// The D8 pre-scan: one distinct-shader walk over the avatar's
+        /// assigned materials, producing one consent subject per unverified
+        /// shader of a supported family, plus the exact shader-name set a
+        /// granted build may transfer. Shaders outside every supported
+        /// family produce nothing here — they refuse downstream with no
+        /// transfer target to offer.
+        /// </summary>
+        internal static (IReadOnlyList<string> Subjects,
+            IReadOnlyCollection<string> GrantedShaderNames)
+            CollectTransferConsent(IEnumerable<Material> materials)
+        {
+            var subjects = new List<string>();
+            var names = new HashSet<string>();
+            var seen = new HashSet<Shader>();
+            foreach (var material in materials)
+            {
+                if (material == null || material.shader == null
+                    || !seen.Add(material.shader))
+                {
+                    continue;
+                }
+
+                var family = IdentifyFamily(material);
+                if (family == CapturedAlphaMaterialFamily.Unsupported)
+                {
+                    continue;
+                }
+
+                var capturedList = CaptureAlphaMaterials(new[] { material });
+                if (IsAttestedAlphaMaterial(capturedList[0]))
+                {
+                    continue;
+                }
+
+                subjects.Add("Shader '" + material.shader.name + "' is not " +
+                    "a verified version. AMUSE would treat it with the " +
+                    "verified version's rules, which may be wrong.");
+                names.Add(material.shader.name);
+            }
+
+            return (subjects, names);
+        }
+
         private static IReadOnlyList<CapturedAlphaMaterial>
             BuildCapturedAlphaMaterials(
                 IReadOnlyList<Material> materials,
