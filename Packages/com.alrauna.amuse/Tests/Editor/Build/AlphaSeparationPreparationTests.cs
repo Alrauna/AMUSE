@@ -1765,8 +1765,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixtures.BaseSetUp();
                 var cases = new (string Label, Texture Texture)[]
                 {
-                    ("trilinear",
-                        fixtures.ImportTrilinearMipmap("cutout_trilinear")),
+                    ("mirror-wrap",
+                        fixtures.ImportMirrorWrapMipmap("cutout_mirror")),
                     ("mismatched-wrap",
                         fixtures.ImportMismatchedWrapMipmap(
                             "cutout_mismatched_wrap")),
@@ -4385,14 +4385,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     name, 4, 4, FullyOpaquePixels());
             }
 
-            internal Texture2D ImportTrilinearMipmap(string name)
+            internal Texture2D ImportMirrorWrapMipmap(string name)
             {
                 return ImportMipmapTexture(
                     name,
                     4,
                     4,
                     FullyOpaquePixels(),
-                    FilterMode.Trilinear);
+                    configure: importer =>
+                    {
+                        importer.wrapMode =
+                            UnityEngine.TextureWrapMode.Mirror;
+                    });
             }
 
             internal Texture2D ImportMismatchedWrapMipmap(string name)

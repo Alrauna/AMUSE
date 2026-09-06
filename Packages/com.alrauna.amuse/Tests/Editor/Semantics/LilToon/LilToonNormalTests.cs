@@ -99,8 +99,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetTexture(
                 "_MainTex",
                 ImportTexture(
-                    "trilinearmain",
-                    importer => importer.filterMode = FilterMode.Trilinear));
+                    "mirrormain",
+                    importer => importer.wrapMode =
+                        UnityEngine.TextureWrapMode.Mirror));
 
             var result = Interpret(material);
 

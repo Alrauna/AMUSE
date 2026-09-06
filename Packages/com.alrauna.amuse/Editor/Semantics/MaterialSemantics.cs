@@ -102,7 +102,15 @@ namespace Alrauna.Amuse.Editor.Semantics
     internal enum TextureFilterMode
     {
         Point,
-        Bilinear
+        Bilinear,
+
+        /// <summary>
+        /// Bilinear within the selected level, plus a monotone blend of the
+        /// two adjacent levels the hardware selects. The classifier models
+        /// the within-level footprint as bilinear; the mip-chain conjunction
+        /// supplies both levels' proofs.
+        /// </summary>
+        Trilinear
     }
 
     internal enum TextureWrapMode
@@ -111,14 +119,40 @@ namespace Alrauna.Amuse.Editor.Semantics
         Repeat
     }
 
+    /// <summary>
+    /// Whether the texture is sampled anisotropically. Anisotropy averages an
+    /// elongated footprint the classifier does not model, so an anisotropic
+    /// sample is provable only where the proof no longer needs the footprint:
+    /// a fully opaque level answers every possible footprint at once.
+    /// </summary>
+    internal enum TextureAnisoMode
+    {
+        None,
+        Anisotropic
+    }
+
     internal readonly struct TextureSampling : IEquatable<TextureSampling>
     {
+        private const TextureAnisoMode DefaultAniso = TextureAnisoMode.None;
+
         internal TextureFilterMode Filter { get; }
         internal TextureWrapMode Wrap { get; }
+        internal TextureAnisoMode Aniso { get; }
 
+        /// <summary>
+        /// The common sampling shape: no anisotropy.
+        /// </summary>
         internal TextureSampling(
             TextureFilterMode filter,
             TextureWrapMode wrap)
+            : this(filter, wrap, DefaultAniso)
+        {
+        }
+
+        internal TextureSampling(
+            TextureFilterMode filter,
+            TextureWrapMode wrap,
+            TextureAnisoMode aniso)
         {
             if (!Enum.IsDefined(typeof(TextureFilterMode), filter))
             {
@@ -128,14 +162,20 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 throw new ArgumentOutOfRangeException(nameof(wrap));
             }
+            if (!Enum.IsDefined(typeof(TextureAnisoMode), aniso))
+            {
+                throw new ArgumentOutOfRangeException(nameof(aniso));
+            }
 
             Filter = filter;
             Wrap = wrap;
+            Aniso = aniso;
         }
 
         public bool Equals(TextureSampling other)
         {
-            return Filter == other.Filter && Wrap == other.Wrap;
+            return Filter == other.Filter && Wrap == other.Wrap &&
+                   Aniso == other.Aniso;
         }
 
         public override bool Equals(object obj)
@@ -145,7 +185,7 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         public override int GetHashCode()
         {
-            return ((int)Filter * 397) ^ (int)Wrap;
+            return (((int)Filter * 397) ^ (int)Wrap) * 397 ^ (int)Aniso;
         }
     }
 
