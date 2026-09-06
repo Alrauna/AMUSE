@@ -153,32 +153,80 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
-        /// Over-deletion guard. Only the mipmapCount clause goes; a mipmapped
-        /// texture that also carries a nonzero bias or anisotropy must still refuse.
+        /// A7 widening. A nonzero mip bias only shifts which chain level the
+        /// hardware selects, and the resolution classifies every level, so the
+        /// bias changes which proofs run, never whether the conjunction holds.
         /// </summary>
         [Test]
-        public void TryGetSampling_MipmappedWithBiasOrAnisotropy_StillRefuses()
+        public void TryGetSampling_MipmappedWithBias_IsAdmitted()
         {
-            var biased = Import(
-                "mipped_biased", sourceHasAlpha: true,
+            var negative = Import(
+                "mipped_biased_negative", sourceHasAlpha: true,
                 importer => importer.mipmapEnabled = true);
-            biased.mipMapBias = -1f;
-            Assert.That(UnityTextureEvidence.TryGetSampling(biased, out _), Is.False);
+            negative.mipMapBias = -1f;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(negative, out var first),
+                Is.True);
+            Assert.That(
+                first,
+                Is.EqualTo(new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
 
-            var aniso = Import(
-                "mipped_aniso", sourceHasAlpha: true,
+            var positive = Import(
+                "mipped_biased_positive", sourceHasAlpha: true,
                 importer => importer.mipmapEnabled = true);
-            aniso.anisoLevel = 4;
-            Assert.That(UnityTextureEvidence.TryGetSampling(aniso, out _), Is.False);
+            positive.mipMapBias = 2f;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(positive, out _), Is.True);
         }
 
+        /// <summary>
+        /// A7 widening. Trilinear interpolates the two adjacent levels the
+        /// hardware selects; within a level its footprint is the bilinear one,
+        /// and a monotone blend of two proven samples stays proven.
+        /// </summary>
         [Test]
-        public void TryGetSampling_TrilinearFilter_IsRefused()
+        public void TryGetSampling_TrilinearFilter_IsAdmitted()
         {
             var texture = Import("trilinear", sourceHasAlpha: true);
             texture.filterMode = FilterMode.Trilinear;
 
-            Assert.That(UnityTextureEvidence.TryGetSampling(texture, out _), Is.False);
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                Is.True);
+            Assert.That(
+                sampling.Filter, Is.EqualTo(TextureFilterMode.Trilinear));
+        }
+
+        /// <summary>
+        /// A7 widening. Anisotropy averages an elongated footprint the
+        /// classifier does not model, so it is admitted only where the proof
+        /// no longer needs the footprint: the classifier's fully-opaque
+        /// fast path answers every possible footprint at once. Admission here
+        /// carries the state; the classifier refuses anisotropy on a level
+        /// that is not fully opaque.
+        /// </summary>
+        [Test]
+        public void TryGetSampling_Anisotropic_IsAdmitted()
+        {
+            var moderate = Import("aniso_moderate", sourceHasAlpha: true);
+            moderate.anisoLevel = 2;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(
+                    moderate, out var sampling),
+                Is.True);
+            Assert.That(
+                sampling.Aniso,
+                Is.EqualTo(TextureAnisoMode.Anisotropic));
+            Assert.That(sampling.Filter, Is.EqualTo(TextureFilterMode.Bilinear));
+
+            var maximum = Import(
+                "aniso_maximum", sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            maximum.anisoLevel = 16;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(maximum, out _), Is.True);
         }
 
         [Test]

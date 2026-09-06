@@ -15,7 +15,16 @@ namespace Alrauna.Amuse.Editor.Analysis
     internal enum AlphaFilterMode
     {
         Point,
-        Bilinear
+        Bilinear,
+
+        /// <summary>
+        /// Bilinear within the selected level plus a blend of the two adjacent
+        /// selected levels. The within-level footprint model is identical to
+        /// bilinear; the between-level blend is monotone, so the mip-chain
+        /// conjunction - which proves every level - supplies the blend's two
+        /// operands and the classification carries over.
+        /// </summary>
+        Trilinear
     }
 
     internal enum AlphaWrapMode
@@ -24,17 +33,44 @@ namespace Alrauna.Amuse.Editor.Analysis
         Repeat
     }
 
+    /// <summary>
+    /// Whether the sample averages an anisotropic footprint. An anisotropic
+    /// footprint is unmodeled, so an anisotropic sample classifies only
+    /// through a level's fully-opaque fast path; anywhere else it stays
+    /// unknown.
+    /// </summary>
+    internal enum AlphaAnisoMode
+    {
+        None,
+        Anisotropic
+    }
+
     internal readonly struct AlphaSamplingSettings
     {
+        private const AlphaAnisoMode DefaultAniso = AlphaAnisoMode.None;
+
         internal AlphaFilterMode FilterMode { get; }
         internal AlphaWrapMode WrapMode { get; }
+        internal AlphaAnisoMode AnisoMode { get; }
 
+        /// <summary>
+        /// The common sampling shape: no anisotropy.
+        /// </summary>
         internal AlphaSamplingSettings(
             AlphaFilterMode filterMode,
             AlphaWrapMode wrapMode)
+            : this(filterMode, wrapMode, DefaultAniso)
+        {
+        }
+
+        internal AlphaSamplingSettings(
+            AlphaFilterMode filterMode,
+            AlphaWrapMode wrapMode,
+            AlphaAnisoMode anisoMode)
         {
             FilterMode = filterMode;
             WrapMode = wrapMode;
+            AnisoMode = anisoMode;
         }
     }
 
@@ -208,6 +244,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.MustRemainTransparent;
             }
 
+            // Anisotropy averages an elongated footprint that no per-filter
+            // envelope model bounds, so it must be decided before any filter
+            // dispatch: a level that is neither fully opaque nor fully
+            // non-opaque - the fast paths above answered those - stays
+            // unknown, and the chain conjunction then admits an anisotropic
+            // triangle only when every level is fully opaque, which is
+            // exactly the anisotropic soundness condition.
+            if (sampling.AnisoMode == AlphaAnisoMode.Anisotropic)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
             if (sampling.FilterMode == AlphaFilterMode.Point &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
@@ -224,6 +272,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return ClassifyBilinearClamp(triangle, texture, envelope);
             }
             if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
+                sampling.WrapMode == AlphaWrapMode.Repeat)
+            {
+                return ClassifyBilinearRepeat(triangle, texture, envelope);
+            }
+
+            // Trilinear's within-level footprint is the bilinear one; the
+            // between-level blend of the two adjacent selected levels is
+            // monotone, and the chain conjunction in the resolver proves both
+            // operands, so the bilinear per-level verdict carries over.
+            if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
+                sampling.WrapMode == AlphaWrapMode.Clamp)
+            {
+                return ClassifyBilinearClamp(triangle, texture, envelope);
+            }
+            if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
                 return ClassifyBilinearRepeat(triangle, texture, envelope);
@@ -568,12 +631,17 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static void ValidateSampling(AlphaSamplingSettings sampling)
         {
             if (sampling.FilterMode != AlphaFilterMode.Point &&
-                sampling.FilterMode != AlphaFilterMode.Bilinear)
+                sampling.FilterMode != AlphaFilterMode.Bilinear &&
+                sampling.FilterMode != AlphaFilterMode.Trilinear)
             {
                 throw new ArgumentOutOfRangeException(nameof(sampling));
             }
             if (sampling.WrapMode != AlphaWrapMode.Clamp &&
                 sampling.WrapMode != AlphaWrapMode.Repeat)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sampling));
+            }
+            if (!Enum.IsDefined(typeof(AlphaAnisoMode), sampling.AnisoMode))
             {
                 throw new ArgumentOutOfRangeException(nameof(sampling));
             }

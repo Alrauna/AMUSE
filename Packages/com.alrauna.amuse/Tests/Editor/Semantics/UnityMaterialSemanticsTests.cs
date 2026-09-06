@@ -189,6 +189,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// The one-pass and two-pass transparent shaders and their outline
+        /// wrappers are admitted identities of the transparent family (S9):
+        /// selection identifies them and hands back the transparent family's
+        /// existing request without attesting the stand-in source, exactly
+        /// like every other thin UsePass wrapper. Falsifies refusing the
+        /// variants for their names after S9 pinned them.
+        /// </summary>
+        [Test]
+        public void SelectionIdentifiesOnePassAndTwoPassTransparentNames()
+        {
+            foreach (var shaderName in new[]
+                     {
+                         "Hidden/lilToonOnePassTransparent",
+                         "Hidden/lilToonTwoPassTransparent",
+                         "Hidden/lilToonOnePassTransparentOutline",
+                         "Hidden/lilToonTwoPassTransparentOutline",
+                     })
+            {
+                var material = NewMaterial(
+                    "selected-" + shaderName.Replace('/', '-') + ".shader",
+                    shaderName,
+                    LilToonProperties());
+
+                var selected = UnityMaterialSemantics
+                    .TrySelectAlphaMaterialRequests(
+                        material, out var family, out var request, out _);
+
+                Assert.That(selected, Is.True, shaderName);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent),
+                    shaderName);
+                Assert.That(
+                    request,
+                    Is.SameAs(
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest),
+                    shaderName);
+            }
+        }
+
+        /// <summary>
         /// Selection answers two separate questions for one material: what
         /// ordinary alpha proof may consider, and what the single closed
         /// capture must gather. Poiyomi is the family where they differ,
@@ -506,19 +548,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// list: it is its own supported family, selected by
         /// TransparentCaptureSchemaCarriesConversionEvidence, and its own
         /// near misses are covered by
-        /// NearMissTransparentName_IsNeverSelectedOrAdmitted.
+        /// NearMissTransparentName_IsNeverSelectedOrAdmitted. The three
+        /// outline wrapper names are no longer here either: S8 pinned them
+        /// as admitted identities of their families, and S9 did the same
+        /// for the one-pass and two-pass transparent variants and their
+        /// outline wrappers. The exactness of every admitted name is
+        /// guarded by the off-by-one near misses below.
         /// </summary>
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
         {
             foreach (var shaderName in new[]
                      {
-                         "Hidden/lilToonCutoutOutline",
-                         "Hidden/lilToonOnePassTransparent",
-                         "Hidden/lilToonTwoPassTransparent",
-                         "Hidden/lilToonTransparentOutline",
-                         "Hidden/lilToonOnePassTransparentOutline",
-                         "Hidden/lilToonTwoPassTransparentOutline",
+                         "Hidden/lilToonCutoutOutlineX",
+                         "Hidden/lilToonOnePassTransparentX",
+                         "Hidden/lilToonTwoPassTransparentX",
+                         "Hidden/lilToonTransparentOutlineX",
+                         "Hidden/lilToonOnePassTransparentOutlineX",
+                         "Hidden/lilToonTwoPassTransparentOutlineX",
+                         "Hidden/lilToonOutlineCutout",
+                         "Hidden/lilToonOutlineTransparent",
+                         "Hidden/lilToonOutlineX",
                          "_lil/[Optional] lilToonOutlineOnly",
                          "_lil/[Optional] lilToonOutlineOnlyCutout",
                          "_lil/[Optional] lilToonOutlineOnlyTransparent",
@@ -939,6 +989,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _EnableEmission1 (""Emission 1"", Float) = 0
         _EnableEmission2 (""Emission 2"", Float) = 0
         _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
         _AlphaForceOpaque (""Force Opaque"", Float) = 1
         _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
         _AlphaToCoverage (""Coverage"", Float) = 0

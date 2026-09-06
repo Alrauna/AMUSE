@@ -913,17 +913,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void TrilinearFilterImport_RefusesSamplingAtTheInterpretation()
+        public void MirrorWrapImport_RefusesSamplingAtTheInterpretation()
         {
             var material = NewCutoutFixtureMaterial();
-            material.SetTexture(
-                MainTextureProperty,
-                ImportMipmapTexture(
-                    "trilinear",
-                    4,
-                    4,
-                    SolidGrid(4, 4, 255),
-                    FilterMode.Trilinear));
+            var mirrorTexture = ImportMipmapTexture(
+                "mirror",
+                4,
+                4,
+                SolidGrid(4, 4, 255),
+                FilterMode.Bilinear);
+            mirrorTexture.wrapMode = UnityEngine.TextureWrapMode.Mirror;
+            material.SetTexture(MainTextureProperty, mirrorTexture);
 
             var captured = CaptureCutoutEvidence(material);
             Assert.That(
@@ -932,8 +932,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 assignment.Texture.HasSampling,
                 Is.False,
-                "capture admits Point/Bilinear x Clamp/Repeat only, so " +
-                "trilinear arrives as missing sampling evidence");
+                "capture admits Point/Bilinear/Trilinear x Clamp/Repeat " +
+                "only, so mirror wrap arrives as missing sampling evidence");
 
             var result =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
