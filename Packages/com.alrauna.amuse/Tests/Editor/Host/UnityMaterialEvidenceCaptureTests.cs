@@ -168,8 +168,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 "_Cutoff",
                 "_Mode",
-                "_SrcBlend",
-                "_DstBlend",
+                "_SrcBlendFA",
+                "_DstBlendFA",
                 "_EmissionColor",
                 "_EmissionStrength",
                 "_BumpScale",

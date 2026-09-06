@@ -251,10 +251,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Identity_AlternateOfficialLookingName_IsUnsupportedShader()
         {
-            // The Two Pass variant shares a prefix but is a different shader.
+            // One character off the S10-admitted Two Pass name: the name
+            // itself refuses before any provenance is consulted.
             AssertUnsupported(
-                Evidence(shaderName: ".poiyomi/Poiyomi Toon Two Pass"),
+                Evidence(shaderName: ".poiyomi/Poiyomi Toon Two Pas"),
                 PoiyomiSemanticDiagnosticCode.UnsupportedShader);
+        }
+
+        [Test]
+        public void Identity_TwoPassNameWithPlainProvenance_IsRefused()
+        {
+            // The Two Pass name is admitted, but this evidence carries the
+            // plain shader's GUID and digest: the identity conjunction
+            // refuses on the provenance, never falling through to the
+            // plain identity.
+            AssertUnsupported(
+                Evidence(shaderName:
+                    PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName),
+                PoiyomiSemanticDiagnosticCode.MissingSourceEvidence);
         }
 
         [Test]
