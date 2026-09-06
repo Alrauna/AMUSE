@@ -382,6 +382,39 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string TransparentPassCanonicalDigest =
             "700a607661f2cc43550452795d8eae0634509dbd07b4e8c381d9412fcc52517f";
 
+
+        // Outline wrapper source identities (S8). The three outline shaders
+        // are thin UsePass wrappers over the family pass assets already
+        // pinned above: each declares no inline pass except a LightMode
+        // Never dummy, so its passes, render mode, and recipe property
+        // surface come from the family pass file. The wrapper files carry no
+        // generator-varied region at all - no HLSLINCLUDE setting block, no
+        // skip-variants slot, no valued define - so the installed bytes are
+        // the tag's bytes and the canonicalization is the identity on them.
+        // Digests were measured on 2026-09-06 by invoking the production
+        // ComputeNormalizedSourceHash on the official tag 2.3.4 files
+        // (zip sha256 e81579d355878ed73880d99a68ab30a8552d55051be603c450f56491bdc66322)
+        // and cross-checked against an independent sha256 of the same bytes;
+        // the two computations agree. The pass-shader half of each profile is
+        // inherited from the family profile for the same reason.
+        internal const string OutlineShaderName = "Hidden/lilToonOutline";
+        internal const string OutlineShaderGuid =
+            "efa77a80ca0344749b4f19fdd5891cbe";
+        internal const string OutlineShaderCanonicalDigest =
+            "bbd886afd367d73ba3e2208aa42086e9149ccf826564ce4bb4f571d16861aa36";
+        internal const string OutlineCutoutShaderName =
+            "Hidden/lilToonCutoutOutline";
+        internal const string OutlineCutoutShaderGuid =
+            "3b4aa19949601f046a20ca8bdaee929f";
+        internal const string OutlineCutoutShaderCanonicalDigest =
+            "9fa9e7e7be55d29851fe4dd5cf2078e259a0b439dd1b61075a7c0448c176a9ec";
+        internal const string OutlineTransparentShaderName =
+            "Hidden/lilToonTransparentOutline";
+        internal const string OutlineTransparentShaderGuid =
+            "3c79b10c7e0b2784aaa4c2f8dd17d55e";
+        internal const string OutlineTransparentShaderCanonicalDigest =
+            "d105a112d4b8c984baf00ccbffd56213d1e399ef7d4de122b2f39442d2ac198f";
+
         internal const string ShaderFormatVersionProperty = "_lilToonVersion";
         private const string IncludeFolderName = "Includes";
 
@@ -450,6 +483,36 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 TransparentShaderCanonicalDigest,
                 TransparentPassCanonicalDigest);
 
+
+        private static readonly LilToonSourceProfile OutlineOpaqueProfile =
+            new LilToonSourceProfile(
+                OutlineShaderName,
+                OutlineShaderGuid,
+                PassShaderName,
+                PassShaderGuid,
+                OpaqueRenderMode,
+                OutlineShaderCanonicalDigest,
+                PassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile OutlineCutoutProfile =
+            new LilToonSourceProfile(
+                OutlineCutoutShaderName,
+                OutlineCutoutShaderGuid,
+                CutoutPassShaderName,
+                CutoutPassShaderGuid,
+                CutoutRenderMode,
+                OutlineCutoutShaderCanonicalDigest,
+                CutoutPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile OutlineTransparentProfile =
+            new LilToonSourceProfile(
+                OutlineTransparentShaderName,
+                OutlineTransparentShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                OutlineTransparentShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
         // D1: a valueless define the *LIL_SHADER_SETTING* substitution can emit.
         // A define with a value, such as LIL_RENDER 0, never matches.
         private static readonly Regex SettingDefine = new Regex(
@@ -1182,34 +1245,47 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return false;
         }
 
+        /// <summary>
+        /// Verifies the pinned opaque family identity against either admitted
+        /// opaque shader: the plain source or its outline wrapper (S8). The
+        /// wrapper is a UsePass wrapper over the same pinned pass asset, so
+        /// the only profile-specific checks that differ are the wrapper's own
+        /// name, GUID, and canonical digest. Mismatch fails closed with a
+        /// diagnostic; there is no name-only fallback.
+        /// </summary>
         internal static bool TryVerifyLilToonIdentity(
             LilToonSourceEvidence evidence,
             out LilToonSemanticDiagnostic diagnostic)
         {
-            return Verify(evidence, OpaqueProfile, out diagnostic);
+            return VerifyFamily(
+                evidence,
+                new[] { OpaqueProfile, OutlineOpaqueProfile },
+                out diagnostic);
         }
 
         /// <summary>
-        /// Verifies the pinned cutout identity (spec §6 R3): the cutout
-        /// shader, its pass, <c>LIL_RENDER 1</c>, and the cutout canonical
-        /// digests, under the shared package/format/include-tree pins.
-        /// Mismatch fails closed with a diagnostic; there is no name-only
-        /// fallback.
+        /// Verifies the pinned cutout family identity (spec §6 R3) against
+        /// either admitted cutout shader: the plain source or its outline
+        /// wrapper (S8), over the same pinned cutout pass asset. Mismatch
+        /// fails closed with a diagnostic; there is no name-only fallback.
         /// </summary>
         internal static bool TryVerifyLilToonCutoutIdentity(
             LilToonSourceEvidence evidence,
             out LilToonSemanticDiagnostic diagnostic)
         {
-            return Verify(evidence, CutoutProfile, out diagnostic);
+            return VerifyFamily(
+                evidence,
+                new[] { CutoutProfile, OutlineCutoutProfile },
+                out diagnostic);
         }
 
         /// <summary>
         /// Verifies the pinned regular Transparent Normal identity (design
-        /// §6): the transparent shader, its pass, <c>LIL_RENDER 2</c>, and the
-        /// transparent canonical digests, under the shared
-        /// package/format/include-tree pins. Mismatch fails closed with a
-        /// diagnostic; there is no name-only fallback. The near-miss vendor
-        /// names Hidden/lilToonOnePassTransparent and
+        /// §6) against either admitted transparent shader: the plain source
+        /// or its outline wrapper (S8), over the same pinned transparent pass
+        /// asset. Mismatch fails closed with a diagnostic; there is no
+        /// name-only fallback. The near-miss vendor names
+        /// Hidden/lilToonOnePassTransparent and
         /// Hidden/lilToonTwoPassTransparent share this pass asset and are
         /// refused on the shader identity.
         /// </summary>
@@ -1217,7 +1293,178 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             LilToonSourceEvidence evidence,
             out LilToonSemanticDiagnostic diagnostic)
         {
-            return Verify(evidence, TransparentProfile, out diagnostic);
+            return VerifyFamily(
+                evidence,
+                new[] { TransparentProfile, OutlineTransparentProfile },
+                out diagnostic);
+        }
+
+        /// <summary>
+        /// Selects the family profile whose pinned shader name is exactly the
+        /// evidence's shader name, then runs the identity conjunction once.
+        /// A shader name outside the family refuses before any digest work,
+        /// with the same diagnostic the single-profile path produced.
+        /// </summary>
+        private static bool VerifyFamily(
+            LilToonSourceEvidence evidence,
+            LilToonSourceProfile[] familyProfiles,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            foreach (var profile in familyProfiles)
+            {
+                if (string.Equals(
+                        evidence.ShaderName,
+                        profile.ShaderName,
+                        StringComparison.Ordinal))
+                {
+                    return Verify(evidence, profile, out diagnostic);
+                }
+            }
+
+            diagnostic = MaterialDiagnostic(
+                LilToonSemanticDiagnosticCode.UnsupportedShader,
+                $"shader name '{evidence.ShaderName}'");
+            return false;
+        }
+
+        /// <summary>
+        /// The admitted profile whose pinned shader name is exactly the live
+        /// shader name, or the opaque profile when nothing matches; the
+        /// family verify refuses the name, so the default only decides which
+        /// pass asset a gather resolves for a shader that will refuse
+        /// anyway.
+        /// </summary>
+        private static LilToonSourceProfile ProfileForShaderName(
+            string shaderName)
+        {
+            if (string.Equals(
+                    shaderName, OutlineShaderName, StringComparison.Ordinal))
+            {
+                return OutlineOpaqueProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    OutlineCutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return OutlineCutoutProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    OutlineTransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return OutlineTransparentProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    CutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return CutoutProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    TransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return TransparentProfile;
+            }
+
+            return OpaqueProfile;
+        }
+
+        /// <summary>
+        /// Gathers identity evidence with the profile the shader's own live
+        /// name selects, so a canonical clone that stays on its source's
+        /// outline wrapper resolves the same pass asset the wrapper executes.
+        /// </summary>
+        internal static LilToonSourceEvidence GatherSourceEvidenceForShaderName(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            if (shader == null) throw new ArgumentNullException(nameof(shader));
+            return Gather(
+                shader, evidence, ProfileForShaderName(shader.name));
+        }
+
+        /// <summary>
+        /// Verifies identity evidence with the family the evidence's shader
+        /// name selects, across every admitted lilToon shader. An
+        /// unrecognized name refuses as an unsupported shader.
+        /// </summary>
+        internal static bool TryVerifyIdentityForShaderName(
+            LilToonSourceEvidence evidence,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            if (IsOutlineWrapperShaderName(evidence.ShaderName) ||
+                string.Equals(
+                    evidence.ShaderName,
+                    SupportedShaderName,
+                    StringComparison.Ordinal))
+            {
+                return VerifyFamily(
+                    evidence,
+                    new[] { OpaqueProfile, OutlineOpaqueProfile },
+                    out diagnostic);
+            }
+            if (string.Equals(
+                    evidence.ShaderName,
+                    CutoutShaderName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    evidence.ShaderName,
+                    OutlineCutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return VerifyFamily(
+                    evidence,
+                    new[] { CutoutProfile, OutlineCutoutProfile },
+                    out diagnostic);
+            }
+
+            return VerifyFamily(
+                evidence,
+                new[] { TransparentProfile, OutlineTransparentProfile },
+                out diagnostic);
+        }
+
+        /// <summary>
+        /// Resolves the canonical opaque target shader name for a source
+        /// shader name. An outline wrapper source keeps its own wrapper, so
+        /// the moved triangles carry the outline passes with them; every
+        /// other source moves onto the plain opaque shader exactly as before
+        /// the outline wrappers were admitted.
+        /// </summary>
+        internal static string ResolveCanonicalTargetShaderName(
+            string sourceShaderName)
+        {
+            return IsOutlineWrapperShaderName(sourceShaderName)
+                ? sourceShaderName
+                : SupportedShaderName;
+        }
+
+        private static bool IsOutlineWrapperShaderName(string shaderName)
+        {
+            return string.Equals(
+                       shaderName, OutlineShaderName,
+                       StringComparison.Ordinal) ||
+                   string.Equals(
+                       shaderName, OutlineCutoutShaderName,
+                       StringComparison.Ordinal) ||
+                   string.Equals(
+                       shaderName, OutlineTransparentShaderName,
+                       StringComparison.Ordinal);
         }
 
         /// <summary>

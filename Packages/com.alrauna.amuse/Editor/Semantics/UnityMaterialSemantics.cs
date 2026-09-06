@@ -449,6 +449,16 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             if (string.Equals(
                     shaderName,
+                    LilToonSourceAttestation.OutlineShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToon,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
                     LilToonSourceAttestation.CutoutShaderName,
                     StringComparison.Ordinal))
             {
@@ -459,7 +469,27 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             if (string.Equals(
                     shaderName,
+                    LilToonSourceAttestation.OutlineCutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonCutout,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
                     LilToonSourceAttestation.TransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.OutlineTransparentShaderName,
                     StringComparison.Ordinal))
             {
                 return (
