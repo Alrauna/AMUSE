@@ -8,19 +8,51 @@ AMUSE aims to understand how an avatar uses materials, textures, geometry, and r
 
 See [docs/architecture/vision.md](docs/architecture/vision.md) for the architectural direction and safety model.
 
-## Current implementation
+## What 0.1.0 does
 
-AMUSE is in early development. The current package provides a small, Editor-only analysis foundation:
+0.1.0 ships alpha separation for PC VRChat avatars. Triangles of an
+AlphaTest or AlphaBlend material that are proven visually opaque move to an
+appended submesh with a generated canonical opaque material. Triangles that
+cannot be proven stay on the original material unchanged. The pass runs at
+the NDMF PlatformFinish phase during real builds, registers every generated
+object with NDMF's ObjectRegistry and AssetSaver, and reports every
+renderer-level and material-level refusal with a reason and a hint.
 
-- exact triangle UV and alpha classification for supported texture semantics;
-- conservative `ProvenOpaque`, `ProvenTransparent`, and `Unknown` outcomes;
-- deterministic mesh-separation planning from triangle classifications;
-- synthetic reference-fixture infrastructure and focused EditMode tests; and
-- an NDMF-compatible Unity package and development project.
+Supported shaders: Poiyomi Toon 9.3.64 (including the Two Pass shader) and
+lilToon 2.3.0 through 2.3.4, including the cutout, transparent, outline,
+and one-pass/two-pass variants listed in the attestation tables. An
+outline-bearing source keeps its outline in the canonical clone. The
+multipass rule applies: a triangle moves only if every pass that draws it
+is proven opaque on that triangle.
 
-## Not implemented yet
+## How to use it
 
-AMUSE does not yet transform meshes or materials. It does not trace animation or material swaps, understand arbitrary shader behavior, execute an NDMF optimization pass, or provide user-facing optimization controls. The current alpha subsystem is one input to the broader engine. It does not define the engine's scope.
+Add the **AMUSE Avatar Optimizer** component to the avatar root. Nothing
+else is required. Without the component, AMUSE does nothing and reports
+nothing. A component on a child does not count.
+
+- The pass runs during real NDMF builds (an upload or a manual avatar
+  build). Building in Play mode is refused.
+- The first build that encounters an unverified shader or host version
+  shows one consent dialog listing what it found. Accepting means AMUSE
+  treats that source with the nearest verified version's rules. Declining
+  is a total no-op for that build. Command-line builds refuse instead of
+  asking.
+- Every refusal is visible in the NDMF report window, with a per-renderer
+  or per-material scope, a plain reason, and a hint.
+- PC only. Android and Quest builds get a named, visible refusal.
+- Combining AMUSE with d4rkAvatarOptimizer is not validated in 0.1.0.
+  d4rk merges submeshes through its own non-NDMF hook, and the interaction
+  has not been characterized. Do not treat a combined build as covered by
+  this release's validation.
+
+## Known limits
+
+Non-identity `_MainTex_ST` tiling and nonzero `_MainTex_ScrollRotate`
+refuse on lilToon with a named `UnsupportedUv` refusal; the triangles keep
+their original material. Tessellation, fur, and gem shader variants are
+not admitted. Unsupported means a named refusal with the renderer or
+material unchanged - never a silent guess.
 
 ## Development setup
 

@@ -315,19 +315,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
 
-            var target = Shader.Find(LilToonSourceAttestation.SupportedShaderName);
+            var targetName =
+                LilToonSourceAttestation.ResolveCanonicalTargetShaderName(
+                    source.shader != null ? source.shader.name : null);
+            var target = Shader.Find(targetName);
             if (target == null)
             {
                 throw new InvalidOperationException(
                     "The attested lilToon environment regressed: opaque target '" +
-                    LilToonSourceAttestation.SupportedShaderName +
+                    targetName +
                     "' did not resolve.");
             }
 
             var targetEvidence =
-                LilToonSourceAttestation.GatherOpaqueTargetSourceEvidence(
+                LilToonSourceAttestation.GatherSourceEvidenceForShaderName(
                     target, evidence);
-            if (!LilToonSourceAttestation.TryVerifyLilToonIdentity(
+            if (!LilToonSourceAttestation.TryVerifyIdentityForShaderName(
                     targetEvidence, out var diagnostic))
             {
                 throw new InvalidOperationException(

@@ -15,6 +15,10 @@ namespace Alrauna.Amuse.Editor.Build
     internal sealed class AmusePlatformFinishState
     {
         internal bool HasExecuted { get; set; }
+        /// <summary>True when the build stopped because the user declined
+        /// the unverified-version consent dialog (D8 consent layer). The
+        /// report channel consumes this in the report slice.</summary>
+        internal bool ConsentDeclined { get; set; }
         internal HostLifecycleCapability Lifecycle { get; set; }
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
@@ -162,7 +166,7 @@ namespace Alrauna.Amuse.Editor.Build
                 typeof(AnimatorServicesContext),
                 inner => inner.Run(
                     AlphaSeparationApply.PassName,
-                    AlphaSeparationApply.Execute));
+                    ctx => AlphaSeparationApply.Execute(ctx)));
         }
     }
 
@@ -179,12 +183,14 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
+                null,
                 null);
         }
 
         internal static void Execute(
             BuildContext context,
-            HostLifecycleFacts facts)
+            HostLifecycleFacts facts,
+            VersionConsentPresenter consentPresenter = null)
         {
             if (facts == null)
             {
@@ -199,7 +205,8 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
-                null);
+                null,
+                consentPresenter);
         }
 
         /// <summary>
@@ -225,7 +232,8 @@ namespace Alrauna.Amuse.Editor.Build
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion = null,
-            VerifiedLilToonConversion lilToonConversion = null)
+            VerifiedLilToonConversion lilToonConversion = null,
+            VersionConsentPresenter consentPresenter = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -246,7 +254,8 @@ namespace Alrauna.Amuse.Editor.Build
                 capturer,
                 resolveSemantics,
                 poiyomiConversion,
-                lilToonConversion);
+                lilToonConversion,
+                consentPresenter);
         }
 
         /// <summary>
@@ -324,7 +333,8 @@ namespace Alrauna.Amuse.Editor.Build
             ClosedAlphaMaterialCapturer capturer,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion,
-            VerifiedLilToonConversion lilToonConversion)
+            VerifiedLilToonConversion lilToonConversion,
+            VersionConsentPresenter consentPresenter)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -332,6 +342,45 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 return;
             }
+
+            // V1 trigger: the pipeline runs only when the avatar root
+            // carries the opt-in component. Absence is a total silent
+            // no-op: nothing is observed and nothing is reported. This
+            // check precedes the bindings invariant because an unopted
+            // avatar does no work at all. A component on a child does not
+            // count; the avatar root is the only switch.
+            if (!TriggerActivated(context))
+            {
+                return;
+            }
+
+            // D8 consent layer: one consolidated click-through per build
+            // covers host versions beyond the attested maxima and shader
+            // names collected from the avatar's assigned materials whose
+            // source is not a verified version. Batch mode has no user to
+            // ask and refuses. Declining is a total no-op after the
+            // trigger: an opted-out avatar never asks.
+            var shaderTransfer = UnityMaterialSemantics
+                .CollectTransferConsent(AllAssignedMaterials(context));
+            var subjects = new List<string>(lifecycle.ConsentSubjects);
+            subjects.AddRange(shaderTransfer.Subjects);
+            if (subjects.Count > 0
+                && !VersionConsentDialog.ShouldProceed(
+                    subjects,
+                    UnityEngine.Application.isBatchMode,
+                    consentPresenter ?? VersionConsentDialog.Present))
+            {
+                state.ConsentDeclined = true;
+                ErrorReport.ReportError(
+                    AmuseReports.Localizer,
+                    ErrorSeverity.Information,
+                    "amuse.consent.Declined");
+                AmuseReports.ConsentDeclined(subjects);
+                return;
+            }
+
+            var transferShaders = shaderTransfer.GrantedShaderNames.Count > 0;
+
 
             // Reaching positive lifecycle permission without the bindings the
             // capture pass retains is an integration defect in the caller, not a
@@ -362,6 +411,7 @@ namespace Alrauna.Amuse.Editor.Build
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     state.RecordRendererRefusal(refusal);
+                    AmuseReports.RendererRefusal(renderer, refusal);
                     continue;
                 }
 
@@ -371,13 +421,32 @@ namespace Alrauna.Amuse.Editor.Build
                 // set, index-aligned with evidence.AdmittedMaterials. Held as a
                 // local transient host capability, never inside the evidence.
                 IReadOnlyList<Material> admittedLiveMaterials;
+                ClosedAlphaMaterialCapturer effectiveCapturer = null;
+                if (transferShaders)
+                {
+                    var granted = shaderTransfer.GrantedShaderNames;
+                    effectiveCapturer = (
+                        IReadOnlyList<Material> materials,
+                        IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                        MaterialEvidenceRequest request,
+                        out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                        UnityMaterialSemantics
+                            .TryCaptureClosedAlphaMaterialsTransferred(
+                                materials,
+                                families,
+                                request,
+                                granted,
+                                out transferred);
+                }
+
                 var evidence = selectRequest == null
                     ? UnityAnimationEvidenceCapture.Capture(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
-                        out admittedLiveMaterials)
+                        out admittedLiveMaterials,
+                        effectiveCapturer)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
                         renderer.sharedMaterials,
@@ -386,8 +455,13 @@ namespace Alrauna.Amuse.Editor.Build
                         selectRequest,
                         capturer,
                         out admittedLiveMaterials);
+                var effectiveResolver = resolveSemantics
+                    ?? (transferShaders
+                        ? (CapturedAlphaMaterialSemanticsResolver)
+                            UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
+                        : null);
                 var resolved = ResolveRuntimeStates(
-                    rendererPath, evidence, resolveSemantics);
+                    rendererPath, evidence, effectiveResolver);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -421,6 +495,7 @@ namespace Alrauna.Amuse.Editor.Build
                     // exception here is an implementation defect and must reach
                     // NDMF as a build-blocking internal failure.
                     state.RecordRendererRefusal(refusal);
+                    AmuseReports.RendererRefusal(renderer, refusal);
                     continue;
                 }
 
@@ -428,7 +503,47 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
+
+            AmuseReports.AvatarSummary(
+                context.AvatarRootObject,
+                state.AnalyzedRendererCount,
+                state.OpaqueCandidateTriangleCount,
+                state.SemanticallyRefusedRendererCount);
         }
+
+        /// <summary>
+        /// The V1 trigger: true only when the avatar root itself carries
+        /// <see cref="Alrauna.Amuse.Runtime.AmuseAvatarOptimizer"/>. A
+        /// component on any child transform does not activate the pipeline.
+        /// </summary>
+        private static bool TriggerActivated(BuildContext context)
+        {
+            var root = context.AvatarRootObject;
+            return root != null
+                && root.GetComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>() != null;
+        }
+
+        /// <summary>
+        /// Every non-null assigned material on the avatar, for the D8
+        /// shader-transfer pre-scan. Distinctness is the collector's job.
+        /// </summary>
+        private static IEnumerable<Material> AllAssignedMaterials(
+            BuildContext context)
+        {
+            foreach (var renderer in context.AvatarRootObject
+                         .GetComponentsInChildren<Renderer>(true))
+            {
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material != null)
+                    {
+                        yield return material;
+                    }
+                }
+            }
+        }
+
 
         /// <summary>
         /// Exercises the PlatformFinish-owned runtime-state orchestration with

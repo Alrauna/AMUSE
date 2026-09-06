@@ -1139,5 +1139,94 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
+
+        // --- A7 widenings: trilinear and anisotropic --------------------
+
+        /// <summary>
+        /// Trilinear selects two adjacent levels and blends them monotonically;
+        /// the chain conjunction proves both operands, so every level opaque is
+        /// still proven opaque and one non-opaque level still absorbs.
+        /// </summary>
+        [Test]
+        public void TrilinearChainConjoinsEveryLevel()
+        {
+            var allOpaque = AlphaResolution.Classified(
+                AllOpaqueChain(),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero));
+            Assert.That(
+                allOpaque.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            var opaqueThenTransparent = AlphaResolution.Classified(
+                OpaqueThenTransparentChain(),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero));
+            Assert.That(
+                opaqueThenTransparent.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// Anisotropy is provable exactly where the footprint stops mattering:
+        /// a chain whose every level is fully opaque.
+        /// </summary>
+        [Test]
+        public void AnisotropicAllOpaqueChainIsProvenOpaque()
+        {
+            var resolution = AlphaResolution.Classified(
+                AllOpaqueChain(),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Bilinear,
+                    AlphaWrapMode.Repeat,
+                    AlphaAnisoMode.Anisotropic),
+                new UvMapping(0, Vector2.one, Vector2.zero));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// One level that is neither fully opaque nor fully non-opaque leaves
+        /// the anisotropic footprint unmodeled, so the conjunction refuses.
+        /// </summary>
+        [Test]
+        public void AnisotropicPartlyOpaqueChainIsUnknown()
+        {
+            var resolution = AlphaResolution.Classified(
+                Chain(MixedField()),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point,
+                    AlphaWrapMode.Clamp,
+                    AlphaAnisoMode.Anisotropic),
+                new UvMapping(0, Vector2.one, Vector2.zero));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// A fully non-opaque level absorbs before the anisotropic fallthrough:
+        /// an average of values below the cutoff stays below it.
+        /// </summary>
+        [Test]
+        public void AnisotropicChainWithANonOpaqueLevelIsAbsorbed()
+        {
+            var resolution = AlphaResolution.Classified(
+                Chain(MixedField(), Field(1, 1, 0)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point,
+                    AlphaWrapMode.Clamp,
+                    AlphaAnisoMode.Anisotropic),
+                new UvMapping(0, Vector2.one, Vector2.zero));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
     }
 }

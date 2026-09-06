@@ -32,8 +32,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string CanonicalNormalizedSourceHash =
             "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755";
 
+        // Second pinned identity (S10): the Two Pass generated shader in the
+        // same package. The digest was measured on the official v9.3.64 tag
+        // artifact by the production ComputeNormalizedSourceHash and an
+        // independent sha256, which agree; the file is LF-only with no BOM,
+        // so the installed bytes are the tag's bytes.
+        internal const string PoiyomiTwoPassShaderName =
+            ".poiyomi/Poiyomi Toon Two Pass";
+        internal const string TwoPassCanonicalShaderGuid =
+            "eda2412ac7ab2db45a47a521f6d7d8a6";
+        internal const string TwoPassCanonicalNormalizedSourceHash =
+            "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
+
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
+
+        private const string SrcBlendProperty = "_SrcBlend";
+        private const string DstBlendProperty = "_DstBlend";
+        private const string BlendOpProperty = "_BlendOp";
+        private const string SrcBlendAlphaProperty = "_SrcBlendAlpha";
+        private const string DstBlendAlphaProperty = "_DstBlendAlpha";
+        private const string BlendOpAlphaProperty = "_BlendOpAlpha";
+        private const string SrcBlend2Property = "_SrcBlend2";
+        private const string DstBlend2Property = "_DstBlend2";
+        private const string BlendOp2Property = "_BlendOp2";
+        private const string BlendOpAlpha2Property = "_BlendOpAlpha2";
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
@@ -648,6 +671,48 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     coverageGate);
             }
 
+            // V2 multipass rule, pass one: the opacity claim is about the
+            // rendered pixel, not the alpha value alone. With alpha proven
+            // 1 on the whole domain only the replace, standard alpha, and
+            // premultiply pairs render the source unchanged; the additive
+            // and multiplicative pairs compose with what is behind and are
+            // never visually opaque.
+            if (!IsProvenOpaqueBlend(
+                    evidence,
+                    SrcBlendProperty,
+                    DstBlendProperty,
+                    BlendOpProperty,
+                    BlendOpAlphaProperty))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    SrcBlendProperty);
+            }
+
+            // V2 multipass rule, pass two: the Two Pass shader's second
+            // Base pass reuses the first pass's alpha chain under the
+            // 2-family preset, so its blend pair gates exactly the same
+            // way. The read itself is the presence test: the alpha request
+            // always names the 2-family scalars, and a plain Toon material
+            // yields no value for them, while a Two Pass source that lost
+            // them fails identity before this read.
+            if (evidence.TryGetScalar(SrcBlend2Property, out _) &&
+                !IsProvenOpaqueBlend(
+                    evidence,
+                    SrcBlend2Property,
+                    DstBlend2Property,
+                    BlendOp2Property,
+                    BlendOpAlpha2Property))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    SrcBlend2Property);
+            }
+
             if (!TryReadBinary(
                     evidence, AlphaForceOpaqueProperty, out var forceOpaque))
             {
@@ -758,6 +823,58 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     sample, TextureChannel.Alpha, colorAlpha);
             return SemanticOutput<ScalarSemanticValue>.Complete(value);
         }
+
+        /// <summary>
+        /// The closed blend-state set whose rendered pixel equals the source
+        /// color once alpha is proven 1 on the whole sampled domain. RGB:
+        /// the blend operation must be add and the factor pair must be
+        /// replace (1,0), standard alpha (5,10), or premultiply (1,10) -
+        /// the `_Mode` presets of the pinned source emit exactly these
+        /// three for their opaque, cutout, fade, and transparent modes.
+        /// Alpha: with the source factor proven 1 and the dst factor in the
+        /// vendor set, both the add and the max operations yield exactly 1,
+        /// because the dst contribution is clamped or dominated. Every
+        /// additive and multiplicative RGB pairing composes with what is
+        /// behind and can never claim opacity. A missing or non-finite
+        /// value fails closed.
+        /// </summary>
+        private static bool IsProvenOpaqueBlend(
+            CapturedMaterialEvidence evidence,
+            string srcProperty,
+            string dstProperty,
+            string blendOpProperty,
+            string blendOpAlphaProperty)
+        {
+            if (!evidence.TryGetScalar(srcProperty, out var src) ||
+                !IsFinite(src) ||
+                !evidence.TryGetScalar(dstProperty, out var dst) ||
+                !IsFinite(dst) ||
+                !evidence.TryGetScalar(
+                    blendOpProperty, out var blendOp) ||
+                !IsFinite(blendOp) ||
+                !evidence.TryGetScalar(
+                    blendOpAlphaProperty, out var blendOpAlpha) ||
+                !IsFinite(blendOpAlpha) ||
+                !evidence.TryGetScalar(
+                    SrcBlendAlphaProperty, out var srcBlendAlpha) ||
+                !IsFinite(srcBlendAlpha) ||
+                !evidence.TryGetScalar(
+                    DstBlendAlphaProperty, out var dstBlendAlpha) ||
+                !IsFinite(dstBlendAlpha))
+            {
+                return false;
+            }
+
+            var rgbOpaque = blendOp == 0f &&
+                ((src == 1f && dst == 0f) ||
+                    (src == 5f && dst == 10f) ||
+                    (src == 1f && dst == 10f));
+            var alphaForcedToOne = srcBlendAlpha == 1f &&
+                (dstBlendAlpha is 0f or 1f or 10f) &&
+                (blendOpAlpha is 0f or 4f);
+            return rgbOpaque && alphaForcedToOne;
+        }
+
 
         /// <summary>
         /// Interprets <c>_MainAlphaMaskMode</c> against the pinned mask
@@ -1304,8 +1421,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             in PoiyomiSourceEvidence evidence,
             out PoiyomiSemanticDiagnostic diagnostic)
         {
-            // 1. Exact shader name and unlocked state.
-            if (!string.Equals(
+            // 1. Exact shader name and unlocked state. Two admitted
+            // identities share one conjunction: the plain Toon shader and
+            // the Two Pass generated shader (S10), each verified against
+            // its own pinned GUID and digest.
+            var isTwoPass = string.Equals(
+                evidence.ShaderName,
+                PoiyomiTwoPassShaderName,
+                StringComparison.Ordinal);
+            if (!isTwoPass &&
+                !string.Equals(
                     evidence.ShaderName,
                     PoiyomiToonShaderName,
                     StringComparison.Ordinal))
@@ -1333,9 +1458,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
+            var expectedGuid = isTwoPass
+                ? TwoPassCanonicalShaderGuid
+                : CanonicalShaderGuid;
             if (!string.Equals(
                     evidence.AssetGuid,
-                    CanonicalShaderGuid,
+                    expectedGuid,
                     StringComparison.Ordinal))
             {
                 diagnostic = MaterialDiagnostic(
@@ -1369,10 +1497,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            // 3. Normalized source hash.
+            // 3. Normalized source hash, against the resolved identity.
+            var expectedHash = isTwoPass
+                ? TwoPassCanonicalNormalizedSourceHash
+                : CanonicalNormalizedSourceHash;
             if (!string.Equals(
                     evidence.NormalizedSourceHash,
-                    CanonicalNormalizedSourceHash,
+                    expectedHash,
                     StringComparison.Ordinal))
             {
                 diagnostic = MaterialDiagnostic(
@@ -1496,6 +1627,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 AlphaMaskBlendStrengthProperty,
                 AlphaMaskValueProperty,
                 AlphaMaskInvertProperty,
+                SrcBlendProperty,
+                DstBlendProperty,
+                BlendOpProperty,
+                BlendOpAlphaProperty,
+                SrcBlendAlphaProperty,
+                DstBlendAlphaProperty,
+                SrcBlend2Property,
+                DstBlend2Property,
+                BlendOp2Property,
+                BlendOpAlpha2Property,
             };
             scalars.UnionWith(MainSamplingModeGates);
             scalars.UnionWith(AlphaCoverageGates);

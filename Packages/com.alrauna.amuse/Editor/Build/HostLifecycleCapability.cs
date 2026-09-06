@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using nadena.dev.ndmf;
 using UnityEditor;
 
@@ -86,21 +87,50 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>VRChat SDK Base and Avatars exclusive upper bound 4.0.0 (design D3).</summary>
         private static readonly int[] VrchatSdkUpperBound = { 4, 0, 0 };
+
+        /// <summary>
+        /// The highest re-attested versions (D8 consent layer). The task-6
+        /// re-attestation verified NDMF 1.14.8 and SDK 3.10.5; the last
+        /// Unity characterization ran on patch 22. Each per-release
+        /// re-attestation moves these forward and retires consent subjects.
+        /// </summary>
+        private const int AttestedUnityPatchMax = 22;
+        private static readonly int[] AttestedNdmfMax = { 1, 14, 8 };
+        private static readonly int[] AttestedVrchatSdkMax = { 3, 10, 5 };
+
         private const string SupportedPlatform = "nadena.dev.ndmf.vrchat.avatar3";
 
         private HostLifecycleCapability(
             bool mayUsePositiveMutation,
             HostLifecycleRefusal refusal,
-            string supportedAssumption)
+            string supportedAssumption,
+            bool consentRequired = false,
+            IReadOnlyList<string> consentSubjects = null)
         {
             MayUsePositiveMutation = mayUsePositiveMutation;
             Refusal = refusal;
             SupportedAssumption = supportedAssumption;
+            ConsentRequired = consentRequired;
+            ConsentSubjects = consentSubjects
+                ?? (IReadOnlyList<string>)Array.Empty<string>();
         }
 
         internal bool MayUsePositiveMutation { get; }
         internal HostLifecycleRefusal Refusal { get; }
         internal string SupportedAssumption { get; }
+
+        /// <summary>
+        /// True when the version is range-admitted but newer than the last
+        /// re-attested maximum, or is a major at or beyond the declared
+        /// upper bound. The build must obtain explicit user consent before
+        /// any work; declining is a total no-op. Never true alongside a
+        /// refusal.
+        /// </summary>
+        internal bool ConsentRequired { get; }
+
+        /// <summary>Plain English consent subjects, one per unattested
+        /// integration. Empty unless <see cref="ConsentRequired"/>.</summary>
+        internal IReadOnlyList<string> ConsentSubjects { get; }
 
         internal static HostLifecycleCapability Evaluate(HostLifecycleFacts facts)
         {
@@ -114,19 +144,29 @@ namespace Alrauna.Amuse.Editor.Build
                 return Refused(HostLifecycleRefusal.UnsupportedUnityVersion);
             }
 
-            if (!PackageVersionAdmitted(facts.NdmfVersion, NdmfFloor, NdmfUpperBound))
+            // D8 + V8: a major at or beyond the declared bound does not
+            // refuse; it becomes a consent subject below. Everything else
+            // the range rules reject still refuses here: below-floor,
+            // prerelease, unparseable, null.
+            if (!PackageVersionAdmitted(facts.NdmfVersion, NdmfFloor, NdmfUpperBound)
+                && !PackageVersionBeyondMajorBound(
+                    facts.NdmfVersion, NdmfFloor, NdmfUpperBound))
             {
                 return Refused(HostLifecycleRefusal.UnsupportedNdmfVersion);
             }
 
             if (!PackageVersionAdmitted(
-                facts.VrchatSdkBaseVersion, VrchatSdkFloor, VrchatSdkUpperBound))
+                    facts.VrchatSdkBaseVersion, VrchatSdkFloor, VrchatSdkUpperBound)
+                && !PackageVersionBeyondMajorBound(
+                    facts.VrchatSdkBaseVersion, VrchatSdkFloor, VrchatSdkUpperBound))
             {
                 return Refused(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion);
             }
 
             if (!PackageVersionAdmitted(
-                facts.VrchatSdkAvatarsVersion, VrchatSdkFloor, VrchatSdkUpperBound))
+                    facts.VrchatSdkAvatarsVersion, VrchatSdkFloor, VrchatSdkUpperBound)
+                && !PackageVersionBeyondMajorBound(
+                    facts.VrchatSdkAvatarsVersion, VrchatSdkFloor, VrchatSdkUpperBound))
             {
                 return Refused(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion);
             }
@@ -147,12 +187,22 @@ namespace Alrauna.Amuse.Editor.Build
                 return Refused(HostLifecycleRefusal.MissingBuildContextServices);
             }
 
+            var subjects = new List<string>();
+            CollectConsentSubject(subjects, facts.UnityVersion, UnityConsentSubject);
+            CollectConsentSubject(subjects, facts.NdmfVersion, NdmfConsentSubject);
+            CollectConsentSubject(
+                subjects, facts.VrchatSdkBaseVersion, SdkConsentSubject);
+            CollectConsentSubject(
+                subjects, facts.VrchatSdkAvatarsVersion, SdkConsentSubject);
+
             return new HostLifecycleCapability(
                 true,
                 HostLifecycleRefusal.None,
                 "Unity 2022.3.22f1 or newer 2022.3 f-release; NDMF 1.14.4 to any 1.x below 2.0.0, " +
                 "no prerelease; VRChat SDK Base/Avatars 3.10.4 to any 3.x below 4.0.0, no prerelease; " +
-                "NDMF platform nadena.dev.ndmf.vrchat.avatar3; non-Play NDMF build.");
+                "NDMF platform nadena.dev.ndmf.vrchat.avatar3; non-Play NDMF build.",
+                subjects.Count > 0,
+                subjects);
         }
 
         internal static HostLifecycleCapability CaptureAndEvaluate(BuildContext context)
@@ -387,6 +437,119 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// True when the version parses cleanly, carries no prerelease, and
+        /// has reached or passed the declared exclusive upper bound: the
+        /// untested-major territory that V8 routes through user consent
+        /// instead of a hard refusal.
+        /// </summary>
+        private static bool PackageVersionBeyondMajorBound(
+            string version, int[] floor, int[] exclusiveUpperBound)
+        {
+            return TryParsePackageVersion(
+                version, out var components, out var hasPrerelease)
+                && !hasPrerelease
+                && CompareComponents(components, floor) >= 0
+                && CompareComponents(components, exclusiveUpperBound) >= 0;
+        }
+
+        private static void CollectConsentSubject(
+            List<string> subjects,
+            string version,
+            Func<string, string> subjectFor)
+        {
+            var subject = subjectFor(version);
+            if (subject != null)
+            {
+                subjects.Add(subject);
+            }
+        }
+
+        private static string UnityConsentSubject(string version)
+        {
+            if (!TryParseUnityVersion(
+                version, out var major, out var minor,
+                out var patch, out var releaseType))
+            {
+                return null;
+            }
+
+            if (major == SupportedUnityMajor && minor == SupportedUnityMinor
+                && releaseType == UnityFReleaseType
+                && patch > AttestedUnityPatchMax)
+            {
+                return "Unity " + version + " is newer than the last " +
+                    "verified 2022.3." + AttestedUnityPatchMax + "f1. " +
+                    "Its texture import behavior is unverified.";
+            }
+
+            return null;
+        }
+
+        private static string NdmfConsentSubject(string version)
+        {
+            return PackageConsentSubject(
+                version, NdmfFloor, NdmfUpperBound, AttestedNdmfMax,
+                "NDMF");
+        }
+
+        private static string SdkConsentSubject(string version)
+        {
+            return PackageConsentSubject(
+                version, VrchatSdkFloor, VrchatSdkUpperBound,
+                AttestedVrchatSdkMax, "VRChat SDK");
+        }
+
+        /// <summary>
+        /// The consent subject for one in-range package version, or null
+        /// when the last re-attestation covers it. Versions at or above the
+        /// declared upper bound produce the beyond-range subject; versions
+        /// above the attested maximum but inside the range produce the
+        /// newer-version subject; everything else inside the range is
+        /// attested and silent. Range refusals never reach here: consent
+        /// never overrides a refusal (D2, D3, D8).
+        /// </summary>
+        private static string PackageConsentSubject(
+            string version,
+            int[] floor,
+            int[] exclusiveUpperBound,
+            int[] attestedMax,
+            string displayName)
+        {
+            if (!TryParsePackageVersion(
+                version, out var components, out var hasPrerelease))
+            {
+                return null;
+            }
+
+            if (hasPrerelease || CompareComponents(components, floor) < 0)
+            {
+                return null;
+            }
+
+            if (CompareComponents(components, exclusiveUpperBound) == 0)
+            {
+                return displayName + " " + version + " is the major the " +
+                    "declared range stops at. Its behavior is unverified.";
+            }
+
+            if (CompareComponents(components, exclusiveUpperBound) > 0)
+            {
+                return displayName + " " + version + " is beyond the " +
+                    "declared " + floor[0] + ".x range this package " +
+                    "supports. Its behavior is unverified.";
+            }
+
+            if (CompareComponents(components, attestedMax) > 0)
+            {
+                return displayName + " " + version + " is newer than the " +
+                    "last verified " + attestedMax[0] + "." + attestedMax[1]
+                    + "." + attestedMax[2] + ". Its behavior is unverified.";
+            }
+
+            return null;
         }
 
         /// <summary>
