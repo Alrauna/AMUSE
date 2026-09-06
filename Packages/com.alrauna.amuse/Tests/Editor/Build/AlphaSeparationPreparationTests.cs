@@ -4704,15 +4704,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Unsupported-family fixture ---------------------------------------
 
         /// <summary>
-        /// A stand-in shader carrying a non-allowlisted lilToon identity (a
-        /// cutout-outline shader). Written and imported under one
-        /// test-owned folder; the caller deletes the folder in its finally.
+        /// A stand-in shader carrying a near-miss lilToon identity: one
+        /// character off the S8-admitted cutout-outline name, so it must
+        /// stay Unsupported while proving selection matches exactly. Written
+        /// and imported under one test-owned folder; the caller deletes the
+        /// folder in its finally.
         /// </summary>
         private const string UnsupportedFamilyTempFolder =
             "Assets/AmuseTests_AlphaUnsupportedFamily";
 
         private const string UnsupportedFamilyShaderName =
-            "Hidden/lilToonCutoutOutline";
+            "Hidden/lilToonCutoutOutlineFake";
 
         /// <summary>
         /// Writes, imports, and returns the unsupported-family temp shader
