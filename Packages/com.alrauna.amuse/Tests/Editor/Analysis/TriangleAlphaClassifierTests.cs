@@ -285,6 +285,139 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
+        // --- A7 widenings: trilinear and anisotropic --------------------
+
+        /// <summary>
+        /// Trilinear's within-level footprint model is the bilinear one, so
+        /// every bilinear verdict must carry over unchanged.
+        /// </summary>
+        [Test]
+        public void TrilinearClampVerdictMatchesBilinearClamp()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.5f, 0.75f),
+                new Vector2(0.5f, 0.75f),
+                new Vector2(0.5f, 0.75f));
+            var texture = new AlphaTextureData(1, 2, new byte[] { 255, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void TrilinearRepeatVerdictMatchesBilinearRepeat()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(-3f, 4f),
+                new Vector2(7f, -8f),
+                new Vector2(11f, 12f));
+            var texture = new AlphaTextureData(1, 1, new byte[] { 255 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Trilinear, AlphaWrapMode.Repeat),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// An anisotropic footprint is unmodeled, so a level that is neither
+        /// fully opaque nor fully non-opaque stays unknown.
+        /// </summary>
+        [Test]
+        public void AnisotropicOnPartlyOpaqueLevelIsUnknown()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.25f, 0.75f));
+            var texture = new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 0, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Point,
+                        AlphaWrapMode.Clamp,
+                        AlphaAnisoMode.Anisotropic),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// The fully-opaque fast path answers before the anisotropic
+        /// fallthrough: a fully opaque level proves every possible footprint.
+        /// </summary>
+        [Test]
+        public void AnisotropicOnFullyOpaqueLevelIsProvenOpaque()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.25f, 0.75f));
+            var texture = new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 255, 255 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Bilinear,
+                        AlphaWrapMode.Clamp,
+                        AlphaAnisoMode.Anisotropic),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// The fully-non-opaque fast path also precedes the anisotropic
+        /// fallthrough: an average of values below the cutoff stays below it,
+        /// so absorbing remains sound.
+        /// </summary>
+        [Test]
+        public void AnisotropicOnFullyNonOpaqueLevelIsAbsorbed()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.25f, 0.75f));
+            var texture = new AlphaTextureData(
+                2, 2, new byte[] { 0, 0, 0, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Point,
+                        AlphaWrapMode.Clamp,
+                        AlphaAnisoMode.Anisotropic),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
         [Test]
         public void ReversingWindingAndMatchingUvsPreservesOutcome()
         {

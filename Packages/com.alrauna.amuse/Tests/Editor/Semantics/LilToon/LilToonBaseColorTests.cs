@@ -286,14 +286,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void TrilinearMainTex_IsUnsupportedSampling()
+        public void MirrorWrapMainTex_IsUnsupportedSampling()
         {
             var material = NewFixtureMaterial();
             material.SetTexture(
                 "_MainTex",
                 ImportTexture(
-                    "trilinear",
-                    importer => importer.filterMode = FilterMode.Trilinear));
+                    "mirror",
+                    importer => importer.wrapMode =
+                        UnityEngine.TextureWrapMode.Mirror));
 
             var result = Interpret(material);
 

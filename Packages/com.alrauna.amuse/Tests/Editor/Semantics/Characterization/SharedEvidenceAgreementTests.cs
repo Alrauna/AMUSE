@@ -80,10 +80,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                     // Scene-only: no asset, so no stable project identity.
                     return Track(new Texture2D(4, 4, TextureFormat.RGBA32, false));
                 case "TryGetSampling":
-                    // Trilinear: mipmapped sampling is admitted now, so an
-                    // unsupported filter is what makes TryGetSampling refuse.
+                    // Mirror wrap: every filter mode is admitted now, so an
+                    // unsupported wrap is what makes TryGetSampling refuse.
                     return ImportTexture(
-                        "shared_trilinear", i => i.filterMode = FilterMode.Trilinear);
+                        "shared_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror);
                 case "TryGetColorInterpretation":
                     // A native asset has stable identity and a usable sampler,
                     // but no TextureImporter at all.

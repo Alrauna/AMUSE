@@ -53,24 +53,27 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
-        /// Extracts a texture's sampler state. Supported only for Point or
-        /// Bilinear filtering with equal Clamp/Repeat wrap and no mip-biased or
-        /// anisotropic sampling.
+        /// Extracts a texture's sampler state. Supported only for Point,
+        /// Bilinear, or Trilinear filtering with equal Clamp/Repeat wrap.
         /// <para>
         /// Mipmapped sampling is admitted because the resolver classifies every
         /// level of the captured chain, and Unity's Bilinear filters within the
         /// selected level and selects a level without blending - so "some level,
         /// bilinear within it" is exactly the model the conjunction covers.
+        /// Trilinear is the same within-level footprint plus a blend of the two
+        /// adjacent selected levels; the conjunction supplies both levels'
+        /// proofs, and a monotone blend of two proven samples stays proven. A
+        /// nonzero mip bias only shifts which levels the hardware selects, so
+        /// it changes which proofs run, never whether the conjunction holds.
         /// </para>
         /// <para>
-        /// Nonzero mip bias stays refused as conservative deferred coverage: the
-        /// conjunction would in fact cover it, since bias only shifts which level is
-        /// selected. Trilinear likewise stays refused for scope rather than
-        /// soundness - interpolating between two levels whose contributing samples
-        /// are all exactly one is itself exactly one, but the sampling vocabulary
-        /// does not express trilinear and widening it is a separate milestone.
-        /// Anisotropy stays refused because it averages texels across an elongated
-        /// footprint the classifier does not model at all.
+        /// Anisotropy is carried as its own state because it averages texels
+        /// across an elongated footprint the classifier does not model. It is
+        /// provable only through the classifier's fully-opaque fast path,
+        /// which answers every possible footprint at once; the classifier
+        /// refuses an anisotropic sample on a level that is not fully opaque.
+        /// Mirror wrap stays refused: the mirrored coordinate remap is not
+        /// modeled.
         /// </para>
         /// </summary>
         internal static bool TryGetSampling(
@@ -95,13 +98,11 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            if (texture.mipMapBias != 0f ||
-                texture.anisoLevel > 1)
-            {
-                return false;
-            }
+            var aniso = texture.anisoLevel > 1
+                ? TextureAnisoMode.Anisotropic
+                : TextureAnisoMode.None;
 
-            sampling = new TextureSampling(filter, wrapU);
+            sampling = new TextureSampling(filter, wrapU, aniso);
             return true;
         }
 
@@ -189,6 +190,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return true;
                 case FilterMode.Bilinear:
                     filter = TextureFilterMode.Bilinear;
+                    return true;
+                case FilterMode.Trilinear:
+                    filter = TextureFilterMode.Trilinear;
                     return true;
                 default:
                     filter = default;
