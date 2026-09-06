@@ -1660,11 +1660,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     "12fcc52517f"));
         }
 
-        [TestCase("Hidden/lilToonOnePassTransparent")]
-        [TestCase("Hidden/lilToonTwoPassTransparent")]
-        [TestCase("Hidden/lilToonTransparentOutline")]
         [TestCase("Hidden/lilToonTransparen")]
         [TestCase("hidden/liltoontransparent")]
+        [TestCase("Hidden/lilToonOnePassTransparentX")]
+        [TestCase("Hidden/lilToonTwoPassTransparentX")]
+        [TestCase("Hidden/lilToonOnePassTransparentOutlineX")]
+        [TestCase("Hidden/lilToonTwoPassTransparentOutlineX")]
         public void VerifyTransparent_NearMissShaderName_Refuses(string name)
         {
             Assert.That(
@@ -1679,19 +1680,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedShader));
         }
 
-        // --- rows 12-13: exact-name selection ------------------------------
+        // --- exactness falsifier -------------------------------------------
 
-        [TestCase("Hidden/lilToonOnePassTransparent")]
-        [TestCase("Hidden/lilToonTwoPassTransparent")]
-        [TestCase("Hidden/lilToonTransparentOutline")]
+        [TestCase("Hidden/lilToonOnePassTransparentX")]
+        [TestCase("Hidden/lilToonTwoPassTransparentX")]
+        [TestCase("Hidden/lilToonOnePassTransparentOutlineX")]
+        [TestCase("Hidden/lilToonTwoPassTransparentOutlineX")]
+        [TestCase("Hidden/lilToonTransparentOutlineX")]
         public void NearMissTransparentName_IsNeverSelectedOrAdmitted(
             string shaderName)
         {
-            // Both near misses declare the SAME pass asset
+            // The near misses are one character off an admitted transparent
+            // identity and declare the SAME pass asset
             // (Hidden/ltspass_transparent) and the same LIL_RENDER 2, queue
             // 2460 and RenderType as the supported family. Falsifies:
-            // prefix/substring matching, Contains("Transparent"), grouping by
-            // LIL_RENDER, by queue, or by pass-asset identity alone.
+            // prefix/substring matching, Contains("Transparent"), grouping
+            // by LIL_RENDER, by queue, or by pass-asset identity alone.
             Assert.That(
                 shaderName,
                 Is.Not.EqualTo(LilToonSourceAttestation.TransparentShaderName));
@@ -2200,6 +2204,169 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// The S9 transparent-variant identities are pinned data: the names,
+        /// GUIDs, and measured digests must equal the official tag 2.3.4
+        /// values, so a silent repin is impossible.
+        /// </summary>
+        [Test]
+        public void TransparentVariantIdentityPins_AreTheMeasuredValues()
+        {
+            Assert.That(
+                LilToonSourceAttestation.OnePassTransparentShaderName,
+                Is.EqualTo("Hidden/lilToonOnePassTransparent"));
+            Assert.That(
+                LilToonSourceAttestation.OnePassTransparentShaderGuid,
+                Is.EqualTo("b269573b9937b8340b3e9e191a3ba5a8"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .OnePassTransparentShaderCanonicalDigest,
+                Is.EqualTo(
+                    "4a5bbd07997e3150bf904aae89223b207c2628e2f1e2d7fe690bcdb76c0d7143"));
+            Assert.That(
+                LilToonSourceAttestation.TwoPassTransparentShaderName,
+                Is.EqualTo("Hidden/lilToonTwoPassTransparent"));
+            Assert.That(
+                LilToonSourceAttestation.TwoPassTransparentShaderGuid,
+                Is.EqualTo("6a77405f7dfdc1447af58854c7f43f39"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .TwoPassTransparentShaderCanonicalDigest,
+                Is.EqualTo(
+                    "c06143d3d345efc1c1dcc8128193a3bb9b1535e4c640b024562923b7b7008074"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .OnePassTransparentOutlineShaderName,
+                Is.EqualTo("Hidden/lilToonOnePassTransparentOutline"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .OnePassTransparentOutlineShaderGuid,
+                Is.EqualTo("7171688840c632447b22ec14e2bdef7e"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .OnePassTransparentOutlineShaderCanonicalDigest,
+                Is.EqualTo(
+                    "7d87faf6ad3f8217f86b91330d6b1767b75fd91d689ae6f7243c6808b3009f80"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .TwoPassTransparentOutlineShaderName,
+                Is.EqualTo("Hidden/lilToonTwoPassTransparentOutline"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .TwoPassTransparentOutlineShaderGuid,
+                Is.EqualTo("9cf054060007d784394b8b0bb703e441"));
+            Assert.That(
+                LilToonSourceAttestation
+                    .TwoPassTransparentOutlineShaderCanonicalDigest,
+                Is.EqualTo(
+                    "af28ad17be74f0077a5a4b154a81a70d3dd98bc0e387b93f859b97dd4c505974"));
+        }
+
+        /// <summary>
+        /// Each S9 variant identity verifies against the transparent family
+        /// with its own pinned name, GUID, and digest over the shared pinned
+        /// transparent pass asset and LIL_RENDER 2 - the same conjunction
+        /// the S8 outline wrappers already satisfy.
+        /// </summary>
+        [Test]
+        public void Verify_TransparentVariantIdentities_Succeed()
+        {
+            foreach (var (name, guid, digest) in new[]
+                     {
+                         (LilToonSourceAttestation.OnePassTransparentShaderName,
+                             LilToonSourceAttestation.OnePassTransparentShaderGuid,
+                             LilToonSourceAttestation
+                                 .OnePassTransparentShaderCanonicalDigest),
+                         (LilToonSourceAttestation.TwoPassTransparentShaderName,
+                             LilToonSourceAttestation.TwoPassTransparentShaderGuid,
+                             LilToonSourceAttestation
+                                 .TwoPassTransparentShaderCanonicalDigest),
+                         (LilToonSourceAttestation
+                             .OnePassTransparentOutlineShaderName,
+                             LilToonSourceAttestation
+                                 .OnePassTransparentOutlineShaderGuid,
+                             LilToonSourceAttestation
+                                 .OnePassTransparentOutlineShaderCanonicalDigest),
+                         (LilToonSourceAttestation
+                             .TwoPassTransparentOutlineShaderName,
+                             LilToonSourceAttestation
+                                 .TwoPassTransparentOutlineShaderGuid,
+                             LilToonSourceAttestation
+                                 .TwoPassTransparentOutlineShaderCanonicalDigest),
+                     })
+            {
+                Assert.That(
+                    LilToonSourceAttestation
+                        .TryVerifyLilToonTransparentIdentity(
+                            Evidence(
+                                shaderName: name,
+                                assetGuid: guid,
+                                passGuid:
+                                    LilToonSourceAttestation
+                                        .TransparentPassShaderGuid,
+                                shaderDigest: digest,
+                                passDigest:
+                                    LilToonSourceAttestation
+                                        .TransparentPassCanonicalDigest,
+                                renderMode: 2),
+                            out var diagnostic),
+                    Is.True, name);
+                Assert.That(diagnostic, Is.Null, name);
+            }
+        }
+
+        /// <summary>
+        /// A variant name selects its variant profile, so evidence carrying
+        /// the variant name over the plain transparent digest must fail
+        /// closed on the digest, not fall through to the plain profile.
+        /// </summary>
+        [Test]
+        public void Verify_TransparentVariantNameWithPlainDigest_FailsClosed()
+        {
+            foreach (var (name, guid) in new[]
+                     {
+                         (LilToonSourceAttestation.OnePassTransparentShaderName,
+                             LilToonSourceAttestation
+                                 .OnePassTransparentShaderGuid),
+                         (LilToonSourceAttestation.TwoPassTransparentShaderName,
+                             LilToonSourceAttestation
+                                 .TwoPassTransparentShaderGuid),
+                         (LilToonSourceAttestation
+                             .OnePassTransparentOutlineShaderName,
+                             LilToonSourceAttestation
+                                 .OnePassTransparentOutlineShaderGuid),
+                         (LilToonSourceAttestation
+                             .TwoPassTransparentOutlineShaderName,
+                             LilToonSourceAttestation
+                                 .TwoPassTransparentOutlineShaderGuid),
+                     })
+            {
+                Assert.That(
+                    LilToonSourceAttestation
+                        .TryVerifyLilToonTransparentIdentity(
+                            Evidence(
+                                shaderName: name,
+                                assetGuid: guid,
+                                passGuid:
+                                    LilToonSourceAttestation
+                                        .TransparentPassShaderGuid,
+                                shaderDigest:
+                                    LilToonSourceAttestation
+                                        .TransparentShaderCanonicalDigest,
+                                passDigest:
+                                    LilToonSourceAttestation
+                                        .TransparentPassCanonicalDigest,
+                                renderMode: 2),
+                            out var diagnostic),
+                    Is.False, name);
+                Assert.That(
+                    diagnostic?.Code,
+                    Is.EqualTo(
+                        LilToonSemanticDiagnosticCode.ModifiedShaderSource),
+                    name);
+            }
+        }
+
+        /// <summary>
         /// A wrapper name selects the wrapper profile, so evidence carrying
         /// the wrapper name over the plain shader's digest must fail closed
         /// on the digest, not fall through to the plain profile.
@@ -2232,6 +2399,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "Hidden/lilToonTransparentOutline")]
         [TestCase("lilToon", "lilToon")]
         [TestCase("Hidden/lilToonCutout", "lilToon")]
+        [TestCase("Hidden/lilToonOnePassTransparent", "lilToon")]
+        [TestCase("Hidden/lilToonTwoPassTransparent", "lilToon")]
+        [TestCase(
+            "Hidden/lilToonOnePassTransparentOutline",
+            "Hidden/lilToonOnePassTransparentOutline")]
+        [TestCase(
+            "Hidden/lilToonTwoPassTransparentOutline",
+            "Hidden/lilToonTwoPassTransparentOutline")]
         [TestCase("Some/Unknown", "lilToon")]
         public void ResolveCanonicalTargetShaderName_KeepsWrapperAndMovesPlain(
             string sourceShaderName,
