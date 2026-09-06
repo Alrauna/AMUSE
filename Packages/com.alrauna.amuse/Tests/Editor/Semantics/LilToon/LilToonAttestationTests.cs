@@ -2084,5 +2084,163 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(
                     "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92"));
         }
+
+        // --- S8: outline wrapper identities --------------------------------
+
+        /// <summary>
+        /// The three pinned outline wrapper identities are the measured tag
+        /// 2.3.4 values. Pins are data: this audit fails when a digest or
+        /// GUID is retyped, so a silent value change cannot pass as a
+        /// refactor.
+        /// </summary>
+        [Test]
+        public void OutlineWrapperIdentityPins_AreTheMeasuredValues()
+        {
+            Assert.That(
+                LilToonSourceAttestation.OutlineShaderName,
+                Is.EqualTo("Hidden/lilToonOutline"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineShaderGuid,
+                Is.EqualTo("efa77a80ca0344749b4f19fdd5891cbe"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineShaderCanonicalDigest,
+                Is.EqualTo(
+                    "bbd886afd367d73ba3e2208aa42086e9149ccf826564ce4bb4f571d16861aa36"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineCutoutShaderName,
+                Is.EqualTo("Hidden/lilToonCutoutOutline"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineCutoutShaderGuid,
+                Is.EqualTo("3b4aa19949601f046a20ca8bdaee929f"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineCutoutShaderCanonicalDigest,
+                Is.EqualTo(
+                    "9fa9e7e7be55d29851fe4dd5cf2078e259a0b439dd1b61075a7c0448c176a9ec"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineTransparentShaderName,
+                Is.EqualTo("Hidden/lilToonTransparentOutline"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineTransparentShaderGuid,
+                Is.EqualTo("3c79b10c7e0b2784aaa4c2f8dd17d55e"));
+            Assert.That(
+                LilToonSourceAttestation.OutlineTransparentShaderCanonicalDigest,
+                Is.EqualTo(
+                    "d105a112d4b8c984baf00ccbffd56213d1e399ef7d4de122b2f39442d2ac198f"));
+        }
+
+        [Test]
+        public void Verify_OutlineOpaqueWrapperIdentity_Succeeds()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        shaderName:
+                            LilToonSourceAttestation.OutlineShaderName,
+                        assetGuid:
+                            LilToonSourceAttestation.OutlineShaderGuid,
+                        shaderDigest:
+                            LilToonSourceAttestation
+                                .OutlineShaderCanonicalDigest),
+                    out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [Test]
+        public void Verify_OutlineCutoutWrapperIdentity_Succeeds()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    Evidence(
+                        shaderName:
+                            LilToonSourceAttestation
+                                .OutlineCutoutShaderName,
+                        assetGuid:
+                            LilToonSourceAttestation
+                                .OutlineCutoutShaderGuid,
+                        passGuid:
+                            LilToonSourceAttestation.CutoutPassShaderGuid,
+                        shaderDigest:
+                            LilToonSourceAttestation
+                                .OutlineCutoutShaderCanonicalDigest,
+                        passDigest:
+                            LilToonSourceAttestation
+                                .CutoutPassCanonicalDigest,
+                        renderMode: 1),
+                    out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [Test]
+        public void Verify_OutlineTransparentWrapperIdentity_Succeeds()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonTransparentIdentity(
+                    Evidence(
+                        shaderName:
+                            LilToonSourceAttestation
+                                .OutlineTransparentShaderName,
+                        assetGuid:
+                            LilToonSourceAttestation
+                                .OutlineTransparentShaderGuid,
+                        passGuid:
+                            LilToonSourceAttestation
+                                .TransparentPassShaderGuid,
+                        shaderDigest:
+                            LilToonSourceAttestation
+                                .OutlineTransparentShaderCanonicalDigest,
+                        passDigest:
+                            LilToonSourceAttestation
+                                .TransparentPassCanonicalDigest,
+                        renderMode: 2),
+                    out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        /// <summary>
+        /// A wrapper name selects the wrapper profile, so evidence carrying
+        /// the wrapper name over the plain shader's digest must fail closed
+        /// on the digest, not fall through to the plain profile.
+        /// </summary>
+        [Test]
+        public void Verify_OutlineWrapperNameWithPlainDigest_FailsClosed()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        shaderName:
+                            LilToonSourceAttestation.OutlineShaderName,
+                        assetGuid:
+                            LilToonSourceAttestation.OutlineShaderGuid,
+                        shaderDigest:
+                            LilToonSourceAttestation.ShaderCanonicalDigest),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(
+                    LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [TestCase("Hidden/lilToonOutline", "Hidden/lilToonOutline")]
+        [TestCase(
+            "Hidden/lilToonCutoutOutline", "Hidden/lilToonCutoutOutline")]
+        [TestCase(
+            "Hidden/lilToonTransparentOutline",
+            "Hidden/lilToonTransparentOutline")]
+        [TestCase("lilToon", "lilToon")]
+        [TestCase("Hidden/lilToonCutout", "lilToon")]
+        [TestCase("Some/Unknown", "lilToon")]
+        public void ResolveCanonicalTargetShaderName_KeepsWrapperAndMovesPlain(
+            string sourceShaderName,
+            string expectedTargetName)
+        {
+            Assert.That(
+                LilToonSourceAttestation.ResolveCanonicalTargetShaderName(
+                    sourceShaderName),
+                Is.EqualTo(expectedTargetName));
+        }
     }
 }
