@@ -86,5 +86,14 @@ citable trig accuracy contract for the covered runtimes.
 ## 5. Decision requested
 
 Option 1: drop S7 from 0.1.0 and record A8 as a standing, verified refusal.
-The 0.1.0 shader-coverage goal (V3) is otherwise delivered by S6 plus the
-existing Poiyomi affine path.
+
+## 6. Decision recorded
+
+Option 1, decided by the user on 2026-09-06: S7 is dropped from 0.1.0.
+Non-identity `_MainTex_ST` and nonzero `_MainTex_ScrollRotate` keep refusing
+with the named `UnsupportedUv` diagnostic as a standing, verified refusal.
+The user noted the discussion will probably be revisited later as its own
+investigation branch, per the reopen conditions in section 4 option 2: an
+upstream lilToon zero-angle early-out, or a citable per-runtime trig
+accuracy contract. The 0.1.0 shader-coverage goal (V3) is otherwise
+delivered by S6 plus the existing Poiyomi affine path.
