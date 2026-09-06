@@ -25,7 +25,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 .GetCustomAttributes(typeof(AddComponentMenu), false)
                 .Cast<AddComponentMenu>()
                 .Single();
-            Assert.That(attribute.componentMenu, Is.EqualTo("AMUSE/Avatar Optimizer"));
+            Assert.That(attribute.componentMenu, Is.EqualTo("AMUSE/AMUSE Avatar Optimizer"));
         }
     }
 }
