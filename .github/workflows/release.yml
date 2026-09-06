@@ -2,6 +2,11 @@ name: Build Release
 
 on: 
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark the published release as a prerelease"
+        type: boolean
+        default: false
 
 jobs:
 
@@ -99,3 +104,4 @@ jobs:
             ${{ env.unityPackage }}
             ${{ env.packagePath }}/package.json
           tag_name: ${{ env.version }}
+          prerelease: ${{ inputs.prerelease }}
