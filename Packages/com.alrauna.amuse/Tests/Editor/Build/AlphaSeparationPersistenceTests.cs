@@ -102,6 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets =
                 new OverrideTemporaryDirectoryScope(PersistenceTempFolder);
             var root = new GameObject("AMUSE persistence");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             AmusePlatformFinishState state = null;
             try
             {
@@ -283,7 +284,106 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        // --- Falsifier 13: source assets are never written -------------------
+        /// <summary>
+        /// S5 (decision V9): every surviving generated clone must resolve
+        /// back to its source through NDMF's object registry, so later
+        /// passes and error reports can map AMUSE outputs. The assertion
+        /// re-enters the build's own registry scope, because the static
+        /// registry is only active during a build.
+        /// </summary>
+        [Test]
+        public void GeneratedClonesResolveToTheirSourcesThroughTheObjectRegistry()
+        {
+            using var assets =
+                new OverrideTemporaryDirectoryScope(PersistenceTempFolder);
+            var root = new GameObject("AMUSE registry resolution");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "registry"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var first = Track(VerifiedOpaqueMaterial());
+                    var second = Track(VerifiedOpaqueMaterial());
+                    var sourceMesh = Track(
+                        AlphaSeparationSplitTests
+                            .CreateOpaqueAndSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "body", sourceMesh, first, split);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE registry swap",
+                    });
+                    SetSwapCurve(
+                        clip, "body", 0,
+                        (0f, first), (0.25f, second), (1.5f, first));
+                    Track(NewController(root, "AMUSE registry graph", clip));
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root,
+                        AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+                    Assert.That(context.Successful, Is.True,
+                        "fixture precondition: the build must complete");
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1),
+                        "fixture precondition: a write must be applied");
+
+                    var wholeSlot = state.Separation.Renderers[0]
+                        .CandidateSlots.Single(slot =>
+                            slot.Plan.SourceMaterialBindingIndex == 0);
+                    var splitSlot = state.Separation.Renderers[0]
+                        .CandidateSlots.Single(slot =>
+                            slot.Plan.SourceMaterialBindingIndex == 1);
+
+                    using (new ObjectRegistryScope(
+                        (IObjectRegistry)context.ObjectRegistry))
+                    {
+                        Assert.That(
+                            ObjectRegistry.GetReference(
+                                wholeSlot.OpaqueOfAdmitted[first]).Object,
+                            Is.EqualTo(first),
+                            "the whole-slot clone must resolve back to its " +
+                            "source material");
+                        Assert.That(
+                            ObjectRegistry.GetReference(
+                                wholeSlot.OpaqueOfAdmitted[second]).Object,
+                            Is.EqualTo(second),
+                            "the curve-only clone must resolve back to its " +
+                            "source material");
+                        Assert.That(
+                            ObjectRegistry.GetReference(
+                                splitSlot.OpaqueOfAdmitted[split]).Object,
+                            Is.EqualTo(split),
+                            "the appended split clone must resolve back to " +
+                            "its source material");
+                        Assert.That(
+                            ObjectRegistry.GetReference(
+                                renderer.sharedMesh).Object,
+                            Is.EqualTo(sourceMesh),
+                            "the mesh clone must resolve back to the source " +
+                            "mesh");
+                    }
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+                AssetDatabase.DeleteAsset(PersistenceTempFolder);
+                DestroyGenerated(state);
+                DestroyTracked();
+            }
+        }
 
         /// <summary>
         /// Captures structural digests of the source mesh, materials, clip
@@ -305,6 +405,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE source preservation");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var lilFixtures = new LilToonTransparentConversionFixtures();
@@ -591,17 +692,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             };
 
         /// <summary>
-        /// The only assertion establishing the no-eager-save invariant: the
-        /// alpha-separation production sources may not contain the
-        /// <c>SaveAsset</c> token at all. Deterministic, needs no build, and
-        /// cannot be defeated by a save whose asset happens to be reachable.
-        /// <para>
-        /// Each audited file must exist and still name the type this audit
-        /// exists for, so a moved, renamed or emptied source fails rather
-        /// than passes vacuously. The dynamic persistence test above cannot
-        /// substitute for this: an eager <c>SaveAsset</c> implementation
-        /// would also leave its objects persistent.
-        /// </para>
+        /// Falsifier 13, two contracts in one audit. First: no alpha-separation
+        /// production source may contain the <c>SaveAsset</c> token at all.
+        /// Decision V9 delegates the saver duty to NDMF, which persists every
+        /// referenced temporary at the end of the build; the dynamic
+        /// persistence tests prove that survival, and a diagnosed S5 defect
+        /// confirmed that an eager save during prepare would re-import the
+        /// very objects the finalization assigns. Second:
+        /// <c>AlphaSeparationApply.cs</c> must register surviving generated
+        /// replacements with NDMF's object registry, so later passes and
+        /// error reports resolve AMUSE outputs back to their sources. Each
+        /// audited file must exist and still name its anchor, so a moved,
+        /// renamed or emptied source fails rather than passes vacuously.
         /// </summary>
         [Test]
         public void AlphaSeparationProductionSourceNamesNoSaveAsset()
@@ -620,6 +722,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     text.Contains(anchor), Is.True,
                     file + " no longer names " + anchor + "; the audit is " +
                     "not reading the production file it exists for");
+
+                if (file == "Build/AlphaSeparationApply.cs")
+                {
+                    Assert.That(
+                        text.Contains("ObjectRegistry.RegisterReplacedObject"),
+                        Is.True,
+                        file + " must register generated replacements with " +
+                        "NDMF's object registry");
+                }
 
                 if (text.Contains("SaveAsset"))
                 {

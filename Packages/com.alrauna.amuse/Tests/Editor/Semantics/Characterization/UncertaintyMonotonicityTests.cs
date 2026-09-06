@@ -126,7 +126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             return material;
         }
 
-        [TestCase("MainTexBecomesTrilinear")]
+        [TestCase("MainTexBecomesMirror")]
         [TestCase("BumpMapLosesNormalImport")]
         [TestCase("BumpMapGreenChannelFlipped")]
         [TestCase("EmissionMapGainsImportedAlpha")]
@@ -143,9 +143,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 
             switch (mutation)
             {
-                case "MainTexBecomesTrilinear":
+                case "MainTexBecomesMirror":
                     MonotonicityAssert.Reimport(
-                        _main, i => i.filterMode = FilterMode.Trilinear);
+                        _main,
+                        i => i.wrapMode =
+                            UnityEngine.TextureWrapMode.Mirror);
                     break;
                 case "BumpMapLosesNormalImport":
                     MonotonicityAssert.Reimport(
@@ -204,7 +206,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                 "The monotonicity baseline must start fully proven.");
         }
 
-        [TestCase("MainTexBecomesTrilinear")]
+        [TestCase("MainTexBecomesMirror")]
         [TestCase("BumpMapLosesNormalImport")]
         [TestCase("BumpMapGreenChannelFlipped")]
         [TestCase("EmissionMapGainsImportedAlpha")]
@@ -217,9 +219,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 
             switch (mutation)
             {
-                case "MainTexBecomesTrilinear":
+                case "MainTexBecomesMirror":
                     MonotonicityAssert.Reimport(
-                        _main, i => i.filterMode = FilterMode.Trilinear);
+                        _main,
+                        i => i.wrapMode =
+                            UnityEngine.TextureWrapMode.Mirror);
                     break;
                 case "BumpMapLosesNormalImport":
                     MonotonicityAssert.Reimport(

@@ -40,18 +40,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         {
             "_Mode",
             "_Cutoff",
-            "_SrcBlend",
-            "_DstBlend",
 
-            // The remaining render state the fixture declares. The
-            // opaque-conversion capability reads most of these, and none of
-            // them may reach any semantic output: unknown or gate-failing
-            // conversion state must refuse conversion only, never widen or
-            // narrow ordinary alpha analysis.
-            "_BlendOp",
-            "_BlendOpAlpha",
-            "_SrcBlendAlpha",
-            "_DstBlendAlpha",
+            // _SrcBlend, _DstBlend, _BlendOp, and _BlendOpAlpha left this
+            // list in S10: the multipass rule reads the primary blend pair,
+            // so they are genuinely alpha-relevant now.
+
+            // _BlendOp, _BlendOpAlpha, _SrcBlendAlpha, and _DstBlendAlpha
+            // also left this list in S10: the multipass rule reads the
+            // alpha-channel factors and both operations. The Add-pass state
+            // stays irrelevant: the canonical recipe never writes it, and
+            // the conversion tests prove it changes nothing.
             "_AddBlendOp",
             "_AddSrcBlend",
             "_AddDstBlend",

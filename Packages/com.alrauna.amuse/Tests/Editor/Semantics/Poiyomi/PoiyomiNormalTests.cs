@@ -205,13 +205,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void TrilinearMainSampler_IsUnsupportedSampling()
+        public void MirrorWrapMainSampler_IsUnsupportedSampling()
         {
             var material = NewFixtureMaterial();
             material.SetTexture("_MainTex", ImportTexture(
-                "nrm_trilinear", i => i.filterMode = FilterMode.Trilinear));
+                "nrm_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror));
             material.SetTexture("_BumpMap", ImportTexture(
-                "nrm_bump_tri", i => i.textureType = TextureImporterType.NormalMap));
+                "nrm_bump_mirror", i => i.textureType = TextureImporterType.NormalMap));
 
             AssertUnsupportedOutput(
                 Interpret(material),

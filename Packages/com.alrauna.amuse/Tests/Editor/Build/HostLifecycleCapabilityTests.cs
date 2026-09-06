@@ -63,18 +63,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The policy admits any 2022.3 f-release at or above patch 22. A
-        /// leftover exact-equality branch beside the range check refuses
-        /// this input.
+        /// The policy admits any 2022.3 f-release at or above patch 22, and
+        /// the D8 consent layer marks patches above the attested maximum as
+        /// consent-required. A leftover exact-equality branch beside the
+        /// range check refuses this input instead.
         /// </summary>
         [Test]
-        public void UnityAbovePatchFloorPermitsPositiveMutation()
+        public void UnityAbovePatchFloorPermitsPositiveMutationWithConsent()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(unityVersion: "2022.3.23f1"));
 
             Assert.That(result.MayUsePositiveMutation, Is.True);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+            Assert.That(result.ConsentRequired, Is.True);
         }
 
         [Test]
@@ -172,14 +174,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
         }
 
+        /// <summary>
+        /// REVERSED by decision V8 (2026-09-05): the declared major bound
+        /// was a hard refusal under the original D2 falsifier table; it is
+        /// now a consent subject. The refusal survives only for prerelease
+        /// and below-floor inputs. See
+        /// NdmfPrereleaseAtUpperBoundRefusesWithNdmfReason, which keeps the
+        /// original refusal semantics.
+        /// </summary>
         [Test]
-        public void NdmfAtExclusiveUpperBoundRefusesWithNdmfReason()
+        public void NdmfAtExclusiveUpperBoundRequiresConsentWithNdmfSubject()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(ndmfVersion: "2.0.0"));
 
-            Assert.That(result.MayUsePositiveMutation, Is.False);
-            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+            Assert.That(result.ConsentRequired, Is.True);
+            Assert.That(result.ConsentSubjects.Count, Is.EqualTo(1));
         }
 
         [Test]
@@ -313,16 +325,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
         }
 
+        /// <summary>
+        /// REVERSED by decision V8 (2026-09-05): the declared major bound
+        /// was a hard refusal under the original D3 falsifier table; it is
+        /// now a consent subject. See NdmfAtExclusiveUpperBound for the
+        /// documented reversal.
+        /// </summary>
         [Test]
-        public void VrchatSdkBaseAtExclusiveUpperBoundRefusesWithBaseReason()
+        public void VrchatSdkBaseAtExclusiveUpperBoundRequiresConsentWithBaseSubject()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(vrchatSdkBaseVersion: "4.0.0"));
 
-            Assert.That(result.MayUsePositiveMutation, Is.False);
-            Assert.That(
-                result.Refusal,
-                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion));
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+            Assert.That(result.ConsentRequired, Is.True);
         }
 
         [Test]
@@ -403,16 +420,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
         }
 
+        /// <summary>
+        /// REVERSED by decision V8 (2026-09-05): see the NDMF reversal note.
+        /// </summary>
         [Test]
-        public void VrchatSdkAvatarsAtExclusiveUpperBoundRefusesWithAvatarsReason()
+        public void VrchatSdkAvatarsAtExclusiveUpperBoundRequiresConsentWithAvatarsSubject()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(vrchatSdkAvatarsVersion: "4.0.0"));
 
-            Assert.That(result.MayUsePositiveMutation, Is.False);
-            Assert.That(
-                result.Refusal,
-                Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
+            Assert.That(result.ConsentRequired, Is.True);
         }
 
         [Test]
