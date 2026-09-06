@@ -4,6 +4,16 @@
   "version": "0.1.0",
   "unity": "2022.3",
   "description": "A Unity/NDMF material optimization engine that analyzes and simplifies material, texture, and rendering usage while preserving behavior.",
+  "license": "MIT",
+  "documentationUrl": "https://github.com/Alrauna/AMUSE#readme",
+  "changelogUrl": "https://github.com/Alrauna/AMUSE/releases",
+  "keywords": [
+    "vrchat",
+    "ndmf",
+    "avatar",
+    "material",
+    "optimization"
+  ],
   "vpmDependencies": {
     "nadena.dev.ndmf": ">=1.14.4 <2.0.0-a"
   },
