@@ -415,6 +415,42 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string OutlineTransparentShaderCanonicalDigest =
             "d105a112d4b8c984baf00ccbffd56213d1e399ef7d4de122b2f39442d2ac198f";
 
+        // One-pass and two-pass transparent wrapper identities (S9). The
+        // one-pass shader imports FORWARD, SHADOW_CASTER, and META from the
+        // pinned transparent pass asset; the two-pass shader adds the
+        // FORWARD_BACK backface pre-pass and FORWARD_ADD. Their outline
+        // wrappers import the outline pass set instead. All four declare no
+        // inline pass except a LightMode Never dummy and share the family
+        // property block byte for byte, so the canonical opaque recipe
+        // applies unchanged and the wrapper bytes are the tag's bytes.
+        // Digests were measured on 2026-09-06 exactly like the S8 digests
+        // above: production ComputeNormalizedSourceHash and an independent
+        // sha256 agree on the official tag 2.3.4 files.
+        internal const string OnePassTransparentShaderName =
+            "Hidden/lilToonOnePassTransparent";
+        internal const string OnePassTransparentShaderGuid =
+            "b269573b9937b8340b3e9e191a3ba5a8";
+        internal const string OnePassTransparentShaderCanonicalDigest =
+            "4a5bbd07997e3150bf904aae89223b207c2628e2f1e2d7fe690bcdb76c0d7143";
+        internal const string TwoPassTransparentShaderName =
+            "Hidden/lilToonTwoPassTransparent";
+        internal const string TwoPassTransparentShaderGuid =
+            "6a77405f7dfdc1447af58854c7f43f39";
+        internal const string TwoPassTransparentShaderCanonicalDigest =
+            "c06143d3d345efc1c1dcc8128193a3bb9b1535e4c640b024562923b7b7008074";
+        internal const string OnePassTransparentOutlineShaderName =
+            "Hidden/lilToonOnePassTransparentOutline";
+        internal const string OnePassTransparentOutlineShaderGuid =
+            "7171688840c632447b22ec14e2bdef7e";
+        internal const string OnePassTransparentOutlineShaderCanonicalDigest =
+            "7d87faf6ad3f8217f86b91330d6b1767b75fd91d689ae6f7243c6808b3009f80";
+        internal const string TwoPassTransparentOutlineShaderName =
+            "Hidden/lilToonTwoPassTransparentOutline";
+        internal const string TwoPassTransparentOutlineShaderGuid =
+            "9cf054060007d784394b8b0bb703e441";
+        internal const string TwoPassTransparentOutlineShaderCanonicalDigest =
+            "af28ad17be74f0077a5a4b154a81a70d3dd98bc0e387b93f859b97dd4c505974";
+
         internal const string ShaderFormatVersionProperty = "_lilToonVersion";
         private const string IncludeFolderName = "Includes";
 
@@ -513,6 +549,66 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 TransparentRenderMode,
                 OutlineTransparentShaderCanonicalDigest,
                 TransparentPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile OnePassTransparentProfile =
+            new LilToonSourceProfile(
+                OnePassTransparentShaderName,
+                OnePassTransparentShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                OnePassTransparentShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile TwoPassTransparentProfile =
+            new LilToonSourceProfile(
+                TwoPassTransparentShaderName,
+                TwoPassTransparentShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                TwoPassTransparentShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile
+            OnePassTransparentOutlineProfile =
+            new LilToonSourceProfile(
+                OnePassTransparentOutlineShaderName,
+                OnePassTransparentOutlineShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                OnePassTransparentOutlineShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
+
+        private static readonly LilToonSourceProfile
+            TwoPassTransparentOutlineProfile =
+            new LilToonSourceProfile(
+                TwoPassTransparentOutlineShaderName,
+                TwoPassTransparentOutlineShaderGuid,
+                TransparentPassShaderName,
+                TransparentPassShaderGuid,
+                TransparentRenderMode,
+                TwoPassTransparentOutlineShaderCanonicalDigest,
+                TransparentPassCanonicalDigest);
+
+        /// <summary>
+        /// Every admitted transparent-family source profile: the plain
+        /// source, its outline wrapper (S8), and the one-pass and two-pass
+        /// transparent variants with their outline wrappers (S9). Identity
+        /// verification and evidence gathering both consume this list, so a
+        /// new wrapper is admitted everywhere or nowhere.
+        /// </summary>
+        private static readonly LilToonSourceProfile[]
+            TransparentFamilyProfiles =
+            {
+                TransparentProfile,
+                OutlineTransparentProfile,
+                OnePassTransparentProfile,
+                TwoPassTransparentProfile,
+                OnePassTransparentOutlineProfile,
+                TwoPassTransparentOutlineProfile,
+            };
         // D1: a valueless define the *LIL_SHADER_SETTING* substitution can emit.
         // A define with a value, such as LIL_RENDER 0, never matches.
         private static readonly Regex SettingDefine = new Regex(
@@ -1281,13 +1377,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Verifies the pinned regular Transparent Normal identity (design
-        /// §6) against either admitted transparent shader: the plain source
-        /// or its outline wrapper (S8), over the same pinned transparent pass
-        /// asset. Mismatch fails closed with a diagnostic; there is no
-        /// name-only fallback. The near-miss vendor names
-        /// Hidden/lilToonOnePassTransparent and
-        /// Hidden/lilToonTwoPassTransparent share this pass asset and are
-        /// refused on the shader identity.
+        /// §6) against every admitted transparent shader: the plain source,
+        /// its outline wrapper (S8), and the one-pass and two-pass variants
+        /// with their outline wrappers (S9), all over the same pinned
+        /// transparent pass asset. Mismatch fails closed with a diagnostic;
+        /// there is no name-only fallback.
         /// </summary>
         internal static bool TryVerifyLilToonTransparentIdentity(
             LilToonSourceEvidence evidence,
@@ -1295,7 +1389,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return VerifyFamily(
                 evidence,
-                new[] { TransparentProfile, OutlineTransparentProfile },
+                TransparentFamilyProfiles,
                 out diagnostic);
         }
 
@@ -1370,10 +1464,31 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
             if (string.Equals(
                     shaderName,
-                    TransparentShaderName,
+                    OnePassTransparentShaderName,
                     StringComparison.Ordinal))
             {
-                return TransparentProfile;
+                return OnePassTransparentProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    TwoPassTransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return TwoPassTransparentProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    OnePassTransparentOutlineShaderName,
+                    StringComparison.Ordinal))
+            {
+                return OnePassTransparentOutlineProfile;
+            }
+            if (string.Equals(
+                    shaderName,
+                    TwoPassTransparentOutlineShaderName,
+                    StringComparison.Ordinal))
+            {
+                return TwoPassTransparentOutlineProfile;
             }
 
             return OpaqueProfile;
@@ -1407,10 +1522,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            if (IsOutlineWrapperShaderName(evidence.ShaderName) ||
-                string.Equals(
+            if (string.Equals(
                     evidence.ShaderName,
                     SupportedShaderName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    evidence.ShaderName,
+                    OutlineShaderName,
                     StringComparison.Ordinal))
             {
                 return VerifyFamily(
@@ -1435,7 +1553,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return VerifyFamily(
                 evidence,
-                new[] { TransparentProfile, OutlineTransparentProfile },
+                TransparentFamilyProfiles,
                 out diagnostic);
         }
 
@@ -1443,8 +1561,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Resolves the canonical opaque target shader name for a source
         /// shader name. An outline wrapper source keeps its own wrapper, so
         /// the moved triangles carry the outline passes with them; every
-        /// other source moves onto the plain opaque shader exactly as before
-        /// the outline wrappers were admitted.
+        /// other source - the plain sources and the plain one-pass and
+        /// two-pass variants - moves onto the plain opaque shader.
         /// </summary>
         internal static string ResolveCanonicalTargetShaderName(
             string sourceShaderName)
@@ -1464,6 +1582,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                        StringComparison.Ordinal) ||
                    string.Equals(
                        shaderName, OutlineTransparentShaderName,
+                       StringComparison.Ordinal) ||
+                   string.Equals(
+                       shaderName, OnePassTransparentOutlineShaderName,
+                       StringComparison.Ordinal) ||
+                   string.Equals(
+                       shaderName, TwoPassTransparentOutlineShaderName,
                        StringComparison.Ordinal);
         }
 

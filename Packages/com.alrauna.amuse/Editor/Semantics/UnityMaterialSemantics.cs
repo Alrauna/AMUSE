@@ -489,6 +489,30 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             if (string.Equals(
                     shaderName,
+                    LilToonSourceAttestation.OnePassTransparentShaderName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.TwoPassTransparentShaderName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation
+                        .OnePassTransparentOutlineShaderName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation
+                        .TwoPassTransparentOutlineShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
                     LilToonSourceAttestation.OutlineTransparentShaderName,
                     StringComparison.Ordinal))
             {
