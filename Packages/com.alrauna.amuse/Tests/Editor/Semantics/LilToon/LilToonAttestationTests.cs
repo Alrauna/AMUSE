@@ -1330,7 +1330,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                    Evidence(packageVersion: "2.3.3"), out var diagnostic),
+                    Evidence(packageVersion: "2.3.5"), out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic.Code,
@@ -1931,16 +1931,108 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
         }
 
+        /// <summary>
+        /// The wrong-package-version guard must name a version that is
+        /// genuinely outside the admitted set. 2.3.3 left the refused set in
+        /// S11; 2.3.5 stands in as the unsupported future patch.
+        /// </summary>
         [Test]
         public void VerifyCutout_WrongPackageVersion_IsRefused()
         {
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
-                    CutoutEvidence(packageVersion: "2.3.3"), out var diagnostic),
+                    CutoutEvidence(packageVersion: "2.3.5"), out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic.Code,
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        // --- S11: admitted patch versions 2.3.0-2.3.3 ----------------------
+
+        /// <summary>
+        /// Shader and pass bytes are byte-identical across 2.3.0-2.3.4, so
+        /// each admitted patch version verifies against the shared digests
+        /// with its own include-tree digest. Digests were computed by the
+        /// production ComputeIncludeTreeDigest over each official tag's
+        /// Shader/Includes tree (37 files each), anchored by reproducing the
+        /// pinned 2.3.4 digest exactly.
+        /// </summary>
+        [TestCase("2.3.0",
+            "bba3205a08b2bd56b4d2c69b8de3144377ec0b4ca4c44cc9d71b1341e62c94a0")]
+        [TestCase("2.3.1",
+            "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
+        [TestCase("2.3.2",
+            "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
+        [TestCase("2.3.3",
+            "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
+        public void Verify_AcceptsAdmittedPatchVersionWithItsOwnTree(
+            string version,
+            string includeDigest)
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version, includeDigest: includeDigest),
+                    out var diagnostic),
+                Is.True,
+                version);
+            Assert.That(diagnostic, Is.Null, version);
+        }
+
+        /// <summary>
+        /// The version and the include tree must pair: a 2.3.3 install
+        /// carrying the 2.3.4 include tree fails closed as modified source,
+        /// because the tree is the only per-version bytes the identity
+        /// conjunction can check.
+        /// </summary>
+        [Test]
+        public void Verify_VersionWithAnotherVersionsTree_IsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        packageVersion: "2.3.3",
+                        includeDigest:
+                            "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        /// <summary>
+        /// A loose (non-package) install carries no package version, so its
+        /// include tree alone identifies the shipped version: an admitted
+        /// tree admits, an unknown tree fails closed.
+        /// </summary>
+        [Test]
+        public void Verify_NoPackageInstallIsAdmittedByItsTree()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        hasPackage: false,
+                        includeDigest:
+                            "bba3205a08b2bd56b4d2c69b8de3144377ec0b4ca4c44cc9d71b1341e62c94a0"),
+                    out _),
+                Is.True);
+        }
+
+        [Test]
+        public void Verify_NoPackageUnknownTree_IsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        hasPackage: false,
+                        includeDigest:
+                            "0000000000000000000000000000000000000000000000000000000000000000"),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
         [Test]
