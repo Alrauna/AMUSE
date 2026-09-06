@@ -126,7 +126,8 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
-            out IReadOnlyList<Material> admittedLiveMaterials)
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            ClosedAlphaMaterialCapturer capturer = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -134,7 +135,7 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 bindings,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials);
         }
 

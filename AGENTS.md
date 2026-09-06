@@ -176,6 +176,8 @@ Private root: a separate Unity project outside this repository (the Census Lab p
 
 Authoritative scene corpus: the `!CENSUSLAB/Scenes/` folder of the Census Lab project.
 
+Test prefab corpus (Census Lab project): the `!CENSUSLAB/Prefabs/` folder of the Census Lab project.
+
 Private launcher location: `!CENSUSLAB/Scripts/Editor/` in the Census Lab project.
 
 Census Lab is for characterization and validation, not the correctness oracle. Prefer read-only use. Reduce failures to public synthetic fixtures where practical. Tests create and delete folders under `Assets/`, so they must never run in the private Lab project.
