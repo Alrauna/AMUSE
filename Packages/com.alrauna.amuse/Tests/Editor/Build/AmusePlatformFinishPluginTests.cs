@@ -232,6 +232,37 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
 
         [Test]
+        public void DisabledComponentDoesNotActivateThePipeline()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE disabled-optin fixture");
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                serialized.FindProperty("_amuseDisabled").boolValue = true;
+                serialized.ApplyModifiedProperties();
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                    "a disabled component must not activate the pipeline");
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "a disabled component must not turn the loop into refusals");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void DeclinedConsentStopsThePipelineWithoutAnalysis()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
