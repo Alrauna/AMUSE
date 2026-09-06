@@ -50,28 +50,33 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// Centered product title with the package version underneath, in the
-        /// style of the optimizers users already know, plus a one-click link
-        /// to the issue tracker. The version is read from the installed
-        /// package metadata, so a release never needs an inspector edit.
+        /// Centered product title with the package version to its right, in
+        /// the style of the optimizers users already know, plus a one-click
+        /// link to the issue tracker. The title is centered across the whole
+        /// row, so its position never depends on the version width. The
+        /// version is read from the installed package metadata, so a release
+        /// never needs an inspector edit.
         /// </summary>
         private static void DrawHeader()
         {
+            var row = EditorGUILayout.GetControlRect(GUILayout.Height(26));
             var centered = new GUIStyle(EditorStyles.boldLabel)
             {
                 alignment = TextAnchor.MiddleCenter,
                 fontSize = 18,
             };
-            EditorGUILayout.LabelField("AMUSE", centered, GUILayout.Height(26));
+            GUI.Label(row, "AMUSE", centered);
+
             var version = UnityEditor.PackageManager.PackageInfo.FindForAssembly(
                 typeof(AmuseAvatarOptimizer).Assembly)?.version;
-            var centeredSmall = new GUIStyle(EditorStyles.miniLabel)
+            if (!string.IsNullOrEmpty(version))
             {
-                alignment = TextAnchor.MiddleCenter,
-            };
-            EditorGUILayout.LabelField(
-                string.IsNullOrEmpty(version) ? string.Empty : "v" + version,
-                centeredSmall);
+                var right = new GUIStyle(EditorStyles.miniLabel)
+                {
+                    alignment = TextAnchor.MiddleRight,
+                };
+                GUI.Label(row, "v" + version, right);
+            }
 
             if (GUILayout.Button("Report a bug"))
             {
