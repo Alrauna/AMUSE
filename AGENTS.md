@@ -177,6 +177,8 @@ Private root: `Assets/!CENSUSLAB/`
 
 Authoritative scene corpus: `Assets/!CENSUSLAB/Scenes/`
 
+Test prefab corpus (Census Lab project): `Assets/!CENSUSLAB/Prefabs/`
+
 Private launcher location: `Assets/!CENSUSLAB/Scripts/Editor/`
 
 Census Lab is for characterization and validation, not the correctness oracle. Prefer read-only use. Reduce failures to public synthetic fixtures where practical. Tests create and delete folders under `Assets/`, so they must never run in the private Lab project.
