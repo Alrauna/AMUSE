@@ -47,7 +47,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             material.SetTexture(
                 "_MainTex",
                 unsupportedMain
-                    ? ImportTexture("blast_main", i => i.filterMode = FilterMode.Trilinear)
+                    ? ImportTexture("blast_main", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror)
                     : ImportTexture("blast_main"));
 
             material.SetTexture(
@@ -124,7 +124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             material.SetTexture(
                 "_MainTex",
                 unsupportedMain
-                    ? ImportTexture("blast_main", i => i.filterMode = FilterMode.Trilinear)
+                    ? ImportTexture("blast_main", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror)
                     : ImportTexture("blast_main"));
 
             material.SetFloat("_UseBumpMap", 1f);

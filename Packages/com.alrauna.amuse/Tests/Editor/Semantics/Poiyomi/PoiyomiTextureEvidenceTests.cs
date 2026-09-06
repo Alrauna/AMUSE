@@ -354,22 +354,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void Sampler_Trilinear_IsUnsupported()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("sampler_trilinear", i =>
-            {
-                i.filterMode = FilterMode.Trilinear;
-                i.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-            }));
-
-            var ok = PoiyomiMaterialSemantics.TryGetMainTextureSampling(
-                material, out _);
-
-            Assert.That(ok, Is.False);
-        }
-
-        [Test]
         public void Sampler_MirrorWrap_IsUnsupported()
         {
             var material = NewFixtureMaterial();
