@@ -989,6 +989,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _EnableEmission1 (""Emission 1"", Float) = 0
         _EnableEmission2 (""Emission 2"", Float) = 0
         _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
         _AlphaForceOpaque (""Force Opaque"", Float) = 1
         _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
         _AlphaToCoverage (""Coverage"", Float) = 0
