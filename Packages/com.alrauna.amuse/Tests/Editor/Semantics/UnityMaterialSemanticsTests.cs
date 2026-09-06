@@ -506,19 +506,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// list: it is its own supported family, selected by
         /// TransparentCaptureSchemaCarriesConversionEvidence, and its own
         /// near misses are covered by
-        /// NearMissTransparentName_IsNeverSelectedOrAdmitted.
+        /// NearMissTransparentName_IsNeverSelectedOrAdmitted. The three
+        /// outline wrapper names are no longer here either: S8 pinned them
+        /// as admitted identities of their families. The exactness of the
+        /// new admitted names is guarded by the off-by-one near misses
+        /// below.
         /// </summary>
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
         {
             foreach (var shaderName in new[]
                      {
-                         "Hidden/lilToonCutoutOutline",
+                         "Hidden/lilToonCutoutOutlineX",
                          "Hidden/lilToonOnePassTransparent",
                          "Hidden/lilToonTwoPassTransparent",
-                         "Hidden/lilToonTransparentOutline",
+                         "Hidden/lilToonTransparentOutlineX",
                          "Hidden/lilToonOnePassTransparentOutline",
                          "Hidden/lilToonTwoPassTransparentOutline",
+                         "Hidden/lilToonOutlineCutout",
+                         "Hidden/lilToonOutlineTransparent",
+                         "Hidden/lilToonOutlineX",
                          "_lil/[Optional] lilToonOutlineOnly",
                          "_lil/[Optional] lilToonOutlineOnlyCutout",
                          "_lil/[Optional] lilToonOutlineOnlyTransparent",
