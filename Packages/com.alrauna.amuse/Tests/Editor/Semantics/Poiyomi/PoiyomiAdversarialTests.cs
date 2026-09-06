@@ -222,12 +222,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void UnsupportedSharedMainSampler_InvalidatesEverySample_ConstantSurvives()
         {
-            // A trilinear MainTex sampler is unsupported and is shared by the
+            // A mirror-wrap MainTex sampler is unsupported and is shared by the
             // color, normal, and emission samples, so all three refuse; the
             // forced-opaque alpha is a constant and survives.
             var material = NewFixtureMaterial();
             material.SetTexture("_MainTex", ImportTexture(
-                "shared_trilinear", i => i.filterMode = FilterMode.Trilinear));
+                "shared_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror));
             material.SetColor("_Color", Color.white);
             material.SetTexture("_BumpMap", ImportTexture(
                 "shared_bump", i => i.textureType = TextureImporterType.NormalMap));

@@ -406,6 +406,9 @@ namespace Alrauna.Amuse.Editor.Analysis
                 case TextureFilterMode.Bilinear:
                     filter = AlphaFilterMode.Bilinear;
                     break;
+                case TextureFilterMode.Trilinear:
+                    filter = AlphaFilterMode.Trilinear;
+                    break;
                 default:
                     return false;
             }
@@ -423,7 +426,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                     return false;
             }
 
-            sampling = new AlphaSamplingSettings(filter, wrap);
+            AlphaAnisoMode aniso;
+            switch (semantic.Aniso)
+            {
+                case TextureAnisoMode.None:
+                    aniso = AlphaAnisoMode.None;
+                    break;
+                case TextureAnisoMode.Anisotropic:
+                    aniso = AlphaAnisoMode.Anisotropic;
+                    break;
+                default:
+                    return false;
+            }
+
+            sampling = new AlphaSamplingSettings(filter, wrap, aniso);
             return true;
         }
 

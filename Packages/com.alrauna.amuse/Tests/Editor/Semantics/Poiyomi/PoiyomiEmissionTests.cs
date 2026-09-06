@@ -387,12 +387,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void MapTrilinearMainSampler_IsUnsupportedSampling()
+        public void MapMirrorWrapMainSampler_IsUnsupportedSampling()
         {
             var material = Slot0Material();
             material.SetFloat("_EmissionStrength", 1f);
             material.SetTexture("_MainTex", ImportTexture(
-                "em_trilinear", i => i.filterMode = FilterMode.Trilinear));
+                "em_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror));
             material.SetTexture("_EmissionMap", AlphaOneMap("em_tri"));
 
             AssertUnsupportedOutput(
