@@ -418,9 +418,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// on. One map, two consumers: a second place deciding "is this a
         /// supported lilToon material" could only drift away from the
         /// first. Every supported name is exact, the transparent normal
-        /// one included; near-miss vendor names (the transparent one-pass,
-        /// two-pass, and outline variants among them) stay Unsupported
-        /// and are refused downstream.
+        /// one and the three S8 outline wrappers included; other near-miss
+        /// vendor names (the transparent one-pass and two-pass among them)
+        /// stay Unsupported and are refused downstream.
         /// </summary>
         private static (
             CapturedAlphaMaterialFamily family,
@@ -449,6 +449,16 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             if (string.Equals(
                     shaderName,
+                    LilToonSourceAttestation.OutlineShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToon,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
                     LilToonSourceAttestation.CutoutShaderName,
                     StringComparison.Ordinal))
             {
@@ -459,7 +469,27 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             if (string.Equals(
                     shaderName,
+                    LilToonSourceAttestation.OutlineCutoutShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonCutout,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
                     LilToonSourceAttestation.TransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
+                    LilToonSourceAttestation.OutlineTransparentShaderName,
                     StringComparison.Ordinal))
             {
                 return (
