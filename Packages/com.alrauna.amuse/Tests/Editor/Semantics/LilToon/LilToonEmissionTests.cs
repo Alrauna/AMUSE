@@ -380,8 +380,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetTexture(
                 "_MainTex",
                 ImportTexture(
-                    "trilinearmain",
-                    importer => importer.filterMode = FilterMode.Trilinear));
+                    "mirrormain",
+                    importer => importer.wrapMode =
+                        UnityEngine.TextureWrapMode.Mirror));
             material.SetTexture("_EmissionMap", ImportOpaqueColorMap("cleanemi"));
 
             var emission = Interpret(material).Semantics.Emission;

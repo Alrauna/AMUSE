@@ -331,11 +331,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void AssignedMainTex_TrilinearSampler_IsUnsupportedSampling()
+        public void AssignedMainTex_MirrorWrapSampler_IsUnsupportedSampling()
         {
             var material = NewFixtureMaterial();
             material.SetTexture("_MainTex", ImportTexture(
-                "basecolor_trilinear", i => i.filterMode = FilterMode.Trilinear));
+                "basecolor_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror));
 
             AssertUnsupportedOutput(
                 Interpret(material),
