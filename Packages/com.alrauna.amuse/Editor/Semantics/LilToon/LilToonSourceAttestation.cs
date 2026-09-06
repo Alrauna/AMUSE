@@ -327,7 +327,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string PassShaderGuid =
             "61b4f98a5d78b4a4a9d89180fac793fc";
         internal const string PackageName = "jp.lilxyzw.liltoon";
-        internal const string PackageVersion = "2.3.4";
+        internal const string PackageVersion = "2.3.4"; // newest admitted; the set is AdmittedPackageVersions (S11)
         internal const float ShaderFormatVersion = 45f;
         internal const int OpaqueRenderMode = 0;
 
@@ -342,6 +342,60 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             "6b6c30c1cbe546fe753bcdc77f547441e3f9114ee80e9591bde2b8e6e7e5eb14";
         internal const string IncludeTreeDigest =
             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
+
+        // Admitted package versions and the include-tree digest each ships
+        // (S11). The Shader and ltspass files are byte-identical across
+        // 2.3.0-2.3.4 - per-tag raw sha256 and .meta GUID comparison on the
+        // official tag artifacts - so the include tree is the only
+        // per-version bytes the identity conjunction checks. 2.3.1, 2.3.2,
+        // and 2.3.3 ship identical trees and share a row. The 2.3.4 digest
+        // reproduces the pinned IncludeTreeDigest above, which anchors the
+        // measurement method; the include diffs against 2.3.4 (an
+        // additional-light mode constant, an APV light-direction helper)
+        // touch nothing the alpha proofs cite.
+        private static readonly (string Version, string IncludeDigest)[]
+            AdmittedPackageVersions =
+            {
+                ("2.3.0",
+                    "bba3205a08b2bd56b4d2c69b8de3144377ec0b4ca4c44cc9d71b1341e62c94a0"),
+                ("2.3.1",
+                    "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
+                ("2.3.2",
+                    "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
+                ("2.3.3",
+                    "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
+                (PackageVersion, IncludeTreeDigest),
+            };
+
+        private static bool IsAdmittedPackageVersion(string packageVersion)
+        {
+            foreach (var row in AdmittedPackageVersions)
+            {
+                if (string.Equals(
+                        row.Version, packageVersion,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string IncludeDigestForVersion(string packageVersion)
+        {
+            foreach (var row in AdmittedPackageVersions)
+            {
+                if (string.Equals(
+                        row.Version, packageVersion,
+                        StringComparison.Ordinal))
+                {
+                    return row.IncludeDigest;
+                }
+            }
+
+            return null;
+        }
 
         // Cutout source identity (spec §6 R3). Measured by the merged B1
         // characterization on 2026-08-30 from an installed
@@ -1656,10 +1710,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     return false;
                 }
 
-                if (!string.Equals(
-                        evidence.PackageVersion,
-                        PackageVersion,
-                        StringComparison.Ordinal))
+                if (!IsAdmittedPackageVersion(evidence.PackageVersion))
                 {
                     diagnostic = MaterialDiagnostic(
                         LilToonSemanticDiagnosticCode.UnsupportedVersion,
@@ -1689,11 +1740,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            // 5. Source digests.
-            if (!TryMatchDigest(
+            // 5. Source digests, include tree first: it is the only
+            // per-version bytes the conjunction checks (S11), keyed by the
+            // package version when installed as a package and by the
+            // admitted-digest set alone for loose installs.
+            if (!TryVerifyIncludeTreeForVersion(
+                    evidence.HasPackage
+                        ? evidence.PackageVersion
+                        : null,
                     evidence.IncludeTreeDigest,
-                    IncludeTreeDigest,
-                    IncludeFolderName,
                     out diagnostic) ||
                 !TryMatchDigest(
                     evidence.ShaderCanonicalDigest,
@@ -1750,6 +1805,44 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             diagnostic = null;
             return true;
+        }
+
+        /// <summary>
+        /// The include tree is the only per-version bytes the identity
+        /// conjunction checks (S11). A packaged install must present the
+        /// tree its own version ships; a loose install carries no version
+        /// label, so an admitted tree alone identifies the shipped version
+        /// and anything else fails closed.
+        /// </summary>
+        private static bool TryVerifyIncludeTreeForVersion(
+            string packageVersion,
+            string includeDigest,
+            out LilToonSemanticDiagnostic diagnostic)
+        {
+            if (!string.IsNullOrEmpty(packageVersion))
+            {
+                return TryMatchDigest(
+                    includeDigest,
+                    IncludeDigestForVersion(packageVersion),
+                    IncludeFolderName,
+                    out diagnostic);
+            }
+
+            foreach (var row in AdmittedPackageVersions)
+            {
+                if (string.Equals(
+                        row.IncludeDigest, includeDigest,
+                        StringComparison.Ordinal))
+                {
+                    diagnostic = null;
+                    return true;
+                }
+            }
+
+            diagnostic = MaterialDiagnostic(
+                LilToonSemanticDiagnosticCode.ModifiedShaderSource,
+                IncludeFolderName);
+            return false;
         }
 
         /// <summary>
