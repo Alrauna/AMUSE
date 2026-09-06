@@ -140,6 +140,15 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _SrcBlendAlpha ("Alpha Source Blend", Int) = 1
         _DstBlendAlpha ("Alpha Destination Blend", Int) = 10
 
+        // Second Base pass blend state (the Two Pass preset family). The
+        // multipass rule reads these only when the captured evidence
+        // declares them, so their presence here lets the interpreter tests
+        // exercise the second gate exactly like the first.
+        _BlendOp2 ("RGB Blend Op Two Pass", Int) = 0
+        _SrcBlend2 ("Src Blend Two Pass", Float) = 1
+        _DstBlend2 ("Dst Blend Two Pass", Float) = 0
+        _BlendOpAlpha2 ("Alpha Blend Op Two Pass", Int) = 0
+
         // ForwardAdd pass blend state. _AddBlendOp is declared ONLY so the
         // conversion tests can vary it and prove it changes nothing: the
         // canonical recipe never writes it, so the unchanged blend operation
