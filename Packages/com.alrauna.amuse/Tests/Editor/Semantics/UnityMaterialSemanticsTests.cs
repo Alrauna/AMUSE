@@ -189,6 +189,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// The one-pass and two-pass transparent shaders and their outline
+        /// wrappers are admitted identities of the transparent family (S9):
+        /// selection identifies them and hands back the transparent family's
+        /// existing request without attesting the stand-in source, exactly
+        /// like every other thin UsePass wrapper. Falsifies refusing the
+        /// variants for their names after S9 pinned them.
+        /// </summary>
+        [Test]
+        public void SelectionIdentifiesOnePassAndTwoPassTransparentNames()
+        {
+            foreach (var shaderName in new[]
+                     {
+                         "Hidden/lilToonOnePassTransparent",
+                         "Hidden/lilToonTwoPassTransparent",
+                         "Hidden/lilToonOnePassTransparentOutline",
+                         "Hidden/lilToonTwoPassTransparentOutline",
+                     })
+            {
+                var material = NewMaterial(
+                    "selected-" + shaderName.Replace('/', '-') + ".shader",
+                    shaderName,
+                    LilToonProperties());
+
+                var selected = UnityMaterialSemantics
+                    .TrySelectAlphaMaterialRequests(
+                        material, out var family, out var request, out _);
+
+                Assert.That(selected, Is.True, shaderName);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent),
+                    shaderName);
+                Assert.That(
+                    request,
+                    Is.SameAs(
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest),
+                    shaderName);
+            }
+        }
+
+        /// <summary>
         /// Selection answers two separate questions for one material: what
         /// ordinary alpha proof may consider, and what the single closed
         /// capture must gather. Poiyomi is the family where they differ,
@@ -508,9 +550,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// near misses are covered by
         /// NearMissTransparentName_IsNeverSelectedOrAdmitted. The three
         /// outline wrapper names are no longer here either: S8 pinned them
-        /// as admitted identities of their families. The exactness of the
-        /// new admitted names is guarded by the off-by-one near misses
-        /// below.
+        /// as admitted identities of their families, and S9 did the same
+        /// for the one-pass and two-pass transparent variants and their
+        /// outline wrappers. The exactness of every admitted name is
+        /// guarded by the off-by-one near misses below.
         /// </summary>
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
@@ -518,11 +561,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             foreach (var shaderName in new[]
                      {
                          "Hidden/lilToonCutoutOutlineX",
-                         "Hidden/lilToonOnePassTransparent",
-                         "Hidden/lilToonTwoPassTransparent",
+                         "Hidden/lilToonOnePassTransparentX",
+                         "Hidden/lilToonTwoPassTransparentX",
                          "Hidden/lilToonTransparentOutlineX",
-                         "Hidden/lilToonOnePassTransparentOutline",
-                         "Hidden/lilToonTwoPassTransparentOutline",
+                         "Hidden/lilToonOnePassTransparentOutlineX",
+                         "Hidden/lilToonTwoPassTransparentOutlineX",
                          "Hidden/lilToonOutlineCutout",
                          "Hidden/lilToonOutlineTransparent",
                          "Hidden/lilToonOutlineX",
