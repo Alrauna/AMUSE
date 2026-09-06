@@ -513,15 +513,21 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// The V1 trigger: true only when the avatar root itself carries
-        /// <see cref="Alrauna.Amuse.Runtime.AmuseAvatarOptimizer"/>. A
-        /// component on any child transform does not activate the pipeline.
+        /// <see cref="Alrauna.Amuse.Runtime.AmuseAvatarOptimizer"/> with its
+        /// Disable AMUSE toggle off. A component on any child transform does
+        /// not activate the pipeline, and a disabled component activates
+        /// nothing at all - the build treats it exactly like an absent one.
         /// </summary>
         private static bool TriggerActivated(BuildContext context)
         {
             var root = context.AvatarRootObject;
-            return root != null
-                && root.GetComponent<
-                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>() != null;
+            if (root == null)
+            {
+                return false;
+            }
+            var component =
+                root.GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            return component != null && !component.AmuseDisabled;
         }
 
         /// <summary>
