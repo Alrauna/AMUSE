@@ -12,12 +12,12 @@ namespace Alrauna.Amuse.Editor.Host
         /// added under verification obligation 7 with a recorded
         /// justification:
         ///
-        /// - VRCAnimatorLayerControl adjusts playable-layer weights. The
-        ///   capture model already treats every captured clip as potentially
-        ///   active regardless of weight - the same conservative reachability
-        ///   basis the animation-event refusal pins - so a weight change can
-        ///   only reduce how much a clip applies, never add a state the
-        ///   model does not already consider.
+        /// - VRCAnimatorLayerControl and VRCPlayableLayerControl adjust
+        ///   playable-layer weights. The capture model already treats every
+        ///   captured clip as potentially active regardless of weight - the
+        ///   same conservative reachability basis the animation-event refusal
+        ///   pins - so a weight change can only reduce how much a clip applies,
+        ///   never add a state the model does not already consider.
         /// - VRCAnimatorTrackingControl selects head, hand, and eye
         ///   tracking sources.
         /// - VRCAnimatorLocomotionControl turns locomotion on or off.
@@ -40,6 +40,7 @@ namespace Alrauna.Amuse.Editor.Host
             MaterialNeutralVrchatBehaviourFullNames =
             {
                 "VRC.SDK3.Avatars.Components.VRCAnimatorLayerControl",
+                "VRC.SDK3.Avatars.Components.VRCPlayableLayerControl",
                 "VRC.SDK3.Avatars.Components.VRCAnimatorTrackingControl",
                 "VRC.SDK3.Avatars.Components.VRCAnimatorLocomotionControl",
                 "VRC.SDK3.Avatars.Components.VRCAnimatorTemporaryPoseSpace",

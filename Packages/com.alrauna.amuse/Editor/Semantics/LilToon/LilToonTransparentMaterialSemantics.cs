@@ -31,6 +31,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string UseMain2ndTexProperty = "_UseMain2ndTex";
         private const string UseMain3rdTexProperty = "_UseMain3rdTex";
         private const string AlphaMaskModeProperty = "_AlphaMaskMode";
+        private const string AlphaMaskScaleProperty = "_AlphaMaskScale";
+        private const string AlphaMaskValueProperty = "_AlphaMaskValue";
         private const string IdMask1Property = "_IDMask1";
         private const string IdMask2Property = "_IDMask2";
         private const string IdMask3Property = "_IDMask3";
@@ -102,7 +104,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             UseParallaxProperty,
             UseMain2ndTexProperty,
             UseMain3rdTexProperty,
-            AlphaMaskModeProperty,
             IdMask1Property,
             IdMask2Property,
             IdMask3Property,
@@ -155,6 +156,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     CutoffProperty,
                     AlphaBoostFaProperty,
                     SubpassCutoffProperty,
+                    AlphaMaskScaleProperty,
+                    AlphaMaskValueProperty,
                 },
                 colorProperties: new[] { ColorProperty },
                 vectorProperties: new[]
@@ -246,8 +249,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
-            // (1) Every optional alpha/coverage feature exactly off. The
-            // first failure names the offending property.
+            // (1) Every optional alpha/coverage feature exactly off.
             var gate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
             if (gate != null)
             {
@@ -258,6 +260,57 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     gate);
             }
 
+            // (1a) Alpha mask mode: mode 0 (off) or mode 2 (multiply) with
+            // _AlphaMaskScale == 1 and _AlphaMaskValue >= 1.
+            if (!evidence.TryGetScalar(AlphaMaskModeProperty, out var maskMode) ||
+                !IsFinite(maskMode))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskModeProperty);
+            }
+
+            if (maskMode == 0f)
+            {
+                // Off: no alpha mask manipulation.
+            }
+            else if (maskMode == 2f)
+            {
+                // Multiply mode: col.a = col.a * saturate(mask.r * scale + value).
+                // When scale == 1 and value >= 1, since mask.r >= 0, mask.r * scale + value >= 1,
+                // so saturate(...) is exactly 1.0, leaving col.a unchanged.
+                if (!evidence.TryGetScalar(AlphaMaskScaleProperty, out var maskScale) ||
+                    !IsFinite(maskScale) ||
+                    maskScale != 1f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskScaleProperty);
+                }
+
+                if (!evidence.TryGetScalar(AlphaMaskValueProperty, out var maskValue) ||
+                    !IsFinite(maskValue) ||
+                    maskValue < 1f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskValueProperty);
+                }
+            }
+            else
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskModeProperty);
+            }
             // (2) Dissolve mode zero, exactly. The shader rounds the mode
             // before branching; the proof cannot, so anything but exact zero
             // — and any non-finite component — refuses (B2 §10).
