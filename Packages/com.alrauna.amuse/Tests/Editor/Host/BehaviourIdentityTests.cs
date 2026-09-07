@@ -61,6 +61,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "VRC.SDK3.Avatars.Components.VRCAnimatorLayerControl"),
                 Is.True);
         }
+        [Test]
+        public void VrchatPlayableLayerControlIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCPlayableLayerControl"),
+                Is.True);
+        }
+
 
         [Test]
         public void VrchatParameterDriverIsAllowlisted()
