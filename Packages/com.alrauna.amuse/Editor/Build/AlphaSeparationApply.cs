@@ -40,6 +40,21 @@ namespace Alrauna.Amuse.Editor.Build
                 context.AssetSaver,
                 _ => PrepareSurvivingSet(context, state, out finalization),
                 () => ApplyFinalization(finalization, state));
+
+            // The summary describes one analyzed run with the counts the
+            // applied writes produced, so it is reported here — after the
+            // mutation — and only when the barrier reached analysis. Builds
+            // the barrier refused or silent-no-op'd keep their own reporting
+            // and never gain a summary line.
+            if (state.ReachedRendererAnalysis)
+            {
+                AmuseReports.AvatarSummary(
+                    context.AvatarRootObject,
+                    state.AnalyzedRendererCount,
+                    state.AppliedOpaqueTriangleCount,
+                    state.SemanticallyRefusedRendererCount,
+                    state.Lifecycle.BuildPath);
+            }
         }
 
         /// <summary>
