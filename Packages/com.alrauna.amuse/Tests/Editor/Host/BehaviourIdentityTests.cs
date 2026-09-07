@@ -54,6 +54,59 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void VrchatMaterialNeutralBehaviourIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorLayerControl"),
+                Is.True);
+        }
+
+        [Test]
+        public void VrchatParameterDriverIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAvatarParameterDriver"),
+                Is.True);
+        }
+
+        [Test]
+        public void VrchatMaterialNeutralBehaviourSurvivesAnSdkPatchBump()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.11.7|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorTrackingControl"),
+                Is.True);
+        }
+
+        [Test]
+        public void MimicTypeOutsideTheVrchatPackageIsNotAllowed()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "some.package@1.0.0|SomeAsm|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorLayerControl"),
+                Is.False,
+                "a third-party type must not ride on the VRChat allowlist");
+        }
+
+        [Test]
+        public void VrchatPackageWithAnUnknownBehaviourIsNotAllowed()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.SomeMysteryBehaviour"),
+                Is.False);
+        }
+
+        [TestCase("com.vrchat.avatars@3.10.4")]
+        [TestCase("a|b|c|d")]
+        public void MalformedIdentityIsNotAllowed(string identity)
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(identity), Is.False);
+        }
+
+        [Test]
         public void NullTypeIsProgrammerMisuse()
         {
             Assert.Throws<ArgumentNullException>(() => BehaviourIdentity.Of(null));
