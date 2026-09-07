@@ -52,11 +52,37 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One Information entry per host lifecycle refusal, with the
+        /// avatar root as its clickable context. A
+        /// <see cref="HostLifecycleRefusal.None"/> next to a denied
+        /// mutation permission is an invariant break, not a refusal, so
+        /// it throws.
+        /// </summary>
+        internal static void LifecycleRefusal(
+            GameObject avatarRoot, HostLifecycleRefusal cause)
+        {
+            if (cause == HostLifecycleRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "HostLifecycleRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.HostKey(cause));
+            }
+        }
+
         internal static void AvatarSummary(
             GameObject avatarRoot,
             int analyzedRenderers,
             int movedTriangles,
-            int untouchedRenderers)
+            int untouchedRenderers,
+            AmuseBuildPath buildPath)
         {
             var summary = string.Format(
                 AmuseReportStrings.Get(
@@ -67,7 +93,9 @@ namespace Alrauna.Amuse.Editor.Build
 
             AmuseBuildStatusStore.Record(
                 avatarRoot.GetInstanceID(),
-                "Last upload: " + summary);
+                (buildPath == AmuseBuildPath.ApplyOnPlay
+                    ? "Last play mode run: "
+                    : "Last upload: ") + summary);
 
             using (ErrorReport.WithContextObject(avatarRoot))
             {

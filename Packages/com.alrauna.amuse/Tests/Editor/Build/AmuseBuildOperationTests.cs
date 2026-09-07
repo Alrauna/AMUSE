@@ -355,19 +355,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(sourceMesh.vertexCount, Is.EqualTo(3));
                 Assert.That(sourceMaterial.color, Is.EqualTo(Color.green));
 
-                // An explicit refusal must record nothing at all, not merely
-                // nothing fatal. NDMF's ErrorReport.ReportError logs every error
-                // it records - Debug.LogException for a StackTraceError, and a
-                // "[NDMF] Error Reported: " warning for every other IError - so an
-                // empty capture proves no entry of any severity was recorded
-                // during this build. BuildContext.Successful alone would not:
-                // it only trips at ErrorSeverity.Error and above, and a warning
-                // never fails a Unity test on its own.
+                // An explicit preparation refusal must add no report of
+                // its own and must never fail the build. Since the V7
+                // lifecycle fix, the barrier reports the host verdict for
+                // the real facts, and this checkout carries no VRChat SDK,
+                // so the capture may hold that lifecycle entry. An
+                // exception, or any non-NDMF entry, fails.
                 Assert.That(
                     reported,
-                    Is.Empty,
-                    "an explicit preparation refusal must report no error, but " +
-                    "NDMF recorded: " + string.Join(" || ", reported));
+                    Has.All.Contains(NdmfReportedErrorPrefix),
+                    "the preparation refusal recorded an exception or a " +
+                    "foreign entry: " + string.Join(" || ", reported));
                 Assert.That(context.Successful, Is.True);
             }
             finally
@@ -478,7 +476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static HostLifecycleCapability RefusedCapability()
         {
             return HostLifecycleCapability.Evaluate(
-                Facts(AmuseBuildPath.ApplyOnPlay));
+                Facts(AmuseBuildPath.Unknown));
         }
 
         private static HostLifecycleFacts Facts(AmuseBuildPath buildPath)
