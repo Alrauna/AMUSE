@@ -469,13 +469,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void ApplyOnPlayRefusesWithLifecycleReason()
+        public void ApplyOnPlayAdmitsWithFullPermission()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(buildPath: AmuseBuildPath.ApplyOnPlay));
 
-            Assert.That(result.MayUsePositiveMutation, Is.False);
-            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.UnsupportedBuildPath));
+            Assert.That(result.MayUsePositiveMutation, Is.True);
+            Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
         }
 
         [Test]

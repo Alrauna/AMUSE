@@ -340,6 +340,11 @@ namespace Alrauna.Amuse.Editor.Build
             state.HasExecuted = true;
             if (!lifecycle.MayUsePositiveMutation)
             {
+                // V7: a lifecycle refusal is never silent. One plain
+                // English entry on the avatar root tells the user why
+                // nothing happened.
+                AmuseReports.LifecycleRefusal(
+                    context.AvatarRootObject, lifecycle.Refusal);
                 return;
             }
 
@@ -508,7 +513,8 @@ namespace Alrauna.Amuse.Editor.Build
                 context.AvatarRootObject,
                 state.AnalyzedRendererCount,
                 state.OpaqueCandidateTriangleCount,
-                state.SemanticallyRefusedRendererCount);
+                state.SemanticallyRefusedRendererCount,
+                lifecycle.BuildPath);
         }
 
         /// <summary>

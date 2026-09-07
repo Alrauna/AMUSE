@@ -216,12 +216,12 @@ namespace Alrauna.Amuse.Editor.Build
                 "avatar.",
 
             ["amuse.host.UnsupportedBuildPath"] =
-                "AMUSE does not run in Play mode.",
+                "AMUSE could not tell what kind of build this is.",
             ["amuse.host.UnsupportedBuildPath:description"] =
-                "AMUSE runs when you upload the avatar, not in Play mode. " +
-                "Enter Play mode does not run the optimizer.",
+                "The build pipeline did not say whether this is an " +
+                "upload or a Play mode run, so AMUSE changed nothing.",
             ["amuse.host.UnsupportedBuildPath:hint"] =
-                "Upload the avatar to see AMUSE's result.",
+                "Update NDMF and run the build again.",
 
             ["amuse.host.MissingBuildContextServices"] =
                 "The build pipeline is missing services AMUSE needs.",
