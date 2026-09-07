@@ -324,6 +324,123 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ApplyOnPlayPathRunsThePipeline()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE play-path fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(buildPath: AmuseBuildPath.ApplyOnPlay));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.HasExecuted, Is.True);
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1),
+                    "the play path reaches the renderer loop, where the " +
+                    "unfamiliar LineRenderer refuses semantically");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void LifecycleRefusalReportsPlainEnglishEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE lifecycle refusal fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+
+            var reported = new List<string>();
+            void Capture(string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
+            Application.logMessageReceived += Capture;
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+
+                AmusePlatformFinishPass.Execute(
+                    context, SupportedFacts(unityVersion: "2019.4.40f1"));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.HasExecuted, Is.True);
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(
+                    reported,
+                    Has.Some.Contains("This Unity version is not supported"));
+            }
+            finally
+            {
+                Application.logMessageReceived -= Capture;
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void RefusalNoneWithDeniedPermissionThrows()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE none-refusal guard fixture");
+
+            try
+            {
+                Assert.That(
+                    () => AmuseReports.LifecycleRefusal(
+                        root, HostLifecycleRefusal.None),
+                    Throws.InvalidOperationException);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void AvatarSummaryNamesTheRunKind()
+        {
+            var root = new GameObject("AMUSE summary label fixture");
+
+            try
+            {
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild);
+                AmuseBuildStatusStore.TryGet(
+                    root.GetInstanceID(), out var uploadStatus);
+                StringAssert.StartsWith(
+                    "Last upload: ", uploadStatus);
+
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay);
+                AmuseBuildStatusStore.TryGet(
+                    root.GetInstanceID(), out var playStatus);
+                StringAssert.StartsWith(
+                    "Last play mode run: ", playStatus);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void CapturePassRetainsTheHostsExactAnimatorBindings()
         {
             using var armed = SyntheticPluginScope.Arm();
@@ -3432,7 +3549,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private static HostLifecycleFacts SupportedFacts(
-            string unityVersion = "2022.3.22f1")
+            string unityVersion = "2022.3.22f1",
+            AmuseBuildPath buildPath = AmuseBuildPath.NonPlayNdmfBuild)
         {
             return new HostLifecycleFacts(
                 unityVersion,
@@ -3440,7 +3558,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "3.10.4",
                 "3.10.4",
                 WellKnownPlatforms.VRChatAvatar30,
-                AmuseBuildPath.NonPlayNdmfBuild,
+                buildPath,
                 hasAssetSaver: true,
                 hasAssetContainer: true,
                 hasObjectRegistry: true,

@@ -5,6 +5,13 @@ using UnityEditor;
 
 namespace Alrauna.Amuse.Editor.Build
 {
+    /// <summary>
+    /// How NDMF invoked this build. Both known paths admit: uploads and
+    /// other edit-mode builds are <see cref="NonPlayNdmfBuild"/>, and
+    /// entering Play mode is <see cref="ApplyOnPlay"/> (the Play mode part
+    /// of V11, reversed on 2026-09-06). <see cref="Unknown"/> means no
+    /// caller classified the build, and it refuses.
+    /// </summary>
     internal enum AmuseBuildPath
     {
         NonPlayNdmfBuild,
@@ -104,12 +111,14 @@ namespace Alrauna.Amuse.Editor.Build
             bool mayUsePositiveMutation,
             HostLifecycleRefusal refusal,
             string supportedAssumption,
+            AmuseBuildPath buildPath,
             bool consentRequired = false,
             IReadOnlyList<string> consentSubjects = null)
         {
             MayUsePositiveMutation = mayUsePositiveMutation;
             Refusal = refusal;
             SupportedAssumption = supportedAssumption;
+            BuildPath = buildPath;
             ConsentRequired = consentRequired;
             ConsentSubjects = consentSubjects
                 ?? (IReadOnlyList<string>)Array.Empty<string>();
@@ -117,6 +126,10 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal bool MayUsePositiveMutation { get; }
         internal HostLifecycleRefusal Refusal { get; }
+
+        /// <summary>The build path this verdict decided on, carried so the
+        /// inspector status can name the run kind.</summary>
+        internal AmuseBuildPath BuildPath { get; }
         internal string SupportedAssumption { get; }
 
         /// <summary>
@@ -141,7 +154,9 @@ namespace Alrauna.Amuse.Editor.Build
 
             if (!UnityVersionAdmitted(facts.UnityVersion))
             {
-                return Refused(HostLifecycleRefusal.UnsupportedUnityVersion);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedUnityVersion,
+                    facts.BuildPath);
             }
 
             // D8 + V8: a major at or beyond the declared bound does not
@@ -152,7 +167,9 @@ namespace Alrauna.Amuse.Editor.Build
                 && !PackageVersionBeyondMajorBound(
                     facts.NdmfVersion, NdmfFloor, NdmfUpperBound))
             {
-                return Refused(HostLifecycleRefusal.UnsupportedNdmfVersion);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedNdmfVersion,
+                    facts.BuildPath);
             }
 
             if (!PackageVersionAdmitted(
@@ -160,7 +177,9 @@ namespace Alrauna.Amuse.Editor.Build
                 && !PackageVersionBeyondMajorBound(
                     facts.VrchatSdkBaseVersion, VrchatSdkFloor, VrchatSdkUpperBound))
             {
-                return Refused(HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedVrchatSdkBaseVersion,
+                    facts.BuildPath);
             }
 
             if (!PackageVersionAdmitted(
@@ -168,23 +187,34 @@ namespace Alrauna.Amuse.Editor.Build
                 && !PackageVersionBeyondMajorBound(
                     facts.VrchatSdkAvatarsVersion, VrchatSdkFloor, VrchatSdkUpperBound))
             {
-                return Refused(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion,
+                    facts.BuildPath);
             }
 
             if (!EqualsOrdinal(facts.PlatformQualifiedName, SupportedPlatform))
             {
-                return Refused(HostLifecycleRefusal.UnsupportedPlatform);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedPlatform,
+                    facts.BuildPath);
             }
 
-            if (facts.BuildPath != AmuseBuildPath.NonPlayNdmfBuild)
+            // The Play mode part of V11 reversed on 2026-09-06: Apply on
+            // Play admits like an upload. Only an unclassified path
+            // refuses, because no caller told the gate what build this is.
+            if (facts.BuildPath == AmuseBuildPath.Unknown)
             {
-                return Refused(HostLifecycleRefusal.UnsupportedBuildPath);
+                return Refused(
+                    HostLifecycleRefusal.UnsupportedBuildPath,
+                    facts.BuildPath);
             }
 
             if (!facts.HasAssetSaver || !facts.HasAssetContainer ||
                 !facts.HasObjectRegistry || !facts.HasErrorReport)
             {
-                return Refused(HostLifecycleRefusal.MissingBuildContextServices);
+                return Refused(
+                    HostLifecycleRefusal.MissingBuildContextServices,
+                    facts.BuildPath);
             }
 
             var subjects = new List<string>();
@@ -200,7 +230,9 @@ namespace Alrauna.Amuse.Editor.Build
                 HostLifecycleRefusal.None,
                 "Unity 2022.3.22f1 or newer 2022.3 f-release; NDMF 1.14.4 to any 1.x below 2.0.0, " +
                 "no prerelease; VRChat SDK Base/Avatars 3.10.4 to any 3.x below 4.0.0, no prerelease; " +
-                "NDMF platform nadena.dev.ndmf.vrchat.avatar3; non-Play NDMF build.",
+                "NDMF platform nadena.dev.ndmf.vrchat.avatar3; NDMF build (upload, Build & Test, " +
+                "or Apply on Play).",
+                facts.BuildPath,
                 subjects.Count > 0,
                 subjects);
         }
@@ -251,9 +283,11 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
-        private static HostLifecycleCapability Refused(HostLifecycleRefusal refusal)
+        private static HostLifecycleCapability Refused(
+            HostLifecycleRefusal refusal,
+            AmuseBuildPath buildPath)
         {
-            return new HostLifecycleCapability(false, refusal, null);
+            return new HostLifecycleCapability(false, refusal, null, buildPath);
         }
 
         /// <summary>
