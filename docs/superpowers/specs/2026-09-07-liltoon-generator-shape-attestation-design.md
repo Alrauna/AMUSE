@@ -68,6 +68,15 @@ shapes. Disagreement means the canonicalization is incomplete and blocks the
 VPM release zip hashes to `34d17276...d73d3b303`, which the registry declares.
 Both artifact identities are now named explicitly in the attestation comments.
 
+`[DECISION]` G5 - found during the first Lab validation: the activator check
+refused every occurrence of the three external-activation defines, including
+the generator's own. The rule is now slot-scoped. An occurrence is admitted
+when it sits inside the verified setting run, or - for the LTCGI define -
+directly before the LIL_PASS_FORWARD anchor. An occurrence anywhere else
+still refuses as an unsupported variant. The defines gate lighting variants,
+not alpha semantics, so slot-proven occurrences cannot flip an AMUSE
+decision.
+
 ## 4. Falsifiers
 
 A plausible wrong implementation must fail at least one:

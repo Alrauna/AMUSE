@@ -269,15 +269,25 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal string Identifier { get; }
         internal string Text { get; }
 
+        /// <summary>
+        /// True when the occurrence sits in a slot the generator is proven
+        /// to write: inside the verified setting run, or — for the LTCGI
+        /// define — directly before the LIL_PASS_FORWARD anchor. An
+        /// occurrence outside those slots is a tamper signal.
+        /// </summary>
+        internal bool ProvenSlot { get; }
+
         internal LilToonActivatorOccurrence(
             int lineIndex,
             string identifier,
-            string text)
+            string text,
+            bool provenSlot)
         {
             LineIndex = lineIndex;
             Identifier = identifier
                 ?? throw new ArgumentNullException(nameof(identifier));
             Text = text ?? throw new ArgumentNullException(nameof(text));
+            ProvenSlot = provenSlot;
         }
     }
 
@@ -976,18 +986,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var regions = new List<LilToonRemovedRegion>();
             var activators = new List<LilToonActivatorOccurrence>();
 
-            for (var i = 0; i < lines.Length; i++)
-            {
-                var trimmed = lines[i].Trim();
-                var activator = ExternalActivatorDefine.Match(trimmed);
-                if (activator.Success)
-                {
-                    activators.Add(new LilToonActivatorOccurrence(
-                        i,
-                        activator.Groups["identifier"].Value,
-                        trimmed));
-                }
-            }
 
             // Mark the setting region before emitting, so a same-shaped line
             // outside it can never be dropped.
@@ -1028,6 +1026,35 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
                 regions.Add(new LilToonRemovedRegion(
                     hlslIncludeOrdinal++, i, records));
+            }
+
+            // Collect the known external-activation defines with their slot
+            // provenance. The generator emits these defines only inside the
+            // verified setting run, or — for LTCGI — directly before the
+            // LIL_PASS_FORWARD anchor. An occurrence anywhere else is a
+            // tamper signal.
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var trimmed = lines[i].Trim();
+                var activator = ExternalActivatorDefine.Match(trimmed);
+                if (!activator.Success)
+                {
+                    continue;
+                }
+
+                var identifier = activator.Groups["identifier"].Value;
+                var proven = inSettingRegion[i]
+                    || (string.Equals(
+                            identifier,
+                            "LIL_FEATURE_LTCGI",
+                            StringComparison.Ordinal)
+                        && i + 1 < lines.Length
+                        && string.Equals(
+                            lines[i + 1].Trim(),
+                            ShadowSlotAnchor,
+                            StringComparison.Ordinal));
+                activators.Add(new LilToonActivatorOccurrence(
+                    i, identifier, trimmed, proven));
             }
 
             var builder = new StringBuilder(rawShaderSource.Length);
@@ -1374,6 +1401,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             foreach (var occurrence in shader.Activators.Concat(pass.Activators))
             {
+                if (occurrence.ProvenSlot)
+                {
+                    continue;
+                }
+
                 diagnostic = MaterialDiagnostic(
                     LilToonSemanticDiagnosticCode.UnsupportedShaderVariant,
                     occurrence.Identifier);
