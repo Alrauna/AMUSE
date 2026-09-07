@@ -77,6 +77,24 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        internal static void AvatarRefusal(
+            GameObject avatarRoot, AvatarAnimationRefusal cause)
+        {
+            if (cause == AvatarAnimationRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "AvatarAnimationRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.AvatarKey(cause));
+            }
+        }
+
         internal static void AvatarSummary(
             GameObject avatarRoot,
             int analyzedRenderers,

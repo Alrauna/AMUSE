@@ -60,6 +60,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void EveryAvatarAnimationRefusalCauseHasPlainEnglishStrings()
+        {
+            foreach (AvatarAnimationRefusal cause in
+                Enum.GetValues(typeof(AvatarAnimationRefusal)))
+            {
+                if (cause == AvatarAnimationRefusal.None)
+                {
+                    continue;
+                }
+
+                var key = AmuseReportStrings.AvatarKey(cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key), Is.True,
+                    "missing title for " + cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":description"), Is.True,
+                    "missing description for " + cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":hint"), Is.True,
+                    "missing hint for " + cause);
+            }
+        }
+
+        [Test]
         public void ConsentAndSummaryStringsExist()
         {
             Assert.That(
