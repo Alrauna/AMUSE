@@ -132,7 +132,31 @@ that include lilToon avatars, because batch runs refuse at the consent layer.
 - The generator's variation space is larger than two observed settings. Each
   future third-party integration can add kinds. The canonicalization proof
   list must grow with evidence, one kind at a time.
-- The `e81579d3` zip provenance question in section 6.
+- The `e81579d3` zip provenance question in section 6 is resolved: it is the
+  tag source zip, reproduced by download. `[MEASURED]`
 - The one-pass and two-pass wrapper digests were measured on tag bytes with
-  canonicalization as the identity. That assumption is false under LTCGI, so
-  those pins need the same re-measurement. `[INFERENCE]`
+  canonicalization as the identity. That assumption is false under LTCGI;
+  the 2026-09-07 re-measurement re-derived them under the new
+  canonicalization and confirmed the digest values unchanged. `[MEASURED]`
+
+## 9. Validation outcome (2026-09-07, after the fix)
+
+A first validation round exposed a second refusal layer: the activator
+provenance check refused the generator's own integration defines. The
+slot-scoped rule (design G5, shipped in PR #74) removed that layer.
+
+The full corpus validation then ran in the Census Lab project, driven
+through the editor automation bridge:
+
+- Consent pre-screen: every prefab assigned-material set was checked
+  against the transfer-consent collector. Zero subjects flagged.
+  `[MEASURED]`
+- Full nondestructive builds with the trigger component ensured: 64 of
+  64 corpus prefabs completed without exception. `[MEASURED]`
+- The semantic barrier and capture passes executed in every build.
+  `[MEASURED]`
+- The editor log for the session contains zero unverified-version
+  reports. `[MEASURED]`
+
+The lilToon consent false refusal is closed for the corpus. The S12
+census validation is unblocked.
