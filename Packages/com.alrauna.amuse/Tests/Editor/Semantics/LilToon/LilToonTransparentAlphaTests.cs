@@ -61,6 +61,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_Cutoff",
             "_AlphaBoostFA",
             "_SubpassCutoff",
+            "_AlphaMaskScale",
+            "_AlphaMaskValue",
         };
 
         private static readonly string[] ExpectedAlphaColors = { "_Color" };
@@ -484,7 +486,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase("_ShiftBackfaceUV", 1f)]
         [TestCase("_UseParallax", 1f)]
         [TestCase("_AlphaMaskMode", 1f)]
-        [TestCase("_AlphaMaskMode", 2f)]
         [TestCase("_AlphaMaskMode", 3f)]
         [TestCase("_AlphaMaskMode", 4f)]
         [TestCase("_IDMask1", 1f)]
@@ -500,6 +501,61 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // Falsifies: gating on the compiled feature set rather than
             // runtime material state.
             AssertAlphaGateUnknown(InterpretTransparent(material), property);
+        }
+
+        // --- Alpha mask mode 2 (multiply) support --------------------------
+
+        [Test]
+        public void AlphaMaskMode2_WithScale1Value1_ProvesOpaqueTriangle()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mask_ok");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 1f);
+
+            var resolution =
+                ResolveThroughTransparentFrontend(material, AllOpaqueChain());
+
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [TestCase(0.5f)]
+        [TestCase(0.0f)]
+        [TestCase(-1.0f)]
+        public void AlphaMaskMode2_WithValueBelowOne_RefusesAsUnsupportedFeature(float value)
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mask_val_low");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", value);
+
+            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskValue");
+        }
+
+        [TestCase(0.5f)]
+        [TestCase(2.0f)]
+        public void AlphaMaskMode2_WithScaleNotOne_RefusesAsUnsupportedFeature(float scale)
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mask_scale_bad");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", scale);
+            material.SetFloat("_AlphaMaskValue", 1f);
+
+            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskScale");
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void AlphaMaskMode2_WithNonFiniteParameters_Refuses(float nonFinite)
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mask_nonfinite");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", nonFinite);
+            material.SetFloat("_AlphaMaskValue", 1f);
+
+            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskScale");
         }
 
         [Test]
