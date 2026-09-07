@@ -20,7 +20,8 @@ namespace Alrauna.Amuse.Editor
             if (AmuseComponentPlacement.IsOnHierarchyRoot(component))
             {
                 EditorGUILayout.HelpBox(
-                    "AMUSE will run on this avatar at upload. " +
+                    "AMUSE will run when you upload this avatar and when " +
+                    "you enter Play mode. " +
                     "It moves proven opaque parts of transparent materials onto opaque copies. " +
                     "Anything it cannot prove stays unchanged and gets reported.",
                     MessageType.Info);
