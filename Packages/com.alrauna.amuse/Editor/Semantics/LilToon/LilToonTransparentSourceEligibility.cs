@@ -22,6 +22,25 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     internal static class LilToonTransparentSourceEligibility
     {
         internal const int SupportedTransparentRenderQueue = 2460;
+
+        /// <summary>
+        /// Unity's Transparent queue bucket plus a two-digit offset is the
+        /// other admitted source queue range. Authored offsets inside the
+        /// bucket (for example 3005) order the source material among other
+        /// transparents; the conversion already accepts that class of
+        /// ordering change for the pinned default 2460, whose proven-opaque
+        /// triangles also leave the transparent ordering for the canonical
+        /// opaque queue 2000. Because a proven-opaque fragment has alpha
+        /// exactly one, its blending is the identity, so its own color
+        /// cannot depend on within-bucket order. The triangles that stay
+        /// transparent keep the authored queue, so their order among each
+        /// other is untouched. Values outside the pinned default and this
+        /// bucket still refuse: cross-bucket values express ordering
+        /// against opaque or test geometry that the alpha proof does not
+        /// preserve.
+        /// </summary>
+        internal const int TransparentBucketRenderQueueFloor = 3000;
+        internal const int TransparentBucketRenderQueueCeiling = 3099;
         internal const string SupportedTransparentRenderType =
             "TransparentCutout";
 
@@ -229,12 +248,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // AlreadyOpaque member, so each gate below either authorizes the
             // recipe's writes or refuses.
 
-            // 3-4. The canonical transparent defaults are the only admitted
-            //    source queue and RenderType. The intended 2460 -> 2000
-            //    normalization is part of the conversion; custom overrides
-            //    express ordering or classification intent that the alpha
+            // 3-4. The admitted source queues are the canonical transparent
+            //    default and Unity's Transparent bucket with a two-digit
+            //    offset. The 2460 -> 2000 normalization is part of the
+            //    conversion, and a bucket offset is the same class of
+            //    within-transparent ordering intent; see the bucket
+            //    constants for why that class is admitted. Anything else
+            //    expresses ordering or classification intent that the alpha
             //    proof does not preserve.
-            if (effectiveRenderQueue != SupportedTransparentRenderQueue)
+            if (effectiveRenderQueue != SupportedTransparentRenderQueue &&
+                (effectiveRenderQueue < TransparentBucketRenderQueueFloor ||
+                 effectiveRenderQueue > TransparentBucketRenderQueueCeiling))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedRenderQueue);

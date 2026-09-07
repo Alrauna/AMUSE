@@ -329,55 +329,97 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
 
-            // Every admitted material completes request selection before any
-            // evidence is captured: each union below spans the whole batch, so
-            // no material's evidence can be gathered until both are known.
-            var families = new CapturedAlphaMaterialFamily[admitted.Count];
-            var alphaRequests = new MaterialEvidenceRequest[admitted.Count];
-            var captureRequests = new MaterialEvidenceRequest[admitted.Count];
+            // Request selection is per-material, and so is its failure. A
+            // material no family selects is unattested, and unattestation is
+            // a fact about the slots that can hold that material - never
+            // about the renderer. Unattested materials stay admitted, so
+            // their indices keep addressing slot evidence, but they join no
+            // capture batch and become the Unsupported sentinel, which slot
+            // resolution refuses as semantics-unknown. Every attested
+            // material completes selection before the one capture runs, so
+            // the two closed unions below still span a fully known batch.
+            var capturedByIndex =
+                new CapturedAlphaMaterial[admitted.Count];
+            var attestedIndices = new List<int>(admitted.Count);
+            var attestedMaterials = new List<Material>(admitted.Count);
+            var attestedFamilies =
+                new List<CapturedAlphaMaterialFamily>(admitted.Count);
+            var alphaRequests =
+                new List<MaterialEvidenceRequest>(admitted.Count);
+            var captureRequests =
+                new List<MaterialEvidenceRequest>(admitted.Count);
             for (var index = 0; index < admitted.Count; index++)
             {
+                CapturedAlphaMaterialFamily family;
+                MaterialEvidenceRequest alphaRequest;
+                MaterialEvidenceRequest materialCaptureRequest;
                 if (!selectRequest(
                         admitted[index],
-                        out families[index],
-                        out alphaRequests[index],
-                        out captureRequests[index]) ||
-                    alphaRequests[index] == null ||
-                    captureRequests[index] == null)
+                        out family,
+                        out alphaRequest,
+                        out materialCaptureRequest) ||
+                    alphaRequest == null ||
+                    materialCaptureRequest == null)
+                {
+                    capturedByIndex[index] =
+                        UnityMaterialSemantics.UnattestedMaterial();
+                    continue;
+                }
+
+                capturedByIndex[index] = null;
+                attestedIndices.Add(index);
+                attestedMaterials.Add(admitted[index]);
+                attestedFamilies.Add(family);
+                alphaRequests.Add(alphaRequest);
+                captureRequests.Add(materialCaptureRequest);
+            }
+
+            // Two closed unions over the attested batch. The capture schema
+            // is what the one capture gathers; the alpha request is what
+            // ordinary alpha proof may consider afterwards. Only the latter
+            // is retained, because no consumer reads the broader schema once
+            // the evidence it authorized has been captured. An unattested
+            // material contributes no request: its slots refuse, and no
+            // alpha proof of another material may depend on it.
+            var alphaRelevanceRequest = attestedIndices.Count == 0
+                ? EmptyRequest
+                : MaterialEvidenceRequest.Combine(
+                    alphaRequests.ToArray());
+            var captureRequest = attestedIndices.Count == 0
+                ? EmptyRequest
+                : MaterialEvidenceRequest.Combine(
+                    captureRequests.ToArray());
+
+            if (attestedIndices.Count > 0)
+            {
+                // The closed batch capture is the sole source-attestation
+                // decision for the materials it receives. Its refusal is a
+                // capture-capability failure over an already-selected batch:
+                // the capturer's contract is all-or-nothing and names no
+                // material, so no slot can be isolated from it and the whole
+                // renderer still refuses.
+                if (!capturer(
+                        attestedMaterials,
+                        attestedFamilies,
+                        captureRequest,
+                        out var capturedMaterials))
                 {
                     return Failed(
                         MaterialDependencyClosureFailure.UnattestedMaterial);
                 }
-            }
+                if (capturedMaterials == null ||
+                    capturedMaterials.Count != attestedIndices.Count)
+                {
+                    throw new InvalidOperationException(
+                        "Closed material capture returned an invalid result " +
+                        "count.");
+                }
 
-            // Two closed unions over the same admitted batch. The capture
-            // schema is what the one capture gathers; the alpha request is what
-            // ordinary alpha proof may consider afterwards. Only the latter is
-            // retained, because no consumer reads the broader schema once the
-            // evidence it authorized has been captured.
-            var alphaRelevanceRequest =
-                MaterialEvidenceRequest.Combine(alphaRequests);
-            var captureRequest =
-                MaterialEvidenceRequest.Combine(captureRequests);
-
-            // The closed batch capture is the sole source-attestation decision,
-            // so its refusal means exactly what an unselectable family means:
-            // some admitted material is not attested. There is no second,
-            // weaker capture outcome to distinguish.
-            if (!capturer(
-                    admitted,
-                    families,
-                    captureRequest,
-                    out var capturedMaterials))
-            {
-                return Failed(
-                    MaterialDependencyClosureFailure.UnattestedMaterial);
-            }
-            if (capturedMaterials == null ||
-                capturedMaterials.Count != admitted.Count)
-            {
-                throw new InvalidOperationException(
-                    "Closed material capture returned an invalid result count.");
+                for (var ordinal = 0; ordinal < attestedIndices.Count; ordinal++)
+                {
+                    capturedByIndex[attestedIndices[ordinal]] =
+                        capturedMaterials[ordinal];
+                }
             }
 
             var clips = new List<CapturedClipEvidence>(observations.Count);
@@ -436,18 +478,19 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             // The success return, and the only place the live pairing escapes.
-            // This list preserves the exact admitted-material order passed into
-            // the capturer, and ClosedAlphaMaterialCapturer's contract places
-            // captured[i] against materials[i], so index i of this list
-            // addresses index i of AdmittedMaterials. The count check above
-            // proves only the expected cardinality, not this ordering.
+            // This list preserves the full admitted-material order - sentinels
+            // included - so index i of it addresses index i of AdmittedMaterials
+            // and of every slot's admitted index list. The capturer's own
+            // positional contract placed its results against the attested
+            // subset above; that mapping is already folded into
+            // capturedByIndex.
             admittedLiveMaterials = Array.AsReadOnly(admitted.ToArray());
 
             return new CapturedAnimationEvidence(
                 MaterialDependencyClosureFailure.None,
                 alphaRelevanceRequest,
                 clips,
-                new List<CapturedAlphaMaterial>(capturedMaterials),
+                capturedByIndex,
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
                 hasAdditiveLayer);

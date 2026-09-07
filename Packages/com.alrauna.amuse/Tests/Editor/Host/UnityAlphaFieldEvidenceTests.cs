@@ -825,16 +825,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityAlphaFieldEvidence.IsAdmittedBuildTarget(target), Is.EqualTo(admitted));
         }
 
-        [TestCase(0, false, true)]
-        [TestCase(0, true, false)]
-        [TestCase(1, false, false)]
-        [TestCase(1, true, false)]
-        [TestCase(2, false, false)]
-        public void TheMipResidencyGateAdmitsOnlyAnUnlimitedNonStreamingTexture(
-            int activeMipmapLimit, bool streaming, bool admitted)
+        [TestCase(0, true)]
+        [TestCase(1, false)]
+        [TestCase(2, false)]
+        public void TheMipLimitGateAdmitsOnlyAnUnlimitedTexture(
+            int activeMipmapLimit, bool admitted)
         {
             Assert.That(
-                UnityAlphaFieldEvidence.MipResidencyGatesPass(activeMipmapLimit, streaming),
+                UnityAlphaFieldEvidence.MipLimitGatesPass(activeMipmapLimit),
                 Is.EqualTo(admitted));
         }
 
@@ -1104,6 +1102,108 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
                 Format(format)(importer);
             });
+        }
+
+        /// <summary>
+        /// Avatar-shaped streaming import: mips on, non-readable, streaming on.
+        /// Uniform pixels keep the exact expectation independent of the
+        /// importer's mip filter.
+        /// </summary>
+        private static Texture2D ImportStreamingMipmapped(
+            string name,
+            Color32[] pixels,
+            int width,
+            int height,
+            TextureImporterFormat format)
+        {
+            return Import(name, pixels, width, height, importer =>
+            {
+                importer.mipmapEnabled = true;
+                importer.isReadable = false;
+                importer.filterMode = FilterMode.Point;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                importer.streamingMipmaps = true;
+                Format(format)(importer);
+            });
+        }
+
+        [Test]
+        public void StreamingMipmapChain_CapturesThroughTheReadableClone()
+        {
+            var opaque = ImportStreamingMipmapped(
+                "streaming_opaque", UniformPixels(8, 8, 255), 8, 8,
+                TextureImporterFormat.RGBA32);
+            Assert.That(opaque.streamingMipmaps, Is.True,
+                "fixture precondition: the import must retain streaming");
+            Assert.That(opaque.isReadable, Is.False,
+                "fixture precondition: an avatar-like import is non-readable");
+            Assert.That(opaque.mipmapCount, Is.EqualTo(4));
+
+            Assert.That(TryChain(opaque, out var chain), Is.True,
+                "a streaming texture must capture through the readable clone");
+            Assert.That(chain.Count, Is.EqualTo(4));
+            for (var mip = 0; mip < chain.Count; mip++)
+            {
+                Assert.That(chain[mip].IsFullyOpaque, Is.True, "mip " + mip);
+            }
+        }
+
+        [Test]
+        public void StreamingMipmapChain_StillRefusesBelowOne()
+        {
+            var blended = ImportStreamingMipmapped(
+                "streaming_blended", UniformPixels(8, 8, 200), 8, 8,
+                TextureImporterFormat.RGBA32);
+
+            // 200/255 is below one at every texel of every level, so the
+            // exact-one predicate stays zero everywhere.
+            Assert.That(TryChain(blended, out var chain), Is.True);
+            for (var mip = 0; mip < chain.Count; mip++)
+            {
+                Assert.That(
+                    chain[mip].IsFullyNonOpaque, Is.True, "mip " + mip);
+            }
+        }
+
+        /// <summary>
+        /// Characterization, recorded as passing on first run: on a
+        /// non-streaming texture the readable-clone route and the
+        /// characterized GPU route produce identical chains at every level.
+        /// This is the pin that the clone route is the same evidence the GPU
+        /// route is trusted for, and it subsumes the importer-determinism
+        /// assumption behind admitting streaming textures through the clone.
+        /// </summary>
+        [Test]
+        public void ReadableCloneRoute_MatchesTheGpuRouteOnNonStreamingTextures()
+        {
+            var texture = ImportMipmapped(
+                "clone_equivalence", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+            Assert.That(texture.streamingMipmaps, Is.False,
+                "fixture precondition");
+
+            Assert.That(TryChain(texture, out var gpu), Is.True);
+            Assert.That(
+                UnityStreamingTextureEvidence.TryCapture(texture, out var clone),
+                Is.True);
+            Assert.That(clone.Count, Is.EqualTo(gpu.Count));
+            for (var mip = 0; mip < gpu.Count; mip++)
+            {
+                Assert.That(
+                    clone[mip].Width, Is.EqualTo(gpu[mip].Width), "mip " + mip);
+                Assert.That(
+                    clone[mip].Height, Is.EqualTo(gpu[mip].Height), "mip " + mip);
+                for (var y = 0; y < gpu[mip].Height; y++)
+                {
+                    for (var x = 0; x < gpu[mip].Width; x++)
+                    {
+                        Assert.That(
+                            clone[mip].GetAlpha(x, y),
+                            Is.EqualTo(gpu[mip].GetAlpha(x, y)),
+                            "mip " + mip + " texel " + x + "," + y);
+                    }
+                }
+            }
         }
 
         /// <summary>

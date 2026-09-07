@@ -1112,7 +1112,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void UnattestedMaterialFailsTheRealCapturePath()
+        public void UnattestedCurrentMaterialClosesAsTheUnsupportedSentinel()
         {
             var material = Own(new Material(Shader.Find("Unlit/Color")));
 
@@ -1121,13 +1121,18 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { material },
                 EmptyGraph(),
                 new StubBindings(),
-                out _);
+                out var admittedLiveMaterials);
 
-            Assert.That(evidence.IsClosed, Is.False);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
-            Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+            Assert.That(evidence.IsClosed, Is.True,
+                "an unattested material must refuse its own slots, not the " +
+                "renderer's closure");
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            CollectionAssert.AreEqual(
+                evidence.CurrentMaterialIndices, new[] { 0 });
+            Assert.That(admittedLiveMaterials, Has.Count.EqualTo(1));
+            Assert.That(admittedLiveMaterials[0], Is.SameAs(material));
         }
 
         /// <summary>
@@ -1185,16 +1190,17 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// A family no frontend supports is refused during selection, before the
-        /// batch capture is reached, so no evidence is gathered for a batch that
-        /// can never close.
+        /// A swap value no family selects stays in the admitted index space —
+        /// its slot must still reach it — but it joins no capture batch and
+        /// arrives as the Unsupported sentinel. The supported current material
+        /// is captured alone.
         /// </summary>
         [Test]
-        public void UnselectableFamilyFailsBeforeTheClosedCaptureIsInvoked()
+        public void UnselectableSwapIsSentinelAndSkipsTheCaptureBatch()
         {
             var supported = NewPoiyomiMaterial();
             var unselectable = Own(new Material(Shader.Find("Unlit/Color")));
-            var captureCalls = 0;
+            var capturedBatch = Array.Empty<Material>();
 
             bool Capture(
                 IReadOnlyList<Material> materials,
@@ -1202,7 +1208,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 MaterialEvidenceRequest request,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
-                captureCalls++;
+                capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
                     materials, families, request, out captured);
             }
@@ -1214,18 +1220,80 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 EmptyGraph(),
                 SelectFixtureRequest,
                 Capture,
-                out _);
+                out var admittedLiveMaterials);
 
-            Assert.That(evidence.IsClosed, Is.False);
             Assert.That(
-                evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+                capturedBatch,
+                Is.EqualTo(new[] { supported }),
+                "the unselectable swap value must not reach the batch capture");
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(evidence.AdmittedMaterials[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
             Assert.That(
-                captureCalls,
-                Is.Zero,
-                "an unselectable family must not reach the batch capture");
-            Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+                RequestedNames(evidence.AlphaRelevanceRequest),
+                Is.Not.Empty,
+                "the supported material's proof must still gather evidence");
+            CollectionAssert.AreEqual(
+                evidence.CurrentMaterialIndices, new[] { 0 });
+            CollectionAssert.AreEqual(
+                evidence.Clips.Single().ObjectBindings.Single()
+                    .AdmittedMaterialIndices,
+                new[] { 1 },
+                "the swap binding must still address the sentinel's index");
+            Assert.That(admittedLiveMaterials, Has.Count.EqualTo(2));
+            Assert.That(admittedLiveMaterials[1],
+                Is.SameAs(unselectable));
+        }
+
+        /// <summary>
+        /// An unattested CURRENT slot material — the jewelry-renderer shape —
+        /// keeps its index beside an attested sibling. The capture batch
+        /// receives only the sibling, and both live materials stay paired to
+        /// their indices.
+        /// </summary>
+        [Test]
+        public void UnattestedCurrentSlotStaysAdmittedWhileSiblingCaptures()
+        {
+            var supported = NewPoiyomiMaterial();
+            var unattested = Own(new Material(Shader.Find("Unlit/Color")));
+            var capturedBatch = Array.Empty<Material>();
+
+            bool Capture(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                out IReadOnlyList<CapturedAlphaMaterial> captured)
+            {
+                capturedBatch = materials.ToArray();
+                return CaptureFixtureMaterials(
+                    materials, families, request, out captured);
+            }
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                Array.Empty<LiveClipObservation>(),
+                new[] { supported, unattested },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                Capture,
+                out var admittedLiveMaterials);
+
+            Assert.That(
+                capturedBatch,
+                Is.EqualTo(new[] { supported }));
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(evidence.AdmittedMaterials[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            CollectionAssert.AreEqual(
+                evidence.CurrentMaterialIndices, new[] { 0, 1 });
+            Assert.That(admittedLiveMaterials[0], Is.SameAs(supported));
+            Assert.That(admittedLiveMaterials[1], Is.SameAs(unattested));
         }
 
         /// <summary>
