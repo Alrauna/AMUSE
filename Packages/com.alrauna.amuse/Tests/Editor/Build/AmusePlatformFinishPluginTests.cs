@@ -768,6 +768,62 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AvatarAnimationRefusalReportsPlainEnglishEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE avatar refusal report fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var controller = new AnimatorController { name = "unallowlisted" };
+
+            var reported = new List<string>();
+            void Capture(string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
+            Application.logMessageReceived += Capture;
+            try
+            {
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                    AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "fixture precondition: the unallowlisted behaviour must " +
+                    "refuse the avatar");
+                Assert.That(
+                    reported,
+                    Has.Some.Contains(
+                        "This avatar has a state behaviour AMUSE does not know"),
+                    "an avatar-scoped animation refusal is a user-facing stop " +
+                    "and must never be silent");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Capture;
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void BehaviourFreeCommittedGraphIsNotRefused()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);

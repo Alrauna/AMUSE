@@ -170,6 +170,56 @@ namespace Alrauna.Amuse.Editor.Build
                 "Clean up the animation curves that point at missing " +
                 "properties.",
 
+            // --- Avatar-scoped animation refusals ---
+            ["amuse.avatar.UnsupportedAnimatorControllerForm"] =
+                "This avatar has an animator controller AMUSE cannot read.",
+            ["amuse.avatar.UnsupportedAnimatorControllerForm:description"] =
+                "One controller on this avatar is not a form AMUSE can " +
+                "read. The avatar keeps all its original materials.",
+            ["amuse.avatar.UnsupportedAnimatorControllerForm:hint"] =
+                "Check the animator controllers on this avatar.",
+
+            ["amuse.avatar.UnsupportedSyncedLayerOverrides"] =
+                "This avatar has synced animation layers.",
+            ["amuse.avatar.UnsupportedSyncedLayerOverrides:description"] =
+                "A controller on this avatar shares one layer with other " +
+                "layers. AMUSE cannot follow the shared layer. The avatar " +
+                "keeps all its original materials.",
+            ["amuse.avatar.UnsupportedSyncedLayerOverrides:hint"] =
+                "Remove the synced layers if you want AMUSE to run on " +
+                "this avatar.",
+
+            ["amuse.avatar.UnresolvedVirtualizedMotionContext"] =
+                "This avatar has a motion AMUSE cannot resolve.",
+            ["amuse.avatar.UnresolvedVirtualizedMotionContext:description"] =
+                "A controller on this avatar uses a motion that stays " +
+                "unprepared at this build stage. The avatar keeps all its " +
+                "original materials.",
+            ["amuse.avatar.UnresolvedVirtualizedMotionContext:hint"] =
+                "Update NDMF and the tools that build this avatar, then " +
+                "run the build again.",
+
+            ["amuse.avatar.UnrecognizedStateMachineBehaviour"] =
+                "This avatar has a state behaviour AMUSE does not know.",
+            ["amuse.avatar.UnrecognizedStateMachineBehaviour:description"] =
+                "A state in an animator controller carries a behaviour " +
+                "that AMUSE does not know. AMUSE cannot prove what that " +
+                "behaviour does. The avatar keeps all its original " +
+                "materials.",
+            ["amuse.avatar.UnrecognizedStateMachineBehaviour:hint"] =
+                "Remove the unknown behaviour if you do not need it, or " +
+                "accept that this avatar stays unchanged.",
+
+            ["amuse.avatar.AnimationEventPresent"] =
+                "This avatar has animation events.",
+            ["amuse.avatar.AnimationEventPresent:description"] =
+                "An animation on this avatar calls a method by name. " +
+                "AMUSE cannot prove what that call changes. The avatar " +
+                "keeps all its original materials.",
+            ["amuse.avatar.AnimationEventPresent:hint"] =
+                "Remove the animation events if you want AMUSE to run on " +
+                "this avatar.",
+
             // --- Host lifecycle refusals ---
             ["amuse.host.UnsupportedUnityVersion"] =
                 "This Unity version is not supported.",
@@ -270,6 +320,11 @@ namespace Alrauna.Amuse.Editor.Build
             return Prefix + "renderer." + cause;
         }
 
+
+        internal static string AvatarKey(AvatarAnimationRefusal cause)
+        {
+            return Prefix + "avatar." + cause;
+        }
         internal static string HostKey(HostLifecycleRefusal cause)
         {
             return Prefix + "host." + cause;
