@@ -441,6 +441,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AvatarSummaryReflectsAppliedOpaqueTriangleCountAfterApply()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE summary applied count fixture");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var fixture = default(AnalyzableRendererFixture);
+
+            try
+            {
+                fixture = AddAnalyzableRenderer(root);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = Alrauna.Amuse.Tests.Editor.Semantics
+                    .LilToon.LilToonFixtureTestBase.CreateVerifiedMaterial();
+                fixture.Renderer.sharedMaterials = new[] { fixture.Material };
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero);
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(root.GetInstanceID(), out var summary),
+                    Is.True);
+                StringAssert.Contains("moved 0 triangles", summary);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void CapturePassRetainsTheHostsExactAnimatorBindings()
         {
             using var armed = SyntheticPluginScope.Arm();

@@ -23,6 +23,13 @@ namespace Alrauna.Amuse.Editor.Build
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
 
+        /// <summary>True once the barrier passed every avatar-scope gate
+        /// (lifecycle, V1 trigger, D8 consent, committed-graph) and reached
+        /// per-renderer analysis. The apply pass consumes this to report the
+        /// avatar summary exactly once, with applied counts, and only for
+        /// builds the barrier actually analyzed.</summary>
+        internal bool ReachedRendererAnalysis { get; set; }
+
         /// <summary>How many renderers received at least one applied
         /// alpha-separation write.</summary>
         internal int AppliedRendererCount { get; set; }
@@ -411,6 +418,11 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
+            // Every avatar-scope gate has passed: from here the run is
+            // reported, so the apply pass may summarize it with applied
+            // counts.
+            state.ReachedRendererAnalysis = true;
+
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
             {
@@ -511,13 +523,6 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
-
-            AmuseReports.AvatarSummary(
-                context.AvatarRootObject,
-                state.AnalyzedRendererCount,
-                state.OpaqueCandidateTriangleCount,
-                state.SemanticallyRefusedRendererCount,
-                lifecycle.BuildPath);
         }
 
         /// <summary>
