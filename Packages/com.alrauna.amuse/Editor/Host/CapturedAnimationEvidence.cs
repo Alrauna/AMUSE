@@ -143,7 +143,17 @@ namespace Alrauna.Amuse.Editor.Host
             ClosureFailure == MaterialDependencyClosureFailure.None;
         internal MaterialDependencyClosureFailure ClosureFailure { get; }
         internal MaterialEvidenceRequest AlphaRelevanceRequest { get; }
+
         internal IReadOnlyList<CapturedClipEvidence> Clips { get; }
+
+        /// <summary>
+        /// One entry per admitted material. An entry is either the closed
+        /// capture of that material, or - for a material no family selects -
+        /// the <see cref="CapturedAlphaMaterialFamily.Unsupported"/> sentinel
+        /// with empty evidence. A sentinel never fails the renderer: the
+        /// slots whose admitted indices reach it refuse as
+        /// semantics-unknown, and every other slot keeps its own proof.
+        /// </summary>
         internal IReadOnlyList<CapturedAlphaMaterial> AdmittedMaterials { get; }
 
         // Slot order matches the current renderer material-slot order. This is

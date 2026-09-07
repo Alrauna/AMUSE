@@ -691,6 +691,32 @@ namespace Alrauna.Amuse.Editor.Semantics
                 SemanticOutput<NormalSemanticValue>.Unknown());
         }
 
+        /// <summary>
+        /// The admitted-material sentinel for a material no family selects.
+        /// Its family is <see cref="CapturedAlphaMaterialFamily.Unsupported"/>
+        /// and its evidence is empty, so
+        /// <see cref="AnalyzeAlphaMaterial"/> answers all-Unknown for it and
+        /// every slot whose admitted set reaches it refuses as
+        /// <c>AdmittedMaterialSemanticsUnknown</c>. The refusal is scoped to
+        /// the slots that can hold the material; sibling slots whose
+        /// materials attest keep their own proofs.
+        /// </summary>
+        internal static CapturedAlphaMaterial UnattestedMaterial()
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                new CapturedMaterialEvidence(
+                    false, null, false, ColorSpace.Uninitialized,
+                    Array.Empty<CapturedMaterialEvidence.PresenceEntry>(),
+                    Array.Empty<CapturedMaterialEvidence.ScalarEntry>(),
+                    Array.Empty<CapturedMaterialEvidence.ColorEntry>(),
+                    Array.Empty<CapturedMaterialEvidence.VectorEntry>(),
+                    Array.Empty<CapturedMaterialEvidence.TextureEntry>(),
+                    Array.Empty<CapturedTextureEvidence>()),
+                default(PoiyomiSourceEvidence),
+                null);
+        }
+
         internal static MaterialSemantics AllUnknown()
         {
             return new MaterialSemantics(
