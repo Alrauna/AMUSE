@@ -159,6 +159,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void TransparentBucketQueueOffsets_AreConvertible()
+        {
+            // 3005 and 3010 are the authored dress values that motivated
+            // the bucket admission.
+            foreach (var queue in new[] { 3000, 3005, 3010, 3099 })
+            {
+                var material = NewTransparentFixtureMaterial();
+                material.renderQueue = queue;
+                var result = EvaluateFor(material);
+                Assert.That(
+                    result.Outcome,
+                    Is.EqualTo(LilToonOpaqueConversionOutcome.Convertible),
+                    "queue " + queue + " refusal was " + result.Refusal);
+            }
+        }
+
+        [Test]
+        public void QueuesOutsideTheTransparentBucket_StillRefuse()
+        {
+            // --- Guard: plausible later widening past the bucket edge
+            // must keep refusing. ---
+            foreach (var queue in new[] { 2461, 2999, 3100, 3999 })
+            {
+                var material = NewTransparentFixtureMaterial();
+                material.renderQueue = queue;
+                AssertRefusal(
+                    EvaluateFor(material),
+                    LilToonOpaqueConversionRefusal.UnsupportedRenderQueue);
+            }
+        }
+
+        [Test]
         public void CustomRenderType_RefusesUnsupportedRenderType()
         {
             var material = NewTransparentFixtureMaterial();

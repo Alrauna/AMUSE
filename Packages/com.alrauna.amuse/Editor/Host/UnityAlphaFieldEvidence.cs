@@ -126,17 +126,41 @@ namespace Alrauna.Amuse.Editor.Host
 
             try
             {
-                // Every policy and capability gate precedes the first allocation.
-                // The format allowlist in particular is checked before any GPU call,
-                // so a compressed source never reaches a route that would log a
-                // Unity error.
+                // Every policy gate precedes the first allocation. The format
+                // allowlist in particular is checked before any GPU call, so a
+                // compressed source never reaches a route that would log a
+                // Unity error. The mipmap limit refuses for both routes: the
+                // limit changes which levels exist, and evidence for a
+                // truncated chain is not evidence for what playback samples.
                 if (!IsAdmittedBuildTarget(EditorUserBuildSettings.activeBuildTarget) ||
                     !IsAdmittedFormat(texture2D.format) ||
-                    !MipResidencyGatesPass(
-                        texture2D.activeMipmapLimit, texture2D.streamingMipmaps) ||
+                    !MipLimitGatesPass(texture2D.activeMipmapLimit) ||
                     !AreDimensionsUsable(
-                        texture2D.width, texture2D.height, texture2D.mipmapCount) ||
-                    !HostCapabilitiesPass(
+                        texture2D.width, texture2D.height, texture2D.mipmapCount))
+                {
+                    source = default;
+                    return false;
+                }
+
+                // A streaming texture never touches the GPU route: its
+                // editor read is measured untrustworthy, however resident it
+                // reports. The readable-clone route reads the importer's own
+                // output instead, and the capability gates below guard the
+                // GPU route this texture does not take.
+                if (texture2D.streamingMipmaps)
+                {
+                    if (!UnityStreamingTextureEvidence.TryCapture(
+                            texture2D, out chain))
+                    {
+                        source = default;
+                        chain = null;
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                if (!HostCapabilitiesPass(
                         SystemInfo.supportsAsyncGPUReadback,
                         SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.Render),
                         SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.ReadPixels),
@@ -171,6 +195,7 @@ namespace Alrauna.Amuse.Editor.Host
                     chain = null;
                     return false;
                 }
+
 
                 return true;
             }
@@ -519,18 +544,21 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// A gate on declared state. activeMipmapLimit is the per-texture effective
         /// limit and already folds in the global limit and any mipmap-limit group.
-        /// Streaming is refused outright rather than handled: what a Load of a
-        /// non-resident level returns has never been observed.
+        /// A nonzero limit refuses for every capture route: the limit changes
+        /// which levels exist, and evidence over a truncated chain is not
+        /// evidence over what playback samples. Streaming is not a limit and
+        /// is no longer refused here: a streaming texture captures through the
+        /// readable-clone route because its GPU read is measured
+        /// untrustworthy, however resident it reports.
         /// <para>
-        /// This is a pure predicate because its false branches cannot be constructed
+        /// This is a pure predicate because its false branch cannot be constructed
         /// without mutating project or importer state, which production must never
         /// do.
         /// </para>
         /// </summary>
-        internal static bool MipResidencyGatesPass(
-            int activeMipmapLimit, bool streamingMipmaps)
+        internal static bool MipLimitGatesPass(int activeMipmapLimit)
         {
-            return activeMipmapLimit == 0 && !streamingMipmaps;
+            return activeMipmapLimit == 0;
         }
 
         internal static bool AreDimensionsUsable(int width, int height, int mipmapCount)
