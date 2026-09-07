@@ -901,10 +901,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void AnimatedRendererWithUnclosedEvidenceRefusesWithoutPartialCurrentStateAnalysis()
+        public void AnimatedRendererWithUnattestedMaterialsRefusesAsSemanticsUnknown()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE unclosed animation evidence fixture");
+            var root = new GameObject("AMUSE unattested materials fixture");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             var fixture = default(AnalyzableRendererFixture);
             AnimatorController controller = null;
@@ -926,17 +926,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
-                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
-                    "a failed animation-evidence closure was salvaged as " +
-                    "current-state-only analysis");
+                // The stand-in current material and the stand-in swap both
+                // fail real selection, so both become Unsupported sentinels
+                // and the renderer's one slot refuses as semantics-unknown.
+                // Per-slot narrowing must not convert that into proof.
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(0),
+                    "a renderer whose every slot refused keeps the " +
+                    "refused accounting, not the analyzed one");
                 Assert.That(amuse.SemanticallyRefusedRendererCount,
                     Is.EqualTo(1));
                 Assert.That(amuse.RendererRefusalCount(
                         RendererAnalysisRefusal
-                            .MaterialDependencyClosureFailed),
+                            .AdmittedMaterialSemanticsUnknown),
                     Is.EqualTo(1),
-                    "the production barrier did not consume the closed-evidence " +
-                    "result from the real graph capture route");
+                    "an unattested material must refuse as unknown " +
+                    "semantics, not as a closure failure");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed),
+                    Is.Zero);
                 Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
             }
             finally
@@ -3193,6 +3201,113 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
             }
+        }
+
+        /// <summary>
+        /// The jewelry-renderer shape: slot 0's material attests and proves
+        /// its triangle opaque, while sibling slot 1's material fails family
+        /// selection outright. The unattested material must poison only slot
+        /// 1; slot 0's proof does not depend on it. Before per-slot
+        /// narrowing, one unattested slot material failed the renderer's
+        /// whole material closure.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_UnattestedSiblingSlotKeepsTheProvenSlotConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE unattested sibling slot");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            Material resolving = null;
+            Material unattested = null;
+            Mesh mesh = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                unattested = new Material(Shader.Find("Unlit/Color"));
+                AddTwoSlotRenderer(root, resolving, unattested, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectExceptUnlit,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the unattested sibling slot refused the whole renderer");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero);
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "exactly the attested slot's triangle may be an opaque " +
+                    "candidate: zero means the sibling still refused the " +
+                    "renderer, and two means the unattested slot was " +
+                    "treated as proven");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+                if (unattested != null) Object.DestroyImmediate(unattested);
+            }
+        }
+
+
+        /// <summary>
+        /// Delegates to the shared verified seam but refuses family
+        /// selection for the Unlit/Color stand-in, so the per-slot narrowing
+        /// is driven through production's real selection-contract: false
+        /// means unattested, never renderer-wide failure.
+        /// </summary>
+        private static bool SelectExceptUnlit(
+            Material material,
+            out CapturedAlphaMaterialFamily family,
+            out MaterialEvidenceRequest alphaRelevance,
+            out MaterialEvidenceRequest captureSchema)
+        {
+            if (material != null &&
+                material.shader == Shader.Find("Unlit/Color"))
+            {
+                family = CapturedAlphaMaterialFamily.Unsupported;
+                alphaRelevance = null;
+                captureSchema = null;
+                return false;
+            }
+
+            return SelectVerifiedFixtureRequest(
+                material, out family, out alphaRelevance, out captureSchema);
+        }
+
+        /// <summary>
+        /// The shared verified resolver is family-blind and reads Poiyomi
+        /// properties off any material it receives. The sentinel carries
+        /// empty evidence, so this wrapper routes it the way production's
+        /// own AnalyzeAlphaMaterial does: family first, all-Unknown for
+        /// Unsupported.
+        /// </summary>
+        private static MaterialSemantics ResolvingVerifiedAlphaOnly(
+            CapturedAlphaMaterial material)
+        {
+            if (material.Family ==
+                    CapturedAlphaMaterialFamily.Unsupported)
+            {
+                return UnityMaterialSemantics.AllUnknown();
+            }
+
+            return VerifiedAlphaOnly(material);
         }
 
         /// <summary>
