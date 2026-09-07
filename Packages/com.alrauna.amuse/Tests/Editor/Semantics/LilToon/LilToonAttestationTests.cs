@@ -384,6 +384,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 analysis.Activators.Select(value => value.LineIndex),
                 Is.EqualTo(new[] { 0, 2, 4 }));
+            Assert.That(
+                analysis.Activators.Select(value => value.ProvenSlot),
+                Is.EqualTo(new[] { false, true, false }));
         }
 
         [Test]
@@ -435,7 +438,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 new LilToonActivatorOccurrence(
                     2,
                     "LIL_FEATURE_LTCGI",
-                    "#define LIL_FEATURE_LTCGI"),
+                    "#define LIL_FEATURE_LTCGI",
+                    false),
             };
             var analysis = new LilToonCanonicalizationAnalysis(
                 string.Empty, regionInput, activatorInput);
@@ -1144,9 +1148,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase("LIL_FEATURE_VRCLIGHTVOLUMES")]
         [TestCase("LIL_FEATURE_AUDIOLINK_PACKAGE")]
         [TestCase("LIL_FEATURE_LTCGI")]
-        public void Verify_HiddenExternalActivatorWithOldCanonicalOutput_IsRefused(
+        public void Verify_MisplacedExternalActivator_IsRefusedAsModifiedSource(
             string identifier)
         {
+            // The generator emits these defines only at proven slots. A
+            // define injected at the head of the setting run breaks the
+            // generator ordering of the official record, so the record
+            // check refuses it as modified source. LTCGI is not a setting
+            // identifier at all and refuses for that reason.
             var clean = PassAnalysis(DefaultStandaloneRecords());
             var records = DefaultStandaloneRecords();
             records.Insert(1, "#define " + identifier);
@@ -1159,10 +1168,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.False);
             Assert.That(
                 diagnostic.Code,
-                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
-            Assert.That(diagnostic.Detail, Does.Contain(identifier));
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
+        [Test]
+        public void Verify_GeneratorSlotActivator_Attests()
+        {
+            // The Census Lab evidence: the generator appends the AudioLink
+            // define at the tail of the setting run, in generator order,
+            // when AudioLink is installed. The occurrence is proven and
+            // attests.
+            var records = DefaultStandaloneRecords();
+            records.Insert(
+                records.Count - 1, "#define LIL_FEATURE_AUDIOLINK_PACKAGE");
+            var mutated = PassAnalysis(records);
+
+            Assert.That(mutated.Activators, Has.Count.EqualTo(1));
+            Assert.That(mutated.Activators[0].ProvenSlot, Is.True);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: mutated), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        [Test]
+        public void Verify_ActivatorOutsideGeneratorSlots_IsRefused()
+        {
+            // Falsifier: the same define in a pass body, away from every
+            // proven slot, stays a tamper signal.
+            var records = DefaultStandaloneRecords();
+            var mutated = PassAnalysis(
+                records,
+                "    #define LIL_FEATURE_AUDIOLINK_PACKAGE\n");
+
+            Assert.That(mutated.Activators, Has.Count.EqualTo(1));
+            Assert.That(mutated.Activators[0].ProvenSlot, Is.False);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(passCanonicalization: mutated), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
+            Assert.That(
+                diagnostic.Detail, Does.Contain("LIL_FEATURE_AUDIOLINK_PACKAGE"));
+        }
+
+        [Test]
         [TestCase("#define LIL_FEATURE_AMUSE_UNKNOWN")]
         [TestCase("#define LIL_OPTIMIZE_AMUSE_UNKNOWN")]
         [TestCase("#pragma skip_variants AMUSE_UNKNOWN")]
@@ -1286,8 +1339,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void Verify_BothLightVolumesForms_AreRefused()
+        public void Verify_BothLightVolumesForms_Attest()
         {
+            // The activator gate no longer refuses generator-slot defines.
+            // Both LightVolumes forms in generator order sit inside the
+            // record grammar's official domain: the record check admits
+            // them, and the defines gate lighting variants, not alpha
+            // semantics. The vendor emits one form per SDK state; a hand
+            // edit flipping the form is alpha-irrelevant and attests like
+            // any official-identifier state.
             var records = DefaultStandaloneRecords();
             InsertAfter(
                 records,
@@ -1297,11 +1357,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 records,
                 "#define LIL_FEATURE_VRCLIGHTVOLUMES",
                 "#define LIL_FEATURE_VRCLIGHTVOLUMES_WITHOUTPACKAGE");
+            var mutated = PassAnalysis(records);
 
             Assert.That(
+                mutated.Activators.Select(value => value.ProvenSlot),
+                Has.All.True);
+            Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                    Evidence(passCanonicalization: PassAnalysis(records)), out _),
-                Is.False);
+                    Evidence(passCanonicalization: mutated), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
         }
 
         [Test]
@@ -2198,9 +2263,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void VerifyCutout_ExternalActivatorProvenance_IsRefused()
         {
-            // One representative mutation from the existing provenance-refusal
-            // family: an external activator define keeps the old canonical
-            // output but refuses as an unsupported variant.
+            // A representative mutation from the provenance-refusal family:
+            // an activator define injected at the head of the setting run
+            // breaks the generator ordering of the official record, so the
+            // record check refuses it as modified source.
             var clean = PassAnalysis(DefaultStandaloneRecords());
             var records = DefaultStandaloneRecords();
             records.Insert(1, "#define LIL_FEATURE_LTCGI");
@@ -2216,8 +2282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 diagnostic.Code,
                 Is.EqualTo(
-                    LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
-            Assert.That(diagnostic.Detail, Does.Contain("LIL_FEATURE_LTCGI"));
+                    LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
         [Test]
