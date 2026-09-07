@@ -1770,9 +1770,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     ("mismatched-wrap",
                         fixtures.ImportMismatchedWrapMipmap(
                             "cutout_mismatched_wrap")),
-                    ("streaming-mipmap",
-                        fixtures.ImportStreamingMipmap(
-                            "cutout_streaming")),
+                    ("unsupported-format",
+                        fixtures.ImportUnsupportedFormatTexture(
+                            "cutout_unsupported_format")),
                     ("non-Texture2D", renderTexture),
                 };
 
@@ -1809,6 +1809,68 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 fixtures.BaseTearDown();
                 UnityEngine.Object.DestroyImmediate(renderTexture);
+            }
+        }
+
+        /// <summary>
+        /// A streaming texture captures through a readable importer clone of
+        /// the same source, so its all-opaque chain proves its triangle end
+        /// to end. This is the positive control for the streaming capture
+        /// route; the GPU blit route itself stays refused for streaming
+        /// textures, whose editor read is measured untrustworthy.
+        /// </summary>
+        [Test]
+        public void StreamingMipmapProvesThroughTheReadableClone()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE streaming clone candidate");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportStreamingMipmap("cutout_streaming"));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the streaming texture must capture through the clone");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the all-opaque streaming chain must prove its triangle");
+                Assert.That(
+                    amuse.Separation,
+                    Is.Not.Null,
+                    "the streaming slot must prepare a conversion");
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
             }
         }
 
@@ -2985,10 +3047,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         fixtures.ImportUnsupportedFormatTexture(
                             "transparent_unsupported_format"),
                         null),
-                    ("streamed-mips",
-                        fixtures.ImportStreamingMipmap(
-                            "transparent_streaming"),
-                        null),
                     ("missing-readback", renderTexture, null),
                     ("degenerate-triangle", standardTexture,
                         mesh =>
@@ -3393,26 +3451,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     UnityEngine.TextureWrapMode.Repeat);
             }
 
-            internal Texture2D ImportUnsupportedFormatTexture(string name)
-            {
-                // Directly allocatable in a format outside the alpha
-                // evidence's closed allowlist, producing no console error:
-                // the producer refuses it at the format gate, before any
-                // GPU work.
-                var texture = new Texture2D(
-                    8, 8, TextureFormat.ARGB4444, false);
-                var path = TempFolder + "/" + name + ".asset";
-                AssetDatabase.CreateAsset(texture, path);
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                Assert.That(
-                    loaded.format, Is.EqualTo(TextureFormat.ARGB4444),
-                    "fixture precondition: the format must be outside " +
-                    "the alpha evidence allowlist");
-                return loaded;
-            }
         }
 
 
@@ -4159,21 +4197,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// A non-allowlisted lilToon identity (a stand-in cutout-outline
-        /// shader) is unselectable at family selection and refuses its
-        /// renderer-wide through material-dependency closure, while a
-        /// later sibling renderer holding only supported materials still
-        /// prepares with its mapping uncorrupted (spec §10).
+        /// shader) is unselectable at family selection. Under per-slot
+        /// closure it poisons exactly its own slot, which stays unproven,
+        /// while the same renderer's supported slot still proves and
+        /// prepares, and a later sibling renderer holding only supported
+        /// materials prepares with its mapping uncorrupted. This supersedes
+        /// the renderer-wide closure scope; the mapping-isolation and
+        /// loop-continuation invariants of the original design remain.
         /// <para>
         /// Falsifies: a family selection that attests any lilToon-named
-        /// shader, a closure that skips the unselectable material instead
-        /// of failing the renderer's whole dependency set, and a renderer
-        /// loop that stops at the refused renderer so the later supported
-        /// sibling never prepares.
+        /// shader, a closure that lets the unsupported identity enter the
+        /// avatar-wide mapping, and a renderer loop that stops at the
+        /// partially refused renderer so the later supported sibling never
+        /// prepares.
         /// </para>
         /// </summary>
         [Test]
         public void
-            UnsupportedLilToonFamilyRefusesRendererWideThroughClosure()
+            UnsupportedLilToonFamilyRefusesOnlyItsOwnSlot()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unsupported family closure");
@@ -4246,26 +4287,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     amuse.RendererRefusalCount(
                         RendererAnalysisRefusal.MaterialDependencyClosureFailed),
-                    Is.EqualTo(1),
-                    "the unselectable member must fail the renderer's " +
-                    "whole material dependency closure");
+                    Is.EqualTo(0),
+                    "an unselectable slot material must not fail the " +
+                    "renderer's whole material dependency closure");
                 Assert.That(amuse.SemanticallyRefusedRendererCount,
-                    Is.EqualTo(1),
-                    "exactly the renderer holding the unsupported member " +
-                    "may refuse");
-                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
-                    "the supported sibling must still analyze");
+                    Is.Zero,
+                    "the partially poisoned renderer must not refuse");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(2),
+                    "the partially poisoned renderer and the supported " +
+                    "sibling must both analyze");
                 Assert.That(amuse.OpaqueCandidateTriangleCount,
-                    Is.EqualTo(1),
-                    "fixture precondition: the supported sibling must " +
-                    "prove its triangle opaque");
+                    Is.EqualTo(2),
+                    "the supported slot beside the unselectable one must " +
+                    "prove its triangle too");
                 Assert.That(amuse.Separation, Is.Not.Null);
                 Assert.That(amuse.Separation.Renderers,
-                    Has.Count.EqualTo(1));
+                    Has.Count.EqualTo(2),
+                    "both renderers keep a convertible slot and must " +
+                    "prepare");
                 Assert.That(
-                    amuse.Separation.Renderers[0].Target.Renderer,
-                    Is.SameAs(supported),
-                    "the retained renderer must be the supported sibling");
+                    amuse.Separation.Renderers.Select(
+                            entry => entry.Target.Renderer),
+                    Does.Contain(supported),
+                    "the supported sibling must be retained");
                 Assert.That(amuse.Separation.CreatedClones,
                     Has.Count.EqualTo(1));
                 Assert.That(
@@ -4289,7 +4333,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     Assert.That(
                         amuse.SlotRefusalCount(reason), Is.Zero,
-                        "the refusal is renderer-scoped closure, not a " +
+                        "the unselectable slot stays unproven without a " +
                         "slot refusal: " + reason);
                 }
             }
@@ -4413,6 +4457,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         importer.wrapModeV =
                             UnityEngine.TextureWrapMode.Clamp;
                     });
+            }
+
+            internal Texture2D ImportUnsupportedFormatTexture(string name)
+            {
+                // Directly allocatable in a format outside the alpha
+                // evidence's closed allowlist, producing no console error:
+                // the producer refuses it at the format gate, before any
+                // GPU work.
+                var texture = new Texture2D(
+                    8, 8, TextureFormat.ARGB4444, false);
+                var path = TempFolder + "/" + name + ".asset";
+                AssetDatabase.CreateAsset(texture, path);
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Imported texture '{path}' must load.");
+                Assert.That(
+                    loaded.format, Is.EqualTo(TextureFormat.ARGB4444),
+                    "fixture precondition: the format must be outside " +
+                    "the alpha evidence allowlist");
+                return loaded;
             }
 
             internal Texture2D ImportStreamingMipmap(string name)
