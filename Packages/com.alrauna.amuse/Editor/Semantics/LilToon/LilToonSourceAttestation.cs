@@ -338,8 +338,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // their own tag's generator.
         internal const string ShaderCanonicalDigest =
             "5206bec25e82db5f8009b27fcc5ba94d7c41113031d4b6b0a2c25ca324a9c704";
+        // The pass digest was re-measured on 2026-09-07 under the R4/R5/R6
+        // canonicalization from two real shapes - the shipped 2.3.4 VPM bytes
+        // (zip sha256 34d172761c51aa9469a904704109086aafa6125a4fa0e058766e2ddc73d3b303)
+        // and a regenerated LTCGI plus AudioLink install. The canonical bytes
+        // of the two shapes agree on one digest per file.
         internal const string PassCanonicalDigest =
-            "6b6c30c1cbe546fe753bcdc77f547441e3f9114ee80e9591bde2b8e6e7e5eb14";
+            "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1";
         internal const string IncludeTreeDigest =
             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
 
@@ -413,13 +418,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string CutoutShaderCanonicalDigest =
             "c83d73a26ab86e933f8cacb8c71307d8715fcc1693cdc08d209011bb0f836178";
         internal const string CutoutPassCanonicalDigest =
-            "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92";
-        // Transparent source identity (design §6). The two canonical digests
-        // were measured on 2026-09-01 from an installed
-        // jp.lilxyzw.liltoon@2.3.4 in a throwaway project outside AMUSE,
-        // using a byte-identical copy of this file, in a run that first
-        // reproduced all five digests already pinned above, and were
-        // identical across two independent Editor sessions (T1 §3.4). Never
+            "91563265289452c61e50203235792fadba17c828dbbf59c9f8ce6013538b15fc";
+        // Transparent source identity (design §6). The shader digest was
+        // measured on 2026-09-01 from an installed jp.lilxyzw.liltoon@2.3.4 in
+        // a throwaway project outside AMUSE, using a byte-identical copy of
+        // this file, in a run that first reproduced all five digests already
+        // pinned above, and were identical across two independent Editor
+        // sessions (T1 §3.4). The pass digest was re-measured on 2026-09-07
+        // like the opaque pass digest above, with both shapes agreeing. Never
         // re-derive these from the lilToon repository: the generator rewrites
         // every ltspass_*.shader at import.
         internal const string TransparentShaderName =
@@ -434,23 +440,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string TransparentShaderCanonicalDigest =
             "ea247d3cd6ecb09ad4aeefdcad37480c0dffa40d594a3b457624097f2372ba13";
         internal const string TransparentPassCanonicalDigest =
-            "700a607661f2cc43550452795d8eae0634509dbd07b4e8c381d9412fcc52517f";
-
-
+            "b60c492d4fa407b3ae4158d22891159be5f4a73a1f7b6925b6ab3359cdac7762";
         // Outline wrapper source identities (S8). The three outline shaders
         // are thin UsePass wrappers over the family pass assets already
         // pinned above: each declares no inline pass except a LightMode
         // Never dummy, so its passes, render mode, and recipe property
-        // surface come from the family pass file. The wrapper files carry no
-        // generator-varied region at all - no HLSLINCLUDE setting block, no
-        // skip-variants slot, no valued define - so the installed bytes are
-        // the tag's bytes and the canonicalization is the identity on them.
-        // Digests were measured on 2026-09-06 by invoking the production
-        // ComputeNormalizedSourceHash on the official tag 2.3.4 files
-        // (zip sha256 e81579d355878ed73880d99a68ab30a8552d55051be603c450f56491bdc66322)
-        // and cross-checked against an independent sha256 of the same bytes;
-        // the two computations agree. The pass-shader half of each profile is
-        // inherited from the family profile for the same reason.
+        // surface come from the family pass file. The wrappers carry one
+        // generator-varied region of their own except the Tags line, which
+        // gains one LTCGI token when LTCGI is installed; R6 removes that
+        // token, so the digest pins are unchanged from their 2026-09-06
+        // measurement. Digests were measured on 2026-09-06 by invoking the
+        // production ComputeNormalizedSourceHash on the official tag 2.3.4
+        // source zip (sha256
+        // e81579d355878ed73880d99a68ab30a8552d55051be603c450f56491bdc66322;
+        // the VPM release zip of the same version hashes to 34d172761c51aa94
+        // 6904704109086aafa6125a4fa0e058766e2ddc73d3b303 and carries
+        // identical lts_*.shader bytes) and cross-checked against an
+        // independent sha256 of the same bytes; the two computations agree.
+        // The pass-shader half of each profile is inherited from the family
+        // profile. The 2026-09-07 re-measurement confirmed every wrapper
+        // shader digest across both generator shapes.
         internal const string OutlineShaderName = "Hidden/lilToonOutline";
         internal const string OutlineShaderGuid =
             "efa77a80ca0344749b4f19fdd5891cbe";
@@ -805,6 +814,53 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             "#pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE",
         };
 
+        // The closed skip_variants token domain of attested lilToon 2.3.4: the
+        // union of the generator's fixed Get* literals and every token in the
+        // shipped package bytes. The unpacker's dedup pass redistributes these
+        // tokens across slots, so content, not position, decides whether a
+        // skip line is generator output.
+        private static readonly string[] OfficialSkipVariantVocabulary =
+        {
+            "DECALS_3RT",
+            "DECALS_4RT",
+            "DECALS_OFF",
+            "DECAL_SURFACE_GRADIENT",
+            "DIRLIGHTMAP_COMBINED",
+            "DYNAMICLIGHTMAP_ON",
+            "LIGHTMAP_ON",
+            "LIGHTMAP_SHADOW_MIXING",
+            "LIGHTPROBE_SH",
+            "PROBE_VOLUMES_L1",
+            "PROBE_VOLUMES_L2",
+            "PROBE_VOLUMES_OFF",
+            "SCREEN_SPACE_SHADOWS_ON",
+            "SHADOWS_SCREEN",
+            "SHADOWS_SHADOWMASK",
+            "SHADOW_HIGH",
+            "SHADOW_LOW",
+            "SHADOW_MEDIUM",
+            "SHADOW_VERY_HIGH",
+            "USE_CLUSTERED_LIGHTLIST",
+            "USE_FPTL_LIGHTLIST",
+            "VERTEXLIGHT_ON",
+            "_ADDITIONAL_LIGHT_SHADOWS",
+            "_DBUFFER_MRT1",
+            "_DBUFFER_MRT2",
+            "_DBUFFER_MRT3",
+            "_MAIN_LIGHT_SHADOWS",
+            "_MAIN_LIGHT_SHADOWS_CASCADE",
+            "_MAIN_LIGHT_SHADOWS_SCREEN",
+            "_MIXED_LIGHTING_SUBTRACTIVE",
+            "_REFLECTION_PROBE_BLENDING",
+            "_REFLECTION_PROBE_BOX_PROJECTION",
+            "_SCREEN_SPACE_OCCLUSION",
+        };
+
+        private static readonly HashSet<string> SkipVariantVocabulary =
+            new HashSet<string>(
+                OfficialSkipVariantVocabulary,
+                StringComparer.Ordinal);
+
         // R2 anchor: the fixed terminal line of the BRP lil_multi_compile_forward
         // expansion. The template places lil_skip_variants_{base,outline}_shadows
         // immediately after it, so this line uniquely locates that slot.
@@ -882,10 +938,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// setting-substituted feature block inside an HLSLINCLUDE run; R2 drops
         /// the shadow skip-variant expansion at its one substitution slot; R3
         /// normalizes an include path only when it provably resolves into the
-        /// attested tree. Everything else — pass bodies, tags, blend state,
-        /// other pragmas, other includes, blank lines, and every valued define —
-        /// is retained, so any hand edit or custom-shader injection changes the
-        /// digest.
+        /// attested tree. R5 drops a skip_variants line whose tokens all belong
+        /// to the generator vocabulary, wherever the dedup pass leaves it; R4
+        /// drops the LTCGI define at its forward-block anchor; R6 removes the
+        /// LTCGI token a SubShader Tags line can gain. Everything else — pass
+        /// bodies, other tag text, blend state, other pragmas, other includes,
+        /// blank lines, and every valued define — is retained, so any hand edit
+        /// or custom-shader injection changes the digest.
         /// </summary>
         internal static string Canonicalize(
             string rawShaderSource,
@@ -989,6 +1048,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
+                if (IsVocabularySkipVariantsLine(trimmed))
+                {
+                    continue;
+                }
+
+                if (IsLtcgiForwardAnchorDefine(lines, i, trimmed))
+                {
+                    continue;
+                }
+
                 if (!first)
                 {
                     builder.Append('\n');
@@ -997,7 +1066,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 first = false;
                 builder.Append(
                     NormalizeIncludeLine(
-                        line, shaderDirectory, projectRoot, includeTree));
+                        RemoveAppendedLtcgiTagToken(line, trimmed),
+                        shaderDirectory, projectRoot, includeTree));
             }
 
             return new LilToonCanonicalizationAnalysis(
@@ -1031,6 +1101,82 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                        slot.Groups["keyword"].Value,
                        ShadowSlotKeyword,
                        StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// R5. Every token on the line must belong to the closed generator
+        /// vocabulary. A skip line only prunes compile variants and cannot
+        /// change an AMUSE decision, so content decides removal wherever the
+        /// dedup pass leaves the line. A line with an unknown token stays
+        /// hashed.
+        /// </summary>
+        private static bool IsVocabularySkipVariantsLine(string trimmed)
+        {
+            if (!SkipVariants.IsMatch(trimmed))
+            {
+                return false;
+            }
+
+            var tokens = trimmed.Split(
+                (char[])null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length < 3)
+            {
+                return false;
+            }
+
+            for (var i = 2; i < tokens.Length; i++)
+            {
+                if (!SkipVariantVocabulary.Contains(tokens[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// R4. The container generator inserts this define directly before
+        /// the LIL_PASS_FORWARD terminal line of the built-in-RP forward block
+        /// when LTCGI is installed. The anchor is read from the raw line
+        /// array, so an earlier removal can never shift it.
+        /// </summary>
+        private static bool IsLtcgiForwardAnchorDefine(
+            string[] lines,
+            int index,
+            string trimmed)
+        {
+            return index + 1 < lines.Length &&
+                string.Equals(
+                    trimmed,
+                    "#define LIL_FEATURE_LTCGI",
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    lines[index + 1].Trim(),
+                    ShadowSlotAnchor,
+                    StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// R6. The LTCGI integration appends exactly one token to a SubShader
+        /// Tags line. The token is removed only from the final position of a
+        /// Tags line; any other edit to the line stays hashed.
+        /// </summary>
+        private static string RemoveAppendedLtcgiTagToken(
+            string line,
+            string trimmed)
+        {
+            const string token = " \"LTCGI\"=\"ALWAYS\"}";
+            if (!trimmed.StartsWith("Tags {", StringComparison.Ordinal) ||
+                !trimmed.EndsWith(token, StringComparison.Ordinal))
+            {
+                return line;
+            }
+
+            var tokenIndex = line.LastIndexOf(token, StringComparison.Ordinal);
+            return tokenIndex < 0
+                ? line
+                : line.Remove(tokenIndex, token.Length - 1);
         }
 
         /// <summary>

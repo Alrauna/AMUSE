@@ -538,11 +538,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void Canonicalize_ConstantSkipVariantsAfterSettingRegion_IsRetained()
+        public void Canonicalize_ConstantSkipVariantsAfterSettingRegion_IsRemoved()
         {
-            // GetSkipVariants{Decals,AddLightShadows,ProbeVolumes,AO} return
-            // fixed literals, so their lines are stable across settings and must
-            // be hashed rather than dropped.
+            // The Get* literals are fixed, but the unpacker's dedup pass
+            // redistributes their tokens across slots, so a fixed-literal line
+            // or any leftover fragment of one varies with settings. The
+            // vocabulary decides removal; injected unknown tokens stay hashed.
             const string withTail =
                 "    HLSLINCLUDE\n" +
                 "        #define LIL_FEATURE_MAIN2ND\n" +
@@ -555,7 +556,163 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "        #pragma target 3.5\n" +
                 "    ENDHLSL\n";
 
-            Assert.That(Canon(withTail), Is.Not.EqualTo(Canon(withoutTail)));
+            Assert.That(Canon(withTail), Is.EqualTo(Canon(withoutTail)));
+        }
+
+        [Test]
+        public void Canonicalize_VocabularySkipVariantsLine_IsRemovedAnywhere()
+        {
+            // The unpacker's dedup pass redistributes skip tokens across the
+            // slots, so a vocabulary line can survive at any position with any
+            // token subset. Content, not position, decides removal. A
+            // skip_variants line only prunes compile variants and cannot
+            // change an AMUSE decision.
+            var withLine =
+                "Pass\n{\n    HLSLPROGRAM\n" +
+                "    #pragma vertex vert\n" +
+                "    #pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE\n" +
+                "    #include \"Includes/lil_common.hlsl\"\n" +
+                "    ENDHLSL\n}\n";
+            var withoutLine =
+                "Pass\n{\n    HLSLPROGRAM\n" +
+                "    #pragma vertex vert\n" +
+                "    #include \"Includes/lil_common.hlsl\"\n" +
+                "    ENDHLSL\n}\n";
+
+            Assert.That(Canon(withLine), Is.EqualTo(Canon(withoutLine)));
+        }
+
+        [Test]
+        public void Canonicalize_LtcgiDefineBeforePassForwardAnchor_IsRemoved()
+        {
+            // The container generator inserts this define directly before the
+            // LIL_PASS_FORWARD terminal line of the built-in-RP forward block
+            // when LTCGI is installed.
+            var withDefine =
+                "            #pragma multi_compile_fwdbase\n" +
+                "            #define LIL_FEATURE_LTCGI\n" +
+                "            #define LIL_PASS_FORWARD\n";
+            var withoutDefine =
+                "            #pragma multi_compile_fwdbase\n" +
+                "            #define LIL_PASS_FORWARD\n";
+
+            Assert.That(Canon(withDefine), Is.EqualTo(Canon(withoutDefine)));
+        }
+
+        [Test]
+        public void Canonicalize_LtcgiDefineAwayFromForwardAnchor_IsRetained()
+        {
+            // Falsifier F4: without the exact next-line anchor the define is
+            // not proven generator output and stays hashed.
+            var away =
+                "            #define LIL_FEATURE_LTCGI\n" +
+                "            #pragma multi_compile_instancing\n" +
+                "            #define LIL_PASS_FORWARD\n";
+
+            Assert.That(Canon(away), Does.Contain("LIL_FEATURE_LTCGI"));
+        }
+
+        [Test]
+        public void Canonicalize_ValuedLtcgiDefine_IsRetained()
+        {
+            // Falsifier F3: only the exact valueless generator form is proven.
+            Assert.That(
+                Canon("#define LIL_FEATURE_LTCGI 1\n"),
+                Does.Contain("LIL_FEATURE_LTCGI"));
+        }
+
+        [Test]
+        public void Canonicalize_AppendedLtcgiTagToken_IsRemoved()
+        {
+            const string clean =
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n";
+            const string tagged =
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n";
+
+            Assert.That(Canon(tagged), Is.EqualTo(Canon(clean)));
+        }
+
+        [Test]
+        public void Canonicalize_OtherTagTokenEdit_IsRetained()
+        {
+            // Falsifier F1: only the exact LTCGI token in the final position
+            // is proven generator output.
+            const string clean =
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n";
+            const string otherValue =
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"OFF\"}\n";
+            const string otherKey =
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGIX\"=\"ALWAYS\"}\n";
+
+            Assert.That(Canon(otherValue), Is.Not.EqualTo(Canon(clean)));
+            Assert.That(Canon(otherKey), Is.Not.EqualTo(Canon(clean)));
+        }
+
+        [Test]
+        public void Canonicalize_GeneratorShapes_AgreeOnOneForm()
+        {
+            // Falsifier F5 as a property: the shipped 2.3.4 bytes and a LTCGI
+            // plus AudioLink regeneration differ only in generator-owned text,
+            // so canonicalization must map both shapes to one form.
+            var shipped =
+                "Shader \"lilToon\"\n" +
+                "{\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n" +
+                "        HLSLINCLUDE\n" +
+                "            #define LIL_FEATURE_MAIN2ND\n" +
+                "            #pragma skip_variants LIGHTMAP_ON DYNAMICLIGHTMAP_ON LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK DIRLIGHTMAP_COMBINED _MIXED_LIGHTING_SUBTRACTIVE\n" +
+                "            #pragma target 3.5\n" +
+                "            #pragma skip_variants DECALS_OFF DECALS_3RT DECALS_4RT DECAL_SURFACE_GRADIENT _DBUFFER_MRT1 _DBUFFER_MRT2 _DBUFFER_MRT3\n" +
+                "        ENDHLSL\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            #pragma multi_compile_fwdbase\n" +
+                "            #define LIL_PASS_FORWARD\n" +
+                "            #include \"Includes/lil_common.hlsl\"\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+            var regenerated =
+                "Shader \"lilToon\"\n" +
+                "{\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "        HLSLINCLUDE\n" +
+                "            #define LIL_FEATURE_MAIN2ND\n" +
+                "            #pragma skip_variants _MIXED_LIGHTING_SUBTRACTIVE\n" +
+                "            #pragma target 3.5\n" +
+                "            #pragma skip_variants _DBUFFER_MRT3\n" +
+                "        ENDHLSL\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            #pragma multi_compile_fwdbase\n" +
+                "            #define LIL_FEATURE_LTCGI\n" +
+                "            #define LIL_PASS_FORWARD\n" +
+                "            #include \"Includes/lil_common.hlsl\"\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(regenerated), Is.EqualTo(Canon(shipped)));
+        }
+
+
+        [Test]
+        public void OfficialSkipVariantVocabulary_IsClosedAndUnique()
+        {
+            var field = typeof(LilToonSourceAttestation).GetField(
+                "OfficialSkipVariantVocabulary",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null);
+            var vocabulary = (string[])field.GetValue(null);
+
+            Assert.That(vocabulary, Has.Length.EqualTo(33));
+            Assert.That(
+                vocabulary.Distinct(StringComparer.Ordinal).Count(),
+                Is.EqualTo(33));
         }
 
         [Test]
@@ -638,20 +795,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void Canonicalize_MultiKeywordPragmaAtSlot_IsRetained()
+        public void Canonicalize_MultiKeywordPragmaAtSlot_IsRemoved()
         {
-            // The dedup pass reduces a surviving line to one keyword, so a
-            // multi-keyword line at the slot is not generator output either.
+            // Dedup can leave any subset of a literal's tokens on a slot
+            // line, so a multi-keyword vocabulary line is still generator
+            // output. The unknown-keyword falsifier above keeps the hostile
+            // case hashed.
             var multi = ForwardPrologue(
                 "            #pragma skip_variants SHADOW_HIGH SHADOW_VERY_HIGH\n");
             var absent = ForwardPrologue(string.Empty);
 
-            Assert.That(Canon(multi), Is.Not.EqualTo(Canon(absent)));
+            Assert.That(Canon(multi), Is.EqualTo(Canon(absent)));
         }
 
         [Test]
-        public void Canonicalize_ShadowPragmaAwayFromSlot_IsRetained()
+        public void Canonicalize_ShadowPragmaAwayFromSlot_IsRemoved()
         {
+            // G1: a vocabulary line is decided by content wherever it sits.
             var offSlot =
                 "    HLSLPROGRAM\n" +
                 "            #pragma vertex vert\n" +
@@ -668,22 +828,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "            #include \"Includes/lil_common.hlsl\"\n" +
                 "    ENDHLSL\n";
 
-            Assert.That(Canon(offSlot), Is.Not.EqualTo(Canon(without)));
-            Assert.That(Canon(offSlot), Does.Contain("SHADOW_VERY_HIGH"));
+            Assert.That(Canon(offSlot), Is.EqualTo(Canon(without)));
         }
 
         [Test]
-        public void Canonicalize_ShadowPragmaAfterDifferentDefine_IsRetained()
+        public void Canonicalize_ShadowPragmaAfterDifferentDefine_IsRemoved()
         {
             var afterOtherDefine =
                 "            #define LIL_PASS_FORWARDADD\n" +
                 "            #pragma skip_variants SHADOW_VERY_HIGH\n";
 
-            Assert.That(Canon(afterOtherDefine), Does.Contain("SHADOW_VERY_HIGH"));
+            Assert.That(Canon(afterOtherDefine), Does.Not.Contain("SHADOW_VERY_HIGH"));
         }
 
         [Test]
-        public void Canonicalize_ShadowPragmaInPassBody_IsRetained()
+        public void Canonicalize_ShadowPragmaInPassBody_IsRemoved()
         {
             var injected =
                 "    HLSLPROGRAM\n" +
@@ -692,7 +851,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "            #pragma skip_variants SHADOW_VERY_HIGH\n" +
                 "    ENDHLSL\n";
 
-            Assert.That(Canon(injected), Does.Contain("SHADOW_VERY_HIGH"));
+            Assert.That(Canon(injected), Does.Not.Contain("SHADOW_VERY_HIGH"));
         }
 
         [Test]
@@ -1458,7 +1617,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShaderVariant));
         }
 
-        // --- pins are the Task 0 measurements ---
+        // --- pins are the Task 0 measurements; the pass digests were
+        // --- re-measured on 2026-09-07 under the R4/R5/R6 canonicalization
 
         [Test]
         public void PinnedDigests_AreTheTask0Measurements()
@@ -1470,7 +1630,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 LilToonSourceAttestation.PassCanonicalDigest,
                 Is.EqualTo(
-                    "6b6c30c1cbe546fe753bcdc77f547441e3f9114ee80e9591bde2b8e6e7e5eb14"));
+                    "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1"));
             Assert.That(
                 LilToonSourceAttestation.IncludeTreeDigest,
                 Is.EqualTo(
@@ -1656,8 +1816,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 LilToonSourceAttestation.TransparentPassCanonicalDigest,
                 Is.EqualTo(
-                    "700a607661f2cc43550452795d8eae0634509dbd07b4e8c381d94" +
-                    "12fcc52517f"));
+                    "b60c492d4fa407b3ae4158d22891159be5f4a73a1f7b6925b6ab335" +
+                    "9cdac7762"));
         }
 
         [TestCase("Hidden/lilToonTransparen")]
@@ -2178,7 +2338,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 LilToonSourceAttestation.CutoutPassCanonicalDigest,
                 Is.EqualTo(
-                    "ecd1caedc99c4569fb17898de16ce2025c21e2d191e06532098370a1291bfe92"));
+                    "91563265289452c61e50203235792fadba17c828dbbf59c9f8ce6013538b15fc"));
         }
 
         // --- S8: outline wrapper identities --------------------------------
