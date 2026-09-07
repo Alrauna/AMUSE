@@ -403,8 +403,11 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 // Avatar scope: the exact named cause is preserved and the whole
                 // avatar stops. No renderer is analyzed, so no partial result and
-                // no per-renderer accounting can survive.
+                // no per-renderer accounting can survive. V7: the stop is never
+                // silent - one plain English entry names the cause.
                 state.AvatarRefusal = graph.Refusal;
+                AmuseReports.AvatarRefusal(
+                    context.AvatarRootObject, graph.Refusal);
                 return;
             }
 
