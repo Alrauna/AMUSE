@@ -40,25 +40,30 @@ namespace Alrauna.Amuse.Editor.Host
         /// imported asset the editor will decode. The name is fixed so a
         /// crashed build's leftovers are replaced, not accumulated, by the
         /// next capture.
-        /// </summary>
         private const string TempFolder = "Assets/Amuse.StreamingReadback";
 
         /// <summary>
-        /// Session-scoped chain cache. Production captures material evidence
-        /// per renderer through the stateless TryCapture path, so one avatar
-        /// presents the same shared texture many times per build; without
-        /// this cache every presentation would import its own clone. The key
+        /// Process-local cache, keyed by source asset identity. The key
         /// is the asset GUID plus the source and .meta write times, so any
         /// re-import or settings change re-clones instead of serving stale
         /// evidence. Editor-session scope only: nothing crosses restarts.
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
-                    TextureChannel channel), AlphaMipChain> Cache = new();
+                    TextureChannel channel, int cutoffBits), AlphaMipChain> Cache = new();
 
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
+            out AlphaMipChain chain)
+        {
+            return TryCapture(source, channel, 1.0f, out chain);
+        }
+
+        internal static bool TryCapture(
+            Texture2D source,
+            TextureChannel channel,
+            float cutoffThreshold,
             out AlphaMipChain chain)
         {
             if (source == null)
@@ -77,13 +82,24 @@ namespace Alrauna.Amuse.Editor.Host
             var guid = AssetDatabase.AssetPathToGUID(path);
             var sourceFile = new FileInfo(path);
             var metaFile = new FileInfo(path + ".meta");
+            var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
                 metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
-                channel);
+                channel,
+                cutoffBits);
             if (Cache.TryGetValue(key, out chain))
             {
+                return true;
+            }
+
+            // Try direct uncompressed disk source reading first to bypass
+            // Unity downsampling and BC7/DXT loss.
+            if (SourceImageAlphaReader.TryReadSourceAlphaChain(
+                    source, channel, cutoffThreshold, out chain))
+            {
+                Cache[key] = chain;
                 return true;
             }
 
@@ -175,8 +191,9 @@ namespace Alrauna.Amuse.Editor.Host
                         var value = channel == TextureChannel.Red
                             ? pixels[index].r
                             : pixels[index].a;
+                        var threshold = Mathf.Clamp01(cutoffThreshold);
                         flags[index] =
-                            value >= 1f ? byte.MaxValue : (byte)0;
+                            value >= threshold ? byte.MaxValue : (byte)0;
                     }
 
                     levels[mip] = new AlphaTextureData(width, height, flags);
