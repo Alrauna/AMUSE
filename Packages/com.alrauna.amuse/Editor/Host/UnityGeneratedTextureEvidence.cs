@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 
@@ -12,8 +15,19 @@ namespace Alrauna.Amuse.Editor.Host
     /// </summary>
     internal static class UnityGeneratedTextureEvidence
     {
+        private const GraphicsFormat TargetFormat = GraphicsFormat.R8G8B8A8_UNorm;
+
         private static readonly Dictionary<(int instanceId, TextureChannel channel, float cutoff), AlphaMipChain>
             SessionCache = new();
+
+        /// <summary>
+        /// Clears the evidence cache.
+        /// Call this method before each build and after cleanup.
+        /// </summary>
+        internal static void ClearCache()
+        {
+            SessionCache.Clear();
+        }
 
         internal static bool TryCapture(
             Texture2D texture,
@@ -27,6 +41,21 @@ namespace Alrauna.Amuse.Editor.Host
             Texture2D texture,
             TextureChannel channel,
             float cutoffThreshold,
+            out AlphaMipChain chain)
+        {
+            return TryCapture(
+                texture,
+                channel,
+                cutoffThreshold,
+                IsStreamingMipmapResident,
+                out chain);
+        }
+
+        internal static bool TryCapture(
+            Texture2D texture,
+            TextureChannel channel,
+            float cutoffThreshold,
+            Func<Texture2D, bool> residencyPredicate,
             out AlphaMipChain chain)
         {
             chain = null;
@@ -46,6 +75,11 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            if (residencyPredicate != null && !residencyPredicate(texture))
+            {
+                return false;
+            }
+
             var threshold = Mathf.Clamp01(cutoffThreshold);
             var key = (texture.GetInstanceID(), channel, threshold);
             if (SessionCache.TryGetValue(key, out chain))
@@ -57,6 +91,14 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 var mipCount = texture.mipmapCount;
                 if (mipCount <= 0 || texture.width <= 0 || texture.height <= 0)
+                {
+                    return false;
+                }
+
+                if (!HostCapabilitiesPass(
+                        SystemInfo.supportsAsyncGPUReadback,
+                        SystemInfo.IsFormatSupported(TargetFormat, FormatUsage.Render),
+                        SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.Sample)))
                 {
                     return false;
                 }
@@ -82,31 +124,45 @@ namespace Alrauna.Amuse.Editor.Host
 
                         material.SetInt("_Mip", m);
 
-                        var rt = RenderTexture.GetTemporary(
-                            width,
-                            height,
-                            0,
-                            RenderTextureFormat.ARGB32,
-                            RenderTextureReadWrite.Linear);
+                        var descriptor = new RenderTextureDescriptor(width, height, TargetFormat, 0)
+                        {
+                            sRGB = false,
+                            useMipMap = false,
+                            autoGenerateMips = false
+                        };
 
-                        var previous = RenderTexture.active;
-                        var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                        var rt = RenderTexture.GetTemporary(descriptor);
 
                         try
                         {
-                            Graphics.Blit(texture, rt, material);
-                            RenderTexture.active = rt;
-                            readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                            readable.Apply(false, false);
-
-                            var pixels = readable.GetPixels32();
-                            var flags = new byte[pixels.Length];
-
-                            for (var i = 0; i < pixels.Length; i++)
+                            if (!IsExpectedTargetFormat(rt.graphicsFormat, TargetFormat) ||
+                                !IsExpectedLevelSize(rt.width, rt.height, width, height))
                             {
-                                // Green channel carries the raw sample from the exact mip.
-                                var rawSample = pixels[i].g;
-                                var isOpaque = (rawSample / 255f) >= threshold;
+                                return false;
+                            }
+
+                            Graphics.Blit(texture, rt, material);
+
+                            var request = AsyncGPUReadback.Request(rt, 0, TargetFormat);
+                            request.WaitForCompletion();
+                            if (request.hasError ||
+                                !IsExpectedLevelSize(request.width, request.height, width, height))
+                            {
+                                return false;
+                            }
+
+                            var data = request.GetData<Color32>();
+                            if (!IsExpectedBufferLength(data.Length, width, height))
+                            {
+                                return false;
+                            }
+
+                            var flags = new byte[data.Length];
+                            for (var i = 0; i < data.Length; i++)
+                            {
+                                var isOpaque = threshold >= 1.0f
+                                    ? data[i].r == 255
+                                    : (data[i].g / 255f) >= threshold;
                                 flags[i] = isOpaque ? byte.MaxValue : (byte)0;
                             }
 
@@ -114,15 +170,13 @@ namespace Alrauna.Amuse.Editor.Host
                         }
                         finally
                         {
-                            RenderTexture.active = previous;
                             RenderTexture.ReleaseTemporary(rt);
-                            Object.DestroyImmediate(readable);
                         }
                     }
                 }
                 finally
                 {
-                    Object.DestroyImmediate(material);
+                    UnityEngine.Object.DestroyImmediate(material);
                 }
 
                 chain = new AlphaMipChain(levels);
@@ -134,6 +188,58 @@ namespace Alrauna.Amuse.Editor.Host
                 chain = null;
                 return false;
             }
+        }
+
+        internal static bool IsStreamingMipmapResident(Texture2D texture)
+        {
+            if (texture == null)
+            {
+                return false;
+            }
+
+            return IsStreamingMipmapResident(
+                texture.streamingMipmaps,
+                texture.IsRequestedMipmapLevelLoaded(),
+                texture.loadedMipmapLevel);
+        }
+
+        internal static bool IsStreamingMipmapResident(
+            bool streamingMipmaps,
+            bool isRequestedMipmapLevelLoaded,
+            int loadedMipmapLevel)
+        {
+            if (!streamingMipmaps)
+            {
+                return true;
+            }
+
+            return isRequestedMipmapLevelLoaded && loadedMipmapLevel == 0;
+        }
+
+        internal static bool HostCapabilitiesPass(
+            bool asyncReadback,
+            bool targetRenderable,
+            bool sourceSampleable)
+        {
+            return asyncReadback && targetRenderable && sourceSampleable;
+        }
+
+        internal static bool IsExpectedTargetFormat(
+            GraphicsFormat actual, GraphicsFormat expected)
+        {
+            return actual == expected;
+        }
+
+        internal static bool IsExpectedLevelSize(
+            int width, int height, int expectedWidth, int expectedHeight)
+        {
+            return width == expectedWidth && height == expectedHeight;
+        }
+
+        internal static bool IsExpectedBufferLength(
+            long actualLength, int width, int height)
+        {
+            return actualLength == (long)width * height;
         }
     }
 }
