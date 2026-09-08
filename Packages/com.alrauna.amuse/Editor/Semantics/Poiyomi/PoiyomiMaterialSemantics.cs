@@ -66,6 +66,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
         private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
         private const string AlphaMaskProperty = "_AlphaMask";
+        private const string CutoffProperty = "_Cutoff";
         private const string AlphaMaskBlendStrengthProperty =
             "_AlphaMaskBlendStrength";
         private const string AlphaMaskValueProperty = "_AlphaMaskValue";
