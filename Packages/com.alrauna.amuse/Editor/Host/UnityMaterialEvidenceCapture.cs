@@ -718,17 +718,21 @@ namespace Alrauna.Amuse.Editor.Host
                     // ever added, narrow CapturedTextureAssignment's view to its
                     // own RequestedEvidence: that is the enforcement point.
                     shared.Evidence |= texture.RequestedEvidence;
+                    if (texture.CutoutThreshold < shared.CutoutThreshold)
+                    {
+                        shared.CutoutThreshold = texture.CutoutThreshold;
+                    }
                     texture.Shared = shared;
                 }
             }
-
             foreach (var shared in identified.Values)
             {
                 shared.Captured = CaptureTexture(
                     shared.Texture,
                     shared.Evidence,
                     true,
-                    shared.Source);
+                    shared.Source,
+                    shared.CutoutThreshold);
             }
 
             var results = new CapturedMaterialEvidence[materials.Length];
@@ -760,13 +764,13 @@ namespace Alrauna.Amuse.Editor.Host
                                 texture.Texture,
                                 texture.RequestedEvidence,
                                 false,
-                                default);
+                                default,
+                                texture.CutoutThreshold);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
                             distinctTextures.Add(capturedTexture);
                         }
                     }
-
                     var assignment = new CapturedTextureAssignment(
                         texture.Texture != null,
                         texture.RequestedEvidence,
@@ -850,6 +854,7 @@ namespace Alrauna.Amuse.Editor.Host
                     : null;
                 var hasScaleOffset = hasValue &&
                     (textureRequest.Evidence & TextureEvidenceKinds.ScaleOffset) != 0;
+                var cutoutThreshold = 1.0f;
                 builder.Textures.Add(new TextureAssignmentBuilder
                 {
                     Name = textureRequest.PropertyName,
@@ -863,6 +868,7 @@ namespace Alrauna.Amuse.Editor.Host
                         ? material.GetTextureOffset(textureRequest.PropertyName)
                         : default,
                     Texture = texture,
+                    CutoutThreshold = cutoutThreshold,
                 });
             }
 
@@ -974,7 +980,8 @@ namespace Alrauna.Amuse.Editor.Host
             Texture texture,
             TextureEvidenceKinds evidence,
             bool hasKnownSource,
-            TextureSourceId knownSource)
+            TextureSourceId knownSource,
+            float cutoffThreshold = 1.0f)
         {
             var hasSource = hasKnownSource &&
                 (evidence & TextureEvidenceKinds.SourceIdentity) != 0;
@@ -998,7 +1005,7 @@ namespace Alrauna.Amuse.Editor.Host
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, out _, out alphaChannel);
+                    texture, cutoffThreshold, out _, out alphaChannel);
             AlphaMipChain redChannel = null;
             var hasRedChannel =
                 (evidence & TextureEvidenceKinds.RedChannel) != 0 &&
@@ -1007,7 +1014,6 @@ namespace Alrauna.Amuse.Editor.Host
                     TextureChannel.Red,
                     out _,
                     out redChannel);
-
             return new CapturedTextureEvidence(
                 hasSource,
                 source,
@@ -1063,16 +1069,16 @@ namespace Alrauna.Amuse.Editor.Host
             internal Vector2 Scale;
             internal Vector2 Offset;
             internal Texture Texture;
+            internal float CutoutThreshold = 1.0f;
             internal SharedTextureBuilder Shared;
         }
-
         private sealed class SharedTextureBuilder
         {
             internal readonly Texture Texture;
             internal readonly TextureSourceId Source;
             internal TextureEvidenceKinds Evidence;
+            internal float CutoutThreshold = 1.0f;
             internal CapturedTextureEvidence Captured;
-
             internal SharedTextureBuilder(
                 Texture texture,
                 TextureSourceId source)

@@ -137,7 +137,27 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, TextureChannel.Alpha, out source, out chain);
+                texture, TextureChannel.Alpha, 1.0f, out source, out chain);
+        }
+
+        internal static bool TryCapture(
+            Texture texture,
+            float cutoffThreshold,
+            out TextureSourceId source,
+            out AlphaMipChain chain)
+        {
+            return TryCapture(
+                texture, TextureChannel.Alpha, cutoffThreshold, out source, out chain);
+        }
+
+        internal static bool TryCapture(
+            Texture texture,
+            TextureChannel channel,
+            out TextureSourceId source,
+            out AlphaMipChain chain)
+        {
+            return TryCapture(
+                texture, channel, 1.0f, out source, out chain);
         }
 
         /// <summary>
@@ -152,6 +172,7 @@ namespace Alrauna.Amuse.Editor.Host
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
+            float cutoffThreshold,
             out TextureSourceId source,
             out AlphaMipChain chain)
         {
@@ -204,14 +225,13 @@ namespace Alrauna.Amuse.Editor.Host
 
                 // A streaming texture never touches the GPU route: its
                 // editor read is measured untrustworthy, however resident it
-
                 // reports. The readable-clone route reads the importer's own
                 // output instead, and the capability gates below guard the
                 // GPU route this texture does not take.
                 if (texture2D.streamingMipmaps)
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
-                            texture2D, channel, out chain))
+                            texture2D, channel, cutoffThreshold, out chain))
                     {
                         source = default;
                         chain = null;
@@ -220,6 +240,7 @@ namespace Alrauna.Amuse.Editor.Host
 
                     return true;
                 }
+
 
                 if (!HostCapabilitiesPass(
                         SystemInfo.supportsAsyncGPUReadback,
