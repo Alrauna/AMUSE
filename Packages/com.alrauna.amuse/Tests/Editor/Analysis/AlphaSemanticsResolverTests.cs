@@ -1228,5 +1228,168 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
+
+        // --- product of two sampled terms (2026-09-07 design §5) --------
+
+        private static TextureSample MaskSample(
+            float scaleX = 1f,
+            float scaleY = 1f,
+            float offsetX = 0f,
+            float offsetY = 0f)
+        {
+            return new TextureSample(
+                new TextureSourceId("test:mask"),
+                new UvMapping(
+                    0,
+                    new Vector2(scaleX, scaleY),
+                    new Vector2(offsetX, offsetY)),
+                new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp));
+        }
+
+        private static AlphaFieldProvider ProvidingTwo(
+            AlphaMipChain mainChain,
+            AlphaMipChain maskChain,
+            bool provideMask = true)
+        {
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(new TextureSourceId("test:field")))
+                {
+                    result = mainChain;
+                    return true;
+                }
+
+                if (provideMask &&
+                    source.Equals(new TextureSourceId("test:mask")))
+                {
+                    result = maskChain;
+                    return true;
+                }
+
+                result = null;
+                return false;
+            };
+        }
+
+        private static SemanticOutput<ScalarSemanticValue>
+            ProductValue(float multiplier)
+        {
+            return SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.ProductOfTextureSamples(
+                    Sample(), TextureChannel.Alpha,
+                    MaskSample(), TextureChannel.Red,
+                    multiplier));
+        }
+
+        [Test]
+        public void ProductWithMultiplierAboveOneRefuses()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1.5f), ProvidingNothing());
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.UnsupportedMultiplier));
+        }
+
+        [Test]
+        public void ProductWithSubUnitMultiplierIsUniformMustRemainTransparent()
+        {
+            // ProvidingNothing proves the lemma consults no texel: both
+            // factors are bounded in [0,1] by the field contract, so a
+            // factor strictly below one keeps the product below one.
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(0.5f), ProvidingNothing());
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome),
+                Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ProductOfTwoAllOpaqueFieldsProvesTheTriangle()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1f),
+                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()));
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out _),
+                Is.False,
+                "a product of two sampled fields is never uniform");
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ProductWithANonOpaqueSecondFactorMipIsAbsorbed()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1f),
+                ProvidingTwo(
+                    AllOpaqueChain(), OpaqueThenTransparentChain()));
+
+            // MustRemainTransparent is absorbing: the mask's transparent
+            // mip vetoes the triangle even though the main field proves.
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ProductWithAnUnknownSecondFactorIsUnknown()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1f),
+                ProvidingTwo(
+                    AllOpaqueChain(), Chain(BudgetExceedingLevel())));
+
+            // Unknown must not exit early as ProvenOpaque: against the
+            // spanning triangle the second factor's budget-exceeding level
+            // answers Unknown, and the product is exactly one only when
+            // both factors are one.
+            Assert.That(
+                resolution.Classify(SpanningTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ProductWithMissingSecondFieldRefusesMissingEvidence()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1f),
+                ProvidingTwo(AllOpaqueChain(), null, provideMask: false));
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+        }
+
+        [Test]
+        public void ProductWithMixedFactorsClassifiesEachTriangleIndependently()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ProductValue(1f),
+                ProvidingTwo(Chain(MixedField()), Chain(MixedField())));
+
+            // Both factors are opaque only over the bottom half: the
+            // corner triangle proves, the spanning triangle does not.
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(SpanningTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
     }
 }

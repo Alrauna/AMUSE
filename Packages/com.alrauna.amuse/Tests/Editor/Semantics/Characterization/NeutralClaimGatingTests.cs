@@ -243,6 +243,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     {
         // Full reviewed list. _UseDither is deliberately absent: it is
         // compiled out at LIL_RENDER 2 and is not a gate on this family.
+        // _AlphaMaskMode is deliberately absent too: modes 1 and 2 are
+        // interpreted mask composition, and mode 1 with the unassigned
+        // white default provably claims constant alpha one. The refusing
+        // mask configurations keep their own frontend tests.
         private static readonly string[] AlphaCoverageGates =
         {
             "_Invisible",
@@ -252,7 +256,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_UseParallax",
             "_UseMain2ndTex",
             "_UseMain3rdTex",
-            "_AlphaMaskMode",
             "_IDMask1", "_IDMask2", "_IDMask3", "_IDMask4",
             "_IDMask5", "_IDMask6", "_IDMask7", "_IDMask8",
             "_IDMaskControlsDissolve",

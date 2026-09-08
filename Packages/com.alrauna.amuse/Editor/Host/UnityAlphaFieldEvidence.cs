@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
@@ -55,7 +56,18 @@ namespace Alrauna.Amuse.Editor.Host
         internal const string ShaderAssetPath =
             "Packages/com.alrauna.amuse/Editor/Host/Shaders/AmuseAlphaExactOne.shader";
 
-        private readonly Dictionary<TextureSourceId, AlphaMipChain> _fieldsBySource;
+        /// <summary>
+        /// The red-channel predicate shader's project path, mirroring
+        /// <see cref="ShaderAssetPath"/>. It exists for the lilToon alpha
+        /// mask, which samples <c>_AlphaMask</c>'s red channel through
+        /// <c>sampler_MainTex</c>.
+        /// </summary>
+        internal const string RedShaderAssetPath =
+            "Packages/com.alrauna.amuse/Editor/Host/Shaders/AmuseRedExactOne.shader";
+
+        private readonly Dictionary<
+            (TextureSourceId source, TextureChannel channel),
+            AlphaMipChain> _fieldsBySource;
 
         /// <summary>
         /// Resolves the supplied textures to their stable project identities through
@@ -70,44 +82,92 @@ namespace Alrauna.Amuse.Editor.Host
         /// not a caller error. A later lookup for such a texture simply refuses.
         /// </para>
         /// </summary>
-        internal UnityAlphaFieldEvidence(IEnumerable<Texture> textures)
+        internal UnityAlphaFieldEvidence(
+            IEnumerable<(Texture texture, TextureChannel channel)> requests)
         {
-            if (textures == null)
+            if (requests == null)
             {
-                throw new ArgumentNullException(nameof(textures));
+                throw new ArgumentNullException(nameof(requests));
             }
 
-            _fieldsBySource = new Dictionary<TextureSourceId, AlphaMipChain>();
-            foreach (var texture in textures)
+            _fieldsBySource = new Dictionary<
+                (TextureSourceId, TextureChannel), AlphaMipChain>();
+            foreach (var (texture, channel) in requests)
             {
-                if (!TryCapture(texture, out var source, out var chain))
+                if (!TryCapture(texture, channel, out var source, out var chain))
                 {
                     continue;
                 }
 
                 // Two textures resolving to one identity are the same asset, so the
-                // first wins and the duplicate is not an error.
-                if (_fieldsBySource.ContainsKey(source))
+                // first wins and the duplicate is not an error. The channel is
+                // part of the key, so one asset can serve its alpha field as a
+                // main texture and its red field as a mask.
+                if (_fieldsBySource.ContainsKey((source, channel)))
                 {
                     continue;
                 }
 
-                _fieldsBySource.Add(source, chain);
+                _fieldsBySource.Add((source, channel), chain);
             }
         }
 
         /// <summary>
-        /// Captures the complete immutable alpha field for one supported texture.
-        /// Every validation predicate belongs here so lookup never needs to touch a
-        /// Unity object after construction.
+        /// Captures the alpha field of each supplied texture. Kept for the
+        /// historical call shape, which never needed a second channel.
+        /// </summary>
+        internal UnityAlphaFieldEvidence(IEnumerable<Texture> textures)
+            : this(textures?.Select(WithAlphaChannel))
+        {
+        }
+
+        private static (Texture, TextureChannel) WithAlphaChannel(
+            Texture texture)
+        {
+            return (texture, TextureChannel.Alpha);
+        }
+
+        /// <summary>
+        /// Captures the complete immutable alpha field for one supported
+        /// texture. Kept for the historical call shape.
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
             out TextureSourceId source,
             out AlphaMipChain chain)
         {
+            return TryCapture(
+                texture, TextureChannel.Alpha, out source, out chain);
+        }
+
+        /// <summary>
+        /// Captures the complete field of one requested channel for one
+        /// supported texture. Every validation predicate belongs here so
+        /// lookup never needs to touch a Unity object after construction.
+        /// The red channel serves the lilToon alpha mask; its predicate is
+        /// decode-proof because the sRGB transfer is monotone and fixes
+        /// exactly 1.0, so byte 255 still marks exactly the texels whose
+        /// sampled value is one.
+        /// </summary>
+        internal static bool TryCapture(
+            Texture texture,
+            TextureChannel channel,
+            out TextureSourceId source,
+            out AlphaMipChain chain)
+        {
             source = default;
             chain = null;
+
+            if (!Enum.IsDefined(typeof(TextureChannel), channel))
+            {
+                throw new ArgumentOutOfRangeException(nameof(channel));
+            }
+
+            if (channel != TextureChannel.Alpha &&
+                channel != TextureChannel.Red)
+            {
+                return false;
+            }
 
             // Unity's overloaded equality is required: it is true for a destroyed
             // object, where ReferenceEquals would be false. A non-Texture2D
@@ -144,13 +204,14 @@ namespace Alrauna.Amuse.Editor.Host
 
                 // A streaming texture never touches the GPU route: its
                 // editor read is measured untrustworthy, however resident it
+
                 // reports. The readable-clone route reads the importer's own
                 // output instead, and the capability gates below guard the
                 // GPU route this texture does not take.
                 if (texture2D.streamingMipmaps)
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
-                            texture2D, out chain))
+                            texture2D, channel, out chain))
                     {
                         source = default;
                         chain = null;
@@ -173,7 +234,10 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                var shader = AssetDatabase.LoadAssetAtPath<Shader>(ShaderAssetPath);
+                var shaderPath = channel == TextureChannel.Red
+                    ? RedShaderAssetPath
+                    : ShaderAssetPath;
+                var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
                 if (!IsShaderUsable(shader != null, shader != null && shader.isSupported))
                 {
                     source = default;
@@ -183,7 +247,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // Gate 12, last because it depends on the shader and on the device
                 // capabilities above. It guards the route it is written beside:
                 // there is no version of TryCapture that returns a chain without it.
-                if (!HostCapabilityCheckPasses())
+                if (!HostCapabilityCheckPasses(channel))
                 {
                     source = default;
                     return false;
@@ -362,14 +426,10 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new ArgumentOutOfRangeException(nameof(channel));
             }
 
-            // Only Alpha has a producer today. A colour channel would additionally
-            // need the sRGB transfer argument written down, so it fails closed.
-            if (channel != TextureChannel.Alpha)
-            {
-                return false;
-            }
-
-            if (!_fieldsBySource.TryGetValue(source, out chain))
+            // Alpha and Red have producers. The red predicate is decode-proof
+            // by the monotone-transfer argument (see TryCapture), so the same
+            // lookup serves both; any other channel still fails closed.
+            if (!_fieldsBySource.TryGetValue((source, channel), out chain))
             {
                 return false;
             }
@@ -381,12 +441,14 @@ namespace Alrauna.Amuse.Editor.Host
         private const GraphicsFormat PredicateTarget = GraphicsFormat.R8_UNorm;
 
         /// <summary>
-        /// Process-local host-capability latch. It records one fact about this
-        /// Editor process's graphics stack; it is keyed by nothing and holds no
-        /// texel, texture, or source identity. It is explicitly NOT a texture
-        /// evidence cache and must never be grown into one. Domain reload clears it.
+        /// Process-local host-capability latches, one per predicate channel.
+        /// Each records one fact about this Editor process's graphics stack;
+        /// each is keyed by nothing and holds no texel, texture, or source
+        /// identity. They are explicitly NOT a texture evidence cache and
+        /// must never be grown into one. Domain reload clears them.
         /// </summary>
-        private static bool? _hostCapabilityPassed;
+        private static bool? _alphaHostCapabilityPassed;
+        private static bool? _redHostCapabilityPassed;
 
         /// <summary>
         /// 4x2, asymmetric on both axes and not symmetric under transpose, so a
@@ -427,22 +489,48 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal static bool HostCapabilityCheckPasses()
         {
-            if (_hostCapabilityPassed.HasValue)
-            {
-                return _hostCapabilityPassed.Value;
-            }
-
-            _hostCapabilityPassed = RunHostCapabilityCheck();
-            return _hostCapabilityPassed.Value;
+            return HostCapabilityCheckPasses(TextureChannel.Alpha);
         }
 
-        private static bool RunHostCapabilityCheck()
+        internal static bool HostCapabilityCheckPasses(TextureChannel channel)
         {
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(ShaderAssetPath);
+            if (channel != TextureChannel.Alpha &&
+                channel != TextureChannel.Red)
+            {
+                return false;
+            }
+
+            if (channel == TextureChannel.Red)
+            {
+                if (_redHostCapabilityPassed.HasValue)
+                {
+                    return _redHostCapabilityPassed.Value;
+                }
+
+                _redHostCapabilityPassed = RunHostCapabilityCheck(channel);
+                return _redHostCapabilityPassed.Value;
+            }
+
+            if (_alphaHostCapabilityPassed.HasValue)
+            {
+                return _alphaHostCapabilityPassed.Value;
+            }
+
+            _alphaHostCapabilityPassed = RunHostCapabilityCheck(channel);
+            return _alphaHostCapabilityPassed.Value;
+        }
+
+        private static bool RunHostCapabilityCheck(TextureChannel channel)
+        {
+            var shaderPath = channel == TextureChannel.Red
+                ? RedShaderAssetPath
+                : ShaderAssetPath;
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
             if (!IsShaderUsable(shader != null, shader != null && shader.isSupported))
             {
                 return false;
             }
+
 
             var texture = new Texture2D(4, 2, TextureFormat.RGBA32, false);
             Material material = null;
@@ -451,11 +539,16 @@ namespace Alrauna.Amuse.Editor.Host
                 var pixels = new Color32[8];
                 for (var index = 0; index < pixels.Length; index++)
                 {
-                    pixels[index] = new Color32(
-                        64, 32, 16,
-                        ExpectedOrientationPattern[index] == byte.MaxValue
-                            ? (byte)255
-                            : (byte)128);
+                    // The fixture encodes the orientation pattern in the
+                    // channel under test: alpha for the alpha predicate,
+                    // red for the mask predicate.
+                    var marked = ExpectedOrientationPattern[index] ==
+                                 byte.MaxValue;
+                    pixels[index] = channel == TextureChannel.Red
+                        ? new Color32(
+                            marked ? (byte)255 : (byte)128, 32, 16, 255)
+                        : new Color32(
+                            64, 32, 16, marked ? (byte)255 : (byte)128);
                 }
 
                 texture.SetPixels32(pixels);

@@ -174,6 +174,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
                         TextureEvidenceKinds.AlphaChannel),
+
+                    // The alpha mask rides _MainTex's sampler, so this
+                    // request deliberately asks for no sampling facts of
+                    // its own: wrap, filter, and anisotropy evidence comes
+                    // from the _MainTex assignment. The red field, not
+                    // alpha, is the mask channel.
+                    new TexturePropertyEvidenceRequest(
+                        "_AlphaMask",
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.RedChannel),
                 });
 
         /// <summary>
@@ -260,57 +271,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     gate);
             }
 
-            // (1a) Alpha mask mode: mode 0 (off) or mode 2 (multiply) with
-            // _AlphaMaskScale == 1 and _AlphaMaskValue >= 1.
-            if (!evidence.TryGetScalar(AlphaMaskModeProperty, out var maskMode) ||
-                !IsFinite(maskMode))
+            // (1a) Alpha mask interpretation (shared with the cutout
+            // frontend; pinned equation and admitted cases in
+            // LilToonAlphaMaskTerm). A refusal records its own
+            // diagnostic; the sample outcome defers to the texture arm,
+            // which owns the shared-sampler and UV0 gates.
+            var maskTerm = LilToonAlphaMaskTerm.Interpret(
+                evidence, diagnostics);
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Refused)
             {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskModeProperty);
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
 
-            if (maskMode == 0f)
-            {
-                // Off: no alpha mask manipulation.
-            }
-            else if (maskMode == 2f)
-            {
-                // Multiply mode: col.a = col.a * saturate(mask.r * scale + value).
-                // When scale == 1 and value >= 1, since mask.r >= 0, mask.r * scale + value >= 1,
-                // so saturate(...) is exactly 1.0, leaving col.a unchanged.
-                if (!evidence.TryGetScalar(AlphaMaskScaleProperty, out var maskScale) ||
-                    !IsFinite(maskScale) ||
-                    maskScale != 1f)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        AlphaMaskScaleProperty);
-                }
-
-                if (!evidence.TryGetScalar(AlphaMaskValueProperty, out var maskValue) ||
-                    !IsFinite(maskValue) ||
-                    maskValue < 1f)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        AlphaMaskValueProperty);
-                }
-            }
-            else
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskModeProperty);
-            }
             // (2) Dissolve mode zero, exactly. The shader rounds the mode
             // before branching; the proof cannot, so anything but exact zero
             // — and any non-finite component — refuses (B2 §10).
@@ -428,12 +400,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
             var colorAlpha = color.a;
 
-            // Texture-backed arm (T1 §9.1 clause 5): the transparent alpha is
-            // the plain _MainTex alpha sample at UV0, built from the captured
-            // ScaleOffset. The transparent source executes the same runtime
+            // Replace mode with a constant term samples nothing at all:
+            // the alpha is that constant, so no texture gate applies.
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Constant)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.Constant(maskTerm.Constant));
+            }
+
+            // Texture-backed arm (T1 §9.1 clause 5): the transparent alpha
+            // is the plain _MainTex alpha sample at UV0, built from the
+            // captured ScaleOffset, composed with the mask term when one
+            // runs. The transparent source executes the same runtime
             // rotation path even at zero scroll/rotate, so the identity-only
             // boundary keeps non-identity ST at this family boundary rather
             // than delegating it to the family-blind resolver (T1 §9.3).
+            // The boundary binds the mask too: uvMain feeds the mask
+            // coordinate, and the mask rides _MainTex's sampler.
             if (!evidence.TryGetTexture(
                     MainTextureProperty, out var assignment) ||
                 !assignment.IsAssigned)
@@ -442,15 +425,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
-            }
-
-            if (!assignment.Texture.HasSourceIdentity)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
                     MainTextureProperty);
             }
 
@@ -491,11 +465,67 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MainTexStProperty);
             }
 
-            var mapping = new UvMapping(0, assignment.Scale, assignment.Offset);
+            // uvMain is UV0 under the identity gates above. The mask
+            // coordinate is UV0 under the mask's own plain affine, and the
+            // mask sample borrows _MainTex's captured sampler facts.
+            var identityMapping =
+                new UvMapping(0, assignment.Scale, assignment.Offset);
+            var sharedSampling = assignment.Texture.Sampling;
+
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
+            {
+                var maskSample = new TextureSample(
+                    maskTerm.Source,
+                    maskTerm.Mapping,
+                    sharedSampling);
+
+                if (maskTerm.ReplacesMainAlpha)
+                {
+                    // Replace mode: the mask term IS the alpha. Neither
+                    // _MainTex's texels nor _Color.a reach the value, so
+                    // no main source identity is needed.
+                    return SemanticOutput<ScalarSemanticValue>.Complete(
+                        ScalarSemanticValue.Texture(
+                            maskSample, TextureChannel.Red));
+                }
+
+                if (!assignment.Texture.HasSourceIdentity)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode
+                            .UnstableTextureIdentity,
+                        MainTextureProperty);
+                }
+
+                var mainSample = new TextureSample(
+                    assignment.Texture.SourceIdentity,
+                    identityMapping,
+                    sharedSampling);
+                return SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.ProductOfTextureSamples(
+                        mainSample,
+                        TextureChannel.Alpha,
+                        maskSample,
+                        TextureChannel.Red,
+                        colorAlpha));
+            }
+
+            // Off, or a mask term provably one: the plain main value.
+            if (!assignment.Texture.HasSourceIdentity)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
+                    MainTextureProperty);
+            }
+
             var sample = new TextureSample(
                 assignment.Texture.SourceIdentity,
-                mapping,
-                assignment.Texture.Sampling);
+                identityMapping,
+                sharedSampling);
             var value = colorAlpha == 1f
                 ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
                 : ScalarSemanticValue.TextureTimesConstant(
