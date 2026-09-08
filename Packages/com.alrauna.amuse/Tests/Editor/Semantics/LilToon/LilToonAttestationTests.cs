@@ -2710,22 +2710,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         [TestCase("Hidden/lilToonOutline", "Hidden/lilToonOutline")]
         [TestCase(
-            "Hidden/lilToonCutoutOutline", "Hidden/lilToonCutoutOutline")]
+            "Hidden/lilToonCutoutOutline", "Hidden/lilToonOutline")]
         [TestCase(
             "Hidden/lilToonTransparentOutline",
-            "Hidden/lilToonTransparentOutline")]
+            "Hidden/lilToonOutline")]
         [TestCase("lilToon", "lilToon")]
         [TestCase("Hidden/lilToonCutout", "lilToon")]
         [TestCase("Hidden/lilToonOnePassTransparent", "lilToon")]
         [TestCase("Hidden/lilToonTwoPassTransparent", "lilToon")]
         [TestCase(
             "Hidden/lilToonOnePassTransparentOutline",
-            "Hidden/lilToonOnePassTransparentOutline")]
+            "Hidden/lilToonOutline")]
         [TestCase(
             "Hidden/lilToonTwoPassTransparentOutline",
-            "Hidden/lilToonTwoPassTransparentOutline")]
+            "Hidden/lilToonOutline")]
         [TestCase("Some/Unknown", "lilToon")]
-        public void ResolveCanonicalTargetShaderName_KeepsWrapperAndMovesPlain(
+        public void ResolveCanonicalTargetShaderName_MapsOutlineWrappersToOutlineOpaqueAndPlainToPlain(
             string sourceShaderName,
             string expectedTargetName)
         {
@@ -2733,6 +2733,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonSourceAttestation.ResolveCanonicalTargetShaderName(
                     sourceShaderName),
                 Is.EqualTo(expectedTargetName));
+        }
+
+        [Test]
+        public void ProfileForShaderName_TransparentShader_ReturnsTransparentProfile()
+        {
+            var m = typeof(LilToonSourceAttestation).GetMethod(
+                "ProfileForShaderName",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(m, Is.Not.Null);
+
+            var profile = m.Invoke(null, new object[] { LilToonSourceAttestation.TransparentShaderName });
+            Assert.That(profile, Is.Not.Null);
+
+            var nameProp = profile.GetType().GetProperty("ShaderName", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(nameProp.GetValue(profile), Is.EqualTo(LilToonSourceAttestation.TransparentShaderName));
+        }
+
+        [Test]
+        public void ResolveCanonicalTargetShaderName_OutlineWrappers_ReturnsOutlineOpaqueShader()
+        {
+            Assert.That(
+                LilToonSourceAttestation.ResolveCanonicalTargetShaderName(LilToonSourceAttestation.OutlineCutoutShaderName),
+                Is.EqualTo(LilToonSourceAttestation.OutlineShaderName));
+            Assert.That(
+                LilToonSourceAttestation.ResolveCanonicalTargetShaderName(LilToonSourceAttestation.OutlineTransparentShaderName),
+                Is.EqualTo(LilToonSourceAttestation.OutlineShaderName));
         }
     }
 }
