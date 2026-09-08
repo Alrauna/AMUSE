@@ -56,6 +56,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly AlphaMipChain _chain;
         private readonly AlphaSamplingSettings _sampling;
         private readonly UvMapping _mapping;
+        private readonly AlphaResolution _firstFactor;
+        private readonly AlphaResolution _secondFactor;
+        private readonly bool _isProduct;
 
         private AlphaResolution(
             bool isResolved,
@@ -64,7 +67,10 @@ namespace Alrauna.Amuse.Editor.Analysis
             TriangleAlphaOutcome uniformOutcome,
             AlphaMipChain chain,
             AlphaSamplingSettings sampling,
-            UvMapping mapping)
+            UvMapping mapping,
+            AlphaResolution firstFactor,
+            AlphaResolution secondFactor,
+            bool isProduct)
         {
             // Invariants: a resolved value carries no failure, a refusal
             // carries one, and a classified value always has its field.
@@ -74,7 +80,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                     "A resolution is resolved exactly when it has no failure.",
                     nameof(failure));
             }
-            if (isResolved && !isUniform && chain == null)
+            if (isResolved && !isUniform && !isProduct && chain == null)
             {
                 throw new ArgumentNullException(nameof(chain));
             }
@@ -86,6 +92,9 @@ namespace Alrauna.Amuse.Editor.Analysis
             _chain = chain;
             _sampling = sampling;
             _mapping = mapping;
+            _firstFactor = firstFactor;
+            _secondFactor = secondFactor;
+            _isProduct = isProduct;
         }
 
         internal bool IsResolved { get; }
@@ -94,7 +103,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static AlphaResolution Refused(AlphaResolutionFailure failure)
         {
             return new AlphaResolution(
-                false, failure, false, default, null, default, default);
+                false, failure, false, default, null, default, default,
+                null, null, false);
         }
 
         internal static AlphaResolution Uniform(TriangleAlphaOutcome outcome)
@@ -106,7 +116,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                 outcome,
                 null,
                 default,
-                default);
+                default,
+                null,
+                null,
+                false);
         }
 
         internal static AlphaResolution Classified(
@@ -138,8 +151,65 @@ namespace Alrauna.Amuse.Editor.Analysis
                 default,
                 chain,
                 sampling,
-                mapping);
+                mapping,
+                null,
+                null,
+                false);
         }
+
+        /// <summary>
+        /// The conjunction of two independently classified factors. The
+        /// factors keep their own fields, samplings, and mappings, so each
+        /// one classifies the triangle under its own coordinate transform.
+        /// The fold is the absorbing outcome lattice:
+        /// <c>MustRemainTransparent</c> wins over everything,
+        /// <c>Unknown</c> wins over <c>ProvenOpaque</c>, and
+        /// <c>ProvenOpaque</c> needs both factors proven.
+        /// <para>
+        /// The exactness argument is the float product lemma: both factors
+        /// are bounded in [0, 1] by the field contract, and a product of
+        /// such values rounds to one only when both factors are one, so
+        /// per-triangle conjunction of the per-factor predicates is the
+        /// product's predicate.
+        /// </para>
+        /// <para>
+        /// Both factors must be classified, never uniform: the resolver
+        /// resolves constant factors before it constructs a product, and a
+        /// uniform factor folded in here would hide that decision inside
+        /// an opaque composite. A composite exposes no uniform outcome, so
+        /// it merges with nothing in deduplication, like every classified
+        /// resolution.
+        /// </para>
+        /// </summary>
+        internal static AlphaResolution Product(
+            AlphaResolution first,
+            AlphaResolution second)
+        {
+            if (first == null)
+                throw new ArgumentNullException(nameof(first));
+            if (second == null)
+                throw new ArgumentNullException(nameof(second));
+            if (!first.IsResolved || !second.IsResolved ||
+                first.TryGetUniformOutcome(out _) ||
+                second.TryGetUniformOutcome(out _))
+            {
+                throw new ArgumentException(
+                    "A product composes two classified resolutions.");
+            }
+
+            return new AlphaResolution(
+                true,
+                AlphaResolutionFailure.None,
+                false,
+                default,
+                null,
+                default,
+                default,
+                first,
+                second,
+                true);
+        }
+
 
         /// <summary>
         /// Reports the stored uniform outcome, if this resolution has one.
@@ -197,6 +267,27 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 return _uniformOutcome;
             }
+
+            if (_isProduct)
+            {
+                var first = _firstFactor.Classify(triangle);
+                if (first == TriangleAlphaOutcome.MustRemainTransparent)
+                {
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
+
+                var second = _secondFactor.Classify(triangle);
+                if (second == TriangleAlphaOutcome.MustRemainTransparent)
+                {
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
+
+                return first == TriangleAlphaOutcome.ProvenOpaque &&
+                       second == TriangleAlphaOutcome.ProvenOpaque
+                    ? TriangleAlphaOutcome.ProvenOpaque
+                    : TriangleAlphaOutcome.Unknown;
+            }
+
 
             // A mip chain is alternative evidence about one configuration, not a
             // set of admitted configurations: the hardware may select any level and
@@ -293,6 +384,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetChannel(),
                         value.GetMultiplier(),
                         fieldProvider);
+                case ScalarSemanticValueKind.ProductOfTextureSamples:
+                    return ResolveProduct(
+                        value.GetFirstTextureSample(),
+                        value.GetFirstChannel(),
+                        value.GetSecondTextureSample(),
+                        value.GetSecondChannel(),
+                        value.GetProductMultiplier(),
+                        fieldProvider);
                 default:
                     // A semantic form added later must fail closed here rather
                     // than fall into a wrong proof path.
@@ -344,6 +443,55 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return AlphaResolution.Uniform(
                 TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        /// <summary>
+        /// alpha = (m1 * k) * m2 over two sampled terms bounded in [0, 1] by
+        /// the field contract. k &lt; 1 forces the product below one at every
+        /// reachable sample by the same range lemma as
+        /// <see cref="ResolveScaledSample"/>: the rounded product of a value
+        /// at most one and a value below one cannot reach one. k &gt; 1 has
+        /// no defined opacity meaning and refuses. k == 1 resolves both
+        /// factors as plain samples and conjoins them: the float product of
+        /// values in [0, 1] is exactly one only when both factors are one,
+        /// so the per-factor exact-one predicates conjoined are the
+        /// product's predicate.
+        /// </summary>
+        private static AlphaResolution ResolveProduct(
+            TextureSample first,
+            TextureChannel firstChannel,
+            TextureSample second,
+            TextureChannel secondChannel,
+            float multiplier,
+            AlphaFieldProvider fieldProvider)
+        {
+            if (multiplier > 1f)
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
+            if (multiplier < 1f)
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent);
+            }
+
+            var firstResolution = ResolveSampled(
+                first, firstChannel, fieldProvider);
+            if (!firstResolution.IsResolved)
+            {
+                return firstResolution;
+            }
+
+            var secondResolution = ResolveSampled(
+                second, secondChannel, fieldProvider);
+            if (!secondResolution.IsResolved)
+            {
+                return secondResolution;
+            }
+
+            return AlphaResolution.Product(firstResolution, secondResolution);
         }
 
         private static AlphaResolution ResolveSampled(
