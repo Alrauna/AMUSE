@@ -1925,10 +1925,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             generatedTex.Apply(false, false);
             AssetDatabase.AddObjectToAsset(generatedTex, containerPath);
             AssetDatabase.SaveAssets();
-            Assert.That(
-                generatedTex.streamingMipmaps,
-                Is.True,
-                "fixture precondition: texture must have streaming mipmaps enabled");
 
             var root = new GameObject("AMUSE generated texture e2e");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -1938,6 +1934,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
+                Assert.That(
+                    generatedTex.streamingMipmaps,
+                    Is.True,
+                    "fixture precondition: texture must have streaming mipmaps enabled");
                 material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 material.mainTexture = generatedTex;
                 material.SetFloat("_Cutoff", 0.5f);
