@@ -2336,6 +2336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void SharedMaterialAcrossMultipleRenderersRegistersReplacementWithoutDuplication()
         {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = CreateAvatarRoot("shared-material-avatar");
             var texture = Track(AlphaSeparationSplitTests.CreateSplitTexture());
             var split = Track(
