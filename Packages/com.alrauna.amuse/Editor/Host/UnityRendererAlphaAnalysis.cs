@@ -494,7 +494,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
-            var fields = GatherAlphaFields(snapshot.Materials);
+            var fields = GatherAlphaFields(snapshot.Materials, int.MaxValue);
             return Analyze(
                 snapshot,
                 resolveSemantics,
@@ -503,8 +503,7 @@ namespace Alrauna.Amuse.Editor.Host
                  out AlphaMipChain chain) =>
                 {
                     chain = null;
-                    return channel == TextureChannel.Alpha &&
-                           fields.TryGetValue(source, out chain);
+                    return fields.TryGetValue((source, channel), out chain);
                 });
         }
 
@@ -570,10 +569,29 @@ namespace Alrauna.Amuse.Editor.Host
             return resolution;
         }
 
-        internal static IReadOnlyDictionary<TextureSourceId, AlphaMipChain>
-            GatherAlphaFields(IReadOnlyList<CapturedAlphaMaterial> materials)
+        /// <summary>
+        /// Collects the alpha and red field chains of every admitted
+        /// texture, each truncated to the proof's mip cap: levels above
+        /// <paramref name="maxMipLevel"/> are the user's accepted
+        /// minification range and leave the proof's scope, so no consumer
+        /// can consult them. The stored evidence keeps its full chains;
+        /// only the handed-out proof scope is capped.
+        /// </summary>
+        internal static IReadOnlyDictionary<
+            (TextureSourceId source, TextureChannel channel),
+            AlphaMipChain> GatherAlphaFields(
+                IReadOnlyList<CapturedAlphaMaterial> materials,
+                int maxMipLevel)
         {
-            var fields = new Dictionary<TextureSourceId, AlphaMipChain>();
+            if (maxMipLevel < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxMipLevel),
+                    "The mip cap must be a level index of at least zero.");
+            }
+
+            var fields = new Dictionary<
+                (TextureSourceId, TextureChannel), AlphaMipChain>();
             foreach (var material in materials)
             {
                 if (material == null)
@@ -583,11 +601,29 @@ namespace Alrauna.Amuse.Editor.Host
 
                 foreach (var texture in material.Evidence.Textures)
                 {
-                    if (texture.HasSourceIdentity &&
-                        texture.HasAlphaChannel &&
-                        !fields.ContainsKey(texture.SourceIdentity))
+                    if (!texture.HasSourceIdentity)
                     {
-                        fields.Add(texture.SourceIdentity, texture.AlphaChannel);
+                        continue;
+                    }
+
+                    var key =
+                        (texture.SourceIdentity, TextureChannel.Alpha);
+                    if (texture.HasAlphaChannel &&
+                        !fields.ContainsKey(key))
+                    {
+                        fields.Add(
+                            key,
+                            texture.AlphaChannel.LimitedTo(maxMipLevel));
+                    }
+
+                    var redKey =
+                        (texture.SourceIdentity, TextureChannel.Red);
+                    if (texture.HasRedChannel &&
+                        !fields.ContainsKey(redKey))
+                    {
+                        fields.Add(
+                            redKey,
+                            texture.RedChannel.LimitedTo(maxMipLevel));
                     }
                 }
             }
