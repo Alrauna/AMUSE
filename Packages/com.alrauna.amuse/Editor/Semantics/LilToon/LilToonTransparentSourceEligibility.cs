@@ -92,6 +92,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string SubpassCutoffProperty = "_SubpassCutoff";
         private const string DistanceFadeProperty = "_DistanceFade";
 
+        private static readonly string[] SourcePresenceSchema =
+        {
+            CutoffProperty, AlphaBoostFaProperty, SubpassCutoffProperty,
+        };
+
         private static readonly string[] SourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
@@ -112,7 +117,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             new MaterialEvidenceRequest(
                 shaderName: false,
                 activeColorSpace: false,
-                presenceProperties: SourceSchema,
+                presenceProperties: SourcePresenceSchema,
                 scalarProperties: SourceSchema,
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: SourceVectorSchema,

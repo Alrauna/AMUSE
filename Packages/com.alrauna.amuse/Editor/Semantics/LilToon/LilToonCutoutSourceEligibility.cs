@@ -42,6 +42,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private const string CutoffProperty = "_Cutoff";
 
+        private static readonly string[] SourcePresenceSchema =
+        {
+            CutoffProperty,
+        };
+
         private static readonly string[] SourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
@@ -56,7 +61,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             new MaterialEvidenceRequest(
                 shaderName: false,
                 activeColorSpace: false,
-                presenceProperties: SourceSchema,
+                presenceProperties: SourcePresenceSchema,
                 scalarProperties: SourceSchema,
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: Array.Empty<string>(),
