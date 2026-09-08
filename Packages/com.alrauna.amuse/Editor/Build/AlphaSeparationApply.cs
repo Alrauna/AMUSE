@@ -370,13 +370,15 @@ namespace Alrauna.Amuse.Editor.Build
                     prepared.Target.ExpectedMesh;
             }
 
+            var registeredReplacements = new HashSet<UnityEngine.Object>();
             foreach (var survivors in rendererSurvivors)
             {
                 foreach (var slot in survivors)
                 {
                     foreach (var pair in slot.OpaqueOfAdmitted)
                     {
-                        if (ReferenceEquals(pair.Key, pair.Value))
+                        if (ReferenceEquals(pair.Key, pair.Value) ||
+                            !registeredReplacements.Add(pair.Value))
                         {
                             continue;
                         }
@@ -389,7 +391,8 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var write in writes)
             {
-                if (write.Mesh == null)
+                if (write.Mesh == null ||
+                    !registeredReplacements.Add(write.Mesh))
                 {
                     continue;
                 }
