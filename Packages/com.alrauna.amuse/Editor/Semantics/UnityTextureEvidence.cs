@@ -19,9 +19,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Resolves the stable project identity of an assigned texture as
         /// <c>unity-asset:&lt;lowercase-guid&gt;:&lt;invariant-decimal-local-id&gt;</c>.
-        /// Scene-only, generated, or otherwise unidentifiable textures are
-        /// refused; identity is never fabricated from instance id, path, name,
-        /// pixels, or reference equality.
+        /// Scene-only or unidentifiable textures fail.
+        /// Characterized sub-assets resolve through their container asset identity.
+        /// Identity is never fabricated from instance id, path, name, pixels, or reference equality.
         /// </summary>
         internal static bool TryGetSourceId(
             Texture texture,
@@ -107,26 +107,41 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
-        /// Selects a color texture's linear/sRGB import interpretation from its
-        /// <see cref="TextureImporter.sRGBTexture"/> flag. A texture with no
-        /// importer (scene-only, generated) cannot prove a color meaning.
+        /// Selects linear or sRGB color interpretation for a texture.
+        /// Reads the import flag for imported textures.
+        /// Reads the graphics format for characterized generated textures.
+        /// Other textures cannot prove a color meaning.
         /// </summary>
         internal static bool TryGetColorInterpretation(
             Texture texture,
             out TextureColorInterpretation interpretation)
         {
             interpretation = default;
-            if (!TryGetTextureImporter(texture, out var importer))
+            if (texture == null)
             {
                 return false;
             }
 
-            interpretation = importer.sRGBTexture
-                ? TextureColorInterpretation.Srgb
-                : TextureColorInterpretation.Linear;
-            return true;
-        }
+            if (TryGetTextureImporter(texture, out var importer))
+            {
+                interpretation = importer.sRGBTexture
+                    ? TextureColorInterpretation.Srgb
+                    : TextureColorInterpretation.Linear;
+                return true;
+            }
 
+            if (GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+            {
+                var isSrgb = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(texture.graphicsFormat) ||
+                             texture.isDataSRGB;
+                interpretation = isSrgb
+                    ? TextureColorInterpretation.Srgb
+                    : TextureColorInterpretation.Linear;
+                return true;
+            }
+
+            return false;
+        }
         /// <summary>
         /// Proves a sampled alpha of exactly one: the source carries no alpha
         /// channel and the importer imports none. Input or grayscale-derived
