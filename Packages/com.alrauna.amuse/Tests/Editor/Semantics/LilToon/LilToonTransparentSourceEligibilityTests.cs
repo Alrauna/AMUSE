@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
@@ -21,10 +22,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         : LilToonFixtureTestBase
     {
         /// <summary>
-        /// The 21 scalars this module reads off the source: the 18 recipe
-        /// names plus _Cutoff, _AlphaBoostFA and _SubpassCutoff. Stated
-        /// literally; a test that read production would let a wrong schema
-        /// test itself.
+        /// The 22 scalars this module reads off the source: the 18 recipe
+        /// names plus _lilToonVersion, _Cutoff, _AlphaBoostFA, and
+        /// _SubpassCutoff. Stated literally. A test that read production
+        /// would let an incorrect schema test itself.
         /// </summary>
         private static readonly string[] ExpectedEligibilityScalars =
         {
@@ -33,7 +34,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_SrcBlendAlpha", "_DstBlendAlpha", "_BlendOp", "_BlendOpAlpha",
             "_SrcBlendFA", "_DstBlendFA", "_SrcBlendAlphaFA",
             "_DstBlendAlphaFA", "_BlendOpFA", "_BlendOpAlphaFA",
-            "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff",
+            "_lilToonVersion", "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff",
         };
 
         private static CapturedMaterialEvidence Capture(Material material)
@@ -90,13 +91,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void SourceEvidenceRequest_IsExactlyTheFourSourceProperties()
+        public void SourceEvidenceRequest_IsExactlyTheFiveSourceProperties()
         {
             var request =
                 LilToonTransparentSourceEligibility.SourceEvidenceRequest;
 
             CollectionAssert.AreEquivalent(
-                new[] { "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
+                new[] { "_lilToonVersion", "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
                 request.ScalarProperties);
             CollectionAssert.AreEquivalent(
                 new[] { "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
@@ -108,7 +109,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void EligibilitySchema_IsTheRecipePlusTheThreeSourceScalars()
+        public void ConversionEvidenceRequest_IncludesShaderFormatVersionProperty()
+        {
+            var request = LilToonTransparentSourceEligibility.ConversionEvidenceRequest;
+            Assert.That(
+                request.ScalarProperties.Contains(LilToonSourceAttestation.ShaderFormatVersionProperty),
+                Is.True,
+                "Conversion request must retain _lilToonVersion for source attestation.");
+        }
+
+        [Test]
+        public void EligibilitySchema_IsTheRecipePlusTheFourSourceScalars()
         {
             CollectionAssert.AreEquivalent(
                 ExpectedEligibilityScalars,

@@ -29,11 +29,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     public sealed class LilToonCutoutSourceEligibilityTests : LilToonFixtureTestBase
     {
         /// <summary>
-        /// The 19 properties conversion reads: the 18 canonical recipe
-        /// properties plus the eligibility-only <c>_Cutoff</c>, which the
-        /// recipe never writes.
+        /// The 20 properties conversion reads: the 18 canonical recipe
+        /// properties plus the eligibility scalars _lilToonVersion and
+        /// _Cutoff. The recipe never writes them.
         /// </summary>
         private static readonly string[] ExpectedConversionSchema =
+        {
+            "_SrcBlend", "_DstBlend", "_AlphaToMask", "_ZWrite", "_ZTest",
+            "_OffsetFactor", "_OffsetUnits", "_ColorMask",
+            "_SrcBlendAlpha", "_DstBlendAlpha", "_BlendOp", "_BlendOpAlpha",
+            "_SrcBlendFA", "_DstBlendFA", "_SrcBlendAlphaFA", "_DstBlendAlphaFA",
+            "_BlendOpFA", "_BlendOpAlphaFA",
+            "_lilToonVersion", "_Cutoff",
+        };
+
+        private static readonly string[] ExpectedConversionPresenceSchema =
         {
             "_SrcBlend", "_DstBlend", "_AlphaToMask", "_ZWrite", "_ZTest",
             "_OffsetFactor", "_OffsetUnits", "_ColorMask",
@@ -59,7 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var actual =
                 LilToonCutoutSourceEligibility.EligibilitySchemaProperties;
 
-            Assert.That(actual.Count, Is.EqualTo(19));
+            Assert.That(actual.Count, Is.EqualTo(20));
             CollectionAssert.AreEquivalent(ExpectedConversionSchema, actual);
         }
 
@@ -72,14 +82,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(request.ShaderName, Is.True);
             Assert.That(request.ActiveColorSpace, Is.False);
             Assert.That(request.PresenceProperties.Count, Is.EqualTo(19));
-            Assert.That(request.ScalarProperties.Count, Is.EqualTo(19));
+            Assert.That(request.ScalarProperties.Count, Is.EqualTo(20));
             Assert.That(request.ScalarProperties, Has.Member("_Cutoff"));
+            Assert.That(request.ScalarProperties, Has.Member("_lilToonVersion"));
             // lilToon's conversion path has no locked-flag scalar: the
             // request must not grow a Poiyomi-style
             // _ShaderOptimizerEnabled-equivalent without a design change.
             Assert.That(request.ScalarProperties, Has.No.Member("_ShaderOptimizerEnabled"));
             CollectionAssert.AreEquivalent(
-                ExpectedConversionSchema, request.PresenceProperties.ToArray());
+                ExpectedConversionPresenceSchema, request.PresenceProperties.ToArray());
             CollectionAssert.AreEquivalent(
                 ExpectedConversionSchema, request.ScalarProperties.ToArray());
             Assert.That(request.ColorProperties, Is.Empty);
@@ -87,43 +98,53 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(request.TextureProperties, Is.Empty);
         }
 
+        [Test]
+        public void ConversionEvidenceRequest_IncludesShaderFormatVersionProperty()
+        {
+            var request = LilToonCutoutSourceEligibility.ConversionEvidenceRequest;
+            Assert.That(
+                request.ScalarProperties.Contains(LilToonSourceAttestation.ShaderFormatVersionProperty),
+                Is.True,
+                "Conversion request must retain _lilToonVersion for source attestation.");
+        }
+
         /// <summary>
-        /// The cutout source owns exactly one property. Falsifies a split
-        /// that left _Cutoff on the target, and a split that widened the
+        /// The cutout source owns exactly two properties. Falsifies a split
+        /// that left properties on the target, and a split that widened the
         /// source request with recipe render state it reads but does not own.
         /// </summary>
         [Test]
-        public void SourceEvidenceRequest_IsExactlyCutoff()
+        public void SourceEvidenceRequest_IsExactlyVersionAndCutoff()
         {
             var request = LilToonCutoutSourceEligibility.SourceEvidenceRequest;
 
-            CollectionAssert.AreEqual(
+            CollectionAssert.AreEquivalent(
                 new[] { "_Cutoff" }, request.PresenceProperties);
-            CollectionAssert.AreEqual(
-                new[] { "_Cutoff" }, request.ScalarProperties);
+            CollectionAssert.AreEquivalent(
+                new[] { "_lilToonVersion", "_Cutoff" }, request.ScalarProperties);
             Assert.That(request.ColorProperties, Is.Empty);
             Assert.That(request.VectorProperties, Is.Empty);
             Assert.That(request.TextureProperties, Is.Empty);
         }
 
         /// <summary>
-        /// The combined object both the capture schema and the conversion
-        /// boundary read is still the same 19 properties the single request
-        /// carried before the split: the split must not change what is
-        /// captured, only who owns each half.
+        /// The combined object that both the capture schema and the conversion
+        /// boundary read has the 20 properties. The split must not change what
+        /// is captured, only who owns each half.
         /// </summary>
         [Test]
-        public void ConversionEvidenceRequest_IsTheRecipePlusCutoff()
+        public void ConversionEvidenceRequest_IsTheRecipePlusVersionAndCutoff()
         {
             var request =
                 LilToonCutoutSourceEligibility.ConversionEvidenceRequest;
 
             Assert.That(request.ShaderName, Is.True);
-            Assert.That(request.ScalarProperties.Count, Is.EqualTo(19));
+            Assert.That(request.PresenceProperties.Count, Is.EqualTo(19));
+            Assert.That(request.ScalarProperties.Count, Is.EqualTo(20));
             CollectionAssert.AreEquivalent(
                 ExpectedConversionSchema, request.ScalarProperties);
             CollectionAssert.AreEquivalent(
-                ExpectedConversionSchema, request.PresenceProperties);
+                ExpectedConversionPresenceSchema, request.PresenceProperties);
         }
 
         // --- Eligibility matrix -----------------------------------------------
