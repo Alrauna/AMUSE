@@ -47,24 +47,24 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            var typeName = mainAsset.GetType().FullName ?? string.Empty;
-            if (typeName.Contains("SubAssetContainer") ||
-                path.Contains("ModularAvatar") ||
-                path.Contains("nadena.dev.ndmf") ||
-                texture.name.Contains("AAO"))
+            var mainType = mainAsset.GetType();
+            var isNdmfContainer = mainType.Name == "SubAssetContainer" ||
+                                  mainType.FullName == "nadena.dev.ndmf.runtime.SubAssetContainer";
+            if (!isNdmfContainer)
             {
-                producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
-                return true;
+                return false;
             }
 
-            // Also admit any ScriptableObject-backed sub-asset container in NDMF builds
-            if (mainAsset is ScriptableObject)
+            var textureName = texture.name ?? string.Empty;
+            var isAaoTexture = textureName.EndsWith(" (AAO UV Packed)") ||
+                               textureName.StartsWith("AAO Monotone ");
+            if (!isAaoTexture)
             {
-                producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
-                return true;
+                return false;
             }
 
-            return false;
+            producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
+            return true;
         }
     }
 }
