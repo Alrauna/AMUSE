@@ -1,7 +1,7 @@
 # lilToon Opaque Target Attestation and Evidence Alignment Design
 
 Date: 2026-09-08
-Status: draft
+Status: implemented
 Scope: lilToon opaque target preparation, source attestation evidence gathering, profile lookup, and conversion evidence requests.
 
 ## 1. Problem
