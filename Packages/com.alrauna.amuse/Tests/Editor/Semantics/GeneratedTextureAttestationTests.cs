@@ -135,6 +135,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void SubAssetInDerivedSubAssetContainer_IsRefused()
+        {
+            var derivedContainer = ScriptableObject.CreateInstance<ForeignNamespace.DerivedSubAssetContainer>();
+            AssetDatabase.CreateAsset(derivedContainer, ArbitraryContainerPath);
+
+            var textureInDerived = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            textureInDerived.name = "MainTex (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(textureInDerived, ArbitraryContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                textureInDerived, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
         public void CharacterizedSubAsset_ResolvesSourceIdentityAndColorInterpretation()
         {
             Assert.That(
@@ -153,6 +171,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 namespace Alrauna.Amuse.Tests.Editor.Semantics.ForeignNamespace
 {
     public class SubAssetContainer : ScriptableObject
+    {
+    }
+
+    public class DerivedSubAssetContainer : nadena.dev.ndmf.runtime.SubAssetContainer
     {
     }
 }

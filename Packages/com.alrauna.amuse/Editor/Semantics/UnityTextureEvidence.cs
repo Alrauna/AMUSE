@@ -33,6 +33,12 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
+            if (AssetDatabase.IsSubAsset(texture) &&
+                !GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+            {
+                return false;
+            }
+
             if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                     texture,
                     out var guid,
