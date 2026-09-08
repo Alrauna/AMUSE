@@ -1,7 +1,7 @@
 # NDMF ObjectRegistry Replacement Deduplication Design
 
 Date: 2026-09-08
-Status: draft
+Status: implemented
 Scope: NDMF object registry replacement registration during alpha separation finalization.
 
 ## 1. Problem
