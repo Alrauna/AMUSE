@@ -534,6 +534,144 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     source, (Shader)null));
         }
 
+        [Test]
+        public void PrepareCanonicalOpaqueClone_WithTargetAttestationSeam_Succeeds()
+        {
+            var originalVerifier = LilToonOpaqueTarget.VerifyTargetIdentity;
+            LilToonSourceEvidence observedEvidence = null;
+            LilToonOpaqueTarget.VerifyTargetIdentity = (LilToonSourceEvidence ev, out LilToonSemanticDiagnostic diag) =>
+            {
+                observedEvidence = ev;
+                diag = null;
+                return true;
+            };
+
+            var targetShader = ImportTempShader(
+                "lilToon",
+                "lilToon.shader",
+                ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
+
+            try
+            {
+                var source = Track(ConversionEligibleStandIn());
+                var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        source,
+                        LilToonTransparentSourceEligibility.ConversionEvidenceRequest),
+                })[0];
+
+                var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(source, captured));
+
+                Assert.That(clone, Is.Not.Null);
+                Assert.That(clone.shader, Is.SameAs(targetShader));
+                Assert.That(observedEvidence, Is.Not.Null);
+                Assert.That(observedEvidence.ShaderName, Is.EqualTo(targetShader.name));
+                Assert.That(observedEvidence.ShaderName, Is.Not.EqualTo(captured.ShaderName));
+            }
+            finally
+            {
+                LilToonOpaqueTarget.VerifyTargetIdentity = originalVerifier;
+                DeleteConversionTempFolder();
+            }
+        }
+
+        [Test]
+        public void PrepareCanonicalOpaqueClone_DefaultVerifierWithStandIn_FailsOnPassShaderNotGuid()
+        {
+            ImportTempShader(
+                "lilToon",
+                "lilToon.shader",
+                ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
+            try
+            {
+                var source = Track(ConversionEligibleStandIn());
+                var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        source,
+                        LilToonTransparentSourceEligibility.ConversionEvidenceRequest),
+                })[0];
+
+                var ex = Assert.Throws<InvalidOperationException>(() =>
+                {
+                    LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(source, captured);
+                });
+
+                Assert.That(
+                    ex.Message,
+                    Does.Not.Contain("shader asset GUID"),
+                    "Target shader with matching GUID must not fail source attestation on GUID.");
+            }
+            finally
+            {
+                DeleteConversionTempFolder();
+            }
+        }
+
+        private static string ValidStandInLilToonSource(string guid)
+        {
+            if (!AssetDatabase.IsValidFolder(ConversionTempFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "AmuseTests_LilToonConversion");
+            }
+
+            File.WriteAllText(
+                ConversionTempFolder + "/lilToon.shader.meta",
+                "fileFormatVersion: 2\n" +
+                "guid: " + guid + "\n" +
+                "ShaderImporter:\n" +
+                "  externalObjects: {}\n" +
+                "  defaultTextures: []\n" +
+                "  nonModifiableTextures: []\n" +
+                "  userData: \n" +
+                "  assetBundleName: \n" +
+                "  assetBundleVariant: \n");
+
+            return
+                "Shader \"lilToon\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        [HideInInspector] _lilToonVersion (\"Version\", Int) = 45\n" +
+                "        _Cutoff (\"Cutoff\", Range(0,1)) = 0.5\n" +
+                "        _SrcBlend (\"SrcBlend\", Float) = 1\n" +
+                "        _DstBlend (\"DstBlend\", Float) = 0\n" +
+                "        _AlphaToMask (\"AlphaToMask\", Float) = 0\n" +
+                "        _ZWrite (\"ZWrite\", Float) = 1\n" +
+                "        _ZTest (\"ZTest\", Float) = 4\n" +
+                "        _OffsetFactor (\"OffsetFactor\", Float) = 0\n" +
+                "        _OffsetUnits (\"OffsetUnits\", Float) = 0\n" +
+                "        _ColorMask (\"ColorMask\", Float) = 15\n" +
+                "        _SrcBlendAlpha (\"SrcBlendAlpha\", Float) = 1\n" +
+                "        _DstBlendAlpha (\"DstBlendAlpha\", Float) = 10\n" +
+                "        _BlendOp (\"BlendOp\", Float) = 0\n" +
+                "        _BlendOpAlpha (\"BlendOpAlpha\", Float) = 0\n" +
+                "        _SrcBlendFA (\"SrcBlendFA\", Float) = 1\n" +
+                "        _DstBlendFA (\"DstBlendFA\", Float) = 1\n" +
+                "        _SrcBlendAlphaFA (\"SrcBlendAlphaFA\", Float) = 0\n" +
+                "        _DstBlendAlphaFA (\"DstBlendAlphaFA\", Float) = 1\n" +
+                "        _BlendOpFA (\"BlendOpFA\", Float) = 4\n" +
+                "        _BlendOpAlphaFA (\"BlendOpAlphaFA\", Float) = 4\n" +
+                "    }\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags { \"RenderType\" = \"Opaque\" }\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            CGPROGRAM\n" +
+                "            #pragma vertex vert\n" +
+                "            #pragma fragment frag\n" +
+                "            #include \"UnityCG.cginc\"\n" +
+                "            float4 vert(float4 vertex : POSITION) : SV_POSITION\n" +
+                "            { return UnityObjectToClipPos(vertex); }\n" +
+                "            fixed4 frag() : SV_Target { return fixed4(1, 1, 1, 1); }\n" +
+                "            ENDCG\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+        }
+
         /// <summary>
         /// The conversion-eligible stand-in is the schema-complete cutout
         /// source. Its defaults are canonical except
