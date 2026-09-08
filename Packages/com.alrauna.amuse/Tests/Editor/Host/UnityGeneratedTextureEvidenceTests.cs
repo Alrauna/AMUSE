@@ -341,5 +341,117 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(chainAbove[0].IsFullyNonOpaque, Is.True);
             Assert.That(ReferenceEquals(chainBelow, chainAbove), Is.False);
         }
+
+        [TestCase(true, false, 0, false)]
+        [TestCase(true, true, 1, false)]
+        [TestCase(true, true, 0, true)]
+        [TestCase(false, false, 1, true)]
+        [TestCase(false, true, 0, true)]
+        public void IsStreamingMipmapResident_EnforcesResidencyGate(
+            bool streaming,
+            bool requestedLoaded,
+            int loadedMip,
+            bool expected)
+        {
+            var resident = UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
+                streaming,
+                requestedLoaded,
+                loadedMip);
+
+            Assert.That(resident, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void TryCapture_RefusesWhenResidencyPredicateFails()
+        {
+            var ok = UnityGeneratedTextureEvidence.TryCapture(
+                _streamingSubTex,
+                TextureChannel.Alpha,
+                1.0f,
+                _ => false,
+                out var chain);
+
+            Assert.That(ok, Is.False);
+            Assert.That(chain, Is.Null);
+        }
+
+        [Test]
+        public void HostCapabilitiesPass_RequiresAsyncReadbackAndSupportedFormats()
+        {
+            Assert.That(
+                UnityGeneratedTextureEvidence.HostCapabilitiesPass(true, true, true),
+                Is.True);
+            Assert.That(
+                UnityGeneratedTextureEvidence.HostCapabilitiesPass(false, true, true),
+                Is.False);
+            Assert.That(
+                UnityGeneratedTextureEvidence.HostCapabilitiesPass(true, false, true),
+                Is.False);
+            Assert.That(
+                UnityGeneratedTextureEvidence.HostCapabilitiesPass(true, true, false),
+                Is.False);
+        }
+
+        [Test]
+        public void IsExpectedTargetFormat_RequiresExactFormatMatch()
+        {
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedTargetFormat(
+                    UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm,
+                    UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm),
+                Is.True);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedTargetFormat(
+                    UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_SRGB,
+                    UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm),
+                Is.False);
+        }
+
+        [Test]
+        public void IsExpectedLevelSize_RequiresMatchingDimensions()
+        {
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedLevelSize(8, 8, 8, 8),
+                Is.True);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedLevelSize(8, 4, 8, 8),
+                Is.False);
+        }
+
+        [Test]
+        public void IsExpectedBufferLength_RequiresExactProduct()
+        {
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedBufferLength(64, 8, 8),
+                Is.True);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsExpectedBufferLength(32, 8, 8),
+                Is.False);
+        }
+
+        [Test]
+        public void ClearCache_EvictsPreviouslyCapturedChains()
+        {
+            var ok1 = UnityGeneratedTextureEvidence.TryCapture(
+                _streamingSubTex,
+                TextureChannel.Alpha,
+                1.0f,
+                out var chain1);
+
+            Assert.That(ok1, Is.True);
+            Assert.That(chain1, Is.Not.Null);
+
+            UnityGeneratedTextureEvidence.ClearCache();
+
+            var ok2 = UnityGeneratedTextureEvidence.TryCapture(
+                _streamingSubTex,
+                TextureChannel.Alpha,
+                1.0f,
+                out var chain2);
+
+            Assert.That(ok2, Is.True);
+            Assert.That(chain2, Is.Not.Null);
+            Assert.That(ReferenceEquals(chain1, chain2), Is.False);
+        }
     }
 }

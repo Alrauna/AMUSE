@@ -107,6 +107,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(UnityTextureEvidence.TryGetSourceId(null, out _), Is.False);
         }
 
+        [Test]
+        public void TryGetSourceId_UncharacterizedSubAsset_IsRefused()
+        {
+            var containerPath = TempFolder + "/SubAssetContainer.asset";
+            var container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, containerPath);
+
+            var uncharacterized = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            uncharacterized.name = "UncharacterizedSubTexture";
+            AssetDatabase.AddObjectToAsset(uncharacterized, containerPath);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(AssetDatabase.IsSubAsset(uncharacterized), Is.True);
+            Assert.That(
+                UnityTextureEvidence.TryGetSourceId(uncharacterized, out _),
+                Is.False);
+        }
+
+        [Test]
+        public void TryGetSourceId_CharacterizedSubAsset_Succeeds()
+        {
+            var containerPath = TempFolder + "/SubAssetContainer2.asset";
+            var container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, containerPath);
+
+            var characterized = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            characterized.name = "MainTex (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(characterized, containerPath);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(AssetDatabase.IsSubAsset(characterized), Is.True);
+            Assert.That(
+                UnityTextureEvidence.TryGetSourceId(characterized, out var sourceId),
+                Is.True);
+            Assert.That(sourceId.Value, Does.StartWith("unity-asset:"));
+        }
+
         // --- TryGetSampling ---
 
         [Test]

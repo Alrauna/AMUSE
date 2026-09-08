@@ -47,7 +47,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            if (!(mainAsset is nadena.dev.ndmf.runtime.SubAssetContainer))
+            if (mainAsset.GetType() != typeof(nadena.dev.ndmf.runtime.SubAssetContainer))
             {
                 return false;
             }
