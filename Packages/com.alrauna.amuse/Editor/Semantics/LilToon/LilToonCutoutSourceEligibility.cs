@@ -42,10 +42,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private const string CutoffProperty = "_Cutoff";
 
-        private static readonly string[] SourceSchema = { CutoffProperty };
+        private static readonly string[] SourceSchema =
+        {
+            LilToonSourceAttestation.ShaderFormatVersionProperty,
+            CutoffProperty,
+        };
 
         /// <summary>
-        /// The cutout source's own eligibility evidence: one property. The
+        /// The cutout source's own eligibility evidence: two properties. The
         /// recipe never writes it, and it is not target evidence.
         /// </summary>
         internal static MaterialEvidenceRequest SourceEvidenceRequest { get; } =
@@ -73,7 +77,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     SourceEvidenceRequest);
 
         /// <summary>
-        /// The 19 property names this module reads off the SOURCE material,
+        /// The 20 property names this module reads off the SOURCE material,
         /// in a fixed order the finiteness sweep and <see cref="Read"/> index
         /// by. Sharing a name with the recipe does not make a source
         /// render-state fact target evidence.
@@ -112,7 +116,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// state after the evidence a decision depends on.
         /// <para>
         /// The load-bearing order is spec §9.3: the schema check, then
-        /// finiteness over all 19 captured scalars (gate 2), then the
+        /// finiteness over all 20 captured scalars (gate 2), then the
         /// mutation-authorizing render-state gates. Finiteness runs first
         /// because every later scalar gate compares captured values against
         /// pinned constants, and a NaN/±inf capture would make those
