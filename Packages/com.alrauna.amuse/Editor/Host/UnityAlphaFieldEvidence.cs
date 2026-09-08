@@ -223,6 +223,21 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // Attested generated textures lack an importer. They are captured
+                // directly from the live resident object via RenderTexture blit.
+                if (GeneratedTextureAttestation.TryIdentifyProducer(texture2D, out _))
+                {
+                    if (!UnityGeneratedTextureEvidence.TryCapture(
+                            texture2D, channel, cutoffThreshold, out chain))
+                    {
+                        source = default;
+                        chain = null;
+                        return false;
+                    }
+
+                    return true;
+                }
+
                 // A streaming texture never touches the GPU route: its
                 // editor read is measured untrustworthy, however resident it
                 // reports. The readable-clone route reads the importer's own
