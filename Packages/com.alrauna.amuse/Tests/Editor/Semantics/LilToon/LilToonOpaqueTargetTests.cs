@@ -504,6 +504,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void GatherSourceEvidenceForShaderName_UsesTargetShaderName_NotSourceEvidenceShaderName()
+        {
+            var source = Track(ConversionEligibleStandIn());
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    source,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+            })[0];
+            var target = Shader.Find(OpaqueConversionShaderName);
+            Assert.That(target, Is.Not.Null);
+
+            var targetEvidence =
+                LilToonSourceAttestation.GatherSourceEvidenceForShaderName(
+                    target, captured);
+
+            Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
+            Assert.That(targetEvidence.ShaderName, Is.Not.EqualTo(captured.ShaderName));
+        }
+
+        [Test]
         public void ProductionWrapper_NullTarget_ThrowsArgumentNullException()
         {
             var source = ConversionEligibleStandIn();
