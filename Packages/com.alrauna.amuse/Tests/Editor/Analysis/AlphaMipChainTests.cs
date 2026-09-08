@@ -137,5 +137,56 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(chain[0].IsFullyOpaque, Is.True);
         }
+
+        [Test]
+        public void LimitedToPrefixKeepsLevelsThroughTheCap()
+        {
+            var chain = new AlphaMipChain(new[]
+            {
+                Level(8, 8, 1), Level(4, 4, 2), Level(2, 2, 3),
+                Level(1, 1, 4),
+            });
+
+            var capped = chain.LimitedTo(2);
+
+            Assert.That(capped.Count, Is.EqualTo(3));
+            Assert.That(capped[2].GetAlpha(0, 0), Is.EqualTo((byte)3));
+        }
+
+        [Test]
+        public void LimitedToBeyondTheLastLevelReturnsTheSameInstance()
+        {
+            var chain = new AlphaMipChain(new[]
+            {
+                Level(2, 2, 1), Level(1, 1, 2),
+            });
+
+            Assert.That(chain.LimitedTo(1), Is.SameAs(chain));
+            Assert.That(chain.LimitedTo(9), Is.SameAs(chain));
+        }
+
+        [Test]
+        public void LimitedToZeroKeepsOnlyMipZero()
+        {
+            var chain = new AlphaMipChain(new[]
+            {
+                Level(4, 4, 7), Level(2, 2, 8), Level(1, 1, 9),
+            });
+
+            var capped = chain.LimitedTo(0);
+
+            Assert.That(capped.Count, Is.EqualTo(1));
+            Assert.That(capped[0].GetAlpha(0, 0), Is.EqualTo((byte)7));
+        }
+
+        [Test]
+        public void LimitedToNegativeThrows()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => chain.LimitedTo(-1));
+        }
     }
 }

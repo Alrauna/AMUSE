@@ -79,6 +79,36 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         internal AlphaTextureData this[int index] => _levels[index];
 
+        /// <summary>
+        /// The prefix of this chain from mip 0 through
+        /// <paramref name="maxMipLevel"/>, or this instance when the cap
+        /// already covers the last level. A prefix is a valid chain: the
+        /// constructor cannot prove completeness, and which levels the
+        /// sampler may select is the provider contract's obligation. The
+        /// user's "Preserve Transparency Maximum Mipmap" policy is exactly
+        /// such a provider-side scope decision, so the proof over the
+        /// prefix treats levels above the cap as outside the checked
+        /// configuration set.
+        /// </summary>
+        internal AlphaMipChain LimitedTo(int maxMipLevel)
+        {
+            if (maxMipLevel < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxMipLevel),
+                    "The mip cap must be a level index of at least zero.");
+            }
+
+            if (maxMipLevel >= _levels.Length - 1)
+            {
+                return this;
+            }
+
+            var prefix = new AlphaTextureData[maxMipLevel + 1];
+            Array.Copy(_levels, prefix, prefix.Length);
+            return new AlphaMipChain(prefix);
+        }
+
         private static int Halved(int size)
         {
             var halved = size >> 1;

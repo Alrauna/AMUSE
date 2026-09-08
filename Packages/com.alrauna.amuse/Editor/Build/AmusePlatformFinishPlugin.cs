@@ -422,6 +422,10 @@ namespace Alrauna.Amuse.Editor.Build
             // reported, so the apply pass may summarize it with applied
             // counts.
             state.ReachedRendererAnalysis = true;
+            var optimizer = context.AvatarRootObject
+                .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var maxMipLevel = ProofMipCapFrom(optimizer);
+
 
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
@@ -481,7 +485,7 @@ namespace Alrauna.Amuse.Editor.Build
                             UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
                         : null);
                 var resolved = ResolveRuntimeStates(
-                    rendererPath, evidence, effectiveResolver);
+                    rendererPath, evidence, effectiveResolver, maxMipLevel);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -542,6 +546,25 @@ namespace Alrauna.Amuse.Editor.Build
             var component =
                 root.GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             return component != null && !component.AmuseDisabled;
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Preserve Transparency Maximum Mipmap"
+        /// policy to the proof's mip cap: a stored -1 (All Mips) becomes
+        /// "no cap". A missing component cannot reach the renderer loop —
+        /// the trigger already required one — but the defensive read keeps
+        /// the loop's behavior total anyway.
+        /// </summary>
+        private static int ProofMipCapFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return int.MaxValue;
+            }
+
+            var stored = optimizer.PreserveTransparencyMaxMipLevel;
+            return stored < 0 ? int.MaxValue : stored;
         }
 
         /// <summary>
@@ -627,7 +650,8 @@ namespace Alrauna.Amuse.Editor.Build
         private static ResolvedRuntimeStates ResolveRuntimeStates(
                 string rendererPath,
                 CapturedAnimationEvidence evidence,
-                CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
+                CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
+                int maxMipLevel = int.MaxValue)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -708,17 +732,16 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var slots = MaterialSlotsFor(evidence, rendererPath);
-
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                evidence.AdmittedMaterials);
+                evidence.AdmittedMaterials,
+                maxMipLevel);
             bool AlphaFields(
                 TextureSourceId source,
                 TextureChannel channel,
                 out AlphaMipChain chain)
             {
                 chain = null;
-                return channel == TextureChannel.Alpha &&
-                       fields.TryGetValue(source, out chain);
+                return fields.TryGetValue((source, channel), out chain);
             }
 
             // Every slot is resolved; no slot's failure stops the loop. A
