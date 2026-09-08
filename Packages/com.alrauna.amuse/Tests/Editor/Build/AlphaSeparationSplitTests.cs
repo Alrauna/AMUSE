@@ -103,6 +103,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Creates and imports a temporary split-alpha texture for tests.
+        /// </summary>
+        internal static Texture2D CreateSplitTexture(string name = "split")
+        {
+            EnsureSplitFolder();
+            return ImportSplitAlphaTexture(name);
+        }
+
+        /// <summary>
         /// A verified Poiyomi fixture material whose alpha comes from the
         /// split texture. Full colour alpha is set explicitly to pin the
         /// semantic precondition and stay aligned with the existing green

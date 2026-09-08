@@ -56,9 +56,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return obj;
         }
 
+        private GameObject CreateAvatarRoot(string name)
+        {
+            var root = Track(new GameObject(name));
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            return root;
+        }
+
         [TearDown]
         public void TearDown()
         {
+            AlphaSeparationSplitTests.DeleteSplitFolder();
             DestroyTracked();
         }
 
@@ -68,7 +76,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 if (tracked[index] != null)
                 {
-                    UnityEngine.Object.DestroyImmediate(tracked[index]);
+                    UnityEngine.Object.DestroyImmediate(tracked[index], true);
                 }
             }
 
@@ -507,7 +515,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             child.transform.SetParent(root.transform, false);
             var renderer = child.AddComponent<SkinnedMeshRenderer>();
             renderer.sharedMesh = mesh;
-            renderer.sharedMaterials = materials;
+            if (mesh != null && materials != null && materials.Length > 0 &&
+                materials.Length < mesh.subMeshCount)
+            {
+                var padded = new Material[mesh.subMeshCount];
+                for (var index = 0; index < mesh.subMeshCount; index++)
+                {
+                    padded[index] =
+                        materials[Math.Min(index, materials.Length - 1)];
+                }
+
+                renderer.sharedMaterials = padded;
+            }
+            else
+            {
+                renderer.sharedMaterials = materials;
+            }
+
             return renderer;
         }
 
@@ -2307,6 +2331,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 fixtures.BaseTearDown();
             }
+        }
+
+        [Test]
+        public void SharedMaterialAcrossMultipleRenderersRegistersReplacementWithoutDuplication()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = CreateAvatarRoot("shared-material-avatar");
+            var texture = Track(AlphaSeparationSplitTests.CreateSplitTexture());
+            var split = Track(
+                AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+            var meshA = Track(
+                AlphaSeparationSplitTests.CreateSplitSourceMesh());
+            var meshB = Track(
+                AlphaSeparationSplitTests.CreateSplitSourceMesh());
+            AddRenderer(root, "rendererA", meshA, split);
+            AddRenderer(root, "rendererB", meshB, split);
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, SeamTestPlatform.Instance);
+            var probe = context.GetState<AlphaSeparationSeamProbe>();
+
+            Assert.That(probe.Decision.IsPrepared, Is.True);
+            Assert.That(probe.Decision.HasMutation, Is.True);
+            Assert.That(probe.Finalization.Writes, Has.Count.EqualTo(2));
         }
 
         /// <summary>
