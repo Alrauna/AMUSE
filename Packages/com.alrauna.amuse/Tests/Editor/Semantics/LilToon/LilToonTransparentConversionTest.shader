@@ -16,6 +16,7 @@ Shader "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest"
         _UseMain2ndTex ("UseMain2ndTex", Int) = 0
         _UseMain3rdTex ("UseMain3rdTex", Int) = 0
         _AlphaMaskMode ("AlphaMaskMode", Int) = 0
+        _AlphaMask ("AlphaMask", 2D) = "white" {}
         _AlphaMaskScale ("AlphaMaskScale", Float) = 1
         _AlphaMaskValue ("AlphaMaskValue", Float) = 0
         // Declared but deliberately NOT part of the transparent alpha

@@ -605,7 +605,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void NullTextureCollection_Throws()
         {
             Assert.That(
-                () => new UnityAlphaFieldEvidence(null),
+                () => new UnityAlphaFieldEvidence(
+                    (System.Collections.Generic.IEnumerable<Texture>)null),
                 Throws.TypeOf<ArgumentNullException>());
         }
 
@@ -1184,7 +1185,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(TryChain(texture, out var gpu), Is.True);
             Assert.That(
-                UnityStreamingTextureEvidence.TryCapture(texture, out var clone),
+                UnityStreamingTextureEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, out var clone),
                 Is.True);
             Assert.That(clone.Count, Is.EqualTo(gpu.Count));
             for (var mip = 0; mip < gpu.Count; mip++)

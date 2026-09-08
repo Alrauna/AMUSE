@@ -12,6 +12,8 @@ namespace Alrauna.Amuse.Editor
     [CustomEditor(typeof(AmuseAvatarOptimizer))]
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
+        private bool _advancedOpen;
+
         public override void OnInspectorGUI()
         {
             DrawHeader();
@@ -43,11 +45,71 @@ namespace Alrauna.Amuse.Editor
                     "in Play mode, or anywhere else, and nothing is reported."));
             serializedObject.ApplyModifiedProperties();
 
+            DrawAdvancedSettings();
+
             if (AmuseBuildStatusStore.TryGet(
                     component.gameObject.GetInstanceID(), out var status))
             {
                 EditorGUILayout.HelpBox(status, MessageType.None);
             }
+        }
+
+
+        /// <summary>
+        /// The Advanced Settings foldout. It holds the proof-scope policy
+        /// knobs: settings most users never touch, and that change what
+        /// AMUSE treats as proven, never what it mutates. Every control
+        /// carries its own plain-English tool tip, because a wrong value
+        /// here changes conversion decisions, not safety.
+        /// </summary>
+        private void DrawAdvancedSettings()
+        {
+            _advancedOpen = EditorGUILayout.Foldout(
+                _advancedOpen, "Advanced Settings", EditorStyles.foldoutHeader);
+            if (!_advancedOpen)
+            {
+                return;
+            }
+
+            var property = serializedObject.FindProperty(
+                "_preserveTransparencyMaxMipLevel");
+
+            // Index 0 is "All Mips" (stored -1); index i maps to level i-1.
+            var options = new[]
+            {
+                "All Mips", "Mip 0", "Mip 1", "Mip 2", "Mip 3", "Mip 4",
+                "Mip 5", "Mip 6", "Mip 7", "Mip 8", "Mip 9", "Mip 10",
+            };
+            var stored = property.intValue;
+            var index = stored < 0
+                ? 0
+                : Mathf.Min(stored + 1, options.Length - 1);
+            var selected = EditorGUILayout.Popup(
+                new GUIContent(
+                    "Preserve Transparency Maximum Mipmap",
+                    "A mipmap level is a smaller copy of the texture. " +
+                    "Each level is half the size of the level before it. " +
+                    "The GPU uses the small levels when the avatar is far " +
+                    "away or small on screen.\n\n" +
+                    "A transparent texture often fades at small levels. " +
+                    "Averaging mixes transparent texels into texels that " +
+                    "were solid. A texel is one pixel of a texture. " +
+                    "AMUSE checks texture levels before it moves a " +
+                    "triangle onto an opaque material. One faded texel in " +
+                    "a checked level stops the move.\n\n" +
+                    "This setting sets the largest level AMUSE checks. " +
+                    "AMUSE ignores every level above it. Mip 4 fits most " +
+                    "viewing distances and keeps most conversions. " +
+                    "Select All Mips to check every level. This is the " +
+                    "safest choice.\n\n" +
+                    "Select a smaller level when a part looks solid at " +
+                    "long distance where it should show through. " +
+                    "Select a larger level when AMUSE moves too few " +
+                    "triangles."),
+                index,
+                options);
+            property.intValue = selected == 0 ? -1 : selected - 1;
+            serializedObject.ApplyModifiedProperties();
         }
 
         /// <summary>

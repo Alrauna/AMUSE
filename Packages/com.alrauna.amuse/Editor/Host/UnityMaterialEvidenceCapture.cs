@@ -19,6 +19,7 @@ namespace Alrauna.Amuse.Editor.Host
         SampledAlphaIsOne = 1 << 4,
         CanonicalNormalMap = 1 << 5,
         AlphaChannel = 1 << 6,
+        RedChannel = 1 << 7,
     }
 
     internal readonly struct TexturePropertyEvidenceRequest
@@ -30,7 +31,8 @@ namespace Alrauna.Amuse.Editor.Host
             TextureEvidenceKinds.ColorInterpretation |
             TextureEvidenceKinds.SampledAlphaIsOne |
             TextureEvidenceKinds.CanonicalNormalMap |
-            TextureEvidenceKinds.AlphaChannel;
+            TextureEvidenceKinds.AlphaChannel |
+            TextureEvidenceKinds.RedChannel;
 
         internal string PropertyName { get; }
         internal TextureEvidenceKinds Evidence { get; }
@@ -261,6 +263,8 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool IsCanonicalNormalMap { get; }
         internal bool HasAlphaChannel { get; }
         internal AlphaMipChain AlphaChannel { get; }
+        internal bool HasRedChannel { get; }
+        internal AlphaMipChain RedChannel { get; }
 
         internal CapturedTextureEvidence(
             bool hasSourceIdentity,
@@ -272,7 +276,9 @@ namespace Alrauna.Amuse.Editor.Host
             bool sampledAlphaIsProvenOne,
             bool isCanonicalNormalMap,
             bool hasAlphaChannel,
-            AlphaMipChain alphaChannel)
+            AlphaMipChain alphaChannel,
+            bool hasRedChannel,
+            AlphaMipChain redChannel)
         {
             HasSourceIdentity = hasSourceIdentity;
             SourceIdentity = sourceIdentity;
@@ -284,6 +290,8 @@ namespace Alrauna.Amuse.Editor.Host
             IsCanonicalNormalMap = isCanonicalNormalMap;
             HasAlphaChannel = hasAlphaChannel;
             AlphaChannel = alphaChannel;
+            HasRedChannel = hasRedChannel;
+            RedChannel = redChannel;
         }
     }
 
@@ -991,6 +999,14 @@ namespace Alrauna.Amuse.Editor.Host
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
                     texture, out _, out alphaChannel);
+            AlphaMipChain redChannel = null;
+            var hasRedChannel =
+                (evidence & TextureEvidenceKinds.RedChannel) != 0 &&
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Red,
+                    out _,
+                    out redChannel);
 
             return new CapturedTextureEvidence(
                 hasSource,
@@ -1002,7 +1018,9 @@ namespace Alrauna.Amuse.Editor.Host
                 sampledAlphaIsOne,
                 canonicalNormal,
                 hasAlphaChannel,
-                alphaChannel);
+                alphaChannel,
+                hasRedChannel,
+                redChannel);
         }
 
         private readonly struct PropertyFact
