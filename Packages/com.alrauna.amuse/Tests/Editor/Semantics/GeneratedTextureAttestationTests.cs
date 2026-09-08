@@ -9,17 +9,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     public class GeneratedTextureAttestationTests
     {
         private const string TestContainerPath = "Assets/AmuseTests_AttestationContainer.asset";
+        private const string ArbitraryContainerPath = "Assets/AmuseTests_ArbitraryContainer.asset";
         private ScriptableObject _container;
         private Texture2D _subTexture;
 
         [SetUp]
         public void SetUp()
         {
-            _container = ScriptableObject.CreateInstance<ScriptableObject>();
+            _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(_container, TestContainerPath);
 
             _subTexture = new Texture2D(8, 8, TextureFormat.RGBA32, false);
-            _subTexture.name = "AAO_Atlas_SubAsset";
+            _subTexture.name = "MainTex (AAO UV Packed)";
             AssetDatabase.AddObjectToAsset(_subTexture, TestContainerPath);
             AssetDatabase.SaveAssets();
         }
@@ -30,6 +31,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
+            }
+
+            if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(ArbitraryContainerPath) != null)
+            {
+                AssetDatabase.DeleteAsset(ArbitraryContainerPath);
             }
         }
 
@@ -44,9 +50,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void MonotoneSubAssetInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
+        {
+            var monotoneTexture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            monotoneTexture.name = "AAO Monotone Color";
+            AssetDatabase.AddObjectToAsset(monotoneTexture, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                monotoneTexture, out var producer);
+
+            Assert.That(isCharacterized, Is.True);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.Anatawa12AvatarOptimizer));
+        }
+
+        [Test]
         public void LooseInMemoryTexture_IsRefused()
         {
             var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            loose.name = "MainTex (AAO UV Packed)";
             try
             {
                 var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
@@ -59,6 +81,39 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 Object.DestroyImmediate(loose);
             }
+        }
+
+        [Test]
+        public void UncharacterizedNameInNdmfContainer_IsRefused()
+        {
+            var uncharacterized = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            uncharacterized.name = "RandomSubAsset";
+            AssetDatabase.AddObjectToAsset(uncharacterized, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                uncharacterized, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
+        public void SubAssetInArbitraryScriptableObjectContainer_IsRefused()
+        {
+            var arbitraryContainer = ScriptableObject.CreateInstance<ScriptableObject>();
+            AssetDatabase.CreateAsset(arbitraryContainer, ArbitraryContainerPath);
+
+            var textureInArbitrary = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            textureInArbitrary.name = "MainTex (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(textureInArbitrary, ArbitraryContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                textureInArbitrary, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
