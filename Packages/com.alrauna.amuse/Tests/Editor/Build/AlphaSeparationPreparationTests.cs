@@ -1925,6 +1925,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             generatedTex.Apply(false, false);
             AssetDatabase.AddObjectToAsset(generatedTex, containerPath);
             AssetDatabase.SaveAssets();
+            Assert.That(
+                generatedTex.streamingMipmaps,
+                Is.True,
+                "fixture precondition: texture must have streaming mipmaps enabled");
 
             var root = new GameObject("AMUSE generated texture e2e");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
