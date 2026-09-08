@@ -347,48 +347,7 @@ namespace Alrauna.Amuse.Editor.Build
             // --- Sweep. One pass, after the surviving set is fixed: every
             // AMUSE-created transient no surviving slot references is
             // destroyed, and nothing else ever is. No reference counting.
-            var referencedMaterials = new HashSet<Material>();
-            var referencedMeshes = new HashSet<Mesh>();
-            foreach (var survivors in rendererSurvivors)
-            {
-                foreach (var slot in survivors)
-                {
-                    foreach (var mapped in slot.OpaqueOfAdmitted.Values)
-                    {
-                        referencedMaterials.Add(mapped);
-                    }
-                }
-            }
-
-            for (var rendererIndex = 0;
-                 rendererIndex < separation.Renderers.Count;
-                 rendererIndex++)
-            {
-                if (rendererSurvivors[rendererIndex].Any(slot =>
-                        slot.Plan.Disposition ==
-                        SubmeshSeparationDisposition.Split))
-                {
-                    referencedMeshes.Add(
-                        separation.Renderers[rendererIndex].MeshClone);
-                }
-            }
-
-            foreach (var clone in separation.CreatedClones)
-            {
-                if (!referencedMaterials.Contains(clone))
-                {
-                    UnityEngine.Object.DestroyImmediate(clone);
-                }
-            }
-
-            foreach (var prepared in separation.Renderers)
-            {
-                if (prepared.MeshClone != null &&
-                    !referencedMeshes.Contains(prepared.MeshClone))
-                {
-                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
-                }
-            }
+            SweepUnreferencedClones(separation, rendererSurvivors);
 
             // --- Registration (B5, decision V9). Every material mapping
             // and mesh clone that survives the sweep is registered with
@@ -784,6 +743,60 @@ namespace Alrauna.Amuse.Editor.Build
 
             var filter = renderer.GetComponent<MeshFilter>();
             return filter != null ? filter.sharedMesh : null;
+        }
+
+        /// <summary>
+        /// Destroys unreferenced temporary clones.
+        /// Clears the generated texture evidence cache.
+        /// </summary>
+        internal static void SweepUnreferencedClones(
+            PreparedAlphaSeparation separation,
+            List<List<PreparedSlotSeparation>> rendererSurvivors)
+        {
+            var referencedMaterials = new HashSet<Material>();
+            var referencedMeshes = new HashSet<Mesh>();
+            foreach (var survivors in rendererSurvivors)
+            {
+                foreach (var slot in survivors)
+                {
+                    foreach (var mapped in slot.OpaqueOfAdmitted.Values)
+                    {
+                        referencedMaterials.Add(mapped);
+                    }
+                }
+            }
+
+            for (var rendererIndex = 0;
+                 rendererIndex < separation.Renderers.Count;
+                 rendererIndex++)
+            {
+                if (rendererSurvivors[rendererIndex].Any(slot =>
+                        slot.Plan.Disposition ==
+                        SubmeshSeparationDisposition.Split))
+                {
+                    referencedMeshes.Add(
+                        separation.Renderers[rendererIndex].MeshClone);
+                }
+            }
+
+            foreach (var clone in separation.CreatedClones)
+            {
+                if (!referencedMaterials.Contains(clone))
+                {
+                    UnityEngine.Object.DestroyImmediate(clone);
+                }
+            }
+
+            foreach (var prepared in separation.Renderers)
+            {
+                if (prepared.MeshClone != null &&
+                    !referencedMeshes.Contains(prepared.MeshClone))
+                {
+                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
+                }
+            }
+
+            UnityGeneratedTextureEvidence.ClearCache();
         }
     }
 }

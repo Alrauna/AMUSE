@@ -1888,6 +1888,92 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A characterized generated sub-asset texture with streaming mipmaps
+        /// has no disk asset importer. The barrier captures directly from
+        /// the resident object and proves opaque end to end.
+        /// </summary>
+        [Test]
+        public void GeneratedSubAssetTexture_IsAdmittedAndProvenOpaqueEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var containerPath = "Assets/AmuseTests_E2EContainer.asset";
+            var container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, containerPath);
+
+            var generatedTex = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            generatedTex.name = "AAO_E2E_Texture (AAO UV Packed)";
+            var serializedTexture = new SerializedObject(generatedTex);
+            var streamingProperty = serializedTexture.FindProperty("m_StreamingMipmaps");
+            if (streamingProperty != null)
+            {
+                streamingProperty.boolValue = true;
+                serializedTexture.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            for (var m = 0; m < generatedTex.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 8 >> m);
+                var px = new Color32[dim * dim];
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, 255);
+                }
+
+                generatedTex.SetPixels32(px, m);
+            }
+
+            generatedTex.Apply(false, false);
+            AssetDatabase.AddObjectToAsset(generatedTex, containerPath);
+            AssetDatabase.SaveAssets();
+
+            var root = new GameObject("AMUSE generated texture e2e");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState state = null;
+
+            try
+            {
+                Assert.That(
+                    generatedTex.streamingMipmaps,
+                    Is.True,
+                    "fixture precondition: texture must have streaming mipmaps enabled");
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.mainTexture = generatedTex;
+                material.SetFloat("_Cutoff", 0.5f);
+
+                var renderer = AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.2f, 0.1f),
+                    new Vector2(0.1f, 0.2f)
+                };
+
+                state = RunBarrier(root);
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(state.OpaqueCandidateTriangleCount, Is.EqualTo(1));
+                Assert.That(state.Separation, Is.Not.Null);
+                Assert.That(state.Separation.Renderers, Has.Count.EqualTo(1));
+                Assert.That(state.Separation.Renderers[0].Target.Renderer, Is.SameAs(renderer));
+                Assert.That(state.Separation.Renderers[0].CandidateSlots, Has.Count.EqualTo(1));
+                Assert.That(state.Separation.TryGetOpaque(material, out var opaque), Is.True);
+                Assert.That(opaque, Is.Not.Null);
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(containerPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(containerPath);
+                }
+            }
+        }
+
+        /// <summary>
         /// The component's "Preserve Transparency Maximum Mipmap" policy
         /// scopes the opacity proof end to end. A chain that stays opaque
         /// through mip 4 and fades only in its 1x1 tail proves its triangle
