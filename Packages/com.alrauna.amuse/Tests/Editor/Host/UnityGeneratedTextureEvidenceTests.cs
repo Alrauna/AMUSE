@@ -205,6 +205,84 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void DistinctMipLevels_AreCapturedWithoutCrossContamination()
+        {
+            var multiMipTex = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            for (var m = 0; m < multiMipTex.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 8 >> m);
+                var px = new Color32[dim * dim];
+                // Even mips are fully opaque 255. Odd mips are transparent 0.
+                var alpha = (byte)(m % 2 == 0 ? 255 : 0);
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, alpha);
+                }
+
+                multiMipTex.SetPixels32(px, m);
+            }
+
+            multiMipTex.Apply(false, false);
+            multiMipTex.name = "MipIsolation (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(multiMipTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var ok = UnityGeneratedTextureEvidence.TryCapture(
+                multiMipTex,
+                TextureChannel.Alpha,
+                1.0f,
+                out var chain);
+
+            Assert.That(ok, Is.True);
+            Assert.That(chain, Is.Not.Null);
+            Assert.That(chain.Count, Is.EqualTo(multiMipTex.mipmapCount));
+            Assert.That(chain[0].IsFullyOpaque, Is.True);
+            Assert.That(chain[1].IsFullyNonOpaque, Is.True);
+            Assert.That(chain[2].IsFullyOpaque, Is.True);
+            Assert.That(chain[3].IsFullyNonOpaque, Is.True);
+        }
+
+        [Test]
+        public void CutoffBoundary_StrictlyRefusesBelowCutoffByte()
+        {
+            var boundaryTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                // Byte 128 has normalized value 128 / 255 = 0.50196...
+                pixels[i] = new Color32(255, 255, 255, 128);
+            }
+
+            boundaryTex.SetPixels32(pixels);
+            boundaryTex.Apply(false, false);
+            boundaryTex.name = "BoundaryCutoff (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(boundaryTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            // Threshold 0.502f is strictly greater than 128 / 255f.
+            // Texels must be non-opaque.
+            var okAbove = UnityGeneratedTextureEvidence.TryCapture(
+                boundaryTex,
+                TextureChannel.Alpha,
+                0.502f,
+                out var chainAbove);
+
+            Assert.That(okAbove, Is.True);
+            Assert.That(chainAbove[0].IsFullyNonOpaque, Is.True);
+
+            // Threshold 0.501f is strictly less than 128 / 255f.
+            // Texels must be opaque.
+            var okBelow = UnityGeneratedTextureEvidence.TryCapture(
+                boundaryTex,
+                TextureChannel.Alpha,
+                0.501f,
+                out var chainBelow);
+
+            Assert.That(okBelow, Is.True);
+            Assert.That(chainBelow[0].IsFullyOpaque, Is.True);
+        }
+
+        [Test]
         public void SessionCache_ReusesPreviouslyCapturedChain()
         {
             var ok1 = UnityGeneratedTextureEvidence.TryCapture(

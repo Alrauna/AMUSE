@@ -61,52 +61,69 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                var shaderPath = channel == TextureChannel.Red
+                    ? UnityAlphaFieldEvidence.RedShaderAssetPath
+                    : UnityAlphaFieldEvidence.ShaderAssetPath;
+                var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+                if (shader == null || !shader.isSupported)
+                {
+                    return false;
+                }
+
+                var material = new Material(shader);
                 var levels = new AlphaTextureData[mipCount];
                 var threshold = Mathf.Clamp01(cutoffThreshold);
-                var threshold255 = Mathf.RoundToInt(threshold * 255f);
 
-                for (var m = 0; m < mipCount; m++)
+                try
                 {
-                    var width = Mathf.Max(1, texture.width >> m);
-                    var height = Mathf.Max(1, texture.height >> m);
-
-                    var rt = RenderTexture.GetTemporary(
-                        width,
-                        height,
-                        0,
-                        RenderTextureFormat.ARGB32,
-                        RenderTextureReadWrite.Linear);
-
-                    var previous = RenderTexture.active;
-                    var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
-
-                    try
+                    for (var m = 0; m < mipCount; m++)
                     {
-                        Graphics.Blit(texture, rt);
-                        RenderTexture.active = rt;
-                        readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                        readable.Apply(false, false);
+                        var width = Mathf.Max(1, texture.width >> m);
+                        var height = Mathf.Max(1, texture.height >> m);
 
-                        var pixels = readable.GetPixels32();
-                        var flags = new byte[pixels.Length];
+                        material.SetInt("_Mip", m);
 
-                        for (var i = 0; i < pixels.Length; i++)
+                        var rt = RenderTexture.GetTemporary(
+                            width,
+                            height,
+                            0,
+                            RenderTextureFormat.ARGB32,
+                            RenderTextureReadWrite.Linear);
+
+                        var previous = RenderTexture.active;
+                        var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
+
+                        try
                         {
-                            var sample = channel == TextureChannel.Red
-                                ? pixels[i].r
-                                : pixels[i].a;
+                            Graphics.Blit(texture, rt, material);
+                            RenderTexture.active = rt;
+                            readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                            readable.Apply(false, false);
 
-                            flags[i] = sample >= threshold255 ? byte.MaxValue : (byte)0;
+                            var pixels = readable.GetPixels32();
+                            var flags = new byte[pixels.Length];
+
+                            for (var i = 0; i < pixels.Length; i++)
+                            {
+                                // Green channel carries the raw sample from the exact mip.
+                                var rawSample = pixels[i].g;
+                                var isOpaque = (rawSample / 255f) >= threshold;
+                                flags[i] = isOpaque ? byte.MaxValue : (byte)0;
+                            }
+
+                            levels[m] = new AlphaTextureData(width, height, flags);
                         }
-
-                        levels[m] = new AlphaTextureData(width, height, flags);
+                        finally
+                        {
+                            RenderTexture.active = previous;
+                            RenderTexture.ReleaseTemporary(rt);
+                            Object.DestroyImmediate(readable);
+                        }
                     }
-                    finally
-                    {
-                        RenderTexture.active = previous;
-                        RenderTexture.ReleaseTemporary(rt);
-                        Object.DestroyImmediate(readable);
-                    }
+                }
+                finally
+                {
+                    Object.DestroyImmediate(material);
                 }
 
                 chain = new AlphaMipChain(levels);
