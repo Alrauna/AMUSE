@@ -100,7 +100,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 new[] { "_lilToonVersion", "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
                 request.ScalarProperties);
             CollectionAssert.AreEquivalent(
-                new[] { "_lilToonVersion", "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
+                new[] { "_Cutoff", "_AlphaBoostFA", "_SubpassCutoff" },
                 request.PresenceProperties);
             CollectionAssert.AreEqual(
                 new[] { "_DistanceFade" }, request.VectorProperties);
