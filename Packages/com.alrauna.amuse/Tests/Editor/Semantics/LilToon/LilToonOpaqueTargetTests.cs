@@ -539,20 +539,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var originalVerifier = LilToonOpaqueTarget.VerifyTargetIdentity;
             LilToonSourceEvidence observedEvidence = null;
-            LilToonOpaqueTarget.VerifyTargetIdentity = (LilToonSourceEvidence ev, out LilToonSemanticDiagnostic diag) =>
-            {
-                observedEvidence = ev;
-                diag = null;
-                return true;
-            };
-
-            var targetShader = ImportTempShader(
-                "lilToon",
-                "lilToon.shader",
-                ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
 
             try
             {
+                LilToonOpaqueTarget.VerifyTargetIdentity = (LilToonSourceEvidence ev, out LilToonSemanticDiagnostic diag) =>
+                {
+                    observedEvidence = ev;
+                    diag = null;
+                    return true;
+                };
+
+                var targetShader = ImportTempShader(
+                    "lilToon",
+                    "lilToon.shader",
+                    ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
+
                 var source = Track(ConversionEligibleStandIn());
                 var captured = UnityMaterialEvidenceCapture.Capture(new[]
                 {
@@ -602,6 +603,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     ex.Message,
                     Does.Not.Contain("shader asset GUID"),
                     "Target shader with matching GUID must not fail source attestation on GUID.");
+                Assert.That(
+                    ex.Message,
+                    Does.Contain(LilToonSourceAttestation.PassShaderName),
+                    "Target shader with matching GUID must fail on missing pass shader.");
             }
             finally
             {
