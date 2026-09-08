@@ -117,6 +117,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void SubAssetInForeignSubAssetContainer_IsRefused()
+        {
+            var foreignContainer = ScriptableObject.CreateInstance<ForeignNamespace.SubAssetContainer>();
+            AssetDatabase.CreateAsset(foreignContainer, ArbitraryContainerPath);
+
+            var textureInForeign = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            textureInForeign.name = "MainTex (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(textureInForeign, ArbitraryContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                textureInForeign, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
         public void CharacterizedSubAsset_ResolvesSourceIdentityAndColorInterpretation()
         {
             Assert.That(
@@ -129,5 +147,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.True);
             Assert.That(colorInterp, Is.EqualTo(TextureColorInterpretation.Srgb));
         }
+    }
+}
+
+namespace Alrauna.Amuse.Tests.Editor.Semantics.ForeignNamespace
+{
+    public class SubAssetContainer : ScriptableObject
+    {
     }
 }

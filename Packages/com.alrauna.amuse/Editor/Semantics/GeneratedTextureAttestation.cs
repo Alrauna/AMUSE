@@ -47,10 +47,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            var mainType = mainAsset.GetType();
-            var isNdmfContainer = mainType.Name == "SubAssetContainer" ||
-                                  mainType.FullName == "nadena.dev.ndmf.runtime.SubAssetContainer";
-            if (!isNdmfContainer)
+            if (mainAsset.GetType().FullName != "nadena.dev.ndmf.runtime.SubAssetContainer")
             {
                 return false;
             }
