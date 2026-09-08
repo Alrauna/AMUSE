@@ -297,6 +297,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return clone;
         }
 
+        internal delegate bool TargetIdentityVerifier(
+            LilToonSourceEvidence evidence,
+            out LilToonSemanticDiagnostic diagnostic);
+
+        internal static TargetIdentityVerifier VerifyTargetIdentity { get; set; } =
+            LilToonSourceAttestation.TryVerifyIdentityForShaderName;
+
         /// <summary>
         /// Resolves and fully attests the opaque lilToon target from the live
         /// environment before delegating to the explicit-target writer.
@@ -330,7 +337,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var targetEvidence =
                 LilToonSourceAttestation.GatherSourceEvidenceForShaderName(
                     target, evidence);
-            if (!LilToonSourceAttestation.TryVerifyIdentityForShaderName(
+            if (!VerifyTargetIdentity(
                     targetEvidence, out var diagnostic))
             {
                 throw new InvalidOperationException(

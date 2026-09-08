@@ -1722,14 +1722,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             {
                 return TwoPassTransparentOutlineProfile;
             }
+            if (string.Equals(
+                    shaderName,
+                    TransparentShaderName,
+                    StringComparison.Ordinal))
+            {
+                return TransparentProfile;
+            }
 
             return OpaqueProfile;
         }
 
         /// <summary>
-        /// Gathers identity evidence with the profile the shader's own live
-        /// name selects, so a canonical clone that stays on its source's
-        /// outline wrapper resolves the same pass asset the wrapper executes.
+        /// Gathers identity evidence for the target shader. Resolves the pass
+        /// asset that matches the target shader profile.
         /// </summary>
         internal static LilToonSourceEvidence GatherSourceEvidenceForShaderName(
             Shader shader,
@@ -1737,7 +1743,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             if (shader == null) throw new ArgumentNullException(nameof(shader));
             return Gather(
-                shader, evidence, ProfileForShaderName(shader.name));
+                shader, evidence, ProfileForShaderName(shader.name), shader.name);
         }
 
         /// <summary>
@@ -1791,16 +1797,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Resolves the canonical opaque target shader name for a source
-        /// shader name. An outline wrapper source keeps its own wrapper, so
-        /// the moved triangles carry the outline passes with them; every
-        /// other source - the plain sources and the plain one-pass and
-        /// two-pass variants - moves onto the plain opaque shader.
+        /// shader name. Outline wrapper sources move to the outline opaque
+        /// shader. All other sources move to the plain opaque shader.
         /// </summary>
         internal static string ResolveCanonicalTargetShaderName(
             string sourceShaderName)
         {
             return IsOutlineWrapperShaderName(sourceShaderName)
-                ? sourceShaderName
+                ? OutlineShaderName
                 : SupportedShaderName;
         }
 
