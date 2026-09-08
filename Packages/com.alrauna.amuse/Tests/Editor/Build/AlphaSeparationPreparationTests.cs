@@ -1690,14 +1690,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixtures.BaseSetUp();
                 var texture = fixtures.ImportFullyOpaqueMipmap(
                     "cutout_optional_paths");
+                // All-white RGBA doubles as an all-255 red mask channel.
+                var mask = fixtures.ImportFullyOpaqueMipmap(
+                    "cutout_optional_paths_mask");
                 var cases = new (string Label, Action<Material> Configure)[]
                 {
                     ("_UseDither",
                         material => material.SetFloat("_UseDither", 1f)),
-                    ("_AlphaMaskMode=1",
-                        material => material.SetFloat("_AlphaMaskMode", 1f)),
-                    ("_AlphaMaskMode=2",
-                        material => material.SetFloat("_AlphaMaskMode", 2f)),
+                    ("_AlphaMaskMode=1 threshold",
+                        material =>
+                        {
+                            material.SetFloat("_AlphaMaskMode", 1f);
+                            material.SetFloat("_AlphaMaskValue", 0.5f);
+                            material.SetTexture("_AlphaMask", mask);
+                        }),
+                    ("_AlphaMaskMode=2 threshold",
+                        material =>
+                        {
+                            material.SetFloat("_AlphaMaskMode", 2f);
+                            material.SetFloat("_AlphaMaskValue", 0.5f);
+                            material.SetTexture("_AlphaMask", mask);
+                        }),
                     ("_AlphaMaskMode=3",
                         material => material.SetFloat("_AlphaMaskMode", 3f)),
                     ("_AlphaMaskMode=4",
@@ -1872,6 +1885,141 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixtures.BaseTearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
+        }
+
+        /// <summary>
+        /// The component's "Preserve Transparency Maximum Mipmap" policy
+        /// scopes the opacity proof end to end. A chain that stays opaque
+        /// through mip 4 and fades only in its 1x1 tail proves its triangle
+        /// under the default cap. The same texture under "All Mips" does
+        /// not, because the faded tail is consulted again. A fade inside
+        /// the cap still stops the proof under the default cap.
+        /// <para>
+        /// Falsifies a cap that the build accepts but ignores, and a cap
+        /// that converts triangles whose fade sits inside the consulted
+        /// levels.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void PreserveTransparencyMipPolicyScopesTheProofEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // 32x32 base, mips 0..5: every level opaque except the 1x1
+                // tail at mip 5, which is fully transparent.
+                var tailHole = fixtures.ImportExplicitMipmapTexture(
+                    "cutout_mip_tail_hole",
+                    32,
+                    mip => mip == 5 ? (byte)0 : (byte)255);
+
+                // The same base with the fade pulled inside the cap: mip 2
+                // and every coarser level fully transparent.
+                var earlyHole = fixtures.ImportExplicitMipmapTexture(
+                    "cutout_mip_early_hole",
+                    32,
+                    mip => mip >= 2 ? (byte)0 : (byte)255);
+
+                var moved = RunMipPolicyArm(
+                    tailHole, "tail default cap", null);
+                Assert.That(
+                    moved.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the capped arm must resolve");
+                Assert.That(
+                    moved.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "a fade above the mip cap must not stop the proof");
+                Assert.That(
+                    moved.Separation, Is.Not.Null,
+                    "the capped proof must prepare a conversion");
+
+                var strict = RunMipPolicyArm(
+                    tailHole, "tail all levels", -1);
+                Assert.That(
+                    strict.OpaqueCandidateTriangleCount, Is.Zero,
+                    "the all-mips policy must consult the faded tail");
+                Assert.That(
+                    strict.Separation, Is.Null,
+                    "the faded tail must stop the conversion");
+
+                var inside = RunMipPolicyArm(
+                    earlyHole, "early fade default cap", null);
+                Assert.That(
+                    inside.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a fade inside the mip cap must still stop the proof");
+                Assert.That(
+                    inside.Separation, Is.Null,
+                    "the policy limits scope; it never waives the " +
+                    "consulted levels");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// One single-triangle cutout arm over the given main texture, with
+        /// the optimizer component's serialized mip cap set when requested.
+        /// Follows the streaming-clone arm's shape: verified seams, manual
+        /// teardown, and the barrier run through the production entry.
+        /// </summary>
+        private static AmusePlatformFinishState RunMipPolicyArm(
+            Texture2D mainTex,
+            string armName,
+            int? maxMipLevel)
+        {
+            var root = new GameObject("AMUSE mip policy " + armName);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            if (maxMipLevel.HasValue)
+            {
+                var serialized = new SerializedObject(component);
+                serialized
+                    .FindProperty("_preserveTransparencyMaxMipLevel")
+                    .intValue = maxMipLevel.Value;
+                serialized.ApplyModifiedProperties();
+            }
+
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material =
+                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture("_MainTex", mainTex);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics:
+                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+
+            return amuse;
         }
 
         /// <summary>
@@ -2385,6 +2533,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                          "_AlphaBoostFA",
                          "_SubpassCutoff",
                          "_AlphaMaskMode",
+                         "_AlphaMaskScale",
+                         "_AlphaMaskValue",
                      })
             {
                 var serialized = material.GetFloat(scalar);
@@ -2423,6 +2573,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AddComponentCase(cases, "_MainTex_ST", "y", scale.y);
             AddComponentCase(cases, "_MainTex_ST", "z", offset.x);
             AddComponentCase(cases, "_MainTex_ST", "w", offset.y);
+            var maskScale = material.GetTextureScale("_AlphaMask");
+            var maskOffset = material.GetTextureOffset("_AlphaMask");
+            AddComponentCase(cases, "_AlphaMask_ST", "x", maskScale.x);
+            AddComponentCase(cases, "_AlphaMask_ST", "y", maskScale.y);
+            AddComponentCase(cases, "_AlphaMask_ST", "z", maskOffset.x);
+            AddComponentCase(cases, "_AlphaMask_ST", "w", maskOffset.y);
 
             // One representative clause-2 gate: a canonical recipe scalar
             // that conversion writes and the runtime could overwrite.
@@ -3469,6 +3625,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "_UseMain2ndTex",
             "_UseMain3rdTex",
             "_AlphaMaskMode",
+            "_AlphaMaskScale",
+            "_AlphaMaskValue",
             "_UseDither",
             "_IDMask1",
             "_IDMask2",
@@ -3553,6 +3711,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AddComponentCase(cases, "_MainTex_ST", "y", scale.y);
             AddComponentCase(cases, "_MainTex_ST", "z", offset.x);
             AddComponentCase(cases, "_MainTex_ST", "w", offset.y);
+            var cutoutMaskScale = material.GetTextureScale("_AlphaMask");
+            var cutoutMaskOffset = material.GetTextureOffset("_AlphaMask");
+            AddComponentCase(
+                cases, "_AlphaMask_ST", "x", cutoutMaskScale.x);
+            AddComponentCase(
+                cases, "_AlphaMask_ST", "y", cutoutMaskScale.y);
+            AddComponentCase(
+                cases, "_AlphaMask_ST", "z", cutoutMaskOffset.x);
+            AddComponentCase(
+                cases, "_AlphaMask_ST", "w", cutoutMaskOffset.y);
 
             foreach (var property in ExpectedLilToonCanonicalOpaqueScalars)
             {
@@ -4427,6 +4595,55 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 return ImportMipmapTexture(
                     name, 4, 4, FullyOpaquePixels());
+            }
+
+            /// <summary>
+            /// A mip-mapped RGBA32 texture asset whose every level is white
+            /// with the alpha the caller picks per level, so a fade can sit
+            /// at an exact mip index. The importer cannot author this: a
+            /// generated chain derives every level from mip 0. The chain is
+            /// written directly through SetPixels32 and stored by
+            /// CreateAsset, so the GPU per-level capture route reads exactly
+            /// the authored levels.
+            /// </summary>
+            internal Texture2D ImportExplicitMipmapTexture(
+                string name,
+                int size,
+                Func<int, byte> alphaByMip)
+            {
+                var mipCount = 1;
+                for (var halved = size; halved > 1; halved >>= 1)
+                {
+                    mipCount++;
+                }
+
+                var texture = new Texture2D(
+                    size, size, TextureFormat.RGBA32, mipCount, false);
+                for (var mip = 0; mip < mipCount; mip++)
+                {
+                    var width = Math.Max(1, size >> mip);
+                    var alpha = alphaByMip(mip);
+                    var pixels = new Color32[width * width];
+                    for (var index = 0; index < pixels.Length; index++)
+                    {
+                        pixels[index] = new Color32(255, 255, 255, alpha);
+                    }
+
+                    texture.SetPixels32(pixels, mip);
+                }
+
+                texture.Apply(false, false);
+                var path = TempFolder + "/" + name + ".asset";
+                AssetDatabase.CreateAsset(texture, path);
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Explicit mipmap texture '{path}' must load.");
+                Assert.That(
+                    loaded.mipmapCount, Is.EqualTo(mipCount),
+                    "fixture precondition: every authored level must " +
+                    "survive the asset round trip");
+                return loaded;
             }
 
             internal Texture2D ImportMirrorWrapMipmap(string name)

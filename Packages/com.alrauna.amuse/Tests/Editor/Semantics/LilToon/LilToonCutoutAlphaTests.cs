@@ -45,6 +45,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_UseMain2ndTex",
             "_UseMain3rdTex",
             "_AlphaMaskMode",
+            "_AlphaMaskScale",
+            "_AlphaMaskValue",
             "_UseDither",
             "_IDMask1",
             "_IDMask2",
@@ -98,12 +100,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ExpectedAlphaColors, request.ColorProperties);
             CollectionAssert.AreEquivalent(
                 ExpectedAlphaVectors, request.VectorProperties);
-            Assert.That(request.TextureProperties.Count, Is.EqualTo(1));
+            // CopyTextures sorts by property name, so _AlphaMask is first.
+            Assert.That(request.TextureProperties.Count, Is.EqualTo(2));
             Assert.That(
                 request.TextureProperties[0].PropertyName,
-                Is.EqualTo("_MainTex"));
+                Is.EqualTo("_AlphaMask"));
             Assert.That(
                 request.TextureProperties[0].Evidence,
+                Is.EqualTo(
+                    TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.RedChannel),
+                "the mask rides _MainTex's sampler, so it requests no " +
+                "sampling facts of its own");
+            Assert.That(
+                request.TextureProperties[1].PropertyName,
+                Is.EqualTo("_MainTex"));
+            Assert.That(
+                request.TextureProperties[1].Evidence,
                 Is.EqualTo(
                     TextureEvidenceKinds.ScaleOffset |
                     TextureEvidenceKinds.SourceIdentity |
@@ -576,8 +590,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase("_UseParallax", 1f)]
         [TestCase("_UseMain2ndTex", 1f)]
         [TestCase("_UseMain3rdTex", 1f)]
-        [TestCase("_AlphaMaskMode", 1f)]
-        [TestCase("_AlphaMaskMode", 2f)]
         [TestCase("_AlphaMaskMode", 3f)]
         [TestCase("_AlphaMaskMode", 4f)]
         [TestCase("_UseDither", 1f)]
@@ -605,6 +617,342 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // _UDIMDiscardMode or _IDMaskControlsDissolve from the runtime
             // gate set — each captured runtime gate refuses independently.
             AssertAlphaGateUnknown(result, property);
+        }
+
+        // --- 4a. alpha mask composition (2026-09-07 design §3) -------------
+        // Modes 1 and 2 left the blanket gate: the mask term
+        // saturate(mask.r * _AlphaMaskScale + _AlphaMaskValue) is composed
+        // exactly, with the mask sampled through the _MainTex sampler at
+        // uvMain transformed by _AlphaMask_ST.
+
+        private static LilToonSemanticResult InterpretCutout(Material material)
+        {
+            return LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+        }
+
+        private static Color32[] MaskGrid(int width, int height, byte red)
+        {
+            var pixels = new Color32[width * height];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                // Only red carries the mask term; alpha is deliberately
+                // full so a mask-blind implementation reading .a would
+                // wrongly prove a holed mask opaque.
+                pixels[index] = new Color32(red, 0, 0, 255);
+            }
+
+            return pixels;
+        }
+
+        private static Color32[] MaskGridWithRedHole(
+            int width, int height, int holeX, int holeY)
+        {
+            var pixels = MaskGrid(width, height, 255);
+            pixels[holeY * width + holeX] = new Color32(0, 0, 0, 255);
+            return pixels;
+        }
+
+        private static Color32[] MainGridWithAlphaHole(
+            int width, int height, int holeX, int holeY)
+        {
+            var pixels = SolidGrid(width, height, 255);
+            pixels[holeY * width + holeX] =
+                new Color32(255, 255, 255, 0);
+            return pixels;
+        }
+
+        private void AssignAllWhiteMask(Material material, string name)
+        {
+            material.SetTexture(
+                "_AlphaMask",
+                ImportMipmapTexture(name, 4, 4, MaskGrid(4, 4, 255)));
+        }
+
+        private static AlphaFieldProvider ProvidingForMasked(
+            CapturedMaterialEvidence evidence,
+            AlphaMipChain mainChain,
+            AlphaMipChain maskChain)
+        {
+            Assert.That(
+                evidence.TryGetTexture(MainTextureProperty, out var main),
+                Is.True);
+            Assert.That(
+                evidence.TryGetTexture("_AlphaMask", out var mask),
+                Is.True);
+            Assert.That(
+                main.IsAssigned && main.Texture.HasSourceIdentity &&
+                mask.IsAssigned && mask.Texture.HasSourceIdentity,
+                Is.True,
+                "masked-seam tests key chains on resolved identities");
+
+            var mainSource = main.Texture.SourceIdentity;
+            var maskSource = mask.Texture.SourceIdentity;
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(mainSource) && channel == TextureChannel.Alpha)
+                {
+                    result = mainChain;
+                    return true;
+                }
+
+                if (source.Equals(maskSource) && channel == TextureChannel.Red)
+                {
+                    result = maskChain;
+                    return true;
+                }
+
+                result = null;
+                return false;
+            };
+        }
+
+        private AlphaResolution ResolveThroughCutoutFrontend(
+            Material material,
+            AlphaMipChain mainChain,
+            AlphaMipChain maskChain)
+        {
+            var captured = CaptureCutoutEvidence(material);
+            var alpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(captured);
+            return AlphaSemanticsResolver.Resolve(
+                alpha, ProvidingForMasked(captured, mainChain, maskChain));
+        }
+
+        /// <summary>
+        /// Resolves with a provider that can serve no field at all, for
+        /// verdicts that must be uniform without consulting a texel.
+        /// </summary>
+        private static AlphaResolution ResolveUniform(Material material)
+        {
+            var captured = CaptureCutoutEvidence(material);
+            var alpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(captured);
+            return AlphaSemanticsResolver.Resolve(
+                alpha,
+                (TextureSourceId source, TextureChannel channel,
+                    out AlphaMipChain chain) =>
+                {
+                    chain = null;
+                    return false;
+                });
+        }
+
+
+        private static void AssertUniformOutcome(
+            AlphaResolution resolution,
+            TriangleAlphaOutcome expected)
+        {
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome),
+                Is.True,
+                "the verdict must be uniform, needing no triangle");
+            Assert.That(outcome, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void AlphaMaskMode1_WithAllWhiteMask_ProvesTriangleDespiteSubUnitColorAlpha()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m1_white");
+            material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.5f));
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            AssignAllWhiteMask(material, "c_m1_white_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+
+            // Falsifies: composing _Color.a into Replace mode. The shader
+            // assigns the mask term over col.a before the cutout
+            // transform, so a half tint cannot darken it.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AlphaMaskMode1_IgnoresTheMainTextureAlphaChannel()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    "c_m1_main_hole", 4, 4,
+                    MainGridWithAlphaHole(4, 4, 1, 1)));
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            AssignAllWhiteMask(material, "c_m1_main_hole_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material, OpaqueThenTransparentChain(), AllOpaqueChain());
+
+            // The main alpha never reaches the coverage value in mode 1.
+            // Falsifies main-alpha composition in mode 1.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AlphaMaskMode1_WithSaturatedValue_IsUniformProvenOpaque()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m1_sat");
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 1f);
+            AssignAllWhiteMask(material, "c_m1_sat_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), OpaqueThenTransparentChain());
+
+            // r * 1 + 1 saturates to exactly one for every r >= 0, so no
+            // texel of either field is consulted.
+            AssertUniformOutcome(
+                resolution, TriangleAlphaOutcome.ProvenOpaque);
+        }
+
+        [Test]
+        public void AlphaMaskMode1_WithThresholdValue_RefusesNamingValue()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m1_thr");
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0.5f);
+            AssignAllWhiteMask(material, "c_m1_thr_mask");
+
+            // The threshold envelope saturate(r + 0.5) is a deferred
+            // contract; the refusal must name the additive term.
+            AssertAlphaGateUnknown(InterpretCutout(material), "_AlphaMaskValue");
+        }
+
+        [Test]
+        public void AlphaMaskUnassigned_Mode1_Scale1Value0_IsUniformProvenOpaque()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+
+            var resolution = ResolveUniform(material);
+
+            // The declared default is "white": mask.r is exactly one, so
+            // the term is saturate(1) and the alpha is constant one.
+            AssertUniformOutcome(
+                resolution, TriangleAlphaOutcome.ProvenOpaque);
+        }
+
+        [Test]
+        public void AlphaMaskUnassigned_Mode2_Scale1Value0_ProvesTriangle()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_unassigned");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            var resolution =
+                ResolveThroughCutoutFrontend(material, AllOpaqueChain());
+            // Unassigned mask: the term is saturate(1 + 0) = 1, leaving
+            // col.a unchanged for the cutout transform.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AlphaMaskMode2_WithAllWhiteMask_ProvesTriangle()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_white");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            AssignAllWhiteMask(material, "c_m2_white_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AlphaMaskMode2_WithMaskHole_ClassifiesTheHoleUnknown()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_hole");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            material.SetTexture(
+                "_AlphaMask",
+                ImportMipmapTexture(
+                    "c_m2_hole_mask", 4, 4,
+                    MaskGridWithRedHole(4, 4, 1, 1)));
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material,
+                AllOpaqueChain(),
+                Chain(
+                    OpaqueGridWithTransparentTexelAlpha(1, 1),
+                    Field(2, 2, 255),
+                    Field(1, 1, 255)));
+
+            // The corner triangle's domain covers texel (1, 1), whose mask
+            // value is provably zero: the product is below one, so the
+            // triangle must stay transparent under the cutout transform.
+            // Falsifies a mask-blind product that reads mask alpha instead
+            // of red.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void AlphaMaskMode2_WithSubUnitColorAlpha_IsUniformMustRemainTransparent()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_tint");
+            material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.5f));
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            AssignAllWhiteMask(material, "c_m2_tint_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+
+            // Product lemma: a factor bounded below one keeps the product
+            // below one at every reachable sample.
+            AssertUniformOutcome(
+                resolution, TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        [Test]
+        public void AlphaMaskMode2_WithScaleNotOneWithAssignedMask_RefusesNamingScale()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_scale");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 2f);
+            material.SetFloat("_AlphaMaskValue", 1f);
+            AssignAllWhiteMask(material, "c_m2_scale_mask");
+
+            AssertAlphaGateUnknown(InterpretCutout(material), "_AlphaMaskScale");
+        }
+
+        [Test]
+        public void AlphaMaskUnassigned_Mode1_Scale0ValueHalf_IsUniformMustRemainTransparent()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 0f);
+            material.SetFloat("_AlphaMaskValue", 0.5f);
+
+            var resolution = ResolveUniform(material);
+
+            AssertUniformOutcome(
+                resolution, TriangleAlphaOutcome.MustRemainTransparent);
         }
 
         [Test]
