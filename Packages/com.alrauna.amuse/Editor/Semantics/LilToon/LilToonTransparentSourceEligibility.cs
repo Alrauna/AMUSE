@@ -94,6 +94,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         private static readonly string[] SourceSchema =
         {
+            LilToonSourceAttestation.ShaderFormatVersionProperty,
             CutoffProperty, AlphaBoostFaProperty, SubpassCutoffProperty,
         };
 
@@ -103,7 +104,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         };
 
         /// <summary>
-        /// The transparent source's own eligibility evidence: three scalars
+        /// The transparent source's own eligibility evidence: four scalars
         /// and one vector. The recipe never writes them, and they are not
         /// target evidence.
         /// </summary>
@@ -132,7 +133,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     SourceEvidenceRequest);
 
         /// <summary>
-        /// The 21 property names this module reads off the SOURCE material,
+        /// The 22 property names this module reads off the SOURCE material,
         /// in a fixed order the finiteness sweep and <see cref="Read"/> index
         /// by. Sharing a name with the recipe does not make a source
         /// render-state fact target evidence.
@@ -172,7 +173,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <para>
         /// The load-bearing order is design §9: the schema check (including
         /// the presence of the _DistanceFade vector), then finiteness over
-        /// all 21 captured scalars and all four vector components (gate 2),
+        /// all 22 captured scalars and all four vector components (gate 2),
         /// then the mutation-authorizing render-state gates. Finiteness runs
         /// first because every later scalar gate compares captured values
         /// against pinned constants, and a NaN/±inf capture would make those
