@@ -1,8 +1,7 @@
 # Generated-Texture Evidence Contract Design
 
 Date: 2026-09-07
-Status: draft (producer characterization filled from source analysis; design
-questions open)
+Status: implemented
 Scope: the source-identity gate on build-transient textures, the capture of
 alpha mip chains from generated texture objects, and the refusal policy for
 uncharacterized producers.
