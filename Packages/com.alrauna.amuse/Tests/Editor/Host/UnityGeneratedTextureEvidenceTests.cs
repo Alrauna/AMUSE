@@ -301,5 +301,45 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(ok2, Is.True);
             Assert.That(ReferenceEquals(chain1, chain2), Is.True);
         }
+
+        [Test]
+        public void SessionCache_DoesNotReturnStaleResultAcrossSlightlyDifferentCutoffs()
+        {
+            var deltaTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                // Byte 128 has normalized value 128 / 255 = 0.50196078...
+                pixels[i] = new Color32(255, 255, 255, 128);
+            }
+
+            deltaTex.SetPixels32(pixels);
+            deltaTex.Apply(false, false);
+            deltaTex.name = "DeltaCutoff (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(deltaTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            // Cutoff 0.501960f is slightly below 128/255. Texels must be opaque.
+            var okBelow = UnityGeneratedTextureEvidence.TryCapture(
+                deltaTex,
+                TextureChannel.Alpha,
+                0.501960f,
+                out var chainBelow);
+
+            Assert.That(okBelow, Is.True);
+            Assert.That(chainBelow[0].IsFullyOpaque, Is.True);
+
+            // Cutoff 0.501962f is slightly above 128/255. Texels must be non-opaque.
+            // The delta is 0.000002f. Quantization would collide in cache.
+            var okAbove = UnityGeneratedTextureEvidence.TryCapture(
+                deltaTex,
+                TextureChannel.Alpha,
+                0.501962f,
+                out var chainAbove);
+
+            Assert.That(okAbove, Is.True);
+            Assert.That(chainAbove[0].IsFullyNonOpaque, Is.True);
+            Assert.That(ReferenceEquals(chainBelow, chainAbove), Is.False);
+        }
     }
 }

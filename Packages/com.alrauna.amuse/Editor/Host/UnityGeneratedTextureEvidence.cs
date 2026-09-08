@@ -12,7 +12,7 @@ namespace Alrauna.Amuse.Editor.Host
     /// </summary>
     internal static class UnityGeneratedTextureEvidence
     {
-        private static readonly Dictionary<(int instanceId, TextureChannel channel, int cutoffBits), AlphaMipChain>
+        private static readonly Dictionary<(int instanceId, TextureChannel channel, float cutoff), AlphaMipChain>
             SessionCache = new();
 
         internal static bool TryCapture(
@@ -46,8 +46,8 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
-            var key = (texture.GetInstanceID(), channel, cutoffBits);
+            var threshold = Mathf.Clamp01(cutoffThreshold);
+            var key = (texture.GetInstanceID(), channel, threshold);
             if (SessionCache.TryGetValue(key, out chain))
             {
                 return true;
@@ -72,7 +72,6 @@ namespace Alrauna.Amuse.Editor.Host
 
                 var material = new Material(shader);
                 var levels = new AlphaTextureData[mipCount];
-                var threshold = Mathf.Clamp01(cutoffThreshold);
 
                 try
                 {
