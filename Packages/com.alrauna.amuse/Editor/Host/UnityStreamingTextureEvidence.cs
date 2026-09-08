@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
 using UnityEngine;
 
@@ -52,10 +53,13 @@ namespace Alrauna.Amuse.Editor.Host
         /// evidence. Editor-session scope only: nothing crosses restarts.
         /// </summary>
         private static readonly
-            Dictionary<(string guid, long sourceTicks, long metaTicks),
-                AlphaMipChain> Cache = new();
+            Dictionary<(string guid, long sourceTicks, long metaTicks,
+                    TextureChannel channel), AlphaMipChain> Cache = new();
 
-        internal static bool TryCapture(Texture2D source, out AlphaMipChain chain)
+        internal static bool TryCapture(
+            Texture2D source,
+            TextureChannel channel,
+            out AlphaMipChain chain)
         {
             if (source == null)
             {
@@ -76,7 +80,8 @@ namespace Alrauna.Amuse.Editor.Host
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
-                metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L);
+                metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
+                channel);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -161,8 +166,17 @@ namespace Alrauna.Amuse.Editor.Host
                     var flags = new byte[pixels.Length];
                     for (var index = 0; index < pixels.Length; index++)
                     {
+                        // The channel selector matches the pinned lilToon
+                        // sampling: masks read .r, alpha reads .a. Both are
+                        // held to the same predicate — the decoded float is
+                        // exactly one iff the stored byte is 255 — whether
+                        // or not GetPixels applies the sRGB transfer,
+                        // because the transfer is monotone and fixes 1.0.
+                        var value = channel == TextureChannel.Red
+                            ? pixels[index].r
+                            : pixels[index].a;
                         flags[index] =
-                            pixels[index].a >= 1f ? byte.MaxValue : (byte)0;
+                            value >= 1f ? byte.MaxValue : (byte)0;
                     }
 
                     levels[mip] = new AlphaTextureData(width, height, flags);
