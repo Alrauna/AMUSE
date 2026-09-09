@@ -390,6 +390,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
             {
                 var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
@@ -397,6 +404,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
                     if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (canPreFilter && !ConservativeBilinearSupportOverlapsTriangle(
+                            unwrappedX - 0.5, unwrappedX + 1.5,
+                            unwrappedY - 0.5, unwrappedY + 1.5,
+                            v0x, v0y, v1x, v1y, v2x, v2y))
                     {
                         continue;
                     }
@@ -456,6 +470,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var y = minimumY; y <= maximumY; y++)
             {
                 for (var x = minimumX; x <= maximumX; x++)
@@ -463,6 +484,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (texture.GetAlpha(x, y) == byte.MaxValue)
                     {
                         continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < -0.5 || v1x < -0.5 || v2x < -0.5)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
+                                         (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
+                        if (!isBoundary && !ConservativeBilinearSupportOverlapsTriangle(
+                                x - 0.5, x + 1.5,
+                                y - 0.5, y + 1.5,
+                                v0x, v0y, v1x, v1y, v2x, v2y))
+                        {
+                            continue;
+                        }
                     }
                     if (ExactUvGeometry.Intersects(
                         domain,
@@ -522,6 +558,100 @@ namespace Alrauna.Amuse.Editor.Analysis
                 true,
                 new ExactRational(center + 3 * halfTexel),
                 false);
+        }
+
+        /// <summary>
+        /// Conservatively tests whether the bilinear reconstruction support box
+        /// can intersect the triangle. Returns false only when the shapes are
+        /// definitely separated. Returns true if they overlap or are within
+        /// numerical tolerance.
+        /// </summary>
+        internal static bool ConservativeBilinearSupportOverlapsTriangle(
+            double boxMinX, double boxMaxX,
+            double boxMinY, double boxMaxY,
+            double v0x, double v0y,
+            double v1x, double v1y,
+            double v2x, double v2y)
+        {
+            // Axis 1 and 2: AABB check.
+            var triMinX = Math.Min(v0x, Math.Min(v1x, v2x));
+            var triMaxX = Math.Max(v0x, Math.Max(v1x, v2x));
+            if (boxMaxX < triMinX || boxMinX > triMaxX)
+            {
+                return false;
+            }
+
+            var triMinY = Math.Min(v0y, Math.Min(v1y, v2y));
+            var triMaxY = Math.Max(v0y, Math.Max(v1y, v2y));
+            if (boxMaxY < triMinY || boxMinY > triMaxY)
+            {
+                return false;
+            }
+
+            // Axis 3, 4, 5: Triangle edge normal half planes.
+            if (EdgeSeparates(v0x, v0y, v1x, v1y, v2x, v2y, boxMinX, boxMaxX, boxMinY, boxMaxY))
+            {
+                return false;
+            }
+            if (EdgeSeparates(v1x, v1y, v2x, v2y, v0x, v0y, boxMinX, boxMaxX, boxMinY, boxMaxY))
+            {
+                return false;
+            }
+            if (EdgeSeparates(v2x, v2y, v0x, v0y, v1x, v1y, boxMinX, boxMaxX, boxMinY, boxMaxY))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool EdgeSeparates(
+            double aX, double aY,
+            double bX, double bY,
+            double cX, double cY,
+            double boxMinX, double boxMaxX,
+            double boxMinY, double boxMaxY)
+        {
+            var nx = -(bY - aY);
+            var ny = bX - aX;
+
+            // Sign of third triangle vertex.
+            var cDot = nx * (cX - aX) + ny * (cY - aY);
+            if (Math.Abs(cDot) < 1e-12)
+            {
+                return false;
+            }
+
+            // Find the box vertex that extends farthest toward the triangle interior.
+            // If that extreme box vertex is outside, the whole box is outside.
+            var extremeX = cDot > 0 ? (nx >= 0 ? boxMaxX : boxMinX) : (nx >= 0 ? boxMinX : boxMaxX);
+            var extremeY = cDot > 0 ? (ny >= 0 ? boxMaxY : boxMinY) : (ny >= 0 ? boxMinY : boxMaxY);
+
+            var extremeDot = nx * (extremeX - aX) + ny * (extremeY - aY);
+            if (cDot > 0)
+            {
+                return extremeDot < -1e-9;
+            }
+
+            return extremeDot > 1e-9;
+        }
+
+        private static void ExtractTexelVertices(
+            ExactUvDomain domain,
+            out double v0x, out double v0y,
+            out double v1x, out double v1y,
+            out double v2x, out double v2y)
+        {
+            var scale = (double)domain.TexelScale;
+            var pt0 = domain.Vertices[0];
+            var pt1 = domain.Vertices[1];
+            var pt2 = domain.Vertices[2];
+            v0x = (double)pt0.X.Numerator / (double)pt0.X.Denominator / scale;
+            v0y = (double)pt0.Y.Numerator / (double)pt0.Y.Denominator / scale;
+            v1x = (double)pt1.X.Numerator / (double)pt1.X.Denominator / scale;
+            v1y = (double)pt1.Y.Numerator / (double)pt1.Y.Denominator / scale;
+            v2x = (double)pt2.X.Numerator / (double)pt2.X.Denominator / scale;
+            v2y = (double)pt2.Y.Numerator / (double)pt2.Y.Denominator / scale;
         }
 
         private static TriangleAlphaOutcome ClassifyPointRepeat(

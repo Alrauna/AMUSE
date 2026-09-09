@@ -285,6 +285,69 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
+        [Test]
+        public void PreFilterRejectsSeparatedTexelSupportBox()
+        {
+            // Triangle with vertices at (2, 2), (4, 2), (2, 4).
+            // Hypotenuse connects (4, 2) to (2, 4), satisfying x + y = 6.
+            // Box [3.5, 5.5] x [3.5, 5.5] overlaps the triangle AABB [2, 4] x [2, 4].
+            // The box lies strictly outside the hypotenuse because min x + y = 7 > 6.
+            // Edge normal separation must reject this disjoint box.
+            var separated = TriangleAlphaClassifier.ConservativeBilinearSupportOverlapsTriangle(
+                3.5, 5.5,
+                3.5, 5.5,
+                2.0, 2.0,
+                4.0, 2.0,
+                2.0, 4.0);
+
+            Assert.That(separated, Is.False);
+        }
+
+        [Test]
+        public void PreFilterRetainsOverlappingTexelSupportBox()
+        {
+            // Triangle with vertices at (2, 2), (4, 2), (2, 4).
+            // Box [1.5, 3.5] x [1.5, 3.5] contains vertex (2, 2).
+            // Overlapping box must return true.
+            var overlaps = TriangleAlphaClassifier.ConservativeBilinearSupportOverlapsTriangle(
+                1.5, 3.5,
+                1.5, 3.5,
+                2.0, 2.0,
+                4.0, 2.0,
+                2.0, 4.0);
+
+            Assert.That(overlaps, Is.True);
+        }
+
+        [Test]
+        public void PreFilterNeverRejectsBoundaryTouchingTexel()
+        {
+            // Triangle with vertices at (2, 2), (4, 2), (2, 4).
+            // Edge connects (4, 2) to (2, 4) along line x + y = 6.
+            // Box [3.0, 5.0] x [3.0, 5.0] touches the hypotenuse at (3, 3).
+            // Conservative filter must never reject a boundary point.
+            var touches = TriangleAlphaClassifier.ConservativeBilinearSupportOverlapsTriangle(
+                3.0, 5.0,
+                3.0, 5.0,
+                2.0, 2.0,
+                4.0, 2.0,
+                2.0, 4.0);
+
+            Assert.That(touches, Is.True);
+
+            // Also test a box just outside by less than numerical tolerance 1e-10.
+            // The extreme point has x + y = 6.0 + 1e-10.
+            // Filter must remain conservative and return true.
+            var nearEdge = TriangleAlphaClassifier.ConservativeBilinearSupportOverlapsTriangle(
+                3.0 + 5e-11, 5.0,
+                3.0 + 5e-11, 5.0,
+                2.0, 2.0,
+                4.0, 2.0,
+                2.0, 4.0);
+
+            Assert.That(nearEdge, Is.True);
+        }
+
         // --- A7 widenings: trilinear and anisotropic --------------------
 
         /// <summary>
