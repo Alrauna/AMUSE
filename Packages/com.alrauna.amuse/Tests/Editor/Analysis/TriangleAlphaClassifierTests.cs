@@ -482,6 +482,27 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(baseline));
         }
 
+        [TestCase("Point")]
+        [TestCase("Bilinear")]
+        [TestCase("Trilinear")]
+        public void RepeatUvCoordinatesExceeding32BitRangeReturnUnknown(string filterMode)
+        {
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                new Vector2(1e11f, 0f),
+                new Vector2(0f, 1e11f));
+            var mode = (AlphaFilterMode)Enum.Parse(typeof(AlphaFilterMode), filterMode);
+            var sampling = new AlphaSamplingSettings(mode, AlphaWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
         [TestCase(255, "ProvenOpaque")]
         [TestCase(0, "MustRemainTransparent")]
         public void UniformFastPathPrecedesMixedSpanBudget(

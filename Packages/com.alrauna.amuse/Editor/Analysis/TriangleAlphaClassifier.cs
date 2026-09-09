@@ -353,18 +353,36 @@ namespace Alrauna.Amuse.Editor.Analysis
                 ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
                 texture.Width,
                 texture.Height);
-            var minimumX = CellIndex(
-                ExactUvGeometry.Minimum(domain, true),
-                domain.TexelScale) - 1;
-            var maximumX = CellIndex(
-                ExactUvGeometry.Maximum(domain, true),
-                domain.TexelScale) + 1;
-            var minimumY = CellIndex(
-                ExactUvGeometry.Minimum(domain, false),
-                domain.TexelScale) - 1;
-            var maximumY = CellIndex(
-                ExactUvGeometry.Maximum(domain, false),
-                domain.TexelScale) + 1;
+            if (!TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, true),
+                    domain.TexelScale,
+                    out var minCellX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, true),
+                    domain.TexelScale,
+                    out var maxCellX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, false),
+                    domain.TexelScale,
+                    out var minCellY) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, false),
+                    domain.TexelScale,
+                    out var maxCellY))
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            if (minCellX <= int.MinValue || maxCellX >= int.MaxValue ||
+                minCellY <= int.MinValue || maxCellY >= int.MaxValue)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            var minimumX = minCellX - 1;
+            var maximumX = maxCellX + 1;
+            var minimumY = minCellY - 1;
+            var maximumY = maxCellY + 1;
             var candidateCount = (long)(maximumX - minimumX + 1) *
                                  (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
@@ -515,10 +533,26 @@ namespace Alrauna.Amuse.Editor.Analysis
                 ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
                 texture.Width,
                 texture.Height);
-            var minimumX = CellIndex(ExactUvGeometry.Minimum(domain, true), domain.TexelScale);
-            var maximumX = CellIndex(ExactUvGeometry.Maximum(domain, true), domain.TexelScale);
-            var minimumY = CellIndex(ExactUvGeometry.Minimum(domain, false), domain.TexelScale);
-            var maximumY = CellIndex(ExactUvGeometry.Maximum(domain, false), domain.TexelScale);
+            if (!TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, true),
+                    domain.TexelScale,
+                    out var minimumX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, true),
+                    domain.TexelScale,
+                    out var maximumX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, false),
+                    domain.TexelScale,
+                    out var minimumY) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, false),
+                    domain.TexelScale,
+                    out var maximumY))
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
             var candidateCount = (long)(maximumX - minimumX + 1) *
                                  (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
@@ -548,14 +582,21 @@ namespace Alrauna.Amuse.Editor.Analysis
             return TriangleAlphaOutcome.ProvenOpaque;
         }
 
-        private static int CellIndex(
+        private static bool TryGetCellIndex(
             ExactRational coordinate,
-            BigInteger texelScale)
+            BigInteger texelScale,
+            out int index)
         {
             var div = ExactUvGeometry.FloorDiv(
                 coordinate.Numerator,
                 coordinate.Denominator * texelScale);
-            return (int)div;
+            if (div < int.MinValue || div > int.MaxValue)
+            {
+                index = 0;
+                return false;
+            }
+            index = (int)div;
+            return true;
         }
 
         private static ExactInterval PointRepeatInterval(
