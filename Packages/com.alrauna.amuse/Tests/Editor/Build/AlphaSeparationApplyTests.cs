@@ -1689,6 +1689,80 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void IgnoredOutOfRangeBindingAtAppendedSlotRefusesSplitCandidate()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE ignored split collision");
+            var optimizer = root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_ignoreOutOfRangeMaterialSlots").boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "ignored_split"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE ignored swap",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        clip,
+                        EditorCurveBinding.PPtrCurve(
+                            "split", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[2]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = split,
+                            },
+                        });
+                    controller = NewController(
+                        root, "AMUSE ignored graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(probe.Decision.IsPrepared, Is.True);
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .SlotBindingAbsentFromEvidence),
+                        Is.EqualTo(1),
+                        "the split slot must be refused because an ignored binding targets its appended slot index");
+                    Assert.That(probe.Decision.HasMutation, Is.False,
+                        "the refused candidate must produce no mesh or material write");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         // --- Task 5 integration coverage: the cutout family end to end ------
 
         /// <summary>

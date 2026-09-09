@@ -124,7 +124,8 @@ namespace Alrauna.Amuse.Editor.Host
             IList<CapturedAlphaMaterial> admittedMaterials,
             IList<int> currentMaterialIndices,
             bool hasUnnormalizedDirectBlendTree,
-            bool hasAdditiveLayer)
+            bool hasAdditiveLayer,
+            IList<int> ignoredOutOfRangeSlots = null)
         {
             ClosureFailure = closureFailure;
             AlphaRelevanceRequest = alphaRelevanceRequest
@@ -137,6 +138,8 @@ namespace Alrauna.Amuse.Editor.Host
                 new List<int>(currentMaterialIndices));
             HasUnnormalizedDirectBlendTree = hasUnnormalizedDirectBlendTree;
             HasAdditiveLayer = hasAdditiveLayer;
+            IgnoredOutOfRangeSlots = new ReadOnlyCollection<int>(
+                new List<int>(ignoredOutOfRangeSlots ?? Array.Empty<int>()));
         }
 
         internal bool IsClosed =>
@@ -162,5 +165,11 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal bool HasUnnormalizedDirectBlendTree { get; }
         internal bool HasAdditiveLayer { get; }
+
+        /// <summary>
+        /// Material slot indices that were ignored during capture because they
+        /// were out of range of current material slots and tolerance was enabled.
+        /// </summary>
+        internal IReadOnlyList<int> IgnoredOutOfRangeSlots { get; }
     }
 }

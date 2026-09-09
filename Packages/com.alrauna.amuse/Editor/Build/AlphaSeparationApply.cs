@@ -186,15 +186,22 @@ namespace Alrauna.Amuse.Editor.Build
                     }
                 }
 
+                var splitCount = 0;
                 foreach (var candidate in prepared.CandidateSlots)
                 {
                     var refusal = ValidateCandidateSlot(
                         prepared, candidate, live, capturedBindings,
-                        targetBindings);
+                        targetBindings, splitCount);
                     if (refusal != AlphaSeparationSlotRefusal.None)
                     {
                         state.RecordSlotRefusal(refusal);
                         continue;
+                    }
+
+                    if (candidate.Plan.Disposition ==
+                        SubmeshSeparationDisposition.Split)
+                    {
+                        splitCount++;
                     }
 
                     survivors.Add(candidate);
@@ -503,8 +510,21 @@ namespace Alrauna.Amuse.Editor.Build
             List<(VirtualClip Clip,
                   EditorCurveBinding Binding,
                   ObjectReferenceKeyframe[] Curve,
-                  int SlotIndex)> targetBindings)
+                  int SlotIndex)> targetBindings,
+            int currentSplitCount)
         {
+            if (candidate.Plan.Disposition ==
+                SubmeshSeparationDisposition.Split)
+            {
+                var appendedIndex = live.Length + currentSplitCount;
+                if (prepared.Evidence.IgnoredOutOfRangeSlots.Contains(appendedIndex) ||
+                    targetBindings.Any(target => target.SlotIndex == appendedIndex))
+                {
+                    return AlphaSeparationSlotRefusal
+                        .SlotBindingAbsentFromEvidence;
+                }
+            }
+
             var slotIndex = candidate.Plan.SourceMaterialBindingIndex;
             foreach (var target in targetBindings)
             {
