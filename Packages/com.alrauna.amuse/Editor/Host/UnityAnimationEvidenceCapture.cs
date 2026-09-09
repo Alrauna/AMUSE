@@ -300,6 +300,7 @@ namespace Alrauna.Amuse.Editor.Host
                     hasUnnormalizedDirectBlendTree,
                     hasAdditiveLayer);
             }
+            var ignoredOutOfRangeSlots = new HashSet<int>();
 
             var admitted = new List<Material>();
             var materialIndices = new Dictionary<Material, int>(
@@ -343,6 +344,7 @@ namespace Alrauna.Amuse.Editor.Host
                     {
                         if (ignoreOutOfRangeSlots)
                         {
+                            ignoredOutOfRangeSlots.Add(slot);
                             continue;
                         }
 
@@ -519,6 +521,9 @@ namespace Alrauna.Amuse.Editor.Host
             // capturedByIndex.
             admittedLiveMaterials = Array.AsReadOnly(admitted.ToArray());
 
+            var orderedIgnored = new List<int>(ignoredOutOfRangeSlots);
+            orderedIgnored.Sort();
+
             return new CapturedAnimationEvidence(
                 MaterialDependencyClosureFailure.None,
                 alphaRelevanceRequest,
@@ -526,7 +531,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturedByIndex,
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
-                hasAdditiveLayer);
+                hasAdditiveLayer,
+                orderedIgnored);
         }
 
         /// <summary>

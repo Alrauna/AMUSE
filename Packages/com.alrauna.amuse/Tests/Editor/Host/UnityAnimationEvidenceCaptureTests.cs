@@ -1636,11 +1636,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void OutOfRangeSlotBindingFailsClosedByDefault()
         {
+            var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
             var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
             {
-                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")) })
+                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
-            var slotMat = new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque"));
+            var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
                 "Renderer",
                 new[] { clip },
@@ -1650,16 +1651,18 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(evidence.IsClosed, Is.False);
             Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
+            Assert.That(evidence.IgnoredOutOfRangeSlots, Is.Empty);
         }
 
         [Test]
         public void OutOfRangeSlotBindingIsIgnoredWhenToleranceEnabled()
         {
+            var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
             var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
             {
-                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")) })
+                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
-            var slotMat = new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque"));
+            var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
                 "Renderer",
                 new[] { clip },
@@ -1669,6 +1672,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(evidence.IsClosed, Is.True);
             Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.IgnoredOutOfRangeSlots, Is.EquivalentTo(new[] { 1 }));
         }
 
         private static bool ObserveFiniteExact(AnimationCurve curve)
