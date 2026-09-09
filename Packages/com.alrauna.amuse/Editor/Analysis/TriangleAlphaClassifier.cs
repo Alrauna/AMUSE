@@ -317,8 +317,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 ExactUvGeometry.Maximum(domain, false),
                 texture.Height,
                 domain.TexelScale);
-            var candidateCount = (new BigInteger(maximumX) - minimumX + 1) *
-                                 (new BigInteger(maximumY) - minimumY + 1);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
             {
                 return TriangleAlphaOutcome.Unknown;
@@ -355,17 +355,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 texture.Height);
             var minimumX = CellIndex(
                 ExactUvGeometry.Minimum(domain, true),
-                domain.TexelScale) - BigInteger.One;
+                domain.TexelScale) - 1;
             var maximumX = CellIndex(
                 ExactUvGeometry.Maximum(domain, true),
-                domain.TexelScale) + BigInteger.One;
+                domain.TexelScale) + 1;
             var minimumY = CellIndex(
                 ExactUvGeometry.Minimum(domain, false),
-                domain.TexelScale) - BigInteger.One;
+                domain.TexelScale) - 1;
             var maximumY = CellIndex(
                 ExactUvGeometry.Maximum(domain, false),
-                domain.TexelScale) + BigInteger.One;
-            var candidateCount = (maximumX - minimumX + 1) *
+                domain.TexelScale) + 1;
+            var candidateCount = (long)(maximumX - minimumX + 1) *
                                  (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
             {
@@ -395,16 +395,17 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         private static ExactInterval BilinearRepeatInterval(
-            BigInteger index,
+            int index,
             BigInteger texelScale)
         {
             var halfTexel = texelScale / 2;
+            var center = new BigInteger(index) * texelScale;
             return new ExactInterval(
                 true,
-                new ExactRational(index * texelScale - halfTexel),
+                new ExactRational(center - halfTexel),
                 false,
                 true,
-                new ExactRational(index * texelScale + 3 * halfTexel),
+                new ExactRational(center + 3 * halfTexel),
                 false);
         }
 
@@ -430,8 +431,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 ExactUvGeometry.Maximum(domain, false),
                 texture.Height,
                 domain.TexelScale) + 1);
-            var candidateCount = (new BigInteger(maximumX) - minimumX + 1) *
-                                 (new BigInteger(maximumY) - minimumY + 1);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
             {
                 return TriangleAlphaOutcome.Unknown;
@@ -484,11 +485,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                     new ExactRational(3 * halfTexel),
                     false);
             }
+
+            var center = new BigInteger(index) * texelScale;
             if (index == size - 1)
             {
                 return new ExactInterval(
                     true,
-                    new ExactRational(index * texelScale - halfTexel),
+                    new ExactRational(center - halfTexel),
                     false,
                     false,
                     default,
@@ -496,10 +499,10 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
             return new ExactInterval(
                 true,
-                new ExactRational(index * texelScale - halfTexel),
+                new ExactRational(center - halfTexel),
                 false,
                 true,
-                new ExactRational(index * texelScale + 3 * halfTexel),
+                new ExactRational(center + 3 * halfTexel),
                 false);
         }
 
@@ -516,7 +519,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             var maximumX = CellIndex(ExactUvGeometry.Maximum(domain, true), domain.TexelScale);
             var minimumY = CellIndex(ExactUvGeometry.Minimum(domain, false), domain.TexelScale);
             var maximumY = CellIndex(ExactUvGeometry.Maximum(domain, false), domain.TexelScale);
-            var candidateCount = (maximumX - minimumX + 1) *
+            var candidateCount = (long)(maximumX - minimumX + 1) *
                                  (maximumY - minimumY + 1);
             if (candidateCount > MaxSupportRegions)
             {
@@ -545,25 +548,27 @@ namespace Alrauna.Amuse.Editor.Analysis
             return TriangleAlphaOutcome.ProvenOpaque;
         }
 
-        private static BigInteger CellIndex(
+        private static int CellIndex(
             ExactRational coordinate,
             BigInteger texelScale)
         {
-            return ExactUvGeometry.FloorDiv(
+            var div = ExactUvGeometry.FloorDiv(
                 coordinate.Numerator,
                 coordinate.Denominator * texelScale);
+            return (int)div;
         }
 
         private static ExactInterval PointRepeatInterval(
-            BigInteger index,
+            int index,
             BigInteger texelScale)
         {
+            var center = new BigInteger(index) * texelScale;
             return new ExactInterval(
                 true,
-                new ExactRational(index * texelScale),
+                new ExactRational(center),
                 true,
                 true,
-                new ExactRational((index + BigInteger.One) * texelScale),
+                new ExactRational(center + texelScale),
                 false);
         }
 
