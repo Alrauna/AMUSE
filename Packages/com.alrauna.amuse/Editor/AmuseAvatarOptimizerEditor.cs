@@ -13,6 +13,7 @@ namespace Alrauna.Amuse.Editor
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
         private bool _advancedOpen;
+        private bool _alphaSeparatorOpen;
 
         public override void OnInspectorGUI()
         {
@@ -45,6 +46,7 @@ namespace Alrauna.Amuse.Editor
                     "in Play mode, or anywhere else, and nothing is reported."));
             serializedObject.ApplyModifiedProperties();
 
+            DrawAlphaSeparator();
             DrawAdvancedSettings();
 
             if (AmuseBuildStatusStore.TryGet(
@@ -56,21 +58,29 @@ namespace Alrauna.Amuse.Editor
 
 
         /// <summary>
-        /// The Advanced Settings foldout. It holds the proof-scope policy
-        /// knobs: settings most users never touch, and that change what
-        /// AMUSE treats as proven, never what it mutates. Every control
-        /// carries its own plain-English tool tip, because a wrong value
-        /// here changes conversion decisions, not safety.
+        /// The Alpha Separator foldout. It holds the user's policy for
+        /// the alpha separation feature: which texture levels the
+        /// opacity proof consults, and how big a split must be before
+        /// AMUSE pays a draw call for it.
         /// </summary>
-        private void DrawAdvancedSettings()
+        private void DrawAlphaSeparator()
         {
-            _advancedOpen = EditorGUILayout.Foldout(
-                _advancedOpen, "Advanced Settings", EditorStyles.foldoutHeader);
-            if (!_advancedOpen)
+            _alphaSeparatorOpen = EditorGUILayout.Foldout(
+                _alphaSeparatorOpen, "Alpha Separator",
+                EditorStyles.foldoutHeader);
+            if (!_alphaSeparatorOpen)
             {
                 return;
             }
 
+            DrawMipCapPopup();
+            DrawMinTextureSizePopup();
+            DrawCoverageSlider();
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private void DrawMipCapPopup()
+        {
             var property = serializedObject.FindProperty(
                 "_preserveTransparencyMaxMipLevel");
 
@@ -109,6 +119,94 @@ namespace Alrauna.Amuse.Editor
                 index,
                 options);
             property.intValue = selected == 0 ? -1 : selected - 1;
+        }
+
+        private void DrawMinTextureSizePopup()
+        {
+            var sizeProperty = serializedObject.FindProperty(
+                "_preserveTransparencyMinTextureSize");
+
+            // Index 0 is "All Sizes" (stored -1); index i maps to 2^i.
+            var sizeOptions = new string[14];
+            sizeOptions[0] = "All Sizes";
+            for (var option = 1; option < sizeOptions.Length; option++)
+            {
+                sizeOptions[option] = Mathf.RoundToInt(
+                    Mathf.Pow(2, option)).ToString();
+            }
+
+            var storedSize = sizeProperty.intValue;
+            var sizeIndex = 0;
+            if (storedSize > 0)
+            {
+                sizeIndex = 1;
+                while (sizeIndex < sizeOptions.Length - 1 &&
+                       Mathf.RoundToInt(Mathf.Pow(2, sizeIndex)) <
+                       storedSize)
+                {
+                    sizeIndex++;
+                }
+            }
+
+            var selectedSize = EditorGUILayout.Popup(
+                new GUIContent(
+                    "Preserve Transparency Minimum Texture Size",
+                    "A mipmap level is a smaller copy of the texture. " +
+                    "This setting sets the smallest level size AMUSE " +
+                    "checks. AMUSE stops checking a texture when a " +
+                    "level is smaller than this size on either side. " +
+                    "A texture smaller than this size on either side " +
+                    "is never checked, so its triangles never move." +
+                    "\n\n" +
+                    "Select All Sizes to check every level of every " +
+                    "texture. Select a smaller size to check more " +
+                    "levels when a part looks solid far away where it " +
+                    "should show through. Select a larger size to " +
+                    "check fewer levels when AMUSE moves too few " +
+                    "triangles."),
+                sizeIndex,
+                sizeOptions);
+            sizeProperty.intValue = selectedSize == 0
+                ? -1
+                : Mathf.RoundToInt(Mathf.Pow(2, selectedSize));
+        }
+
+        private void DrawCoverageSlider()
+        {
+            var coverageProperty = serializedObject.FindProperty(
+                "_minimumOpaqueCoveragePercent");
+            coverageProperty.intValue = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Minimum Opaque Coverage Percentage",
+                    "AMUSE moves proven opaque triangles of a mixed " +
+                    "material onto a separate opaque material. Each " +
+                    "split adds one draw call, and draw calls cost " +
+                    "CPU time. This setting sets the smallest share " +
+                    "of proven opaque triangles a mixed material " +
+                    "needs before AMUSE does the split. The share " +
+                    "counts every triangle of that material slot." +
+                    "\n\n" +
+                    "Use 0 to always split when at least one triangle " +
+                    "is proven opaque. Raise the value to skip splits " +
+                    "that move too little."),
+                Mathf.Clamp(coverageProperty.intValue, 0, 100),
+                0, 100);
+        }
+
+        /// <summary>
+        /// The Advanced Settings foldout. It holds the animation-closure
+        /// tolerance setting: the rule for animations that name material
+        /// slots this mesh does not have. Most users never touch it.
+        /// </summary>
+        private void DrawAdvancedSettings()
+        {
+            _advancedOpen = EditorGUILayout.Foldout(
+                _advancedOpen, "Advanced Settings", EditorStyles.foldoutHeader);
+            if (!_advancedOpen)
+            {
+                return;
+            }
+
             EditorGUILayout.PropertyField(
                 serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
                 new GUIContent(
