@@ -112,9 +112,9 @@ namespace Alrauna.Amuse.Editor
                     "viewing distances and keeps most conversions. " +
                     "Select All Mips to check every level. This is the " +
                     "safest choice.\n\n" +
-                    "Select a smaller level when a part looks solid at " +
-                    "long distance where it should show through. " +
-                    "Select a larger level when AMUSE moves too few " +
+                    "Select a larger level when a part looks solid " +
+                    "at long distance where it should show through. " +
+                    "Select a smaller level when AMUSE moves too few " +
                     "triangles."),
                 index,
                 options);
