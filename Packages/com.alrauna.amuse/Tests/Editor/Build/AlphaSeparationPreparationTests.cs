@@ -2068,28 +2068,124 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The component's "Preserve Transparency Minimum Texture Size"
+        /// policy scopes the opacity proof end to end. A 32x32 chain
+        /// that stays opaque through mip 1 and fades from its 8x8 level
+        /// proves its triangle under a minimum size of 9, because the
+        /// fade leaves the consulted levels. The same chain under a
+        /// minimum size of 8 consults the faded level and stops. A
+        /// minimum size above the base width consults nothing and
+        /// converts nothing. All Sizes restores the full chain, so the
+        /// fade stops the proof again.
+        /// <para>
+        /// Falsifies a minimum size that the build accepts but ignores,
+        /// and a minimum size that waives the consulted faded levels.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void PreserveTransparencySizePolicyScopesTheProofEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // 32x32 base: every level opaque except mip 2 and
+                // coarser, which are fully transparent.
+                var earlyHole = fixtures.ImportExplicitMipmapTexture(
+                    "size_policy_early_hole",
+                    32,
+                    mip => mip >= 2 ? (byte)0 : (byte)255);
+
+                // A minimum size of 9 consults the 32x32 and 16x16
+                // levels only. The fade at mip 2 leaves the proof
+                // scope, so the triangle moves.
+                var capped = RunMipPolicyArm(
+                    earlyHole, "size cap 9", null, 9);
+                Assert.That(
+                    capped.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the capped arm must resolve");
+                Assert.That(
+                    capped.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "a fade inside the size-ignored levels must not " +
+                    "stop the proof");
+                Assert.That(
+                    capped.Separation, Is.Not.Null,
+                    "the size-capped proof must prepare a conversion");
+
+                // A minimum size of 8 also consults the faded 8x8
+                // level, so the proof must stop.
+                var consulted = RunMipPolicyArm(
+                    earlyHole, "size cap 8", null, 8);
+                Assert.That(
+                    consulted.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a fade inside the consulted levels must stop " +
+                    "the proof");
+                Assert.That(
+                    consulted.Separation, Is.Null,
+                    "the size policy limits scope. It never waives " +
+                    "the consulted levels");
+
+                // The 32x32 texture is below a 33 minimum on every
+                // level. Nothing is consulted and nothing converts.
+                var below = RunMipPolicyArm(
+                    earlyHole, "size below minimum", null, 33);
+                Assert.That(
+                    below.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a texture below the minimum size must not " +
+                    "convert");
+                Assert.That(
+                    below.Separation, Is.Null,
+                    "a texture below the minimum size must prepare " +
+                    "nothing");
+
+                // All Sizes restores the full chain: the fade is
+                // consulted and the proof stops.
+                var allSizes = RunMipPolicyArm(
+                    earlyHole, "size all sizes", null,
+                    FixtureProofScope.AllSizes);
+                Assert.That(
+                    allSizes.OpaqueCandidateTriangleCount, Is.Zero,
+                    "All Sizes must consult the faded level");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
-        /// the optimizer component's serialized mip cap set when requested.
+        /// the optimizer component's serialized mip cap and minimum
+        /// size set when requested.
         /// Follows the streaming-clone arm's shape: verified seams, manual
         /// teardown, and the barrier run through the production entry.
         /// </summary>
         private static AmusePlatformFinishState RunMipPolicyArm(
             Texture2D mainTex,
             string armName,
-            int? maxMipLevel)
+            int? maxMipLevel,
+            int? minTextureSize = null)
         {
             var root = new GameObject("AMUSE mip policy " + armName);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-                FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
             if (maxMipLevel.HasValue)
             {
-                var serialized = new SerializedObject(component);
-                serialized
-                    .FindProperty("_preserveTransparencyMaxMipLevel")
+                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
                     .intValue = maxMipLevel.Value;
-                serialized.ApplyModifiedProperties();
             }
+
+            if (minTextureSize.HasValue)
+            {
+                serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                    .intValue = minTextureSize.Value;
+            }
+
+            serialized.ApplyModifiedProperties();
 
             Material material = null;
             Mesh mesh = null;
