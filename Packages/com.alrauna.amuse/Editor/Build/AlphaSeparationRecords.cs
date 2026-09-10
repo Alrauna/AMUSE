@@ -71,6 +71,14 @@ namespace Alrauna.Amuse.Editor.Build
         /// fully described by what was proven.</summary>
         SlotBindingAbsentFromEvidence,
 
+        /// <summary>The user's minimum opaque coverage policy gates
+        /// this split: the slot's proven-opaque triangle share is
+        /// below the configured percentage, so the extra draw call is
+        /// not worth the GPU win. This is a policy refusal, not a
+        /// proof fact: the classification is untouched, and a lower
+        /// setting would let the same proof split.</summary>
+        OpaqueCoverageBelowMinimum,
+
         // --- Renderer-scoped members. Applied to all candidate slots of one
         // renderer and to nothing else: never to that renderer's alpha
         // analysis, never to another renderer.
