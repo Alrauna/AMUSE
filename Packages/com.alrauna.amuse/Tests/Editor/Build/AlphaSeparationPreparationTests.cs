@@ -40,6 +40,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE prepared candidate");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -101,6 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE prepared without mutation");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -146,6 +148,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE no candidate");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
 
@@ -189,6 +192,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE already opaque");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -250,6 +254,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE no split no clone");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -291,6 +296,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // Baseline: unanimated, the slot converts.
             var baselineRoot = new GameObject("AMUSE zwrite unanimated");
             baselineRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(baselineRoot);
             Material baselineMaterial = null;
             Mesh baselineMesh = null;
             AmusePlatformFinishState baseline = null;
@@ -325,6 +331,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // unaffected.
             var refusedRoot = new GameObject("AMUSE zwrite animated to 0");
             refusedRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(refusedRoot);
             Material refusedMaterial = null;
             Mesh refusedMesh = null;
             AnimationClip refusedClip = null;
@@ -380,6 +387,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // (b) Animated to the serialized default: the slot prepares.
             var preparedRoot = new GameObject("AMUSE zwrite animated to 1");
             preparedRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(preparedRoot);
             Material preparedMaterial = null;
             Mesh preparedMesh = null;
             AnimationClip preparedClip = null;
@@ -443,6 +451,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mixed family slot");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
             Material lilToon = null;
             Mesh mesh = null;
@@ -537,6 +546,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE lilToon sibling");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
             Material lilToon = null;
             Mesh mesh = null;
@@ -623,6 +633,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE shared source dedup");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -685,6 +696,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE overwrite before conversion");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AnimationClip clip = null;
@@ -790,6 +802,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE shared source per renderer");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh meshA = null;
             Mesh meshB = null;
@@ -905,6 +918,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout conversion candidate");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -1081,6 +1095,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var root = new GameObject(
                     "AMUSE poiyomi nonidentity st content decided");
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 Material material = null;
                 Mesh mesh = null;
                 AmusePlatformFinishState amuse = null;
@@ -1183,6 +1198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var root = new GameObject(
                     "AMUSE poiyomi nonidentity st migrates");
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 Material material = null;
                 Mesh mesh = null;
                 AmusePlatformFinishState amuse = null;
@@ -1274,6 +1290,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st animated default");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AnimationClip clip = null;
@@ -1352,6 +1369,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st non singleton");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AnimationClip clip = null;
@@ -1428,6 +1446,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st source preserved");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -1838,6 +1857,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE streaming clone candidate");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -1928,6 +1948,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var root = new GameObject("AMUSE generated texture e2e");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState state = null;
@@ -2047,27 +2068,124 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The component's "Preserve Transparency Minimum Texture Size"
+        /// policy scopes the opacity proof end to end. A 32x32 chain
+        /// that stays opaque through mip 1 and fades from its 8x8 level
+        /// proves its triangle under a minimum size of 9, because the
+        /// fade leaves the consulted levels. The same chain under a
+        /// minimum size of 8 consults the faded level and stops. A
+        /// minimum size above the base width consults nothing and
+        /// converts nothing. All Sizes restores the full chain, so the
+        /// fade stops the proof again.
+        /// <para>
+        /// Falsifies a minimum size that the build accepts but ignores,
+        /// and a minimum size that waives the consulted faded levels.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void PreserveTransparencySizePolicyScopesTheProofEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // 32x32 base: every level opaque except mip 2 and
+                // coarser, which are fully transparent.
+                var earlyHole = fixtures.ImportExplicitMipmapTexture(
+                    "size_policy_early_hole",
+                    32,
+                    mip => mip >= 2 ? (byte)0 : (byte)255);
+
+                // A minimum size of 9 consults the 32x32 and 16x16
+                // levels only. The fade at mip 2 leaves the proof
+                // scope, so the triangle moves.
+                var capped = RunMipPolicyArm(
+                    earlyHole, "size cap 9", null, 9);
+                Assert.That(
+                    capped.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the capped arm must resolve");
+                Assert.That(
+                    capped.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "a fade inside the size-ignored levels must not " +
+                    "stop the proof");
+                Assert.That(
+                    capped.Separation, Is.Not.Null,
+                    "the size-capped proof must prepare a conversion");
+
+                // A minimum size of 8 also consults the faded 8x8
+                // level, so the proof must stop.
+                var consulted = RunMipPolicyArm(
+                    earlyHole, "size cap 8", null, 8);
+                Assert.That(
+                    consulted.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a fade inside the consulted levels must stop " +
+                    "the proof");
+                Assert.That(
+                    consulted.Separation, Is.Null,
+                    "the size policy limits scope. It never waives " +
+                    "the consulted levels");
+
+                // The 32x32 texture is below a 33 minimum on every
+                // level. Nothing is consulted and nothing converts.
+                var below = RunMipPolicyArm(
+                    earlyHole, "size below minimum", null, 33);
+                Assert.That(
+                    below.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a texture below the minimum size must not " +
+                    "convert");
+                Assert.That(
+                    below.Separation, Is.Null,
+                    "a texture below the minimum size must prepare " +
+                    "nothing");
+
+                // All Sizes restores the full chain: the fade is
+                // consulted and the proof stops.
+                var allSizes = RunMipPolicyArm(
+                    earlyHole, "size all sizes", null,
+                    FixtureProofScope.AllSizes);
+                Assert.That(
+                    allSizes.OpaqueCandidateTriangleCount, Is.Zero,
+                    "All Sizes must consult the faded level");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
-        /// the optimizer component's serialized mip cap set when requested.
+        /// the optimizer component's serialized mip cap and minimum
+        /// size set when requested.
         /// Follows the streaming-clone arm's shape: verified seams, manual
         /// teardown, and the barrier run through the production entry.
         /// </summary>
         private static AmusePlatformFinishState RunMipPolicyArm(
             Texture2D mainTex,
             string armName,
-            int? maxMipLevel)
+            int? maxMipLevel,
+            int? minTextureSize = null)
         {
             var root = new GameObject("AMUSE mip policy " + armName);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
             if (maxMipLevel.HasValue)
             {
-                var serialized = new SerializedObject(component);
-                serialized
-                    .FindProperty("_preserveTransparencyMaxMipLevel")
+                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
                     .intValue = maxMipLevel.Value;
-                serialized.ApplyModifiedProperties();
             }
+
+            if (minTextureSize.HasValue)
+            {
+                serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                    .intValue = minTextureSize.Value;
+            }
+
+            serialized.ApplyModifiedProperties();
 
             Material material = null;
             Mesh mesh = null;
@@ -2334,6 +2452,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var root = new GameObject(
                     "AMUSE transparent clone contract");
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 Material material = null;
                 Mesh mesh = null;
                 AmusePlatformFinishState amuse = null;
@@ -2909,6 +3028,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 };
                 scenario.Source.SetTexture("_MainTex", texture);
                 scenario.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(scenario.root);
 
                 scenario.mesh = new Mesh
                 {
@@ -3183,6 +3303,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .CreateTransparentConversionMaterial(),
                 };
                 arm.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(arm.root);
                 arm.CutoutMaterial.SetTexture("_MainTex", opaqueTexture);
                 arm.TransparentMaterial.SetTexture(
                     "_MainTex", opaqueTexture);
@@ -3324,6 +3445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var root = new GameObject(
                         "AMUSE transparent unknown " + unknownCase.Label);
                     root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                    FixtureProofScope.PinAllSizes(root);
                     Material material = null;
                     Mesh mesh = null;
                     AmusePlatformFinishState amuse = null;
@@ -3590,6 +3712,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .CreateTransparentConversionMaterial(),
                 };
                 fixture.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
 
@@ -4039,6 +4162,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var root = new GameObject(rootName);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 Material material = null;
                 Mesh meshFirst = null;
                 Mesh meshSecond = null;
@@ -4143,6 +4267,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixtures = new LilToonCutoutConversionFixtures();
             var root = new GameObject("AMUSE cutout refused sibling");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material convertible = null;
             Material bareCutout = null;
             Mesh convertibleMesh = null;
@@ -4261,6 +4386,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout poiyomi siblings");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
             Material cutout = null;
             Mesh mesh = null;
@@ -4366,6 +4492,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mixed poiyomi cutout slot");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
             Material cutout = null;
             Mesh mesh = null;
@@ -4473,6 +4600,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unsupported family closure");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             Material cutout = null;
             Material outline = null;
             Mesh blockedMesh = null;
@@ -4990,6 +5118,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Material = LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
                 };
                 fixture.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
 

@@ -64,5 +64,85 @@ namespace Alrauna.Amuse.Tests.Editor
                 UnityEngine.Object.DestroyImmediate(go);
             }
         }
+
+        [Test]
+        public void DefaultPreserveTransparencyMinTextureSizeIs128()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.PreserveTransparencyMinTextureSize,
+                    Is.EqualTo(128));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void PreserveTransparencyMinTextureSizeSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_preserveTransparencyMinTextureSize");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 512;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.PreserveTransparencyMinTextureSize,
+                    Is.EqualTo(512));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultMinimumOpaqueCoveragePercentIs25()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.MinimumOpaqueCoveragePercent, Is.EqualTo(25));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void MinimumOpaqueCoveragePercentSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_minimumOpaqueCoveragePercent");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 40;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.MinimumOpaqueCoveragePercent, Is.EqualTo(40));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
     }
 }
