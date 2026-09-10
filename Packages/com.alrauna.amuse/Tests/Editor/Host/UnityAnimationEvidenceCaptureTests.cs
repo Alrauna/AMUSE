@@ -47,6 +47,25 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             _fixtureFamilies =
                 new Dictionary<Material, CapturedAlphaMaterialFamily>();
 
+        [SetUp]
+        public void SetUp()
+        {
+            if (TestContext.CurrentContext.Test.Name.StartsWith(
+                    "OutOfRangeSlotBinding", StringComparison.Ordinal))
+            {
+                EnsureOpaqueTestShader();
+            }
+        }
+
+        private static void EnsureOpaqueTestShader()
+        {
+            if (Shader.Find("Hidden/Alrauna/AmuseTests/Opaque") == null)
+            {
+                UnattestedShader(
+                    "Opaque.shader", "Hidden/Alrauna/AmuseTests/Opaque");
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -1614,6 +1633,48 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     out _));
         }
 
+        [Test]
+        public void OutOfRangeSlotBindingFailsClosedByDefault()
+        {
+            var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
+            var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
+            {
+                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
+            });
+            var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                "Renderer",
+                new[] { clip },
+                new[] { slotMat },
+                ValidGraph(),
+                ignoreOutOfRangeSlots: false);
+
+            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
+            Assert.That(evidence.IgnoredOutOfRangeSlots, Is.Empty);
+        }
+
+        [Test]
+        public void OutOfRangeSlotBindingIsIgnoredWhenToleranceEnabled()
+        {
+            var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
+            var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
+            {
+                new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
+            });
+            var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                "Renderer",
+                new[] { clip },
+                new[] { slotMat },
+                ValidGraph(),
+                ignoreOutOfRangeSlots: true);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.IgnoredOutOfRangeSlots, Is.EquivalentTo(new[] { 1 }));
+        }
+
         private static bool ObserveFiniteExact(AnimationCurve curve)
         {
             var clip = new AnimationClip { name = "finite exact probe" };
@@ -1875,6 +1936,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return new CommittedControllerGraphResult(
                 AvatarAnimationRefusal.None,
                 Array.Empty<CommittedLayer>());
+        }
+
+        private static CommittedControllerGraphResult ValidGraph()
+        {
+            return EmptyGraph();
         }
 
         private static CommittedLayer Layer(

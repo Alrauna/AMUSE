@@ -127,7 +127,8 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
             out IReadOnlyList<Material> admittedLiveMaterials,
-            ClosedAlphaMaterialCapturer capturer = null)
+            ClosedAlphaMaterialCapturer capturer = null,
+            bool ignoreOutOfRangeSlots = false)
         {
             return CaptureGraph(
                 rendererPath,
@@ -136,7 +137,8 @@ namespace Alrauna.Amuse.Editor.Host
                 bindings,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
-                out admittedLiveMaterials);
+                out admittedLiveMaterials,
+                ignoreOutOfRangeSlots);
         }
 
         // Public-project vendor fixtures exercise verified frontend equations but
@@ -150,7 +152,8 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            out IReadOnlyList<Material> admittedLiveMaterials)
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            bool ignoreOutOfRangeSlots = false)
         {
             return CaptureObserved(
                 rendererPath,
@@ -159,7 +162,26 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 selectRequest,
                 capturer,
-                out admittedLiveMaterials);
+                out admittedLiveMaterials,
+                ignoreOutOfRangeSlots);
+        }
+
+        internal static CapturedAnimationEvidence CaptureObservedForTests(
+            string rendererPath,
+            IReadOnlyList<LiveClipObservation> observations,
+            IReadOnlyList<Material> currentSlots,
+            CommittedControllerGraphResult graph,
+            bool ignoreOutOfRangeSlots = false)
+        {
+            return CaptureObserved(
+                rendererPath,
+                observations,
+                currentSlots,
+                graph,
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
+                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                out _,
+                ignoreOutOfRangeSlots);
         }
 
         internal static CapturedAnimationEvidence CaptureGraphForTests(
@@ -169,7 +191,8 @@ namespace Alrauna.Amuse.Editor.Host
             IPlatformAnimatorBindings bindings,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            out IReadOnlyList<Material> admittedLiveMaterials)
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            bool ignoreOutOfRangeSlots = false)
         {
             return CaptureGraph(
                 rendererPath,
@@ -178,7 +201,8 @@ namespace Alrauna.Amuse.Editor.Host
                 bindings,
                 selectRequest,
                 capturer,
-                out admittedLiveMaterials);
+                out admittedLiveMaterials,
+                ignoreOutOfRangeSlots);
         }
 
         private static CapturedAnimationEvidence CaptureGraph(
@@ -188,7 +212,8 @@ namespace Alrauna.Amuse.Editor.Host
             IPlatformAnimatorBindings bindings,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            out IReadOnlyList<Material> admittedLiveMaterials)
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            bool ignoreOutOfRangeSlots = false)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -219,7 +244,8 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 selectRequest,
                 capturer,
-                out admittedLiveMaterials);
+                out admittedLiveMaterials,
+                ignoreOutOfRangeSlots);
         }
 
         private static CapturedAnimationEvidence CaptureObserved(
@@ -229,7 +255,8 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
-            out IReadOnlyList<Material> admittedLiveMaterials)
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            bool ignoreOutOfRangeSlots = false)
         {
             // Assigned once here so that EVERY closure-failure return below hands
             // back an empty list rather than a partial one. The real pairing is
@@ -273,6 +300,7 @@ namespace Alrauna.Amuse.Editor.Host
                     hasUnnormalizedDirectBlendTree,
                     hasAdditiveLayer);
             }
+            var ignoredOutOfRangeSlots = new HashSet<int>();
 
             var admitted = new List<Material>();
             var materialIndices = new Dictionary<Material, int>(
@@ -314,6 +342,12 @@ namespace Alrauna.Amuse.Editor.Host
 
                     if (slot >= currentSlots.Count)
                     {
+                        if (ignoreOutOfRangeSlots)
+                        {
+                            ignoredOutOfRangeSlots.Add(slot);
+                            continue;
+                        }
+
                         return Failed(
                             MaterialDependencyClosureFailure.SlotOutOfRange);
                     }
@@ -443,7 +477,7 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     var indices = new List<int>();
                     if (LiveAnimationObservation.TryParseMaterialSlotBinding(
-                            binding.PropertyName, out _))
+                            binding.PropertyName, out var slot))
                     {
                         // Same condition as admission above, so the immutable
                         // copy can never disagree with what was admitted. A
@@ -452,7 +486,8 @@ namespace Alrauna.Amuse.Editor.Host
                         // empty index list, which would read as "this renderer
                         // has a swap that admits nothing".
                         if (!AddressesAnalyzedRenderer(
-                                binding.Path, rendererPath))
+                                binding.Path, rendererPath) ||
+                            (slot >= currentSlots.Count && ignoreOutOfRangeSlots))
                         {
                             continue;
                         }
@@ -486,6 +521,9 @@ namespace Alrauna.Amuse.Editor.Host
             // capturedByIndex.
             admittedLiveMaterials = Array.AsReadOnly(admitted.ToArray());
 
+            var orderedIgnored = new List<int>(ignoredOutOfRangeSlots);
+            orderedIgnored.Sort();
+
             return new CapturedAnimationEvidence(
                 MaterialDependencyClosureFailure.None,
                 alphaRelevanceRequest,
@@ -493,7 +531,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturedByIndex,
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
-                hasAdditiveLayer);
+                hasAdditiveLayer,
+                orderedIgnored);
         }
 
         /// <summary>

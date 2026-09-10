@@ -109,6 +109,15 @@ namespace Alrauna.Amuse.Editor
                 index,
                 options);
             property.intValue = selected == 0 ? -1 : selected - 1;
+            EditorGUILayout.PropertyField(
+                serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
+                new GUIContent(
+                    "Ignore Out-of-Range Material Slots",
+                    "Some animation files animate material slots that do not exist on this mesh. " +
+                    "By default, AMUSE refuses to optimize this mesh to prevent visual errors. " +
+                    "Turn this setting on to ignore these extra slot animations and optimize the valid slots.\n\n" +
+                    "Risk: If an animation later changes this mesh to have more material slots, " +
+                    "or if another tool relies on the untouched slot count, visual errors can occur."));
             serializedObject.ApplyModifiedProperties();
         }
 

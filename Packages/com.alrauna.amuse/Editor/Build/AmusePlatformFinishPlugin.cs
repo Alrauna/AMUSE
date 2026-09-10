@@ -426,6 +426,8 @@ namespace Alrauna.Amuse.Editor.Build
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             var maxMipLevel = ProofMipCapFrom(optimizer);
+            var ignoreOutOfRangeSlots =
+                optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
 
 
             foreach (var renderer in context.AvatarRootObject
@@ -471,7 +473,8 @@ namespace Alrauna.Amuse.Editor.Build
                         graph,
                         state.AnimatorBindings,
                         out admittedLiveMaterials,
-                        effectiveCapturer)
+                        effectiveCapturer,
+                        ignoreOutOfRangeSlots)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
                         renderer.sharedMaterials,
@@ -479,7 +482,8 @@ namespace Alrauna.Amuse.Editor.Build
                         state.AnimatorBindings,
                         selectRequest,
                         capturer,
-                        out admittedLiveMaterials);
+                        out admittedLiveMaterials,
+                        ignoreOutOfRangeSlots);
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
                         ? (CapturedAlphaMaterialSemanticsResolver)
