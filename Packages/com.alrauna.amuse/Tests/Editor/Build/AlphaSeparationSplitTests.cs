@@ -580,6 +580,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE split triples");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -691,6 +692,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE split sibling refuses");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -778,6 +780,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE split bounds");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -859,6 +862,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE split indices");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
