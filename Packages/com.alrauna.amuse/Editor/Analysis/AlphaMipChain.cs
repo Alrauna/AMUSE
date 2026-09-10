@@ -109,6 +109,41 @@ namespace Alrauna.Amuse.Editor.Analysis
             return new AlphaMipChain(prefix);
         }
 
+        /// <summary>
+        /// The largest level index whose width and height are both at
+        /// or above <paramref name="minimumSize"/>, or -1 when even
+        /// mip 0 is smaller. Each level halves, so the qualifying
+        /// levels always form a prefix of the chain and the returned
+        /// index caps the proof's consulted prefix. This is the pure
+        /// rule behind the user's "Preserve Transparency Minimum
+        /// Texture Size" policy: the smaller dimension governs.
+        /// </summary>
+        internal int MaximumLevelAtOrAbove(int minimumSize)
+        {
+            if (minimumSize < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(minimumSize),
+                    "The minimum size must be at least one texel.");
+            }
+
+            var last = -1;
+            for (var level = 0; level < _levels.Length; level++)
+            {
+                if (_levels[level].Width >= minimumSize &&
+                    _levels[level].Height >= minimumSize)
+                {
+                    last = level;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return last;
+        }
+
         private static int Halved(int size)
         {
             var halved = size >> 1;
