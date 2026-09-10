@@ -188,5 +188,48 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => chain.LimitedTo(-1));
         }
+
+        [Test]
+        public void MaximumLevelAtOrAboveReturnsTheLastQualifyingLevel()
+        {
+            var chain = new AlphaMipChain(new[]
+            {
+                Level(32, 32, 1), Level(16, 16, 2), Level(8, 8, 3),
+                Level(4, 4, 4), Level(2, 2, 5), Level(1, 1, 6),
+            });
+
+            Assert.That(chain.MaximumLevelAtOrAbove(8), Is.EqualTo(2));
+            Assert.That(chain.MaximumLevelAtOrAbove(9), Is.EqualTo(1));
+            Assert.That(chain.MaximumLevelAtOrAbove(32), Is.EqualTo(0));
+            Assert.That(chain.MaximumLevelAtOrAbove(1), Is.EqualTo(5));
+        }
+
+        [Test]
+        public void MaximumLevelAtOrAboveReturnsMinusOneWhenMipZeroIsBelowTheMinimum()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(8, 8, 1), Level(4, 4, 2) });
+
+            Assert.That(chain.MaximumLevelAtOrAbove(16), Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void MaximumLevelAtOrAboveLetsTheSmallerDimensionGovern()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(32, 8, 1), Level(16, 4, 2) });
+
+            Assert.That(chain.MaximumLevelAtOrAbove(8), Is.EqualTo(0));
+            Assert.That(chain.MaximumLevelAtOrAbove(9), Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void MaximumLevelAtOrAboveRejectsNonPositiveSizes()
+        {
+            var chain = new AlphaMipChain(new[] { Level(2, 2, 1) });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => chain.MaximumLevelAtOrAbove(0));
+        }
     }
 }
