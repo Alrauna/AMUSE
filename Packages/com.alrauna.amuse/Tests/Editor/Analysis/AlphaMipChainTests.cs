@@ -224,6 +224,16 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
+        public void MaximumLevelAtOrAboveLetsTheWidthGovernOnTallChains()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(8, 32, 1), Level(4, 16, 2) });
+
+            Assert.That(chain.MaximumLevelAtOrAbove(8), Is.EqualTo(0));
+            Assert.That(chain.MaximumLevelAtOrAbove(9), Is.EqualTo(-1));
+        }
+
+        [Test]
         public void MaximumLevelAtOrAboveRejectsNonPositiveSizes()
         {
             var chain = new AlphaMipChain(new[] { Level(2, 2, 1) });

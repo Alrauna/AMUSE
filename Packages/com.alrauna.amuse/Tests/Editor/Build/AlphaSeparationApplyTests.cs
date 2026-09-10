@@ -1850,9 +1850,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void CoverageAtTheMinimumPreparesTheSplitCandidate()
         {
-            // Default coverage is 25. The fixture's 50 percent share
-            // sits above it, and equality proceeds by the integer
-            // rule. This arm pins the default-driven behavior.
+            // The fixture's split candidate carries a 50 percent opaque
+            // share, so the pin below makes the threshold exact, and
+            // equality proceeds by the integer rule.
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE coverage at minimum");
             var optimizer =
@@ -1860,6 +1860,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(optimizer);
             serialized.FindProperty("_preserveTransparencyMinTextureSize")
                 .intValue = FixtureProofScope.AllSizes;
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 50;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
@@ -1896,8 +1898,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             AlphaSeparationSlotRefusal
                                 .OpaqueCoverageBelowMinimum),
                         Is.Zero,
-                        "the 50 percent split must prepare at the 25 " +
-                        "percent default");
+                        "the 50 percent split must prepare at the 50 " +
+                        "percent minimum");
                     Assert.That(
                         probe.Decision.HasMutation, Is.True,
                         "the split at or above the minimum must apply");
