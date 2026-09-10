@@ -103,6 +103,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 new OverrideTemporaryDirectoryScope(PersistenceTempFolder);
             var root = new GameObject("AMUSE persistence");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -298,6 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 new OverrideTemporaryDirectoryScope(PersistenceTempFolder);
             var root = new GameObject("AMUSE registry resolution");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -406,6 +408,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE source preservation");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var lilFixtures = new LilToonTransparentConversionFixtures();

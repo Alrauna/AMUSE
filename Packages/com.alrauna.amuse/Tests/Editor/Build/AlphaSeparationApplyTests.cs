@@ -60,6 +60,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var root = Track(new GameObject(name));
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             return root;
         }
 
@@ -776,6 +777,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE wholly opaque apply");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -823,6 +825,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE swap mapping");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -922,6 +925,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unmapped value");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1025,6 +1029,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var marker = new MarkerBindingsScope("AMUSE marked swap");
             var root = new GameObject("AMUSE marker clip");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1119,6 +1124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE foreign replacement");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -1172,6 +1178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mapped replacement");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1261,6 +1268,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE late invalidated split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1347,6 +1355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE selective sweep");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1455,6 +1464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE validation coverage");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -1574,6 +1584,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE identity split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -1695,6 +1706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE ignored split collision");
             var optimizer = root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             var serialized = new SerializedObject(optimizer);
             serialized.FindProperty("_ignoreOutOfRangeMaterialSlots").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -1793,6 +1805,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ApplyCutoutPersistenceFolder);
             var root = new GameObject("AMUSE cutout full artifact");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             var fixtures = new LilToonCutoutConversionFixtures();
             try
@@ -2013,6 +2026,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout appended slot");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -2191,6 +2205,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout map to self");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -2478,6 +2493,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "AMUSE transparent parity " +
                     (withTransparentSibling ? "sibling" : "control"));
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 try
                 {
                     // The cutout + Poiyomi fixture: exactly the proven
