@@ -28,6 +28,9 @@ namespace Alrauna.Amuse.Runtime
         [SerializeField]
         private int _preserveTransparencyMaxMipLevel = 4;
 
+        [SerializeField]
+        private bool _ignoreOutOfRangeMaterialSlots;
+
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
         /// treats a disabled component exactly like an absent one: nothing
@@ -42,5 +45,14 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int PreserveTransparencyMaxMipLevel =>
             _preserveTransparencyMaxMipLevel;
+
+        /// <summary>
+        /// When true, AMUSE ignores animation bindings that target material
+        /// slot indices outside the mesh material count. When false, an
+        /// out-of-range slot animation causes the renderer to refuse
+        /// optimization.
+        /// </summary>
+        public bool IgnoreOutOfRangeMaterialSlots =>
+            _ignoreOutOfRangeMaterialSlots;
     }
 }
