@@ -494,7 +494,8 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
-            var fields = GatherAlphaFields(snapshot.Materials, int.MaxValue);
+            var fields =
+                GatherAlphaFields(snapshot.Materials, int.MaxValue, 1);
             return Analyze(
                 snapshot,
                 resolveSemantics,
@@ -575,19 +576,28 @@ namespace Alrauna.Amuse.Editor.Host
         /// <paramref name="maxMipLevel"/> are the user's accepted
         /// minification range and leave the proof's scope, so no consumer
         /// can consult them. The stored evidence keeps its full chains;
-        /// only the handed-out proof scope is capped.
+        /// only the handed-out proof scope is capped. The minimum
+        /// texture size drops a texture from the proof entirely when
+        /// even mip 0 is smaller than the size.
         /// </summary>
         internal static IReadOnlyDictionary<
             (TextureSourceId source, TextureChannel channel),
             AlphaMipChain> GatherAlphaFields(
                 IReadOnlyList<CapturedAlphaMaterial> materials,
-                int maxMipLevel)
+                int maxMipLevel,
+                int minTextureSize)
         {
             if (maxMipLevel < 0)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(maxMipLevel),
                     "The mip cap must be a level index of at least zero.");
+            }
+            if (minTextureSize < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(minTextureSize),
+                    "The minimum texture size must be at least one texel.");
             }
 
             var fields = new Dictionary<
@@ -606,6 +616,20 @@ namespace Alrauna.Amuse.Editor.Host
                         continue;
                     }
 
+                    // Both channels of one texture share level
+                    // dimensions, so one size scope governs both.
+                    var sizeScope =
+                        TextureSizeScope(texture, minTextureSize);
+                    if (sizeScope < 0)
+                    {
+                        // The texture is below the user's minimum
+                        // size: no level is consulted, the field stays
+                        // absent, and every triangle over it stays
+                        // Unknown through MissingTextureEvidence.
+                        continue;
+                    }
+
+                    var cap = Math.Min(maxMipLevel, sizeScope);
                     var key =
                         (texture.SourceIdentity, TextureChannel.Alpha);
                     if (texture.HasAlphaChannel &&
@@ -613,7 +637,7 @@ namespace Alrauna.Amuse.Editor.Host
                     {
                         fields.Add(
                             key,
-                            texture.AlphaChannel.LimitedTo(maxMipLevel));
+                            texture.AlphaChannel.LimitedTo(cap));
                     }
 
                     var redKey =
@@ -623,12 +647,31 @@ namespace Alrauna.Amuse.Editor.Host
                     {
                         fields.Add(
                             redKey,
-                            texture.RedChannel.LimitedTo(maxMipLevel));
+                            texture.RedChannel.LimitedTo(cap));
                     }
                 }
             }
 
             return fields;
+        }
+
+        private static int TextureSizeScope(
+            CapturedTextureEvidence texture,
+            int minTextureSize)
+        {
+            if (texture.HasAlphaChannel)
+            {
+                return texture.AlphaChannel.MaximumLevelAtOrAbove(
+                    minTextureSize);
+            }
+
+            if (texture.HasRedChannel)
+            {
+                return texture.RedChannel.MaximumLevelAtOrAbove(
+                    minTextureSize);
+            }
+
+            return -1;
         }
 
         /// <summary>

@@ -60,6 +60,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var root = Track(new GameObject(name));
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             return root;
         }
 
@@ -776,6 +777,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE wholly opaque apply");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -823,6 +825,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE swap mapping");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -922,6 +925,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unmapped value");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1025,6 +1029,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var marker = new MarkerBindingsScope("AMUSE marked swap");
             var root = new GameObject("AMUSE marker clip");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1119,6 +1124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE foreign replacement");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
@@ -1172,6 +1178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mapped replacement");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             try
@@ -1261,6 +1268,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE late invalidated split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1347,6 +1355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE selective sweep");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1455,6 +1464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE validation coverage");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -1574,6 +1584,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE identity split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -1695,6 +1706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE ignored split collision");
             var optimizer = root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             var serialized = new SerializedObject(optimizer);
             serialized.FindProperty("_ignoreOutOfRangeMaterialSlots").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
@@ -1763,6 +1775,224 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void CoverageBelowMinimumRefusesTheSplitCandidate()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE coverage below minimum");
+            var optimizer =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                .intValue = FixtureProofScope.AllSizes;
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 60;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "coverage_low"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    // Mirror the ignored-slot test's controller setup.
+                    // The gate is policy over the plan, not animation
+                    // evidence, so an empty tracked clip suffices.
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE coverage empty",
+                    });
+                    controller = NewController(
+                        root, "AMUSE coverage graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum),
+                        Is.EqualTo(1),
+                        "the 50 percent split must refuse below a 60 " +
+                        "percent minimum");
+                    Assert.That(
+                        probe.Decision.HasMutation, Is.False,
+                        "the coverage-refused candidate must produce " +
+                        "no mesh or material write");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void CoverageAtTheMinimumPreparesTheSplitCandidate()
+        {
+            // The fixture's split candidate carries a 50 percent opaque
+            // share, so the pin below makes the threshold exact, and
+            // equality proceeds by the integer rule.
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE coverage at minimum");
+            var optimizer =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                .intValue = FixtureProofScope.AllSizes;
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 50;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "coverage_at"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE coverage empty",
+                    });
+                    controller = NewController(
+                        root, "AMUSE coverage at graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum),
+                        Is.Zero,
+                        "the 50 percent split must prepare at the 50 " +
+                        "percent minimum");
+                    Assert.That(
+                        probe.Decision.HasMutation, Is.True,
+                        "the split at or above the minimum must apply");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void WhollyOpaqueCandidatesNeverRefuseForCoverage()
+        {
+            // A 100 percent minimum still admits the wholly opaque
+            // submesh and refuses only the mixed one.
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE coverage wholly opaque");
+            var optimizer =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                .intValue = FixtureProofScope.AllSizes;
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 100;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "coverage_wholly"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    // The fixture contract: submesh 0 is the uniformly
+                    // opaque candidate on a constant opaque material,
+                    // submesh 1 the mixed split over the split texture.
+                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests
+                            .CreateOpaqueAndSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, opaque, split);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE coverage empty",
+                    });
+                    controller = NewController(
+                        root, "AMUSE wholly opaque coverage graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum),
+                        Is.EqualTo(1),
+                        "only the mixed submesh may refuse for " +
+                        "coverage");
+                    Assert.That(
+                        probe.Decision.HasMutation, Is.True,
+                        "the wholly opaque submesh must still convert " +
+                        "at a 100 percent minimum");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         // --- Task 5 integration coverage: the cutout family end to end ------
 
         /// <summary>
@@ -1793,6 +2023,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ApplyCutoutPersistenceFolder);
             var root = new GameObject("AMUSE cutout full artifact");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             var fixtures = new LilToonCutoutConversionFixtures();
             try
@@ -2013,6 +2244,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout appended slot");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -2191,6 +2423,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout map to self");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -2478,6 +2711,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "AMUSE transparent parity " +
                     (withTransparentSibling ? "sibling" : "control"));
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
                 try
                 {
                     // The cutout + Poiyomi fixture: exactly the proven

@@ -28,6 +28,32 @@ namespace Alrauna.Amuse.Runtime
         [SerializeField]
         private int _preserveTransparencyMaxMipLevel = 4;
 
+        /// <summary>
+        /// The smallest texture size the opacity proof consults, in
+        /// texels. The value -1 means every size. The proof stops
+        /// consulting a texture's mip chain at the level whose width or
+        /// height falls below this size. A texture already smaller than
+        /// this size has no consulted levels and never converts. The
+        /// default of 128 is a rule of thumb that matches normal
+        /// viewing distances. The inspector shows it as "Preserve
+        /// Transparency Minimum Texture Size".
+        /// </summary>
+        [SerializeField]
+        private int _preserveTransparencyMinTextureSize = 128;
+
+        /// <summary>
+        /// The smallest share of proven-opaque triangles a mixed
+        /// submesh needs before AMUSE splits it onto a separate opaque
+        /// material. Each split adds one runtime draw call, so a small
+        /// share can cost more CPU than it saves GPU work. The value 0
+        /// always splits when at least one triangle is proven opaque.
+        /// The default of 25 percent is a rule of thumb. The inspector
+        /// shows it as "Minimum Opaque Coverage Percentage".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _minimumOpaqueCoveragePercent = 25;
+
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots;
 
@@ -45,6 +71,21 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int PreserveTransparencyMaxMipLevel =>
             _preserveTransparencyMaxMipLevel;
+
+        /// <summary>
+        /// The minimum texture size as stored: -1 for every size, else
+        /// the smallest consulted size in texels.
+        /// </summary>
+        public int PreserveTransparencyMinTextureSize =>
+            _preserveTransparencyMinTextureSize;
+
+        /// <summary>
+        /// The smallest proven-opaque triangle share, in percent, a
+        /// mixed submesh needs before AMUSE splits it. The value 0
+        /// splits whenever at least one triangle is proven opaque.
+        /// </summary>
+        public int MinimumOpaqueCoveragePercent =>
+            _minimumOpaqueCoveragePercent;
 
         /// <summary>
         /// When true, AMUSE ignores animation bindings that target material
