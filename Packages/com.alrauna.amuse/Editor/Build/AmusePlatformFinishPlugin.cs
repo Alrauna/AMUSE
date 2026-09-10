@@ -426,6 +426,7 @@ namespace Alrauna.Amuse.Editor.Build
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             var maxMipLevel = ProofMipCapFrom(optimizer);
+            var minTextureSize = MinTextureSizeFrom(optimizer);
             var ignoreOutOfRangeSlots =
                 optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
 
@@ -490,7 +491,8 @@ namespace Alrauna.Amuse.Editor.Build
                             UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
                         : null);
                 var resolved = ResolveRuntimeStates(
-                    rendererPath, evidence, effectiveResolver, maxMipLevel);
+                    rendererPath, evidence, effectiveResolver, maxMipLevel,
+                    minTextureSize);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -570,6 +572,25 @@ namespace Alrauna.Amuse.Editor.Build
 
             var stored = optimizer.PreserveTransparencyMaxMipLevel;
             return stored < 0 ? int.MaxValue : stored;
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Preserve Transparency Minimum Texture
+        /// Size" policy to the proof's minimum: a stored -1 (All
+        /// Sizes) becomes 1, which every level satisfies. A missing
+        /// component also maps to 1. The defensive read mirrors
+        /// <see cref="ProofMipCapFrom"/>.
+        /// </summary>
+        private static int MinTextureSizeFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 1;
+            }
+
+            var stored = optimizer.PreserveTransparencyMinTextureSize;
+            return stored < 1 ? 1 : stored;
         }
 
         /// <summary>
@@ -656,7 +677,8 @@ namespace Alrauna.Amuse.Editor.Build
                 string rendererPath,
                 CapturedAnimationEvidence evidence,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
-                int maxMipLevel = int.MaxValue)
+                int maxMipLevel = int.MaxValue,
+                int minTextureSize = 1)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -739,7 +761,8 @@ namespace Alrauna.Amuse.Editor.Build
             var slots = MaterialSlotsFor(evidence, rendererPath);
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
                 evidence.AdmittedMaterials,
-                maxMipLevel);
+                maxMipLevel,
+                minTextureSize);
             bool AlphaFields(
                 TextureSourceId source,
                 TextureChannel channel,
