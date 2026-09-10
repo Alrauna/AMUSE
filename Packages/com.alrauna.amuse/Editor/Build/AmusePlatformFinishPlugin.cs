@@ -427,6 +427,7 @@ namespace Alrauna.Amuse.Editor.Build
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             var maxMipLevel = ProofMipCapFrom(optimizer);
             var minTextureSize = MinTextureSizeFrom(optimizer);
+            var minimumOpaqueCoveragePercent = MinimumCoverageFrom(optimizer);
             var ignoreOutOfRangeSlots =
                 optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
 
@@ -514,7 +515,8 @@ namespace Alrauna.Amuse.Editor.Build
                             evidence,
                             admittedLiveMaterials,
                             poiyomiConversion,
-                            lilToonConversion);
+                            lilToonConversion,
+                            minimumOpaqueCoveragePercent);
                     }
                 }
 
@@ -591,6 +593,25 @@ namespace Alrauna.Amuse.Editor.Build
 
             var stored = optimizer.PreserveTransparencyMinTextureSize;
             return stored < 1 ? 1 : stored;
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Minimum Opaque Coverage Percentage"
+        /// policy to the gate: a stored value below zero is a defect
+        /// against the Range attribute, and the defensive read treats
+        /// it as 0, which always splits on at least one proven
+        /// triangle. The read mirrors <see cref="ProofMipCapFrom"/>.
+        /// </summary>
+        private static int MinimumCoverageFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 0;
+            }
+
+            var stored = optimizer.MinimumOpaqueCoveragePercent;
+            return stored < 0 ? 0 : stored;
         }
 
         /// <summary>
@@ -885,7 +906,8 @@ namespace Alrauna.Amuse.Editor.Build
             CapturedAnimationEvidence evidence,
             IReadOnlyList<Material> admittedLiveMaterials,
             VerifiedPoiyomiConversion poiyomiConversion,
-            VerifiedLilToonConversion lilToonConversion)
+            VerifiedLilToonConversion lilToonConversion,
+            int minimumOpaqueCoveragePercent)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -895,7 +917,8 @@ namespace Alrauna.Amuse.Editor.Build
                 evidence,
                 admittedLiveMaterials,
                 poiyomiConversion,
-                lilToonConversion);
+                lilToonConversion,
+                minimumOpaqueCoveragePercent);
             if (prepared == null)
             {
                 return;
