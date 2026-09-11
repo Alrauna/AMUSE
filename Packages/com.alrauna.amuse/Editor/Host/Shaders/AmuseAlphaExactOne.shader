@@ -17,10 +17,13 @@
 // holds exactly when alpha == 1.0, and alpha < 0.0 never holds, so the output
 // is byte for byte the former output.
 //
-// The three constants store exactly in the R8_UNorm target, whose write keeps
-// the byte nearest to value * 255: 1.0 stores 255, 0.0 stores 0, and
-// 1.0/255.0 stores 1. The output validator refuses any other byte, so a host
-// that quantized differently fails the capture instead of corrupting evidence.
+// The constants 1.0 and 0.0 store exactly in the R8_UNorm target. The
+// erased constant 1.0/255.0 stores 1 on a write that rounds to nearest,
+// and the inert bounds never reach it: the capability gate re-measures
+// the erased encoding once per AppDomain under active bounds. The claim
+// is narrow: the output validator refuses every byte outside the three
+// states, so a deviation that leaves the flag grid fails the capture
+// instead of corrupting evidence.
 //
 // GREEN carries the raw alpha and is a RESEARCH DIAGNOSTIC ONLY. Production
 // renders this shader into a GraphicsFormat.R8_UNorm target, which stores only
