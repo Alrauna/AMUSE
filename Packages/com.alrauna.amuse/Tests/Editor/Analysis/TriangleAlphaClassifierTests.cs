@@ -1058,5 +1058,153 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             alpha[y * 8 + x] = 0;
             return new AlphaTextureData(8, 8, alpha);
         }
+
+        private static TriangleAlphaOutcome ClassifyFullCover(
+            AlphaTextureData texture,
+            AlphaFilterMode filter,
+            int maxNoiseTexelPercent)
+        {
+            // A triangle whose UV0 footprint covers every texel of the
+            // 2x2 texture: the corner (1, 1) sits on the exact boundary
+            // x + y = 2, so the closed domain intersects all four texel
+            // cells and the scan consults all four.
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+            return TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                new AlphaSamplingSettings(filter, AlphaWrapMode.Clamp),
+                AlphaUvEnvelope.Zero,
+                maxNoiseTexelPercent);
+        }
+
+        [Test]
+        public void SparseErasedStrayProvesOpaqueUnderTheGate()
+        {
+            // Four consulted texels, one erased: 1 * 100 < 50 * 4 is
+            // true, so the stray substitutes and the triangle proves.
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DenseErasedNoiseRefusesUnderTheGate()
+        {
+            // Three erased among four: 3 * 100 < 50 * 4 is false, so
+            // erasure does not fire and the triangle stays unproven.
+            var bytes = new byte[]
+            {
+                255, AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void EqualityAtTheDensityBoundRefuses()
+        {
+            // Two erased among four consulted: 2 * 100 < 50 * 4 is
+            // false, so exact equality refuses. Kills >= in place of >.
+            var bytes = new byte[]
+            {
+                255, 255,
+                AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ZeroDensityKeepsErasureInert()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 0),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void WitnessByteAlwaysBlocksRegardlessOfDensity()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, 200,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 99),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void FourArgumentClassifyTreatsTheFlagAsWitness()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void BilinearClampSharesTheDensityRule()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Bilinear, 50),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Bilinear, 0),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
     }
 }
