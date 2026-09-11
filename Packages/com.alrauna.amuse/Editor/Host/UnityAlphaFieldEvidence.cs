@@ -315,7 +315,17 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                if (!TryCaptureChain(texture2D, shader, bounds, out chain))
+                // Spec section 3: a texel between the noise gate and the
+                // shader cutoff is discarded at runtime and must never read
+                // opaque, so a shader cutoff source keeps the policy inert
+                // on this route, exactly as on the other three. The inert
+                // bounds reproduce the base exact-255 contract, which is
+                // what the cutoff arm binarizes by here.
+                var effectiveBounds = cutoffThreshold < 1f
+                    ? AlphaPolicyBounds.Inert
+                    : bounds;
+                if (!TryCaptureChain(
+                        texture2D, shader, effectiveBounds, out chain))
                 {
                     source = default;
                     chain = null;

@@ -2206,6 +2206,149 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A shader cutoff source stays policy-inert end to end. The
+        /// cutout runtime clips by the shader cutoff, so a texel below
+        /// the cutoff is discarded there and must never read opaque
+        /// through widened evidence: over the stray chain, the inert
+        /// defaults and the active policy both prove nothing and prepare
+        /// nothing. The active arm is the regression for the direct GPU
+        /// route's cutoff gate.
+        /// </summary>
+        [Test]
+        public void ShaderCutoffSourcesStayPolicyInertEndToEnd()
+        {
+            var inert = RunCutoutPolicyArm(100, 0, 2, "cutout inert");
+            Assert.That(
+                inert.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the inert cutout arm must resolve");
+            Assert.That(
+                inert.OpaqueCandidateTriangleCount, Is.Zero,
+                "the stray texel must witness under the exact-255 " +
+                "contract");
+            Assert.That(
+                inert.Separation, Is.Null,
+                "the unproven cutout slot must stay on its material");
+
+            var active = RunCutoutPolicyArm(99, 2, 50, "cutout policy");
+            Assert.That(
+                active.SemanticallyRefusedRendererCount, Is.Zero,
+                "policy inertness is not a refusal");
+            Assert.That(
+                active.OpaqueCandidateTriangleCount, Is.Zero,
+                "the policy must not erase a texel the shader cutoff " +
+                "discards");
+            Assert.That(
+                active.Separation, Is.Null,
+                "the cutout slot must stay policy-inert at any slider " +
+                "values");
+        }
+
+        /// <summary>
+        /// The opaque bound widens the fade proof exactly at the mapped
+        /// byte: texels at 254 stay witnesses under the default 100,
+        /// whose opaque bound is 255, and prove opaque under 99, whose
+        /// bound is 253. Falsifies a bound that never reaches the capture
+        /// route and one that widens past its mapped byte.
+        /// </summary>
+        [Test]
+        public void AlphaOpaqueBoundScalesTheProofEndToEnd()
+        {
+            var widened = RunAlphaPolicyArm(99, 0, 2, "bound 99", 254);
+            Assert.That(
+                widened.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the widened arm must resolve");
+            Assert.That(
+                widened.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                "texels at 254 meet the mapped opaque bound 253");
+            Assert.That(
+                widened.Separation, Is.Not.Null,
+                "the widened proof must prepare a conversion");
+
+            var exact = RunAlphaPolicyArm(100, 0, 2, "bound 100", 254);
+            Assert.That(
+                exact.SemanticallyRefusedRendererCount, Is.Zero,
+                "a witnessing texel is an analysis outcome, not a " +
+                "refusal");
+            Assert.That(
+                exact.OpaqueCandidateTriangleCount, Is.Zero,
+                "texels at 254 stay below the exact-255 bound");
+            Assert.That(
+                exact.Separation, Is.Null,
+                "the unproven slot must stay on its original material");
+        }
+
+        /// <summary>
+        /// One single-triangle cutout arm over the stray chain, with the
+        /// optimizer component's three alpha policy fields set through
+        /// serialized properties. Mirrors <see cref="RunAlphaPolicyArm"/>
+        /// with the cutout fixture material, whose shader cutoff the
+        /// capture declares.
+        /// </summary>
+        private static AmusePlatformFinishState RunCutoutPolicyArm(
+            int opaquePercent,
+            int noiseGatePercent,
+            int maxNoiseTexelPercent,
+            string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            fixtures.BaseSetUp();
+            var root = new GameObject("AMUSE cutout policy " + armName);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
+            serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                .intValue = opaquePercent;
+            serialized.FindProperty("_transparencyNoiseGatePercent")
+                .intValue = noiseGatePercent;
+            serialized.FindProperty("_maximumNoiseTexelPercent")
+                .intValue = maxNoiseTexelPercent;
+            serialized.ApplyModifiedProperties();
+
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                var texture = fixtures.ImportStrayTexelTexture(
+                    "cutout_policy_stray_" + armName);
+                material =
+                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture("_MainTex", texture);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics:
+                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+
+            return amuse;
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
         /// the optimizer component's serialized mip cap and minimum
         /// size set when requested.
@@ -2291,7 +2434,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int opaquePercent,
             int noiseGatePercent,
             int maxNoiseTexelPercent,
-            string armName)
+            string armName,
+            byte? uniformAlpha = null)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -2314,8 +2458,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState amuse = null;
             try
             {
-                var texture = fixtures.ImportStrayTexelTexture(
-                    "alpha_policy_stray_" + armName);
+                var texture = uniformAlpha.HasValue
+                    ? fixtures.ImportUniformAlphaTexture(
+                        "alpha_policy_uniform_" + armName,
+                        uniformAlpha.Value)
+                    : fixtures.ImportStrayTexelTexture(
+                        "alpha_policy_stray_" + armName);
                 material =
                     LilToonFixtureTestBase.CreateTransparentConversionMaterial();
                 material.SetTexture("_MainTex", texture);
@@ -5058,6 +5206,40 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "fixture precondition: the imported texture must " +
                     "retain streaming residency");
                 return texture;
+            }
+
+            /// <summary>
+            /// A 4x4 mip chain whose every texel of every level carries
+            /// the given alpha, authored directly through SetPixels32 and
+            /// stored by CreateAsset exactly like the stray-texel
+            /// fixture, so the authored levels survive and the asset
+            /// carries a project identity.
+            /// </summary>
+            internal Texture2D ImportUniformAlphaTexture(
+                string name, byte alpha)
+            {
+                var texture = new Texture2D(
+                    4, 4, TextureFormat.RGBA32, 3, false);
+                for (var mip = 0; mip < 3; mip++)
+                {
+                    var width = Math.Max(1, 4 >> mip);
+                    var level = new Color32[width * width];
+                    for (var index = 0; index < level.Length; index++)
+                    {
+                        level[index] = new Color32(255, 255, 255, alpha);
+                    }
+
+                    texture.SetPixels32(level, mip);
+                }
+
+                texture.Apply(false, false);
+                var path = TempFolder + "/" + name + ".asset";
+                AssetDatabase.CreateAsset(texture, path);
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Uniform alpha texture '{path}' must load.");
+                return loaded;
             }
 
             private static Color32[] FullyOpaquePixels()
