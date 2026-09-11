@@ -14,10 +14,14 @@
 // import, not by this shader. The transfer is strictly monotone and fixes
 // exactly 0.0 and 1.0, and that is what makes the comparisons sound:
 //
-// - Inert bounds reduce the verdict to the former binary test. raw >= 1.0
-//   holds exactly when raw == 1.0, which under a strictly monotone transfer
-//   that fixes 1.0 is exactly the stored texel whose byte is 255; raw < 0.0
-//   never holds. The output is byte for byte the former output.
+// - Inert bounds reduce the verdict to the former binary test, for every
+//   input. The opaque arm also requires the sample to be at most 1.0, so
+//   raw >= 1.0 and raw <= 1.0 hold together exactly when raw == 1.0,
+//   which under a strictly monotone transfer that fixes 1.0 is exactly
+//   the stored texel whose byte is 255. The erased arm requires an
+//   active noise bound above 0, so nothing erases. The output is byte
+//   for byte the former output, including for the out-of-range float
+//   sources the research characterization feeds this shader.
 // - Under any monotone fetch the three verdict bands stay ordered in
 //   stored-byte order: a lower byte can never outrank a higher one.
 // - When the fetch applies no transfer, the decode is UNorm b/255 and the
@@ -83,10 +87,16 @@ Shader "Hidden/Alrauna/Amuse/RedExactOne"
                 // AlphaPolicyBounds' published verdict does; the bands
                 // cannot overlap under the inspector clamp, so the order
                 // only pins the behavior of bounds no production caller
-                // supplies.
-                float verdict = mask >= _OpaqueBound
+                // supplies. The 1.0 ceiling keeps a value outside [0, 1]
+                // out of the opaque band, and the active-gate check keeps
+                // the inert noise bound 0 from erasing a negative float;
+                // the research characterization renders float sources
+                // through this shader too.
+                float verdict = mask >= _OpaqueBound && mask <= 1.0
                     ? 1.0
-                    : (mask < _NoiseBound ? 1.0 / 255.0 : 0.0);
+                    : (mask < _NoiseBound && _NoiseBound > 0.0
+                        ? 1.0 / 255.0
+                        : 0.0);
                 return float4(verdict, mask, 0.0, 1.0);
             }
             ENDCG
