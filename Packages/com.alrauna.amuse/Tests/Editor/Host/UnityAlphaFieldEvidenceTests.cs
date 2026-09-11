@@ -1261,37 +1261,46 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// The three-state verdict through the real R8 predicate route. With
-        /// the gate-on bounds From(100, 2) the noise bound is byte 6 and the
-        /// opaque bound is byte 255. The stray byte 3 is strictly below the
-        /// noise bound, so exactly that texel reads ErasedFlag; the mid-band
-        /// byte 200 stays a witness; every 255 texel stays opaque. The fixture
-        /// is readable and single-mip, so each stored byte maps to exactly one
-        /// texel at level 0.
+        /// The three-state verdict through the real R8 predicate route, with
+        /// the opaque bound pinned. Under the gate-on bounds From(80, 2) the
+        /// noise bound is byte 6 and the opaque bound is byte 204. The stray
+        /// byte 3 is strictly below the noise bound, so exactly that texel
+        /// reads ErasedFlag; the mid-band byte 200 stays a witness; the byte
+        /// 205 texel meets the opaque bound 204 and reads 255, which fails a
+        /// hardcoded exact-one test or a dropped opaque bound. The fixture
+        /// is readable and single-mip, so each stored byte maps to exactly
+        /// one texel at level 0.
         /// </summary>
         [Test]
         public void AStrayNoiseByteIsErasedUnderGateOnBounds()
         {
             var pixels = UniformPixels(Size, Size, 255);
             pixels[0] = new Color32(64, 32, 16, 3);
+            pixels[5] = new Color32(64, 32, 16, 205);
             pixels[7] = new Color32(64, 32, 16, 200);
             var texture = Import("bounds_threestate", pixels, Size, Size);
 
             Assert.That(
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, 1.0f, AlphaPolicyBounds.From(100, 2),
+                    texture, 1.0f, AlphaPolicyBounds.From(80, 2),
                     out _, out var chain),
                 Is.True);
             var field = chain[0];
 
             // Unity pixel arrays run bottom-to-top, and so does
-            // AlphaTextureData: pixel 0 lands at (0, 0), pixel 7 at (3, 1).
+            // AlphaTextureData: pixel 0 lands at (0, 0), pixel 5 at (1, 1),
+            // and pixel 7 at (3, 1).
             Assert.That(
                 field.GetAlpha(0, 0), Is.EqualTo(AlphaTextureData.ErasedFlag),
                 "The stray byte 3 is strictly below the noise bound 6.");
             Assert.That(
                 field.GetAlpha(3, 1), Is.EqualTo(0),
                 "The mid-band byte 200 stays a witness.");
+            Assert.That(
+                field.GetAlpha(1, 1), Is.EqualTo(255),
+                "The byte 205 texel meets the opaque bound 204. A hardcoded "
+                + "exact-one test or a dropped opaque bound reads witness "
+                + "here.");
 
             var erased = 0;
             var witness = 0;
@@ -1328,7 +1337,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 witness, Is.EqualTo(1), "only the mid-band byte is a witness");
             Assert.That(
                 opaque, Is.EqualTo(Size * Size - 2),
-                "every 255 texel stays opaque");
+                "every texel at or above the opaque bound stays opaque");
         }
 
         /// <summary>
@@ -1360,6 +1369,50 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         "Texel (" + x + "," + y + ") must stay a witness.");
                 }
             }
+        }
+
+        /// <summary>
+        /// The red-channel mirror of the stray-byte test: the three-state
+        /// verdict under active bounds on the mask predicate. The fixture
+        /// imports linear, with sRGB off, because an sRGB fetch decodes the
+        /// red channel and moves the band edges. With the UNorm decode a
+        /// stored byte b samples exactly b/255, as on the alpha channel.
+        /// Under the gate-on bounds From(80, 2) the noise bound is byte 6
+        /// and the opaque bound is byte 204, so red 3 reads ErasedFlag, red
+        /// 205 reads opaque, and red 200 stays a witness.
+        /// </summary>
+        [Test]
+        public void ARedChannelStrayNoiseByteIsErasedUnderGateOnBounds()
+        {
+            var pixels = UniformPixels(Size, Size, 255);
+            pixels[0] = new Color32(3, 32, 16, 255);
+            pixels[5] = new Color32(205, 32, 16, 255);
+            pixels[7] = new Color32(200, 32, 16, 255);
+            var texture = Import(
+                "bounds_threestate_red", pixels, Size, Size,
+                importer => importer.sRGBTexture = false);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Red, 1.0f,
+                    AlphaPolicyBounds.From(80, 2),
+                    out _, out var chain),
+                Is.True);
+            var field = chain[0];
+
+            // Unity pixel arrays run bottom-to-top, and so does
+            // AlphaTextureData: pixel 0 lands at (0, 0), pixel 5 at (1, 1),
+            // and pixel 7 at (3, 1).
+            Assert.That(
+                field.GetAlpha(0, 0), Is.EqualTo(AlphaTextureData.ErasedFlag),
+                "Red 3 is strictly below the noise bound 6.");
+            Assert.That(
+                field.GetAlpha(1, 1), Is.EqualTo(255),
+                "Red 205 meets the opaque bound 204, which pins the red "
+                + "shader's opaque bound threading.");
+            Assert.That(
+                field.GetAlpha(3, 1), Is.EqualTo(0),
+                "Red 200 sits between the bounds and stays a witness.");
         }
 
         /// <summary>

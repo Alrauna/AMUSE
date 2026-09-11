@@ -540,6 +540,14 @@ namespace Alrauna.Amuse.Editor.Host
         };
 
         /// <summary>
+        /// The one fixture texel that carries the noise-band byte 3 instead
+        /// of 128, for the erased-encoding re-measurement. Under the inert
+        /// run it reads 0 like its neighbors, so the orientation pattern is
+        /// unchanged.
+        /// </summary>
+        private const int NoiseFixtureTexel = 7;
+
+        /// <summary>
         /// Gate 12. Row order is soundness-critical - a vertical flip would
         /// attribute alpha to the wrong triangles and could yield a false
         /// ProvenOpaque - and the orientation agreement was measured on one graphics
@@ -553,10 +561,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// is no partial credit and no retry.
         /// </para>
         /// <para>
-        /// It proves that this host's production route preserves the expected
-        /// orientation and the exact R8 flag encoding. It does NOT independently attest the
-        /// decode or swizzle behaviour of any compressed format; the fixture is one
-        /// uncompressed texture.
+        /// The inert run proves that this host's production route preserves
+        /// the expected orientation and the exact R8 encoding of 255 and 0.
+        /// The inert bounds never reach the erased verdict, so a second,
+        /// bounds-on acquisition re-measures the erased encoding once per
+        /// AppDomain. The claim is narrow: deviations that leave the flag
+        /// grid fail the capture, and the erased encoding is pinned by this
+        /// gate measurement on the hardware that runs the gate. It does NOT
+        /// independently attest the decode or swizzle behaviour of any
+        /// compressed format; the fixture is one uncompressed texture.
         /// </para>
         /// <para>
         /// The fixture is built in memory and so has no asset identity, which is why
@@ -618,14 +631,18 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     // The fixture encodes the orientation pattern in the
                     // channel under test: alpha for the alpha predicate,
-                    // red for the mask predicate.
-                    var marked = ExpectedOrientationPattern[index] ==
-                                 byte.MaxValue;
+                    // red for the mask predicate. One unmarked texel
+                    // carries the noise-band byte 3 instead of 128. Both
+                    // read 0 under the inert bounds, so the orientation
+                    // pattern is unchanged, and the bounds-on second run
+                    // reads that texel as the erased flag.
+                    var channelByte = ExpectedOrientationPattern[index] ==
+                                      byte.MaxValue
+                        ? (byte)255
+                        : index == NoiseFixtureTexel ? (byte)3 : (byte)128;
                     pixels[index] = channel == TextureChannel.Red
-                        ? new Color32(
-                            marked ? (byte)255 : (byte)128, 32, 16, 255)
-                        : new Color32(
-                            64, 32, 16, marked ? (byte)255 : (byte)128);
+                        ? new Color32(channelByte, 32, 16, 255)
+                        : new Color32(64, 32, 16, channelByte);
                 }
 
                 texture.SetPixels32(pixels);
@@ -633,9 +650,9 @@ namespace Alrauna.Amuse.Editor.Host
 
                 material = new Material(shader);
 
-                // The gate pins the orientation and the R8 encoding under the
-                // inert bounds: the fixture's expectations are the base
-                // binary output the inert contract guarantees.
+                // The inert run pins the orientation and the 255 and 0
+                // encodings: the fixture's expectations are the base binary
+                // output the inert contract guarantees.
                 if (!TryAcquireLevel(
                         texture, 0, material, AlphaPolicyBounds.Inert,
                         out var level))
@@ -652,7 +669,26 @@ namespace Alrauna.Amuse.Editor.Host
                     }
                 }
 
-                return MatchesExpectedPattern(actual, ExpectedOrientationPattern);
+                if (!MatchesExpectedPattern(actual, ExpectedOrientationPattern))
+                {
+                    return false;
+                }
+
+                // The inert run cannot reach the erased verdict: the noise
+                // bound 0 never fires. This second, bounds-on acquisition
+                // re-measures the erased encoding once per AppDomain: the
+                // noise-band texel must store exactly byte 1 through the
+                // R8_UNorm write.
+                if (!TryAcquireLevel(
+                        texture, 0, material, AlphaPolicyBounds.From(80, 2),
+                        out var boundsOnLevel))
+                {
+                    return false;
+                }
+
+                return boundsOnLevel.GetAlpha(
+                    NoiseFixtureTexel % 4, NoiseFixtureTexel / 4)
+                    == AlphaTextureData.ErasedFlag;
             }
             finally
             {
