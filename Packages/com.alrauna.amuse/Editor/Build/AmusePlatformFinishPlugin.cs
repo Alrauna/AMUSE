@@ -811,6 +811,9 @@ namespace Alrauna.Amuse.Editor.Build
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
                     AlphaFields,
+                    // Task 7's mapper supplies the real density percent.
+                    // Zero keeps erasure inert until then.
+                    0,
                     resolveSemantics);
                 if (!resolved.IsResolved)
                 {

@@ -202,6 +202,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                            AnimatedPropertyRef Reference)> slotBindings,
             MaterialEvidenceRequest relevance,
             AlphaFieldProvider alphaFields,
+            int maxNoiseTexelPercent,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
         {
             if (slot == null) throw new ArgumentNullException(nameof(slot));
@@ -244,7 +245,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var semantics = resolveSemantics(admitted)
                     ?? UnityMaterialSemantics.AllUnknown();
                 var resolution =
-                    AlphaSemanticsResolver.Resolve(semantics.Alpha, alphaFields);
+                    AlphaSemanticsResolver.Resolve(
+                        semantics.Alpha, alphaFields, maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
                     return SlotResolutionResult.Refused(
