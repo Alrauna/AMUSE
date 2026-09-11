@@ -244,6 +244,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 throw new ArgumentNullException(nameof(texture));
             }
             ValidateSampling(sampling);
+            ValidateDensityPolicy(maxNoiseTexelPercent);
             ValidateFinite(triangle.Position0, nameof(triangle.Position0));
             ValidateFinite(triangle.Position1, nameof(triangle.Position1));
             ValidateFinite(triangle.Position2, nameof(triangle.Position2));
@@ -1171,6 +1172,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                 true,
                 new ExactRational((index + 1) * texelScale),
                 false);
+        }
+
+        /// <summary>
+        /// The density policy is a percentage. A value above 100 would let
+        /// a fully erased consulted set prove a triangle without opaque
+        /// evidence. Values outside the range are programming defects, so
+        /// the classifier refuses them instead of repairing them.
+        /// </summary>
+        private static void ValidateDensityPolicy(int maxNoiseTexelPercent)
+        {
+            if (maxNoiseTexelPercent < 0 || maxNoiseTexelPercent > 100)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxNoiseTexelPercent));
+            }
         }
 
         private static void ValidateSampling(AlphaSamplingSettings sampling)

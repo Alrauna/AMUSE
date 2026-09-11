@@ -1206,5 +1206,16 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     texture, AlphaFilterMode.Bilinear, 0),
                 Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
+
+        [Test]
+        public void DensityPercentOutsideZeroToHundredIsAProgrammingDefect()
+        {
+            var texture = new AlphaTextureData(2, 2, new byte[] { 255, 255, 255, 255 });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => ClassifyFullCover(texture, AlphaFilterMode.Point, 101));
+            Assert.DoesNotThrow(
+                () => ClassifyFullCover(texture, AlphaFilterMode.Point, 100));
+        }
     }
 }
