@@ -959,9 +959,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero);
         }
 
+        // A null density routes the four-argument Classify; a value
+        // routes the five-argument Classify with that density policy.
         private static TriangleAlphaOutcome[] ClassifyInputCase(
             FixtureInputCatalog inputs,
-            string caseId)
+            string caseId,
+            int? maxNoiseTexelPercent = null)
         {
             var fixtureCase = ReferenceFixtureData.FindCase(inputs, caseId);
             var textureRecord = inputs.textures.Single(item => item.id == fixtureCase.textureId);
@@ -989,16 +992,25 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var i1 = meshRecord.triangleVertexIndices[offset + 1];
                 var i2 = meshRecord.triangleVertexIndices[offset + 2];
                 var triangle = CreateTriangleInput(meshRecord, i0, i1, i2);
-                results[triangleIndex] = TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
+                results[triangleIndex] = maxNoiseTexelPercent.HasValue
+                    ? TriangleAlphaClassifier.Classify(
+                        triangle,
+                        texture,
+                        sampling,
+                        AlphaUvEnvelope.Zero,
+                        maxNoiseTexelPercent.Value)
+                    : TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
             }
 
             return results;
         }
 
-        private static void AssertCaseMatchesOracle(string caseId)
+        private static void AssertCaseMatchesOracle(
+            string caseId,
+            int? maxNoiseTexelPercent = null)
         {
             var catalogs = ReferenceFixtureData.Load();
-            var actual = ClassifyInputCase(catalogs.Inputs, caseId);
+            var actual = ClassifyInputCase(catalogs.Inputs, caseId, maxNoiseTexelPercent);
             var expected = ReferenceFixtureData.FindExpectation(
                     catalogs.Expectations,
                     caseId)
@@ -1216,6 +1228,22 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 () => ClassifyFullCover(texture, AlphaFilterMode.Point, 101));
             Assert.DoesNotThrow(
                 () => ClassifyFullCover(texture, AlphaFilterMode.Point, 100));
+        }
+
+        [TestCase("fully-opaque-texture")]
+        [TestCase("alpha-254-boundary")]
+        [TestCase("fully-transparent-texture")]
+        [TestCase("mixed-alpha-texture")]
+        [TestCase("triangle-in-opaque-region")]
+        [TestCase("triangle-in-transparent-region")]
+        [TestCase("triangle-crosses-alpha-boundary")]
+        public void InertPolicyMatchesOracle(string caseId)
+        {
+            // Runs the oracle cases through the five-argument Classify
+            // with density 0 and the bounds-inert four-argument path,
+            // asserting both agree with the reference fixture oracle.
+            AssertCaseMatchesOracle(caseId);
+            AssertCaseMatchesOracle(caseId, 0);
         }
     }
 }
