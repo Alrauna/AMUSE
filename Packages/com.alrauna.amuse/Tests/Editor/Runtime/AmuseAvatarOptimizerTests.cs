@@ -144,5 +144,45 @@ namespace Alrauna.Amuse.Tests.Editor
                 UnityEngine.Object.DestroyImmediate(go);
             }
         }
+
+        [Test]
+        public void AlphaPolicyFieldsRoundTripAndDefaultInert()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+
+                var alpha = serializedObject.FindProperty(
+                    "_minimumOpaqueAlphaPercent");
+                var gate = serializedObject.FindProperty(
+                    "_transparencyNoiseGatePercent");
+                var texel = serializedObject.FindProperty(
+                    "_maximumNoiseTexelPercent");
+                Assert.That(alpha, Is.Not.Null);
+                Assert.That(gate, Is.Not.Null);
+                Assert.That(texel, Is.Not.Null);
+                Assert.That(alpha.intValue, Is.EqualTo(100));
+                Assert.That(gate.intValue, Is.EqualTo(0));
+                Assert.That(texel.intValue, Is.EqualTo(2));
+
+                alpha.intValue = 99;
+                gate.intValue = 5;
+                texel.intValue = 10;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.MinimumOpaqueAlphaPercent, Is.EqualTo(99));
+                Assert.That(
+                    optimizer.TransparencyNoiseGatePercent, Is.EqualTo(5));
+                Assert.That(
+                    optimizer.MaximumNoiseTexelPercent, Is.EqualTo(10));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
     }
 }

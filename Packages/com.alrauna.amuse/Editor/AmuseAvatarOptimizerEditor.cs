@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 
 namespace Alrauna.Amuse.Editor
@@ -76,6 +77,7 @@ namespace Alrauna.Amuse.Editor
             DrawMipCapPopup();
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
+            DrawAlphaPolicyControls();
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -190,6 +192,67 @@ namespace Alrauna.Amuse.Editor
                     "is proven opaque. Raise the value to skip splits " +
                     "that move too little."),
                 Mathf.Clamp(coverageProperty.intValue, 0, 100),
+                0, 100);
+        }
+
+        private void DrawAlphaPolicyControls()
+        {
+            var alphaProperty = serializedObject.FindProperty(
+                "_minimumOpaqueAlphaPercent");
+            var minimumOpaqueAlpha = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Minimum Opaque Alpha Percentage",
+                    "A texel is one pixel of a texture. AMUSE checks " +
+                    "texel alpha before it moves a triangle onto an " +
+                    "opaque material. This setting sets the smallest " +
+                    "alpha percentage that counts as opaque evidence. " +
+                    "It applies to materials without a shader cutoff." +
+                    "\n\n" +
+                    "Alpha between this value and full opacity becomes " +
+                    "fully opaque after a move. The default of 100 is " +
+                    "the safest choice. Raise the value when a part " +
+                    "looks solid far away where it should show " +
+                    "through."),
+                Mathf.Clamp(alphaProperty.intValue, 0, 100),
+                0, 100);
+            alphaProperty.intValue = minimumOpaqueAlpha;
+
+            var gateProperty = serializedObject.FindProperty(
+                "_transparencyNoiseGatePercent");
+            var gate = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Transparency Noise Gate Percentage",
+                    "A transparent texture often holds faint stray " +
+                    "texels that never show. Alpha below this value " +
+                    "is noise. AMUSE ignores noise when the noise is " +
+                    "sparse. This applies to materials without a " +
+                    "shader cutoff." +
+                    "\n\n" +
+                    "Noise that AMUSE ignores becomes fully opaque " +
+                    "after a move. A texture without a source file " +
+                    "gives AMUSE only its published mip levels, so " +
+                    "the gate is weaker on it. Raise the value when " +
+                    "faint strays stop moves that should happen."),
+                Mathf.Clamp(gateProperty.intValue, 0, 100),
+                0, 100);
+            gateProperty.intValue =
+                AlphaPolicyBounds.ClampNoise(minimumOpaqueAlpha, gate);
+
+            var texelProperty = serializedObject.FindProperty(
+                "_maximumNoiseTexelPercent");
+            texelProperty.intValue = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Maximum Noise Texel Percentage",
+                    "This setting works with the noise gate. The gate " +
+                    "fires for one polygon only when its noise texels " +
+                    "are strictly under this share of the texels AMUSE " +
+                    "checks for that polygon." +
+                    "\n\n" +
+                    "Noise that AMUSE ignores becomes fully opaque " +
+                    "after a move. Raise the value to ignore denser " +
+                    "noise. Raise it only when a part looks solid far " +
+                    "away where it should show through."),
+                Mathf.Clamp(texelProperty.intValue, 0, 100),
                 0, 100);
         }
 
