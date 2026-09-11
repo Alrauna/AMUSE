@@ -140,6 +140,14 @@ namespace Alrauna.Amuse.Editor.Analysis
     {
         private readonly byte[] _alpha8;
 
+        /// <summary>
+        /// The stored value for an erased texel: noise under the user's
+        /// gate. Capture writes only 255, 0, and this flag, so a fixture
+        /// that stores 1 by hand must not expect erasure unless the
+        /// classifier runs with an active density policy.
+        /// </summary>
+        internal const byte ErasedFlag = 1;
+
         internal int Width { get; }
         internal int Height { get; }
         internal bool IsFullyOpaque { get; private set; }
