@@ -12,10 +12,15 @@
 // alpha channel never crosses the sRGB transfer, and every admitted alpha
 // decode is UNorm, so a stored byte b samples exactly b/255: the float
 // comparisons then order texels exactly as their stored bytes order, and a
-// bound of B/255 is met exactly when the stored byte is at or above B. With the
-// inert bounds the verdict reduces to the former binary test: alpha >= 1.0
-// holds exactly when alpha == 1.0, and alpha < 0.0 never holds, so the output
-// is byte for byte the former output.
+// bound of B/255 is met exactly when the stored byte is at or above B. The
+// opaque arm also requires the sample to be at most 1.0, so a value
+// outside [0, 1] can never read opaque under any bounds, and erasure
+// requires an active noise bound above 0. With the inert bounds the
+// verdict is therefore the former binary test for every input, including
+// the out-of-range float values the research characterization feeds it:
+// alpha >= 1.0 and alpha <= 1.0 hold together exactly when alpha == 1.0,
+// and nothing erases. The output is byte for byte the former output for
+// every input.
 //
 // The constants 1.0 and 0.0 store exactly in the R8_UNorm target. The
 // erased constant 1.0/255.0 stores 1 on a write that rounds to nearest,
@@ -74,9 +79,17 @@ Shader "Hidden/Alrauna/Amuse/AlphaExactOne"
                 // published verdict does. The bands cannot overlap under
                 // the inspector clamp, so the order only pins the
                 // behavior of bounds no production caller supplies.
-                float verdict = alpha >= _OpaqueBound
+                // The 1.0 ceiling keeps a value outside [0, 1] out of the
+                // opaque band: the research characterization renders float
+                // sources through this shader, and one bit must report
+                // them exactly as it reported them before the bounds
+                // arrived. The active-gate check keeps the inert noise
+                // bound 0 from erasing a negative float.
+                float verdict = alpha >= _OpaqueBound && alpha <= 1.0
                     ? 1.0
-                    : (alpha < _NoiseBound ? 1.0 / 255.0 : 0.0);
+                    : (alpha < _NoiseBound && _NoiseBound > 0.0
+                        ? 1.0 / 255.0
+                        : 0.0);
                 return float4(verdict, alpha, 0.0, 1.0);
             }
             ENDCG
