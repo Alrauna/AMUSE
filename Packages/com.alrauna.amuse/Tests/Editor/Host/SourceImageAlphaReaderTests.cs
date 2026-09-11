@@ -1,4 +1,5 @@
 using System.IO;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
@@ -55,9 +56,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             // Test with cutoff 0.5f:
             // top half (alpha 0.8f >= 0.5f) should be 255
             // bottom half (alpha 0.2f < 0.5f) should be 0
+            // Inert bounds: the 0.5f cutoff keeps the float threshold
+            // route this test pins.
             Assert.That(
                 SourceImageAlphaReader.TryReadSourceAlphaChain(
-                    imported, TextureChannel.Alpha, 0.5f, out var chain),
+                    imported, TextureChannel.Alpha, 0.5f,
+                    AlphaPolicyBounds.Inert, out var chain),
                 Is.True);
             Assert.That(chain, Is.Not.Null);
             Assert.That(chain.Count, Is.GreaterThan(0));
@@ -93,9 +97,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(pngPath);
             UnityEngine.Object.DestroyImmediate(tex);
 
+            // Inert bounds at cutoff 1.0f still take the float
+            // threshold route this test pins.
             Assert.That(
                 SourceImageAlphaReader.TryReadSourceAlphaChain(
-                    imported, TextureChannel.Alpha, 1.0f, out var chain),
+                    imported, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out var chain),
                 Is.True);
 
             var mip0 = chain[0];
