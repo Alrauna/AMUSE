@@ -25,12 +25,14 @@ namespace Alrauna.Amuse.Editor.Host
     /// <para>
     /// The evidence it produces is <em>predicate-equivalent</em> to effective shader
     /// alpha at <em>every captured declared mip</em>, not byte-identical to GPU
-    /// memory: at each level, byte 255 marks exactly the texels whose sampled alpha
-    /// is exactly one, and every other byte marks a value strictly below one. That
-    /// is the contract <see cref="AlphaFieldProvider"/> states and the only property
-    /// <see cref="TriangleAlphaClassifier"/> reads. The chain is the texture's
-    /// complete declared mip chain, mip 0 first: the hardware may select any level
-    /// and the resolver cannot know which.
+    /// memory. At each level each byte is the policy verdict over the sampled
+    /// channel: 255 at or above the policy's opaque bound, 1
+    /// (<see cref="Analysis.AlphaTextureData.ErasedFlag"/>) strictly below its
+    /// noise bound, and 0 otherwise. The inert bounds reduce the verdict to the
+    /// base exact-255 contract: byte 255 marks exactly the texels whose sampled
+    /// alpha is exactly one, and every other byte marks a value strictly below
+    /// one. The chain is the texture's complete declared mip chain, mip 0 first:
+    /// the hardware may select any level and the resolver cannot know which.
     /// </para>
     /// <para>
     /// The values come from the <em>GPU-decoded imported representation</em>, read
@@ -180,10 +182,11 @@ namespace Alrauna.Amuse.Editor.Host
         /// exactly 1.0, so byte 255 still marks exactly the texels whose
         /// sampled value is one.
         /// <para>
-        /// The bounds are the user's alpha policy as exact bytes. The
-        /// inert bounds reproduce the base exact-255 contract, and the
-        /// routes that honor the bounds carry them in their cache keys,
-        /// so two policies never share a cached chain.
+        /// The bounds are the user's alpha policy as exact bytes, and every
+        /// capture route honors them. The inert bounds reproduce the base
+        /// exact-255 contract. The cached routes carry the bounds in their
+        /// cache keys, so two policies never share a cached chain, and the
+        /// direct GPU route applies them in its predicate shader.
         /// </para>
         /// </summary>
         internal static bool TryCapture(
@@ -276,10 +279,10 @@ namespace Alrauna.Amuse.Editor.Host
                     return true;
                 }
 
-                // The bounds do not reach this route: the predicate
-                // shader binarizes at exact one, and the policy-aware
-                // capture paths are the source-image, streaming, and
-                // generated routes.
+                // The bounds reach this route through the predicate shader:
+                // the shaders emit the three-state verdict under _OpaqueBound
+                // and _NoiseBound, so the policy governs the primary path for
+                // imported avatar textures too.
                 if (!HostCapabilitiesPass(
                         SystemInfo.supportsAsyncGPUReadback,
                         SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.Render),
@@ -312,7 +315,7 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                if (!TryCaptureChain(texture2D, shader, out chain))
+                if (!TryCaptureChain(texture2D, shader, bounds, out chain))
                 {
                     source = default;
                     chain = null;
@@ -337,10 +340,13 @@ namespace Alrauna.Amuse.Editor.Host
         /// Captures every declared mip and constructs the chain only after exactly
         /// mipmapCount successes. A single failed level refuses the whole texture:
         /// there is no code path on which a partially populated chain exists, so
-        /// none can escape.
+        /// none can escape. The bounds ride along to every level.
         /// </summary>
         private static bool TryCaptureChain(
-            Texture2D texture, Shader shader, out AlphaMipChain chain)
+            Texture2D texture,
+            Shader shader,
+            AlphaPolicyBounds bounds,
+            out AlphaMipChain chain)
         {
             chain = null;
             var levels = new AlphaTextureData[texture.mipmapCount];
@@ -352,7 +358,7 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
-                    if (!TryAcquireLevel(texture, mip, material, out var level))
+                    if (!TryAcquireLevel(texture, mip, material, bounds, out var level))
                     {
                         return false;
                     }
@@ -372,7 +378,9 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// The one GPU acquisition core: Blit through the predicate shader into an
         /// exact R8_UNorm target, read the bytes back synchronously, validate, and
-        /// build one grid.
+        /// build one grid. It writes the policy bounds to the material as
+        /// normalized floats, a bound byte over 255, so the shader's verdict
+        /// bands are the caller's policy at every level.
         /// <para>
         /// It holds no identity, build-target, format-allowlist, mip-limit,
         /// streaming, or capability gate. Those belong to its callers, and repeating
@@ -385,7 +393,11 @@ namespace Alrauna.Amuse.Editor.Host
         /// </para>
         /// </summary>
         private static bool TryAcquireLevel(
-            Texture2D texture, int mip, Material material, out AlphaTextureData level)
+            Texture2D texture,
+            int mip,
+            Material material,
+            AlphaPolicyBounds bounds,
+            out AlphaTextureData level)
         {
             level = null;
 
@@ -393,6 +405,12 @@ namespace Alrauna.Amuse.Editor.Host
             var height = Mathf.Max(1, texture.height >> mip);
 
             material.SetInt("_Mip", mip);
+
+            // Normalized floats: a stored byte b samples exactly b/255 on
+            // every admitted decode, so the shaders' comparisons order the
+            // stored bytes exactly as the bytes order.
+            material.SetFloat("_OpaqueBound", bounds.OpaqueBound / 255f);
+            material.SetFloat("_NoiseBound", bounds.NoiseBound / 255f);
 
             var descriptor = new RenderTextureDescriptor(width, height, PredicateTarget, 0)
             {
@@ -444,7 +462,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var bytes = new byte[width * height];
                 data.CopyTo(bytes);
 
-                if (!IsBinaryPredicateBuffer(bytes))
+                if (!IsPredicateFlagBuffer(bytes))
                 {
                     return false;
                 }
@@ -536,7 +554,7 @@ namespace Alrauna.Amuse.Editor.Host
         /// </para>
         /// <para>
         /// It proves that this host's production route preserves the expected
-        /// orientation and binary R8 encoding. It does NOT independently attest the
+        /// orientation and the exact R8 flag encoding. It does NOT independently attest the
         /// decode or swizzle behaviour of any compressed format; the fixture is one
         /// uncompressed texture.
         /// </para>
@@ -614,7 +632,13 @@ namespace Alrauna.Amuse.Editor.Host
                 texture.Apply(false, false);
 
                 material = new Material(shader);
-                if (!TryAcquireLevel(texture, 0, material, out var level))
+
+                // The gate pins the orientation and the R8 encoding under the
+                // inert bounds: the fixture's expectations are the base
+                // binary output the inert contract guarantees.
+                if (!TryAcquireLevel(
+                        texture, 0, material, AlphaPolicyBounds.Inert,
+                        out var level))
                 {
                     return false;
                 }
@@ -815,13 +839,16 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// One responsibility: the shader emits only 0 or 1, which an R8_UNorm
-        /// target stores as 0 or 255. Anything between means the value was
-        /// filtered, rescaled, or transfer-converted on the way out, and the
-        /// predicate would no longer be the predicate. Length is
-        /// <see cref="IsExpectedBufferLength"/>'s job.
+        /// One responsibility: every byte is one of the three flag states the
+        /// predicate shaders emit, which an R8_UNorm target stores exactly.
+        /// 255 is the opaque verdict, AlphaTextureData.ErasedFlag is the
+        /// erased verdict, and 0 is the witness. Anything else means the value
+        /// was filtered, rescaled, or transfer-converted on the way out, and
+        /// the predicate would no longer be the predicate. Length is
+        /// <see cref="IsExpectedBufferLength"/>'s job, checked earlier and
+        /// against the length Unity returned.
         /// </summary>
-        internal static bool IsBinaryPredicateBuffer(byte[] bytes)
+        internal static bool IsPredicateFlagBuffer(byte[] bytes)
         {
             if (bytes == null)
             {
@@ -830,7 +857,9 @@ namespace Alrauna.Amuse.Editor.Host
 
             foreach (var value in bytes)
             {
-                if (value != 0 && value != byte.MaxValue)
+                if (value != 0 &&
+                    value != AlphaTextureData.ErasedFlag &&
+                    value != byte.MaxValue)
                 {
                     return false;
                 }

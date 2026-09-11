@@ -2,12 +2,37 @@
 // Editor/ so it is excluded from player builds and never reaches a built
 // avatar.
 //
-// It loads ONE explicit mip level by integer texel index and emits the binary
-// result of "red is exactly one" in RED. Load is a texel fetch: no filtering,
-// no mip selection, no wrap. Whether or not the fetch applies the sRGB
-// transfer, the decode is monotone and maps exactly 1.0 -> 1.0, so byte 255
-// is exactly the stored texel whose sampled value is one and the predicate is
-// decode-proof.
+// It loads ONE explicit mip level by integer texel index and emits a
+// three-state verdict in RED over the sampled red value, under the same
+// bounds contract as the alpha predicate: byte 255 at or above the opaque
+// bound, AlphaTextureData.ErasedFlag (byte 1) strictly below the noise
+// bound, byte 0 otherwise. The bounds arrive as normalized floats, a bound
+// byte divided by 255, with the inert defaults 1.0 and 0.0. Load is a texel
+// fetch: no filtering, no mip selection, no wrap.
+//
+// Whether the fetch applies the sRGB transfer is decided by the texture's
+// import, not by this shader. The transfer is strictly monotone and fixes
+// exactly 0.0 and 1.0, and that is what makes the comparisons sound:
+//
+// - Inert bounds reduce the verdict to the former binary test. raw >= 1.0
+//   holds exactly when raw == 1.0, which under a strictly monotone transfer
+//   that fixes 1.0 is exactly the stored texel whose byte is 255; raw < 0.0
+//   never holds. The output is byte for byte the former output.
+// - Under any monotone fetch the three verdict bands stay ordered in
+//   stored-byte order: a lower byte can never outrank a higher one.
+// - When the fetch applies no transfer, the decode is UNorm b/255 and the
+//   normalized bounds compare exactly as the stored bytes compare, which is
+//   the alpha channel's case at every texel.
+// - When the transfer applies, the bounds compare in the transfer's value
+//   space: a bound byte B met by raw means the stored byte is the one the
+//   transfer maps across B/255. The inert contract above is what production
+//   captures are pinned on, and it is exact.
+//
+// The three constants store exactly in the R8_UNorm target, whose write
+// keeps the byte nearest to value * 255: 1.0 stores 255, 0.0 stores 0, and
+// 1.0/255.0 stores 1. The output validator refuses any other byte, so a
+// host that quantized differently fails the capture instead of corrupting
+// evidence.
 //
 // GREEN carries the raw red and is a RESEARCH DIAGNOSTIC ONLY, mirroring the
 // alpha predicate. Production renders this shader into a
@@ -15,7 +40,12 @@
 // green is discarded before any production code sees a result.
 Shader "Hidden/Alrauna/Amuse/RedExactOne"
 {
-    Properties { _MainTex ("Texture", 2D) = "white" {} }
+    Properties
+    {
+        _MainTex ("Texture", 2D) = "white" {}
+        _OpaqueBound ("Opaque bound", Float) = 1.0
+        _NoiseBound ("Noise bound", Float) = 0.0
+    }
     SubShader
     {
         Pass
@@ -29,6 +59,8 @@ Shader "Hidden/Alrauna/Amuse/RedExactOne"
 
             Texture2D<float4> _MainTex;
             int _Mip;
+            float _OpaqueBound;
+            float _NoiseBound;
 
             struct v2f { float4 pos : SV_POSITION; };
 
@@ -43,7 +75,17 @@ Shader "Hidden/Alrauna/Amuse/RedExactOne"
             {
                 int3 coordinate = int3((int)i.pos.x, (int)i.pos.y, _Mip);
                 float mask = _MainTex.Load(coordinate).r;
-                return float4(mask == 1.0 ? 1.0 : 0.0, mask, 0.0, 1.0);
+
+                // The erased test reads the red fetch, the same value the
+                // opaque test reads. The opaque test reads first, as
+                // AlphaPolicyBounds' published verdict does; the bands
+                // cannot overlap under the inspector clamp, so the order
+                // only pins the behavior of bounds no production caller
+                // supplies.
+                float verdict = mask >= _OpaqueBound
+                    ? 1.0
+                    : (mask < _NoiseBound ? 1.0 / 255.0 : 0.0);
+                return float4(verdict, mask, 0.0, 1.0);
             }
             ENDCG
         }
