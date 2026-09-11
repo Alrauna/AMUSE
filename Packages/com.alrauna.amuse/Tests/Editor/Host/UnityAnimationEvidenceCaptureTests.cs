@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
@@ -792,6 +793,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { initial },
                 graph,
                 new StubBindings(specialClip),
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 CaptureFixtureMaterials,
                 out _);
@@ -842,13 +844,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 Assert.That(selected, Is.EqualTo(2));
                 captureCalls++;
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -897,11 +900,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 capturerSaw = request;
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -968,12 +972,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 captureCalls++;
                 capturerSaw = request;
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -1140,6 +1145,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { material },
                 EmptyGraph(),
                 new StubBindings(),
+                AlphaPolicyBounds.Inert,
                 out var admittedLiveMaterials);
 
             Assert.That(evidence.IsClosed, Is.True,
@@ -1172,6 +1178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 refusedBatch = materials.ToArray();
@@ -1225,11 +1232,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -1284,11 +1292,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -1334,6 +1343,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { material },
                 EmptyGraph(),
                 new StubBindings(),
+                AlphaPolicyBounds.Inert,
                 out _);
 
             Assert.That(evidence.IsClosed, Is.False);
@@ -1356,6 +1366,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     Array.Empty<Material>(),
                     refused,
                     new StubBindings(),
+                    AlphaPolicyBounds.Inert,
                     out _));
         }
 
@@ -1427,12 +1438,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 captureCalls++;
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -1484,12 +1496,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
             {
                 captureCalls++;
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
-                    materials, families, request, out captured);
+                    materials, families, request, bounds, out captured);
             }
 
             var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
@@ -1630,6 +1643,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     new[] { current },
                     EmptyGraph(),
                     new StubBindings(),
+                    AlphaPolicyBounds.Inert,
                     out _));
         }
 
@@ -1789,13 +1803,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
             var inputs = materials
                 .Select(material =>
                     new MaterialEvidenceCaptureInput(material, request))
                 .ToArray();
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, bounds);
             captured = evidence.Select((value, index) =>
                     new CapturedAlphaMaterial(
                         families[index],

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -430,14 +431,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild);
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
                 AmuseBuildStatusStore.TryGet(
                     root.GetInstanceID(), out var uploadStatus);
                 StringAssert.StartsWith(
                     "Last upload: ", uploadStatus);
 
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay);
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
                 AmuseBuildStatusStore.TryGet(
                     root.GetInstanceID(), out var playStatus);
                 StringAssert.StartsWith(
@@ -446,6 +447,156 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void SummaryNamesPolicyOnlyWhileAlphaPolicyIsActive()
+        {
+            var root = new GameObject("AMUSE summary policy fixture");
+
+            try
+            {
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
+                AmuseBuildStatusStore.TryGet(
+                    root.GetInstanceID(), out var inertStatus);
+                Assert.That(
+                    inertStatus.Contains("alpha policy"),
+                    Is.False);
+
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
+                AmuseBuildStatusStore.TryGet(
+                    root.GetInstanceID(), out var activeStatus);
+                Assert.That(
+                    activeStatus.Contains("alpha policy"),
+                    Is.True);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The mappers are the component boundary of the alpha policy, so a
+        /// missing component must read as the inert defaults: opaque
+        /// percent 100, noise percent 0, density 0.
+        /// </summary>
+        [Test]
+        public void PolicyMappersAreInertWithoutAnOptimizerComponent()
+        {
+            Assert.That(
+                InvokePolicyMapper("OpaquePercentFrom", null),
+                Is.EqualTo(100));
+            Assert.That(
+                InvokePolicyMapper("NoisePercentFrom", null),
+                Is.EqualTo(0));
+            Assert.That(
+                InvokePolicyMapper("MaxNoiseTexelPercentFrom", null),
+                Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// A stored value outside the Range attribute is a defect against
+        /// the component contract. The mappers clamp it defensively
+        /// instead of classifying with a policy no inspector could have
+        /// saved, and the noise gate still applies the inspector clamp
+        /// after the defensive clamps.
+        /// </summary>
+        [Test]
+        public void PolicyMappersClampOutOfRangeStoredValuesDefensively()
+        {
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "OpaquePercentFrom"),
+                Is.EqualTo(0));
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "NoisePercentFrom"),
+                Is.EqualTo(0));
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "MaxNoiseTexelPercentFrom"),
+                Is.EqualTo(0));
+
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(150, 150, 150, "OpaquePercentFrom"),
+                Is.EqualTo(100));
+
+            // The gate maps first to 100, then the inspector clamp keeps
+            // it strictly below the opaque percent 50.
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(50, 80, 2, "NoisePercentFrom"),
+                Is.EqualTo(49));
+        }
+
+        /// <summary>
+        /// The classifier throws outside the density range, so an
+        /// above-range density must fail at the component boundary when
+        /// the plugin wires the policy, not at the first classification
+        /// deep inside a build.
+        /// </summary>
+        [Test]
+        public void DensityMapperRejectsAboveRangePolicyAtWiringTime()
+        {
+            Assert.That(
+                () => InvokePolicyMapperWithSerializedPolicy(
+                    100, 0, 150, "MaxNoiseTexelPercentFrom"),
+                Throws.InvalidOperationException);
+        }
+
+        private static int InvokePolicyMapper(
+            string mapperName,
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            var method = typeof(AmusePlatformFinishPass).GetMethod(
+                mapperName,
+                BindingFlags.Static | BindingFlags.NonPublic,
+                null,
+                new[] { typeof(Alrauna.Amuse.Runtime.AmuseAvatarOptimizer) },
+                null);
+            Assert.That(method, Is.Not.Null, mapperName + " must exist");
+
+            try
+            {
+                return (int)method.Invoke(null, new object[] { optimizer });
+            }
+            catch (TargetInvocationException exception)
+            {
+                // Reflection wraps the mapper's own failure. Rethrow the
+                // original, so a wiring-time rejection is observable as
+                // the exception the plugin actually throws.
+                ExceptionDispatchInfo.Capture(exception.InnerException)
+                    .Throw();
+                throw;
+            }
+        }
+
+        private static int InvokePolicyMapperWithSerializedPolicy(
+            int opaquePercent,
+            int noiseGatePercent,
+            int maxNoiseTexelPercent,
+            string mapperName)
+        {
+            var root = new GameObject("AMUSE policy mapper " + mapperName);
+            try
+            {
+                var component =
+                    root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var serialized = new SerializedObject(component);
+                serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                    .intValue = opaquePercent;
+                serialized.FindProperty("_transparencyNoiseGatePercent")
+                    .intValue = noiseGatePercent;
+                serialized.FindProperty("_maximumNoiseTexelPercent")
+                    .intValue = maxNoiseTexelPercent;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                return InvokePolicyMapper(mapperName, component);
+            }
+            finally
+            {
                 Object.DestroyImmediate(root);
             }
         }
@@ -3074,11 +3225,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     IReadOnlyList<Material> materials,
                     IReadOnlyList<CapturedAlphaMaterialFamily> families,
                     MaterialEvidenceRequest request,
+                    AlphaPolicyBounds bounds,
                     out IReadOnlyList<CapturedAlphaMaterial> captured)
                 {
                     batches.Add(materials.ToArray());
                     return CaptureVerifiedFixtureMaterials(
-                        materials, families, request, out captured);
+                        materials, families, request, bounds, out captured);
                 }
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -3715,6 +3867,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 renderer.sharedMaterials,
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
+                // The runtime-state mechanics seams stay policy-free, so
+                // they capture under the inert bounds.
+                AlphaPolicyBounds.Inert,
                 SelectVerifiedFixtureRequest,
                 CaptureVerifiedFixtureMaterials,
                 out _);
@@ -3738,10 +3893,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
             out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
             return VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials(
-                materials, families, request, out captured);
+                materials, families, request, bounds, out captured);
         }
 
         private static MaterialSemantics VerifiedAlphaOnly(

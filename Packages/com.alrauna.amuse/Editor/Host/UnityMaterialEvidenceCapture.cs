@@ -673,6 +673,18 @@ namespace Alrauna.Amuse.Editor.Host
         internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
             IReadOnlyList<MaterialEvidenceCaptureInput> inputs)
         {
+            // Semantics-interpretation captures keep the inert bounds, which
+            // reproduce the base exact-255 contract: the policy widens the
+            // proof's evidence, never an admission decision. The closed-batch
+            // proof capture threads the active policy through the full
+            // overload.
+            return Capture(inputs, AlphaPolicyBounds.Inert);
+        }
+
+        internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
+            IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
+            AlphaPolicyBounds bounds)
+        {
             if (inputs == null)
             {
                 throw new ArgumentNullException(nameof(inputs));
@@ -732,6 +744,7 @@ namespace Alrauna.Amuse.Editor.Host
                     shared.Evidence,
                     true,
                     shared.Source,
+                    bounds,
                     shared.CutoutThreshold);
             }
 
@@ -765,6 +778,7 @@ namespace Alrauna.Amuse.Editor.Host
                                 texture.RequestedEvidence,
                                 false,
                                 default,
+                                bounds,
                                 texture.CutoutThreshold);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
@@ -981,6 +995,7 @@ namespace Alrauna.Amuse.Editor.Host
             TextureEvidenceKinds evidence,
             bool hasKnownSource,
             TextureSourceId knownSource,
+            AlphaPolicyBounds bounds,
             float cutoffThreshold = 1.0f)
         {
             var hasSource = hasKnownSource &&
@@ -1002,13 +1017,13 @@ namespace Alrauna.Amuse.Editor.Host
                 (evidence & TextureEvidenceKinds.CanonicalNormalMap) != 0 &&
                 UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
             AlphaMipChain alphaChannel = null;
-            // The plugin threads the active policy into this handoff in
-            // a later slice, so both channels capture under the inert
-            // bounds, which reproduce the base exact-255 contract.
+            // Both channels read under the active policy: the red channel
+            // serves alpha-mask products, so the same alpha policy governs
+            // every field the proof consults.
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, cutoffThreshold, AlphaPolicyBounds.Inert,
+                    texture, cutoffThreshold, bounds,
                     out _, out alphaChannel);
             AlphaMipChain redChannel = null;
             var hasRedChannel =
@@ -1017,7 +1032,7 @@ namespace Alrauna.Amuse.Editor.Host
                     texture,
                     TextureChannel.Red,
                     1.0f,
-                    AlphaPolicyBounds.Inert,
+                    bounds,
                     out _,
                     out redChannel);
             return new CapturedTextureEvidence(

@@ -2156,6 +2156,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The component's alpha noise-gate policy scopes the opacity proof
+        /// end to end. A fully-opaque 4x4 chain whose one stray texel sits
+        /// below the gate erases that stray, and a polygon whose stray is
+        /// sparse under the density bound proves opaque and splits. The
+        /// same chain with the gate off keeps the stray a witness, so
+        /// the polygon is unproven and the slot stays on its original
+        /// material. The texture is authored at runtime and stored as an
+        /// asset, so it carries a project identity and capture routes
+        /// through the direct GPU path, which applies the policy in its
+        /// predicate shader.
+        /// <para>
+        /// Falsifies a gate that the build accepts but ignores, and a gate
+        /// that converts polygons whose strays are not sparse.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TransparencyNoiseGatePolicyDrivesTheProofEndToEnd()
+        {
+            // The gate erases the stray, and a density bound of 50
+            // treats a sparse erased texel as opaque evidence, so the
+            // triangle proves and the barrier prepares the split.
+            var converting = RunAlphaPolicyArm(
+                100, 2, 50, "gate on");
+            Assert.That(
+                converting.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the gated arm must resolve");
+            Assert.That(
+                converting.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                "a stray below the gate must not stop the proof");
+            Assert.That(
+                converting.Separation, Is.Not.Null,
+                "the gated proof must prepare a conversion");
+
+            // The gate off keeps the stray a witness: nothing proves,
+            // nothing is prepared, and the slot keeps its material.
+            var refusing = RunAlphaPolicyArm(
+                100, 0, 50, "gate off");
+            Assert.That(
+                refusing.SemanticallyRefusedRendererCount, Is.Zero,
+                "a witnessing stray is an analysis outcome, not a " +
+                "refusal");
+            Assert.That(
+                refusing.OpaqueCandidateTriangleCount, Is.Zero,
+                "the stray must witness without the gate");
+            Assert.That(
+                refusing.Separation, Is.Null,
+                "the unproven slot must stay on its original material");
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
         /// the optimizer component's serialized mip cap and minimum
         /// size set when requested.
@@ -2225,6 +2275,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             return amuse;
         }
+
+        /// <summary>
+        /// One single-triangle transparent (fade-eligible) arm over a
+        /// procedural 4x4 chain whose alpha bytes are all 255 except one
+        /// texel at 3, with the optimizer component's three alpha policy
+        /// fields set through serialized properties. Mirrors
+        /// <see cref="RunMipPolicyArm"/>: verified seams, manual teardown,
+        /// and the barrier run through the production entry. The chain is
+        /// authored at runtime and stored as an asset, so it carries a
+        /// project identity and capture routes through the direct GPU
+        /// path and its policy-aware predicate shader.
+        /// </summary>
+        private static AmusePlatformFinishState RunAlphaPolicyArm(
+            int opaquePercent,
+            int noiseGatePercent,
+            int maxNoiseTexelPercent,
+            string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            fixtures.BaseSetUp();
+            var root = new GameObject("AMUSE alpha policy " + armName);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
+            serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                .intValue = opaquePercent;
+            serialized.FindProperty("_transparencyNoiseGatePercent")
+                .intValue = noiseGatePercent;
+            serialized.FindProperty("_maximumNoiseTexelPercent")
+                .intValue = maxNoiseTexelPercent;
+            serialized.ApplyModifiedProperties();
+
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                var texture = fixtures.ImportStrayTexelTexture(
+                    "alpha_policy_stray_" + armName);
+                material =
+                    LilToonFixtureTestBase.CreateTransparentConversionMaterial();
+                material.SetTexture("_MainTex", texture);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics:
+                        VerifiedLilToonTestSeams.VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+
+            return amuse;
+        }
+
 
         /// <summary>
         /// Non-singleton animation of every cutout alpha-request scalar,
@@ -4942,6 +5069,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 return pixels;
+            }
+
+            /// <summary>
+            /// A 4x4 mip chain authored per texel: every texel is alpha 255
+            /// except one stray texel at alpha 3, texel (0, 0) of mip 0,
+            /// and every coarser level is uniform 255. The levels are
+            /// written directly through SetPixels32 and stored by
+            /// CreateAsset, exactly like the explicit mipmap fixture: the
+            /// stored asset carries a project identity, so the capture's
+            /// source-identity gate admits it, and the GPU per-level route
+            /// reads exactly the authored levels.
+            /// </summary>
+            internal Texture2D ImportStrayTexelTexture(string name)
+            {
+                var texture = new Texture2D(
+                    4, 4, TextureFormat.RGBA32, 3, false);
+                var pixels = new Color32[4 * 4];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new Color32(255, 255, 255, 255);
+                }
+
+                // Texel (0, 0) sits inside the arm triangle's bilinear
+                // footprint, so the proof must consult it.
+                pixels[0] = new Color32(255, 255, 255, 3);
+                texture.SetPixels32(pixels, 0);
+                for (var mip = 1; mip < 3; mip++)
+                {
+                    var width = Math.Max(1, 4 >> mip);
+                    var level = new Color32[width * width];
+                    for (var index = 0; index < level.Length; index++)
+                    {
+                        level[index] = new Color32(255, 255, 255, 255);
+                    }
+
+                    texture.SetPixels32(level, mip);
+                }
+
+                texture.Apply(false, false);
+                var path = TempFolder + "/" + name + ".asset";
+                AssetDatabase.CreateAsset(texture, path);
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Stray texel texture '{path}' must load.");
+                return loaded;
             }
         }
 

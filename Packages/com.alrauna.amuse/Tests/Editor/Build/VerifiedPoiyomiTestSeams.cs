@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -87,6 +88,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
             out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
@@ -96,7 +98,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     materials[index], request);
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, bounds);
             var result = new CapturedAlphaMaterial[materials.Count];
             for (var index = 0; index < result.Length; index++)
             {
