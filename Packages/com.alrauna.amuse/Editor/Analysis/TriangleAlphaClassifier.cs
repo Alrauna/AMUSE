@@ -222,6 +222,23 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaSamplingSettings sampling,
             AlphaUvEnvelope envelope)
         {
+            return Classify(triangle, texture, sampling, envelope, 0);
+        }
+
+        /// <summary>
+        /// Classifies with the per-polygon noise density policy. A policy
+        /// of zero keeps erasure inert. An erased texel then behaves
+        /// exactly like a witness byte. A positive policy lets an erased
+        /// texel skip the witness check only when the erased share of the
+        /// consulted texels stays strictly under the policy.
+        /// </summary>
+        internal static TriangleAlphaOutcome Classify(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaSamplingSettings sampling,
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent)
+        {
             if (texture == null)
             {
                 throw new ArgumentNullException(nameof(texture));
@@ -267,22 +284,22 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (sampling.FilterMode == AlphaFilterMode.Point &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
-                return ClassifyPointClamp(triangle, texture, envelope);
+                return ClassifyPointClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
             if (sampling.FilterMode == AlphaFilterMode.Point &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
-                return ClassifyPointRepeat(triangle, texture, envelope);
+                return ClassifyPointRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
             if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
-                return ClassifyBilinearClamp(triangle, texture, envelope);
+                return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
             if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
-                return ClassifyBilinearRepeat(triangle, texture, envelope);
+                return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
 
             // Trilinear's within-level footprint is the bilinear one; the
@@ -292,12 +309,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
                 sampling.WrapMode == AlphaWrapMode.Clamp)
             {
-                return ClassifyBilinearClamp(triangle, texture, envelope);
+                return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
             if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
                 sampling.WrapMode == AlphaWrapMode.Repeat)
             {
-                return ClassifyBilinearRepeat(triangle, texture, envelope);
+                return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
 
             return TriangleAlphaOutcome.Unknown;
@@ -306,7 +323,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static TriangleAlphaOutcome ClassifyPointClamp(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent)
         {
             var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
             var minimumX = PointClampIndex(
@@ -332,11 +350,28 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            // The density gate decides whether erased texels act as
+            // witnesses. A policy of zero skips the pre-pass entirely.
+            var substituteErased = maxNoiseTexelPercent > 0 &&
+                PointClampSubstitutesErasedTexels(
+                    texture,
+                    domain,
+                    maxNoiseTexelPercent,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY);
+
             for (var y = minimumY; y <= maximumY; y++)
             {
                 for (var x = minimumX; x <= maximumX; x++)
                 {
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -352,10 +387,63 @@ namespace Alrauna.Amuse.Editor.Analysis
             return TriangleAlphaOutcome.ProvenOpaque;
         }
 
+        /// <summary>
+        /// Decides whether the erased texels in the point clamp candidate
+        /// window substitute for witnesses. The gate counts every candidate
+        /// whose support interval intersects the domain. Opaque candidates
+        /// count too. Erasure substitutes only when the erased share of the
+        /// consulted candidates stays strictly under the policy. Equality
+        /// refuses. The existence walk runs first, so a window without
+        /// erasure never pays for the exact intersection count.
+        /// </summary>
+        private static bool PointClampSubstitutesErasedTexels(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            int maxNoiseTexelPercent,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            if (!WindowHoldsErasedTexel(
+                    texture,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY))
+            {
+                return false;
+            }
+
+            var consulted = 0L;
+            var erased = 0L;
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    if (!ExactUvGeometry.Intersects(
+                            domain,
+                            PointClampInterval(x, texture.Width, domain.TexelScale),
+                            PointClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                    }
+                }
+            }
+
+            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+        }
+
         private static TriangleAlphaOutcome ClassifyBilinearRepeat(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent)
         {
             var domain = ExactUvGeometry.NormalizeRepeat(
                 ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
@@ -398,6 +486,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            // The density gate decides whether erased texels act as
+            // witnesses. A policy of zero skips the pre-pass entirely.
+            var substituteErased = maxNoiseTexelPercent > 0 &&
+                BilinearRepeatSubstitutesErasedTexels(
+                    texture,
+                    domain,
+                    maxNoiseTexelPercent,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY);
+
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -411,7 +511,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -434,6 +539,61 @@ namespace Alrauna.Amuse.Editor.Analysis
             return TriangleAlphaOutcome.ProvenOpaque;
         }
 
+        /// <summary>
+        /// Decides whether the erased texels in the bilinear repeat
+        /// candidate window substitute for witnesses. The gate counts every
+        /// candidate whose support interval intersects the domain. Opaque
+        /// candidates count too. Erasure substitutes only when the erased
+        /// share of the consulted candidates stays strictly under the
+        /// policy. Equality refuses. The existence walk runs first, so a
+        /// window without erasure never pays for the exact intersection
+        /// count.
+        /// </summary>
+        private static bool BilinearRepeatSubstitutesErasedTexels(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            int maxNoiseTexelPercent,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            if (!RepeatedWindowHoldsErasedTexel(
+                    texture,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY))
+            {
+                return false;
+            }
+
+            var consulted = 0L;
+            var erased = 0L;
+            for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
+            {
+                var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
+                for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
+                {
+                    var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
+                    if (!ExactUvGeometry.Intersects(
+                            domain,
+                            BilinearRepeatInterval(unwrappedX, domain.TexelScale),
+                            BilinearRepeatInterval(unwrappedY, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                    }
+                }
+            }
+
+            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+        }
+
         private static ExactInterval BilinearRepeatInterval(
             int index,
             BigInteger texelScale)
@@ -452,7 +612,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static TriangleAlphaOutcome ClassifyBilinearClamp(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent)
         {
             var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
             var minimumX = Math.Max(0, PointClampIndex(
@@ -478,6 +639,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            // The density gate decides whether erased texels act as
+            // witnesses. A policy of zero skips the pre-pass entirely.
+            var substituteErased = maxNoiseTexelPercent > 0 &&
+                BilinearClampSubstitutesErasedTexels(
+                    texture,
+                    domain,
+                    maxNoiseTexelPercent,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY);
+
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -489,7 +662,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 for (var x = minimumX; x <= maximumX; x++)
                 {
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -518,6 +696,59 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// Decides whether the erased texels in the bilinear clamp
+        /// candidate window substitute for witnesses. The gate counts every
+        /// candidate whose support interval intersects the domain. Opaque
+        /// candidates count too. Erasure substitutes only when the erased
+        /// share of the consulted candidates stays strictly under the
+        /// policy. Equality refuses. The existence walk runs first, so a
+        /// window without erasure never pays for the exact intersection
+        /// count.
+        /// </summary>
+        private static bool BilinearClampSubstitutesErasedTexels(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            int maxNoiseTexelPercent,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            if (!WindowHoldsErasedTexel(
+                    texture,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY))
+            {
+                return false;
+            }
+
+            var consulted = 0L;
+            var erased = 0L;
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    if (!ExactUvGeometry.Intersects(
+                            domain,
+                            BilinearClampInterval(x, texture.Width, domain.TexelScale),
+                            BilinearClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                    }
+                }
+            }
+
+            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
         }
 
         private static ExactInterval BilinearClampInterval(
@@ -665,7 +896,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static TriangleAlphaOutcome ClassifyPointRepeat(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent)
         {
             var domain = ExactUvGeometry.NormalizeRepeat(
                 ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
@@ -698,13 +930,30 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
+            // The density gate decides whether erased texels act as
+            // witnesses. A policy of zero skips the pre-pass entirely.
+            var substituteErased = maxNoiseTexelPercent > 0 &&
+                PointRepeatSubstitutesErasedTexels(
+                    texture,
+                    domain,
+                    maxNoiseTexelPercent,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY);
+
             for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
             {
                 var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
                 for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -718,6 +967,118 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// Decides whether the erased texels in the point repeat candidate
+        /// window substitute for witnesses. The gate counts every candidate
+        /// whose support interval intersects the domain. Opaque candidates
+        /// count too. Erasure substitutes only when the erased share of the
+        /// consulted candidates stays strictly under the policy. Equality
+        /// refuses. The existence walk runs first, so a window without
+        /// erasure never pays for the exact intersection count.
+        /// </summary>
+        private static bool PointRepeatSubstitutesErasedTexels(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            int maxNoiseTexelPercent,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            if (!RepeatedWindowHoldsErasedTexel(
+                    texture,
+                    minimumX,
+                    maximumX,
+                    minimumY,
+                    maximumY))
+            {
+                return false;
+            }
+
+            var consulted = 0L;
+            var erased = 0L;
+            for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
+            {
+                var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
+                for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
+                {
+                    var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
+                    if (!ExactUvGeometry.Intersects(
+                            domain,
+                            PointRepeatInterval(unwrappedX, domain.TexelScale),
+                            PointRepeatInterval(unwrappedY, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                    }
+                }
+            }
+
+            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+        }
+
+        /// <summary>
+        /// Reports whether any texel in the candidate window stores the
+        /// erased flag. The density pre-pass walks the window once for this
+        /// check. This avoids the exact intersection count when the window
+        /// holds no erasure.
+        /// </summary>
+        private static bool WindowHoldsErasedTexel(
+            AlphaTextureData texture,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Reports whether any texel under the repeated candidate window
+        /// stores the erased flag. The window may span several texture
+        /// tiles, so the walk folds every unwrapped index back onto the
+        /// stored texels. The density pre-pass walks the window once for
+        /// this check. This avoids the exact intersection count when the
+        /// window holds no erasure.
+        /// </summary>
+        private static bool RepeatedWindowHoldsErasedTexel(
+            AlphaTextureData texture,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
+            for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
+            {
+                var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
+                for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
+                {
+                    var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
+                    if (texture.GetAlpha(x, y) == AlphaTextureData.ErasedFlag)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static bool TryGetCellIndex(
