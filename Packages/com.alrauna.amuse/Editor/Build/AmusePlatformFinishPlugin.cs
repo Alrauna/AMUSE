@@ -30,6 +30,13 @@ namespace Alrauna.Amuse.Editor.Build
         /// builds the barrier actually analyzed.</summary>
         internal bool ReachedRendererAnalysis { get; set; }
 
+        /// <summary>True when the avatar's alpha policy deviates from its
+        /// inert defaults, so moved triangles may rest on policy-widened
+        /// evidence rather than on exact proof. The apply pass consumes
+        /// this beside <see cref="ReachedRendererAnalysis"/> to mark the
+        /// avatar summary exactly once per analyzed build.</summary>
+        internal bool AlphaPolicyActive { get; set; }
+
         /// <summary>How many renderers received at least one applied
         /// alpha-separation write.</summary>
         internal int AppliedRendererCount { get; set; }
@@ -428,6 +435,16 @@ namespace Alrauna.Amuse.Editor.Build
             var maxMipLevel = ProofMipCapFrom(optimizer);
             var minTextureSize = MinTextureSizeFrom(optimizer);
             var minimumOpaqueCoveragePercent = MinimumCoverageFrom(optimizer);
+            var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
+            var noiseGatePercent = NoisePercentFrom(optimizer);
+            var maxNoiseTexelPercent = MaxNoiseTexelPercentFrom(optimizer);
+            var alphaPolicyBounds =
+                AlphaPolicyBounds.From(opaqueAlphaPercent, noiseGatePercent);
+            // The disclosure marker follows the spec's exact rule: the
+            // summary names the policy only when a setting left its inert
+            // default. The density alone never marks a build.
+            state.AlphaPolicyActive =
+                opaqueAlphaPercent < 100 || noiseGatePercent > 0;
             var ignoreOutOfRangeSlots =
                 optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
 
@@ -458,12 +475,14 @@ namespace Alrauna.Amuse.Editor.Build
                         IReadOnlyList<Material> materials,
                         IReadOnlyList<CapturedAlphaMaterialFamily> families,
                         MaterialEvidenceRequest request,
+                        AlphaPolicyBounds bounds,
                         out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
                         UnityMaterialSemantics
                             .TryCaptureClosedAlphaMaterialsTransferred(
                                 materials,
                                 families,
                                 request,
+                                bounds,
                                 granted,
                                 out transferred);
                 }
@@ -474,6 +493,7 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
+                        alphaPolicyBounds,
                         out admittedLiveMaterials,
                         effectiveCapturer,
                         ignoreOutOfRangeSlots)
@@ -482,6 +502,7 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer.sharedMaterials,
                         graph,
                         state.AnimatorBindings,
+                        alphaPolicyBounds,
                         selectRequest,
                         capturer,
                         out admittedLiveMaterials,
@@ -493,7 +514,7 @@ namespace Alrauna.Amuse.Editor.Build
                         : null);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
-                    minTextureSize);
+                    minTextureSize, maxNoiseTexelPercent);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -615,6 +636,80 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// Maps the optimizer's "Minimum Opaque Alpha Percentage" policy
+        /// to the proof's opaque percent. A stored value outside the
+        /// Range attribute is a defect in the stored component, and the
+        /// defensive read clamps it into the expressible range instead
+        /// of classifying with a policy no inspector could have saved.
+        /// A missing component maps to the inert 100.
+        /// </summary>
+        private static int OpaquePercentFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 100;
+            }
+
+            var stored = optimizer.MinimumOpaqueAlphaPercent;
+            return stored < 0 ? 0 : stored > 100 ? 100 : stored;
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Transparency Noise Gate Percentage"
+        /// policy to the proof's noise percent: the same defensive
+        /// clamps as <see cref="OpaquePercentFrom"/>, then the
+        /// inspector clamp that keeps the gate strictly below the
+        /// opaque percent. A missing component maps to the inert 0.
+        /// </summary>
+        private static int NoisePercentFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 0;
+            }
+
+            var opaque = OpaquePercentFrom(optimizer);
+            var stored = optimizer.TransparencyNoiseGatePercent;
+            stored = stored < 0 ? 0 : stored > 100 ? 100 : stored;
+            return AlphaPolicyBounds.ClampNoise(opaque, stored);
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Maximum Noise Texel Percentage" policy
+        /// to the classifier's density bound. A stored value below zero
+        /// is treated as the inert 0, which never substitutes. A stored
+        /// value above 100 is rejected here rather than at the first
+        /// Classify: the classifier throws outside this range, and a
+        /// wiring-time failure names the component before any build
+        /// work starts. A missing component maps to the inert 0.
+        /// </summary>
+        private static int MaxNoiseTexelPercentFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 0;
+            }
+
+            var stored = optimizer.MaximumNoiseTexelPercent;
+            if (stored < 0)
+            {
+                return 0;
+            }
+
+            if (stored > 100)
+            {
+                throw new InvalidOperationException(
+                    "AMUSE Maximum Noise Texel Percentage is stored as " +
+                    stored + ", outside the 0 to 100 range.");
+            }
+
+            return stored;
+        }
+
+        /// <summary>
         /// Every non-null assigned material on the avatar, for the D8
         /// shader-transfer pre-scan. Distinctness is the collector's job.
         /// </summary>
@@ -699,7 +794,8 @@ namespace Alrauna.Amuse.Editor.Build
                 CapturedAnimationEvidence evidence,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
                 int maxMipLevel = int.MaxValue,
-                int minTextureSize = 1)
+                int minTextureSize = 1,
+                int maxNoiseTexelPercent = 0)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -811,9 +907,7 @@ namespace Alrauna.Amuse.Editor.Build
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
                     AlphaFields,
-                    // Task 7's mapper supplies the real density percent.
-                    // Zero keeps erasure inert until then.
-                    0,
+                    maxNoiseTexelPercent,
                     resolveSemantics);
                 if (!resolved.IsResolved)
                 {

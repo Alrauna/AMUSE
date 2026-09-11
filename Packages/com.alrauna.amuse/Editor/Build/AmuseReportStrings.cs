@@ -301,6 +301,10 @@ namespace Alrauna.Amuse.Editor.Build
                 "opaque materials. {2} renderers kept everything original.",
             ["amuse.summary.Title:hint"] =
                 "Open this component to see the same status.",
+            ["amuse.summary.PolicyActive:description"] =
+                "AMUSE moved triangles while the alpha policy was " +
+                "active, so some moved triangles rest on your alpha " +
+                "settings rather than on exact proof.",
         };
 
         /// <summary>True when the table holds a string for the key.</summary>
