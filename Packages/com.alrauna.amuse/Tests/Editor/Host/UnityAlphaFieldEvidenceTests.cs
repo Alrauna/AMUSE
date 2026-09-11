@@ -1012,27 +1012,34 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// One responsibility only: every byte is 0 or 255. Length is
-        /// IsExpectedBufferLength's job, checked earlier and against the length
-        /// Unity returned.
+        /// One responsibility only: every byte is one of the three flag states
+        /// the predicate shaders emit: 0, AlphaTextureData.ErasedFlag, or 255.
+        /// Length is IsExpectedBufferLength's job, checked earlier and against
+        /// the length Unity returned.
         /// </summary>
         [Test]
-        public void OnlyZeroAnd255AreAcceptedFromThePredicateTarget()
+        public void OnlyTheThreeFlagStatesAreAcceptedFromThePredicateTarget()
         {
             Assert.That(
-                UnityAlphaFieldEvidence.IsBinaryPredicateBuffer(
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
                     new byte[] { 0, 255, 255, 0 }), Is.True);
             Assert.That(
-                UnityAlphaFieldEvidence.IsBinaryPredicateBuffer(
-                    new byte[] { 0, 1, 255, 0 }), Is.False);
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
+                    new byte[] { 0, 1, 255, 0 }), Is.True);
             Assert.That(
-                UnityAlphaFieldEvidence.IsBinaryPredicateBuffer(
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
+                    new byte[] { 1, 1, 1, 1 }), Is.True);
+            Assert.That(
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
+                    new byte[] { 0, 2, 255, 0 }), Is.False);
+            Assert.That(
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
                     new byte[] { 0, 254, 255, 0 }), Is.False);
             Assert.That(
-                UnityAlphaFieldEvidence.IsBinaryPredicateBuffer(
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(
                     new byte[] { 0, 128, 255, 0 }), Is.False);
             Assert.That(
-                UnityAlphaFieldEvidence.IsBinaryPredicateBuffer(null), Is.False);
+                UnityAlphaFieldEvidence.IsPredicateFlagBuffer(null), Is.False);
         }
 
         /// <summary>
@@ -1205,6 +1212,152 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                             Is.EqualTo(gpu[mip].GetAlpha(x, y)),
                             "mip " + mip + " texel " + x + "," + y);
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Inert equivalence on the direct GPU route: the bounds-aware capture
+        /// under AlphaPolicyBounds.Inert must equal the legacy instance path
+        /// byte for byte. The fixture carries bytes strictly inside the inert
+        /// bands, 128 and 254, so the capture also proves the inert noise
+        /// bound erases nothing: no texel may read ErasedFlag.
+        /// </summary>
+        [Test]
+        public void InertBounds_MatchTheLegacyChainByteForByte()
+        {
+            var texture = Import("bounds_inert", AsymmetricPixels(), Size, Size);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var gated),
+                Is.True);
+            Assert.That(TryChain(texture, out var legacy), Is.True);
+
+            Assert.That(gated.Count, Is.EqualTo(legacy.Count));
+            for (var mip = 0; mip < legacy.Count; mip++)
+            {
+                Assert.That(
+                    gated[mip].Width, Is.EqualTo(legacy[mip].Width), "mip " + mip);
+                Assert.That(
+                    gated[mip].Height, Is.EqualTo(legacy[mip].Height), "mip " + mip);
+                for (var y = 0; y < legacy[mip].Height; y++)
+                {
+                    for (var x = 0; x < legacy[mip].Width; x++)
+                    {
+                        Assert.That(
+                            gated[mip].GetAlpha(x, y),
+                            Is.EqualTo(legacy[mip].GetAlpha(x, y)),
+                            "mip " + mip + " texel " + x + "," + y);
+                        Assert.That(
+                            gated[mip].GetAlpha(x, y),
+                            Is.Not.EqualTo(AlphaTextureData.ErasedFlag),
+                            "Inert bounds never erase: mip " + mip
+                            + " texel " + x + "," + y);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The three-state verdict through the real R8 predicate route. With
+        /// the gate-on bounds From(100, 2) the noise bound is byte 6 and the
+        /// opaque bound is byte 255. The stray byte 3 is strictly below the
+        /// noise bound, so exactly that texel reads ErasedFlag; the mid-band
+        /// byte 200 stays a witness; every 255 texel stays opaque. The fixture
+        /// is readable and single-mip, so each stored byte maps to exactly one
+        /// texel at level 0.
+        /// </summary>
+        [Test]
+        public void AStrayNoiseByteIsErasedUnderGateOnBounds()
+        {
+            var pixels = UniformPixels(Size, Size, 255);
+            pixels[0] = new Color32(64, 32, 16, 3);
+            pixels[7] = new Color32(64, 32, 16, 200);
+            var texture = Import("bounds_threestate", pixels, Size, Size);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, 1.0f, AlphaPolicyBounds.From(100, 2),
+                    out _, out var chain),
+                Is.True);
+            var field = chain[0];
+
+            // Unity pixel arrays run bottom-to-top, and so does
+            // AlphaTextureData: pixel 0 lands at (0, 0), pixel 7 at (3, 1).
+            Assert.That(
+                field.GetAlpha(0, 0), Is.EqualTo(AlphaTextureData.ErasedFlag),
+                "The stray byte 3 is strictly below the noise bound 6.");
+            Assert.That(
+                field.GetAlpha(3, 1), Is.EqualTo(0),
+                "The mid-band byte 200 stays a witness.");
+
+            var erased = 0;
+            var witness = 0;
+            var opaque = 0;
+            for (var y = 0; y < field.Height; y++)
+            {
+                for (var x = 0; x < field.Width; x++)
+                {
+                    var flag = field.GetAlpha(x, y);
+                    if (flag == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                    }
+                    else if (flag == 0)
+                    {
+                        witness++;
+                    }
+                    else if (flag == byte.MaxValue)
+                    {
+                        opaque++;
+                    }
+                    else
+                    {
+                        Assert.Fail(
+                            "Texel (" + x + "," + y + ") read " + flag
+                            + ", which is not a flag state.");
+                    }
+                }
+            }
+
+            Assert.That(
+                erased, Is.EqualTo(1), "only the stray byte is erased");
+            Assert.That(
+                witness, Is.EqualTo(1), "only the mid-band byte is a witness");
+            Assert.That(
+                opaque, Is.EqualTo(Size * Size - 2),
+                "every 255 texel stays opaque");
+        }
+
+        /// <summary>
+        /// The witness band: byte 200 sits at or above the noise bound 6 and
+        /// strictly below the opaque bound 255, so every texel stays a witness
+        /// under the gate-on bounds From(100, 2). A route that leaked the
+        /// source byte, or erased the whole band, fails here.
+        /// </summary>
+        [Test]
+        public void AMidBandByteStaysAWitnessUnderGateOnBounds()
+        {
+            var texture = Import(
+                "bounds_witness", UniformPixels(Size, Size, 200), Size, Size);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, 1.0f, AlphaPolicyBounds.From(100, 2),
+                    out _, out var chain),
+                Is.True);
+            var field = chain[0];
+
+            Assert.That(field.IsFullyNonOpaque, Is.True);
+            for (var y = 0; y < field.Height; y++)
+            {
+                for (var x = 0; x < field.Width; x++)
+                {
+                    Assert.That(
+                        field.GetAlpha(x, y), Is.EqualTo(0),
+                        "Texel (" + x + "," + y + ") must stay a witness.");
                 }
             }
         }
