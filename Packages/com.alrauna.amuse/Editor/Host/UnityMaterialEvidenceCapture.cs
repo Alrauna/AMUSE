@@ -37,9 +37,20 @@ namespace Alrauna.Amuse.Editor.Host
         internal string PropertyName { get; }
         internal TextureEvidenceKinds Evidence { get; }
 
+        /// <summary>
+        /// The shader property whose value is this texture's alpha cutoff,
+        /// or null when the alpha is read unclipped. A declared cutoff
+        /// below one binarizes the capture by the cutoff and keeps the
+        /// alpha policy inert for the source: a texel between the noise
+        /// gate and the shader cutoff is discarded at runtime and must
+        /// never read opaque (spec section 3).
+        /// </summary>
+        internal string CutoffScalarProperty { get; }
+
         internal TexturePropertyEvidenceRequest(
             string propertyName,
-            TextureEvidenceKinds evidence)
+            TextureEvidenceKinds evidence,
+            string cutoffScalarProperty = null)
         {
             if (string.IsNullOrWhiteSpace(propertyName))
             {
@@ -51,9 +62,17 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 throw new ArgumentOutOfRangeException(nameof(evidence));
             }
+            if (cutoffScalarProperty != null &&
+                string.IsNullOrWhiteSpace(cutoffScalarProperty))
+            {
+                throw new ArgumentException(
+                    "A declared cutoff property name must be non-empty.",
+                    nameof(cutoffScalarProperty));
+            }
 
             PropertyName = propertyName;
             Evidence = evidence;
+            CutoffScalarProperty = cutoffScalarProperty;
         }
     }
 
@@ -120,6 +139,8 @@ namespace Alrauna.Amuse.Editor.Host
             var vectors = new SortedSet<string>(StringComparer.Ordinal);
             var textures = new SortedDictionary<string, TextureEvidenceKinds>(
                 StringComparer.Ordinal);
+            var textureCutoffs = new SortedDictionary<string, string>(
+                StringComparer.Ordinal);
 
             foreach (var request in requests)
             {
@@ -139,6 +160,23 @@ namespace Alrauna.Amuse.Editor.Host
                     textures.TryGetValue(
                         texture.PropertyName, out var existing);
                     textures[texture.PropertyName] = existing | texture.Evidence;
+                    if (texture.CutoffScalarProperty == null)
+                    {
+                        continue;
+                    }
+
+                    if (textureCutoffs.TryGetValue(
+                            texture.PropertyName, out var declared) &&
+                        declared != texture.CutoffScalarProperty)
+                    {
+                        throw new ArgumentException(
+                            "One texture property cannot declare two " +
+                            "different cutoff properties.",
+                            nameof(requests));
+                    }
+
+                    textureCutoffs[texture.PropertyName] =
+                        texture.CutoffScalarProperty;
                 }
             }
 
@@ -146,8 +184,9 @@ namespace Alrauna.Amuse.Editor.Host
                 textures.Count);
             foreach (var texture in textures)
             {
+                textureCutoffs.TryGetValue(texture.Key, out var cutoff);
                 textureRequests.Add(new TexturePropertyEvidenceRequest(
-                    texture.Key, texture.Value));
+                    texture.Key, texture.Value, cutoff));
             }
 
             return new MaterialEvidenceRequest(
@@ -868,7 +907,25 @@ namespace Alrauna.Amuse.Editor.Host
                     : null;
                 var hasScaleOffset = hasValue &&
                     (textureRequest.Evidence & TextureEvidenceKinds.ScaleOffset) != 0;
+                // A family that declares its cutoff scalar hands the real
+                // value to the capture, whose routes binarize by it and
+                // keep the alpha policy inert for the source. A family
+                // that declares none reads the unclipped exact-255 arm,
+                // where the policy applies.
                 var cutoutThreshold = 1.0f;
+                if (textureRequest.CutoffScalarProperty != null)
+                {
+                    var cutoffFact =
+                        facts[textureRequest.CutoffScalarProperty];
+                    if (isLive && cutoffFact.HasType &&
+                        (cutoffFact.Type == ShaderPropertyType.Float ||
+                         cutoffFact.Type == ShaderPropertyType.Range))
+                    {
+                        cutoutThreshold = material.GetFloat(
+                            textureRequest.CutoffScalarProperty);
+                    }
+                }
+
                 builder.Textures.Add(new TextureAssignmentBuilder
                 {
                     Name = textureRequest.PropertyName,

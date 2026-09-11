@@ -168,6 +168,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 },
                 textureProperties: new[]
                 {
+                    // No cutoff declaration: the transparent alpha is the
+                    // plain unclipped _MainTex sample (T1 §9.1 clause 5),
+                    // so the exact-255 arm is this family's capture arm
+                    // and the alpha policy applies to it.
                     new TexturePropertyEvidenceRequest(
                         MainTextureProperty,
                         TextureEvidenceKinds.ScaleOffset |
