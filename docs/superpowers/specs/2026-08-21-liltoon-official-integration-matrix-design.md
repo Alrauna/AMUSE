@@ -323,4 +323,3 @@ Use implementation shape **A** once the analysis-lifecycle and coherent-snapshot
 Do not build atomic per-combination profiles, a generic registry/provider/plugin architecture, or a general preprocessor. The observed combinations do not justify them.
 
 No implementation plan accompanies this document, because the authoritative analysis lifecycle and coherent evidence snapshot remain architectural prerequisites. Production attestation code, semantic adapters, census tooling, NDMF ordering, and unrelated optimizer areas are unchanged on this branch.
-</content>

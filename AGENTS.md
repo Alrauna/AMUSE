@@ -90,7 +90,7 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 ## Runtime/Tooling Preferences
 
 - Dev environment: Unity 2022.3.22f1 (`ProjectSettings/ProjectVersion.txt`). The package declares `unity: "2022.3"`.
-- The build gate admits Unity 2022.3 patch 22 and newer f-releases, NDMF `[1.14.4, 2.0.0)`, VRChat SDK Base and Avatars `[3.10.4, 4.0.0)`, and non-Play NDMF builds only.
+- The build gate admits Unity 2022.3 patch 22 and newer f-releases, NDMF `[1.14.4, 2.0.0)`, and VRChat SDK Base and Avatars `[3.10.4, 4.0.0)`. Upload and NDMF Play mode build paths both admit. An unclassified build path refuses. Per-build consent covers certain untested host versions and recognized shader sources.
 - Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. PowerShell 7 runs the one bootstrap script.
 - Generated `*.csproj` and `*.sln` files are gitignored. Never commit or hand-edit them.
 - `Packages/nadena.dev.ndmf/` is intentionally untracked. A fresh clone restores it with `vpm resolve project .`. A new embedded package needs a whitelist line in `Packages/.gitignore`.
@@ -108,7 +108,7 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 
 ## Repository reality and scope
 
-Current code, tests, pinned source behavior, reproducible characterization, and real-avatar evidence have priority over old plans, summaries, or architectural intent.
+Current code, tests, pinned source behavior, reproducible characterization, and real-avatar evidence have priority over old plans and summaries for questions about what exists. `docs/architecture/vision.md` defines the long-term direction. Code does not overrule that direction, and old plans do not authorize new subsystems or contract changes.
 
 Keep current work separate from discovered prerequisites, future architectural pressure, and speculative opportunities. Do not silently expand the active task.
 
@@ -185,6 +185,18 @@ Census Lab is for characterization and validation, not the correctness oracle. P
 Preserve the privacy tiers: Tier 1 raw observations, Tier 2 run-local anonymized intermediate, and Tier 3 privacy-reviewed aggregate output. By default, only reviewed aggregate information may leave the Lab.
 
 Never expose private names, paths, GUIDs, identifiers, per-avatar/per-renderer rows, or fingerprint-like structure. Never create publishable Census metrics without privacy review.
+
+## Private data in documents
+
+Documents never contain private identifiers, machine paths, or ports. The rules bind every file, including untracked scratch, because scratch can be committed later.
+
+Name machines and instances by role. The only allowed forms are `the dev editor instance` and `the Census Lab editor instance`. Never write an instance name, an instance hash, a port, a GUID, or a test-job identifier. Record test results as observed counts.
+
+Characterize private avatars by role. Never write an avatar, renderer, material, animation clip, controller, or hierarchy name. Replace exact triangle counts with ranges. Never write per-renderer or per-slot tables. A sanitized characterization opens with a privacy note that states the sanitization.
+
+Date every status claim in a record. Never write an unqualified `today` or `currently`. Old records speak for their date, and `docs/superpowers/README.md` states the standing interpretation.
+
+Before document work is reported complete, the changed files pass an identifier sweep. The sweep checks for an at sign joined to a hexadecimal hash, drive-letter paths, home-directory paths, four-digit ports, and every private asset name known to the session. Every hit is a defect. Fix the hits, then state that the sweep ran.
 
 ## Git and evidence
 

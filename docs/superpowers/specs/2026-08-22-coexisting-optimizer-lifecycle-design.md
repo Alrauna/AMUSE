@@ -730,5 +730,3 @@ A future implementation conforms to this specification only when it demonstrates
 - Apply-on-Play positive mutation stays unavailable, until it is separately proven safe
 - unsupported and unknown evidence never broadens optimization
 - no whole-tail scanner, reflection dependency, or generic plugin framework has entered the design
-</content>
-<parameter name="i">Rewrite spec in STE-flavored English</parameter>
