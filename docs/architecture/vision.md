@@ -4,7 +4,7 @@
 
 AMUSE aims to reduce the rendering and resource cost of VRChat avatars without destructive changes to your source assets. Material and shader understanding is its main purpose. Geometry and animation changes support that purpose. The goal is automatic optimization that keeps the intended appearance and avatar controls within stated compatibility limits. AMUSE must cooperate with other avatar tools rather than replace every type of avatar optimization.
 
-This document defines the long-term direction, not a completed feature set or an implementation plan. In each section, the first paragraph explains the purpose for artists. The second paragraph states the engineering direction or current implementation. Current-status statements describe the code at `e4f281d`, with package version `0.1.0-pre.1`. Current code establishes what exists, but it does not determine the limits of the long-term vision. Historical plans and architecture diagrams do not authorize new subsystems or changes to the correctness contract.
+This document defines the long-term direction, not a completed feature set or an implementation plan. In each section, the first paragraph explains the purpose for artists. The second paragraph states the engineering direction or current implementation. Current-status statements describe the code at `bd5fa9e`, with package version `0.1.0-pre.1`. Current code establishes what exists, but it does not determine the limits of the long-term vision. Historical plans and architecture diagrams do not authorize new subsystems or changes to the correctness contract.
 
 ## Useful optimization with a stated contract
 

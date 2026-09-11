@@ -1,6 +1,6 @@
 # Conversion blockers on a private Census test avatar
 
-Date: 2026-09-08. Base: `main` at `fb7bb2d`.
+Date: 2026-09-08. Base: `main` at `1ae9a0f`.
 Labels: `[SOURCE]` is a fact read in this repository or in pinned upstream code.
 `[MEASURED]` is a fact produced by a test or execution in this investigation.
 `[INFERENCE]` is a deduction. `[RECOMMENDATION]` is a proposed next step.

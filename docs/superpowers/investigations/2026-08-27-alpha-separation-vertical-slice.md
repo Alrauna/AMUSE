@@ -391,4 +391,3 @@ the full reconstruction set (§5) — this last item now needs public characteri
 - profitability and cost modeling
 - cross-renderer planning
 - any Census launcher or schema extension
-</content>
