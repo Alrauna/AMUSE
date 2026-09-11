@@ -1,6 +1,6 @@
 # AMUSE
 
-AMUSE: Alrauna's Material Understanding & Simplification Engine is a non-destructive Unity material optimization project for VRChat avatars built on NDMF. It focuses on behavior-preserving analysis, planning, and transformation.
+AMUSE: Alrauna's Material Understanding & Simplification Engine is a non-destructive Unity material optimization project for VRChat avatars built on NDMF. It uses material and shader understanding to reduce avatar rendering and resource cost. Each optimization states which differences it permits and which appearance and avatar controls it preserves.
 
 ## Install
 
