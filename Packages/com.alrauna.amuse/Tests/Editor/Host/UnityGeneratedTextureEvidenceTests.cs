@@ -71,6 +71,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 _streamingSubTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.True);
@@ -101,6 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 null,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.False);
@@ -114,6 +116,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 _streamingSubTex,
                 TextureChannel.Green,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.False);
@@ -132,6 +135,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 uncharacterized,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.False);
@@ -159,6 +163,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 redTexture,
                 TextureChannel.Red,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.True);
@@ -188,6 +193,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 halfAlphaTexture,
                 TextureChannel.Alpha,
                 0.6f,
+                AlphaPolicyBounds.Inert,
                 out var chainHigh);
 
             Assert.That(okHigh, Is.True);
@@ -198,6 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 halfAlphaTexture,
                 TextureChannel.Alpha,
                 0.4f,
+                AlphaPolicyBounds.Inert,
                 out var chainLow);
 
             Assert.That(okLow, Is.True);
@@ -231,6 +238,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 multiMipTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.True);
@@ -265,6 +273,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 boundaryTex,
                 TextureChannel.Alpha,
                 0.502f,
+                AlphaPolicyBounds.Inert,
                 out var chainAbove);
 
             Assert.That(okAbove, Is.True);
@@ -276,6 +285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 boundaryTex,
                 TextureChannel.Alpha,
                 0.501f,
+                AlphaPolicyBounds.Inert,
                 out var chainBelow);
 
             Assert.That(okBelow, Is.True);
@@ -289,12 +299,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 _streamingSubTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain1);
 
             var ok2 = UnityGeneratedTextureEvidence.TryCapture(
                 _streamingSubTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain2);
 
             Assert.That(ok1, Is.True);
@@ -324,6 +336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 deltaTex,
                 TextureChannel.Alpha,
                 0.501960f,
+                AlphaPolicyBounds.Inert,
                 out var chainBelow);
 
             Assert.That(okBelow, Is.True);
@@ -335,6 +348,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 deltaTex,
                 TextureChannel.Alpha,
                 0.501962f,
+                AlphaPolicyBounds.Inert,
                 out var chainAbove);
 
             Assert.That(okAbove, Is.True);
@@ -369,6 +383,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 TextureChannel.Alpha,
                 1.0f,
                 _ => false,
+                AlphaPolicyBounds.Inert,
                 out var chain);
 
             Assert.That(ok, Is.False);
@@ -436,6 +451,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 _streamingSubTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain1);
 
             Assert.That(ok1, Is.True);
@@ -447,11 +463,68 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 _streamingSubTex,
                 TextureChannel.Alpha,
                 1.0f,
+                AlphaPolicyBounds.Inert,
                 out var chain2);
 
             Assert.That(ok2, Is.True);
             Assert.That(chain2, Is.Not.Null);
             Assert.That(ReferenceEquals(chain1, chain2), Is.False);
+        }
+
+        [Test]
+        public void SessionCache_DoesNotServeInertEvidenceUnderGateOnBounds()
+        {
+            var strayTex = new Texture2D(4, 4, TextureFormat.RGBA32, true);
+            for (var m = 0; m < strayTex.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 4 >> m);
+                var px = new Color32[dim * dim];
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, 255);
+                }
+
+                // One stray at byte 3: a witness under the inert
+                // bounds, noise under a 2 percent gate.
+                if (m == 0)
+                {
+                    px[0] = new Color32(255, 255, 255, 3);
+                }
+
+                strayTex.SetPixels32(px, m);
+            }
+
+            strayTex.Apply(false, false);
+            strayTex.name = "AlphaMask (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(strayTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var okInert = UnityGeneratedTextureEvidence.TryCapture(
+                strayTex,
+                TextureChannel.Alpha,
+                1.0f,
+                AlphaPolicyBounds.Inert,
+                out var inertChain);
+
+            var okGateOn = UnityGeneratedTextureEvidence.TryCapture(
+                strayTex,
+                TextureChannel.Alpha,
+                1.0f,
+                AlphaPolicyBounds.From(100, 2),
+                out var gateOnChain);
+
+            Assert.That(okInert, Is.True);
+            Assert.That(okGateOn, Is.True);
+            Assert.That(ReferenceEquals(inertChain, gateOnChain), Is.False);
+
+            // The gate-on chain carries the erased flag where the
+            // inert chain carries a witness, so the second call
+            // re-captured under its own policy instead of serving the
+            // cached chain.
+            Assert.That(inertChain[0].GetAlpha(0, 0), Is.EqualTo(0));
+            Assert.That(
+                gateOnChain[0].GetAlpha(0, 0),
+                Is.EqualTo(AlphaTextureData.ErasedFlag));
         }
     }
 }

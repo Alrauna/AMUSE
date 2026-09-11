@@ -56,18 +56,6 @@ namespace Alrauna.Amuse.Editor.Host
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
-            out AlphaMipChain chain)
-        {
-            // The inert bounds are the base exact-255 policy this
-            // shorthand has always served. Callers that know the active
-            // policy pass it to the full overload.
-            return TryCapture(
-                source, channel, 1.0f, AlphaPolicyBounds.Inert, out chain);
-        }
-
-        internal static bool TryCapture(
-            Texture2D source,
-            TextureChannel channel,
             float cutoffThreshold,
             AlphaPolicyBounds bounds,
             out AlphaMipChain chain)
@@ -173,11 +161,15 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                // The clone fallback is bounds-blind: it builds base
-                // float-threshold evidence until the bounds-threading task
-                // reaches this route. A reader-refused texture must never
-                // silently serve policy-less evidence under an
-                // active-policy cache key.
+                // Published-chain limitation: the clone's coarser
+                // levels arrive pre-averaged, so masked re-averaging is
+                // not available here and each texel resolves at its own
+                // level. The loop honors the bounds rather than
+                // refusing the capture, so the evidence always matches
+                // the bounds in the cache key, and a policy-active
+                // texture whose only route is this clone keeps a
+                // capture route.
+                var threshold = Mathf.Clamp01(cutoffThreshold);
                 var levels = new AlphaTextureData[clone.mipmapCount];
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
@@ -206,9 +198,16 @@ namespace Alrauna.Amuse.Editor.Host
                         var value = channel == TextureChannel.Red
                             ? pixels[index].r
                             : pixels[index].a;
-                        var threshold = Mathf.Clamp01(cutoffThreshold);
-                        flags[index] =
-                            value >= threshold ? byte.MaxValue : (byte)0;
+                        var decoded = SourceImageMaskedChain.DecodeByte(value);
+                        var isErased = threshold >= 1.0f &&
+                            bounds.NoiseBound > 0 &&
+                            decoded < bounds.NoiseBound;
+                        var isOpaque = threshold >= 1.0f
+                            ? decoded >= bounds.OpaqueBound
+                            : value >= threshold;
+                        flags[index] = isErased
+                            ? AlphaTextureData.ErasedFlag
+                            : isOpaque ? byte.MaxValue : (byte)0;
                     }
 
                     levels[mip] = new AlphaTextureData(width, height, flags);

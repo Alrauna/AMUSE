@@ -1186,7 +1186,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(TryChain(texture, out var gpu), Is.True);
             Assert.That(
                 UnityStreamingTextureEvidence.TryCapture(
-                    texture, TextureChannel.Alpha, out var clone),
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out var clone),
                 Is.True);
             Assert.That(clone.Count, Is.EqualTo(gpu.Count));
             for (var mip = 0; mip < gpu.Count; mip++)
