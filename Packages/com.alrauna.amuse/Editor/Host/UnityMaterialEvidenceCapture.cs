@@ -1002,16 +1002,22 @@ namespace Alrauna.Amuse.Editor.Host
                 (evidence & TextureEvidenceKinds.CanonicalNormalMap) != 0 &&
                 UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
             AlphaMipChain alphaChannel = null;
+            // The plugin threads the active policy into this handoff in
+            // a later slice, so both channels capture under the inert
+            // bounds, which reproduce the base exact-255 contract.
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, cutoffThreshold, out _, out alphaChannel);
+                    texture, cutoffThreshold, AlphaPolicyBounds.Inert,
+                    out _, out alphaChannel);
             AlphaMipChain redChannel = null;
             var hasRedChannel =
                 (evidence & TextureEvidenceKinds.RedChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
                     texture,
                     TextureChannel.Red,
+                    1.0f,
+                    AlphaPolicyBounds.Inert,
                     out _,
                     out redChannel);
             return new CapturedTextureEvidence(

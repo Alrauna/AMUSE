@@ -64,5 +64,45 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     $"percent {percent}");
             }
         }
+
+        // From takes percents. The pair (99, 2) maps to the byte
+        // bounds O = 253 and n = 6.
+        [TestCase(100, 0, 254, 0)]
+        [TestCase(100, 0, 255, 255)]
+        [TestCase(99, 2, 252, 0)]
+        [TestCase(99, 2, 3, 1)]
+        [TestCase(99, 2, 253, 255)]
+        public void PublishedFlagRuleResolvesTheThreeBands(
+            int opaquePercent,
+            int noisePercent,
+            int sample,
+            int expected)
+        {
+            var bounds = AlphaPolicyBounds.From(opaquePercent, noisePercent);
+            var resolved = expected == 255
+                ? byte.MaxValue
+                : (byte)expected;
+            Assert.That(
+                SourceImageMaskedChainTestsHelpers.PublishedFlag(
+                    (byte)sample, bounds),
+                Is.EqualTo(resolved));
+        }
+    }
+
+    internal static class SourceImageMaskedChainTestsHelpers
+    {
+        // Mirrors the inline rule both published-chain routes use. Kept
+        // next to the tests so the table above pins the exact rule the
+        // two routes must implement.
+        internal static byte PublishedFlag(byte sample, AlphaPolicyBounds bounds)
+        {
+            if (sample >= bounds.OpaqueBound)
+            {
+                return byte.MaxValue;
+            }
+            return bounds.NoiseBound > 0 && sample < bounds.NoiseBound
+                ? AlphaTextureData.ErasedFlag
+                : (byte)0;
+        }
     }
 }

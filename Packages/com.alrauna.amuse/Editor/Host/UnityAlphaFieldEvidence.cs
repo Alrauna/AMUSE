@@ -129,7 +129,9 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// Captures the complete immutable alpha field for one supported
-        /// texture. Kept for the historical call shape.
+        /// texture. Kept for the historical call shape. It captures
+        /// under the inert bounds, which reproduce the base exact-255
+        /// contract.
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
@@ -137,19 +139,27 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, TextureChannel.Alpha, 1.0f, out source, out chain);
+                texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                out source, out chain);
         }
 
         internal static bool TryCapture(
             Texture texture,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out TextureSourceId source,
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, TextureChannel.Alpha, cutoffThreshold, out source, out chain);
+                texture, TextureChannel.Alpha, cutoffThreshold, bounds,
+                out source, out chain);
         }
 
+        /// <summary>
+        /// Captures under the inert bounds, which reproduce the base
+        /// exact-255 contract. Callers that know the active policy pass
+        /// it to the full overload.
+        /// </summary>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
@@ -157,7 +167,8 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, channel, 1.0f, out source, out chain);
+                texture, channel, 1.0f, AlphaPolicyBounds.Inert,
+                out source, out chain);
         }
 
         /// <summary>
@@ -168,11 +179,18 @@ namespace Alrauna.Amuse.Editor.Host
         /// decode-proof because the sRGB transfer is monotone and fixes
         /// exactly 1.0, so byte 255 still marks exactly the texels whose
         /// sampled value is one.
+        /// <para>
+        /// The bounds are the user's alpha policy as exact bytes. The
+        /// inert bounds reproduce the base exact-255 contract, and the
+        /// routes that honor the bounds carry them in their cache keys,
+        /// so two policies never share a cached chain.
+        /// </para>
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out TextureSourceId source,
             out AlphaMipChain chain)
         {
@@ -228,7 +246,8 @@ namespace Alrauna.Amuse.Editor.Host
                 if (GeneratedTextureAttestation.TryIdentifyProducer(texture2D, out _))
                 {
                     if (!UnityGeneratedTextureEvidence.TryCapture(
-                            texture2D, channel, cutoffThreshold, out chain))
+                            texture2D, channel, cutoffThreshold, bounds,
+                            out chain))
                     {
                         source = default;
                         chain = null;
@@ -245,12 +264,9 @@ namespace Alrauna.Amuse.Editor.Host
                 // GPU route this texture does not take.
                 if (texture2D.streamingMipmaps)
                 {
-                    // This route does not carry the active bounds yet, so
-                    // it captures under the inert bounds, which reproduce
-                    // the base exact-255 contract.
                     if (!UnityStreamingTextureEvidence.TryCapture(
-                            texture2D, channel, cutoffThreshold,
-                            AlphaPolicyBounds.Inert, out chain))
+                            texture2D, channel, cutoffThreshold, bounds,
+                            out chain))
                     {
                         source = default;
                         chain = null;
@@ -260,7 +276,10 @@ namespace Alrauna.Amuse.Editor.Host
                     return true;
                 }
 
-
+                // The bounds do not reach this route: the predicate
+                // shader binarizes at exact one, and the policy-aware
+                // capture paths are the source-image, streaming, and
+                // generated routes.
                 if (!HostCapabilitiesPass(
                         SystemInfo.supportsAsyncGPUReadback,
                         SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.Render),
