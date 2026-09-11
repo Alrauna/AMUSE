@@ -173,6 +173,11 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // The clone fallback is bounds-blind: it builds base
+                // float-threshold evidence until the bounds-threading task
+                // reaches this route. A reader-refused texture must never
+                // silently serve policy-less evidence under an
+                // active-policy cache key.
                 var levels = new AlphaTextureData[clone.mipmapCount];
                 for (var mip = 0; mip < levels.Length; mip++)
                 {

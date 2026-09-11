@@ -98,11 +98,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
-        public void MaskedAverageAboveTheBoundIsOpaque()
+        public void MixedBlockBelowTheOpaqueBoundStaysWitness()
         {
-            // One 4x4 block holds two 255s and two 200s with n = 6:
-            // nothing is noise, masked average 227.5 stays below O = 255,
-            // so the block is witness.
+            // One 4x4 block holds fourteen 255s and two 200s with n = 6:
+            // nothing is noise, and the masked sum 3970 stays below
+            // 255 * 16 = 4080, so the block is witness.
             var bytes = Uniform(16, 255);
             bytes[0] = 200;
             bytes[1] = 200;
@@ -110,6 +110,36 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var levels = SourceImageMaskedChain.Build(
                 bytes, 4, 4, 1, bounds);
             Assert.That(levels[0].GetAlpha(0, 0), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void OddWidthPartitionPlacesEachTexelInItsBlock()
+        {
+            // A 5x1 source partitions into levels 5, 2, and 1 wide. The
+            // middle level's blocks are uneven: [0, 2) and [2, 5). With
+            // O = 230 the second block's sum is 689, exactly one short
+            // of 230 * 3, so it stays witness only while all three of
+            // its texels are consulted. A naive even split drops texel 4
+            // and would turn the block opaque at 230 * 2, so the test
+            // catches a dropped texel on an odd width. The 1x1 level
+            // sums to 1199, at or above 230 * 5 = 1150, so it is opaque;
+            // any dropped texel would fall below that bound.
+            var bytes = new byte[] { 255, 255, 230, 230, 229 };
+            var bounds = AlphaPolicyBounds.From(90, 2);
+            var levels = SourceImageMaskedChain.Build(
+                bytes, 5, 1, 3, bounds);
+            Assert.That(levels.Length, Is.EqualTo(3));
+            Assert.That(levels[1].Width, Is.EqualTo(2));
+            // Level 0 keeps the per-texel verdicts: 230 meets O = 230
+            // and 229 does not.
+            Assert.That(levels[0].GetAlpha(3, 0), Is.EqualTo(255));
+            Assert.That(levels[0].GetAlpha(4, 0), Is.EqualTo(0));
+            // The uneven block [2, 5) is witness by one unit; the even
+            // block [0, 2) is opaque.
+            Assert.That(levels[1].GetAlpha(0, 0), Is.EqualTo(255));
+            Assert.That(levels[1].GetAlpha(1, 0), Is.EqualTo(0));
+            // The 1x1 level sums to 1199, at or above 230 * 5 = 1150.
+            Assert.That(levels[2].GetAlpha(0, 0), Is.EqualTo(255));
         }
 
         [Test]
