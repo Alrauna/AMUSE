@@ -218,7 +218,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, chain));
+                alpha, ProvidingFor(captured, chain), 0);
         }
 
         private Material NewGateOffMaterialWithOpaqueTexture(string textureName)
@@ -662,7 +662,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingForMasked(captured, mainChain, maskChain));
+                alpha, ProvidingForMasked(captured, mainChain, maskChain), 0);
         }
 
         /// <summary>
@@ -681,7 +681,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     chain = null;
                     return false;
-                });
+                }, 0);
         }
 
 

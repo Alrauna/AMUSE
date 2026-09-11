@@ -505,13 +505,18 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     chain = null;
                     return fields.TryGetValue((source, channel), out chain);
-                });
+                },
+                // The density stays zero on this path. It is the structural
+                // refusal probe, so it must never convert a triangle on the
+                // strength of the noise allowance.
+                0);
         }
 
         private static RendererAlphaAnalysis Analyze(
             UnityRendererAlphaSnapshot snapshot,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
-            AlphaFieldProvider alphaFields)
+            AlphaFieldProvider alphaFields,
+            int maxNoiseTexelPercent)
         {
             var resolutions = new Dictionary<
                 CapturedAlphaMaterial, AlphaResolution>();
@@ -524,7 +529,8 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 var material = snapshot.Materials[submesh.MaterialSlotIndex];
                 var resolution = ResolveFor(
-                    material, resolveSemantics, alphaFields, resolutions);
+                    material, resolveSemantics, alphaFields, resolutions,
+                    maxNoiseTexelPercent);
                 var outcomes = Classify(
                     submesh.Indices,
                     snapshot.Positions,
@@ -549,7 +555,8 @@ namespace Alrauna.Amuse.Editor.Host
             CapturedAlphaMaterial material,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             AlphaFieldProvider alphaFields,
-            Dictionary<CapturedAlphaMaterial, AlphaResolution> memo)
+            Dictionary<CapturedAlphaMaterial, AlphaResolution> memo,
+            int maxNoiseTexelPercent)
         {
             if (material != null && memo.TryGetValue(material, out var cached))
             {
@@ -560,7 +567,7 @@ namespace Alrauna.Amuse.Editor.Host
                 ? UnityMaterialSemantics.AllUnknown()
                 : resolveSemantics(material) ?? UnityMaterialSemantics.AllUnknown();
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Alpha, alphaFields);
+                semantics.Alpha, alphaFields, maxNoiseTexelPercent);
 
             if (material != null)
             {
