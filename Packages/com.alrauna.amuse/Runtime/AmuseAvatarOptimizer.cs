@@ -54,6 +54,46 @@ namespace Alrauna.Amuse.Runtime
         [Range(0, 100)]
         private int _minimumOpaqueCoveragePercent = 25;
 
+        /// <summary>
+        /// The smallest alpha percentage that counts as opaque evidence
+        /// for materials without a shader cutoff. Alpha at or above this
+        /// value is opaque evidence. Alpha between this value and full
+        /// opacity becomes fully opaque after a move, so a value below
+        /// 100 consents to that flattening. The default of 100 is inert:
+        /// only exact full opacity is opaque evidence, as before. The
+        /// inspector shows it as "Minimum Opaque Alpha Percentage".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _minimumOpaqueAlphaPercent = 100;
+
+        /// <summary>
+        /// The alpha percentage below which a texel is noise for
+        /// materials without a shader cutoff. AMUSE ignores noise only
+        /// where the noise is sparse. Ignored noise becomes fully
+        /// opaque after a move, so a value above 0 consents to that
+        /// flattening. A texture without a source file gives AMUSE only
+        /// its published mip levels, so the gate is weaker on it. The
+        /// default of 0 is inert: nothing is noise. The inspector shows
+        /// it as "Transparency Noise Gate Percentage".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _transparencyNoiseGatePercent = 0;
+
+        /// <summary>
+        /// The largest noise share, in percent, at which the noise gate
+        /// still fires for one polygon. The gate fires only when a
+        /// polygon's noise texels are strictly under this share of the
+        /// texels AMUSE checks for that polygon. Raising it lets the
+        /// gate flatten denser noise to fully opaque. The default of
+        /// 2 percent is a rule of thumb for stray anti-aliasing noise.
+        /// The inspector shows it as "Maximum Noise Texel Percentage".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _maximumNoiseTexelPercent = 2;
+
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots;
 
@@ -86,6 +126,27 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int MinimumOpaqueCoveragePercent =>
             _minimumOpaqueCoveragePercent;
+
+        /// <summary>
+        /// The smallest alpha percentage that counts as opaque evidence
+        /// for materials without a shader cutoff.
+        /// </summary>
+        public int MinimumOpaqueAlphaPercent =>
+            _minimumOpaqueAlphaPercent;
+
+        /// <summary>
+        /// The alpha percentage below which a texel is noise for
+        /// materials without a shader cutoff.
+        /// </summary>
+        public int TransparencyNoiseGatePercent =>
+            _transparencyNoiseGatePercent;
+
+        /// <summary>
+        /// The largest noise share, in percent of a polygon's checked
+        /// texels, at which the noise gate still fires for that polygon.
+        /// </summary>
+        public int MaximumNoiseTexelPercent =>
+            _maximumNoiseTexelPercent;
 
         /// <summary>
         /// When true, AMUSE ignores animation bindings that target material
