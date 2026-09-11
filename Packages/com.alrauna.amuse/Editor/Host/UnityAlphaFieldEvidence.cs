@@ -245,8 +245,12 @@ namespace Alrauna.Amuse.Editor.Host
                 // GPU route this texture does not take.
                 if (texture2D.streamingMipmaps)
                 {
+                    // This route does not carry the active bounds yet, so
+                    // it captures under the inert bounds, which reproduce
+                    // the base exact-255 contract.
                     if (!UnityStreamingTextureEvidence.TryCapture(
-                            texture2D, channel, cutoffThreshold, out chain))
+                            texture2D, channel, cutoffThreshold,
+                            AlphaPolicyBounds.Inert, out chain))
                     {
                         source = default;
                         chain = null;

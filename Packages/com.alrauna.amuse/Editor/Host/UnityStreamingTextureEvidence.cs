@@ -50,20 +50,26 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
-                    TextureChannel channel, int cutoffBits), AlphaMipChain> Cache = new();
+                    TextureChannel channel, int cutoffBits,
+                    AlphaPolicyBounds bounds), AlphaMipChain> Cache = new();
 
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
             out AlphaMipChain chain)
         {
-            return TryCapture(source, channel, 1.0f, out chain);
+            // The inert bounds are the base exact-255 policy this
+            // shorthand has always served. Callers that know the active
+            // policy pass it to the full overload.
+            return TryCapture(
+                source, channel, 1.0f, AlphaPolicyBounds.Inert, out chain);
         }
 
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out AlphaMipChain chain)
         {
             if (source == null)
@@ -83,12 +89,16 @@ namespace Alrauna.Amuse.Editor.Host
             var sourceFile = new FileInfo(path);
             var metaFile = new FileInfo(path + ".meta");
             var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
+            // The bounds ride in the key: two policies can share a cutoff
+            // while building different chains, so a policy change must
+            // re-capture instead of serving the other policy's evidence.
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
                 metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
                 channel,
-                cutoffBits);
+                cutoffBits,
+                bounds);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -97,7 +107,7 @@ namespace Alrauna.Amuse.Editor.Host
             // Try direct uncompressed disk source reading first to bypass
             // Unity downsampling and BC7/DXT loss.
             if (SourceImageAlphaReader.TryReadSourceAlphaChain(
-                    source, channel, cutoffThreshold, out chain))
+                    source, channel, cutoffThreshold, bounds, out chain))
             {
                 Cache[key] = chain;
                 return true;
