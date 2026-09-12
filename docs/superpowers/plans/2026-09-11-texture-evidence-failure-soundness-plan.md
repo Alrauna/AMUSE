@@ -16,9 +16,12 @@ authorization.
 
 ## Background
 
-A lab avatar with the Merge Skinned Mesh option of the third party
-optimizer enabled moved about nine tenths of the dress polygons to
-opaque materials with every slider inert. The captured chain holds only
+A lab avatar with AAO, anatawa12's Avatar Optimizer, and its
+TraceAndOptimize component's Merge Skinned Mesh option enabled moved
+about nine tenths of the dress polygons to opaque materials with every
+slider inert. AAO merges the renderers before NDMF's PlatformFinish
+passes, so the failure surfaces on the AAO merged renderer. The
+captured chain holds only
 about 13 percent opaque texels, and the moved polygons sample 18 to 37
 percent partial texels, so the classification cannot have consulted
 that chain. The first texture slot of the captured evidence is empty.
