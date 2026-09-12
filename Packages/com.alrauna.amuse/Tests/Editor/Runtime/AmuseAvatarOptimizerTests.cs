@@ -156,28 +156,29 @@ namespace Alrauna.Amuse.Tests.Editor
 
                 var alpha = serializedObject.FindProperty(
                     "_minimumOpaqueAlphaPercent");
-                var gate = serializedObject.FindProperty(
-                    "_transparencyNoiseGatePercent");
-                var texel = serializedObject.FindProperty(
-                    "_maximumNoiseTexelPercent");
+                var clamp = serializedObject.FindProperty(
+                    "_polygonAlphaUpperClampPercent");
+                var coverage = serializedObject.FindProperty(
+                    "_polygonMinimumOpaqueCoveragePercent");
                 Assert.That(alpha, Is.Not.Null);
-                Assert.That(gate, Is.Not.Null);
-                Assert.That(texel, Is.Not.Null);
+                Assert.That(clamp, Is.Not.Null);
+                Assert.That(coverage, Is.Not.Null);
                 Assert.That(alpha.intValue, Is.EqualTo(100));
-                Assert.That(gate.intValue, Is.EqualTo(0));
-                Assert.That(texel.intValue, Is.EqualTo(2));
+                Assert.That(clamp.intValue, Is.EqualTo(100));
+                Assert.That(coverage.intValue, Is.EqualTo(100));
 
                 alpha.intValue = 99;
-                gate.intValue = 5;
-                texel.intValue = 10;
+                clamp.intValue = 5;
+                coverage.intValue = 10;
                 serializedObject.ApplyModifiedProperties();
 
                 Assert.That(
                     optimizer.MinimumOpaqueAlphaPercent, Is.EqualTo(99));
                 Assert.That(
-                    optimizer.TransparencyNoiseGatePercent, Is.EqualTo(5));
+                    optimizer.PolygonAlphaUpperClampPercent, Is.EqualTo(5));
                 Assert.That(
-                    optimizer.MaximumNoiseTexelPercent, Is.EqualTo(10));
+                    optimizer.PolygonMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(10));
             }
             finally
             {

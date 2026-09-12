@@ -229,8 +229,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Classifies with the per-polygon noise density policy. A policy
         /// of zero keeps erasure inert. An erased texel then behaves
         /// exactly like a witness byte. A positive policy lets an erased
-        /// texel skip the witness check only when the erased share of the
-        /// consulted texels stays strictly under the policy.
+        /// texel skip the witness check only when the erased share of
+        /// the consulted texels stays at or under the policy.
         /// </summary>
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
@@ -437,7 +437,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
-            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+            return erased * 100 <= (long)maxNoiseTexelPercent * consulted;
         }
 
         private static TriangleAlphaOutcome ClassifyBilinearRepeat(
@@ -592,7 +592,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
-            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+            return erased * 100 <= (long)maxNoiseTexelPercent * consulted;
         }
 
         private static ExactInterval BilinearRepeatInterval(
@@ -749,7 +749,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
-            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+            return erased * 100 <= (long)maxNoiseTexelPercent * consulted;
         }
 
         private static ExactInterval BilinearClampInterval(
@@ -1021,7 +1021,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
-            return erased * 100 < (long)maxNoiseTexelPercent * consulted;
+            return erased * 100 <= (long)maxNoiseTexelPercent * consulted;
         }
 
         /// <summary>

@@ -493,10 +493,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 InvokePolicyMapper("OpaquePercentFrom", null),
                 Is.EqualTo(100));
             Assert.That(
-                InvokePolicyMapper("NoisePercentFrom", null),
+                InvokePolicyMapper("PolygonClampPercentFrom", null),
                 Is.EqualTo(0));
             Assert.That(
-                InvokePolicyMapper("MaxNoiseTexelPercentFrom", null),
+                InvokePolicyMapper("DensityCapFromCoveragePercent", null),
                 Is.EqualTo(0));
         }
 
@@ -504,31 +504,53 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// A stored value outside the Range attribute is a defect against
         /// the component contract. The mappers clamp it defensively
         /// instead of classifying with a policy no inspector could have
-        /// saved, and the noise gate still applies the inspector clamp
-        /// after the defensive clamps.
+        /// saved, and the per-polygon clamp still applies the inspector
+        /// clamp after the defensive clamps.
         /// </summary>
         [Test]
         public void PolicyMappersClampOutOfRangeStoredValuesDefensively()
         {
+            // A stored opaque clamp at or below zero admits fully
+            // transparent texels as opaque evidence, so the mapper
+            // reads it as the inert exact-255 contract instead.
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(0, 0, 0, "OpaquePercentFrom"),
+                Is.EqualTo(100));
             Assert.That(
                 InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "OpaquePercentFrom"),
+                Is.EqualTo(100));
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "PolygonClampPercentFrom"),
                 Is.EqualTo(0));
             Assert.That(
-                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "NoisePercentFrom"),
-                Is.EqualTo(0));
-            Assert.That(
-                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "MaxNoiseTexelPercentFrom"),
+                InvokePolicyMapperWithSerializedPolicy(-5, -5, -5, "DensityCapFromCoveragePercent"),
                 Is.EqualTo(0));
 
             Assert.That(
                 InvokePolicyMapperWithSerializedPolicy(150, 150, 150, "OpaquePercentFrom"),
                 Is.EqualTo(100));
 
-            // The gate maps first to 100, then the inspector clamp keeps
-            // it strictly below the opaque percent 50.
+            // The clamp maps first to 80, then the inspector clamp
+            // keeps it strictly below the opaque percent 50.
             Assert.That(
-                InvokePolicyMapperWithSerializedPolicy(50, 80, 2, "NoisePercentFrom"),
+                InvokePolicyMapperWithSerializedPolicy(50, 80, 2, "PolygonClampPercentFrom"),
                 Is.EqualTo(49));
+
+            // A clamp of 100 admits nothing, so it maps to the inert 0
+            // regardless of the coverage slider.
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(100, 100, 2, "PolygonClampPercentFrom"),
+                Is.EqualTo(0));
+
+            // The coverage share and the tolerated stray share are
+            // complements: a coverage of 60 maps to a density bound
+            // of 40, and a coverage of 100 maps to the inert 0.
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(100, 2, 60, "DensityCapFromCoveragePercent"),
+                Is.EqualTo(40));
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(100, 2, 100, "DensityCapFromCoveragePercent"),
+                Is.EqualTo(0));
         }
 
         /// <summary>
@@ -542,7 +564,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             Assert.That(
                 () => InvokePolicyMapperWithSerializedPolicy(
-                    100, 0, 150, "MaxNoiseTexelPercentFrom"),
+                    100, 0, 150, "DensityCapFromCoveragePercent"),
                 Throws.InvalidOperationException);
         }
 
@@ -575,8 +597,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private static int InvokePolicyMapperWithSerializedPolicy(
             int opaquePercent,
-            int noiseGatePercent,
-            int maxNoiseTexelPercent,
+            int polygonClampPercent,
+            int polygonCoveragePercent,
             string mapperName)
         {
             var root = new GameObject("AMUSE policy mapper " + mapperName);
@@ -587,10 +609,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var serialized = new SerializedObject(component);
                 serialized.FindProperty("_minimumOpaqueAlphaPercent")
                     .intValue = opaquePercent;
-                serialized.FindProperty("_transparencyNoiseGatePercent")
-                    .intValue = noiseGatePercent;
-                serialized.FindProperty("_maximumNoiseTexelPercent")
-                    .intValue = maxNoiseTexelPercent;
+                serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                    .intValue = polygonClampPercent;
+                serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
+                    .intValue = polygonCoveragePercent;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 return InvokePolicyMapper(mapperName, component);

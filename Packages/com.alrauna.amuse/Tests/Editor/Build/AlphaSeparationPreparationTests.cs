@@ -2174,7 +2174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void TransparencyNoiseGatePolicyDrivesTheProofEndToEnd()
         {
-            // The gate erases the stray, and a density bound of 50
+            // The clamp erases the stray, and a density bound of 50
             // treats a sparse erased texel as opaque evidence, so the
             // triangle proves and the barrier prepares the split.
             var converting = RunAlphaPolicyArm(
@@ -2286,8 +2286,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static AmusePlatformFinishState RunCutoutPolicyArm(
             int opaquePercent,
-            int noiseGatePercent,
-            int maxNoiseTexelPercent,
+            int polygonClampPercent,
+            int polygonCoveragePercent,
             string armName)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
@@ -2300,10 +2300,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(component);
             serialized.FindProperty("_minimumOpaqueAlphaPercent")
                 .intValue = opaquePercent;
-            serialized.FindProperty("_transparencyNoiseGatePercent")
-                .intValue = noiseGatePercent;
-            serialized.FindProperty("_maximumNoiseTexelPercent")
-                .intValue = maxNoiseTexelPercent;
+            serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                .intValue = polygonClampPercent;
+            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
+                .intValue = polygonCoveragePercent;
             serialized.ApplyModifiedProperties();
 
             Material material = null;
@@ -2432,8 +2432,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static AmusePlatformFinishState RunAlphaPolicyArm(
             int opaquePercent,
-            int noiseGatePercent,
-            int maxNoiseTexelPercent,
+            int polygonClampPercent,
+            int polygonCoveragePercent,
             string armName,
             byte? uniformAlpha = null)
         {
@@ -2447,10 +2447,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(component);
             serialized.FindProperty("_minimumOpaqueAlphaPercent")
                 .intValue = opaquePercent;
-            serialized.FindProperty("_transparencyNoiseGatePercent")
-                .intValue = noiseGatePercent;
-            serialized.FindProperty("_maximumNoiseTexelPercent")
-                .intValue = maxNoiseTexelPercent;
+            serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                .intValue = polygonClampPercent;
+            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
+                .intValue = polygonCoveragePercent;
             serialized.ApplyModifiedProperties();
 
             Material material = null;
