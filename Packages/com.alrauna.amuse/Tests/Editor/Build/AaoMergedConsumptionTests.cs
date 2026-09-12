@@ -6,6 +6,7 @@ using Alrauna.Amuse.Runtime;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
 using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf.platform;
 using NUnit.Framework;
@@ -160,6 +161,132 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(chain.Count, Is.GreaterThanOrEqualTo(1));
         }
 
+        /// <summary>
+        /// Walks the production material path for the fixture's real
+        /// lilToon material one stage at a time and names the first stage
+        /// that refuses: family selection, attested closed capture, then
+        /// alpha analysis. Each checkpoint prints its named outcome, so a
+        /// zero-candidate build names its blocker instead of failing
+        /// silently upstream of every refusal bucket.
+        /// </summary>
+        [Test]
+        public void ProductionSemanticsResolveTheFixtureMaterial()
+        {
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+            quadrantTexture = Track(ImportQuadrantAlphaTexture());
+            var shader = Shader.Find("Hidden/lilToonTransparent");
+            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+            var material = Track(NewTransparentMaterial(shader));
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var relevanceRequest,
+                    out var captureRequest);
+            Assert.That(
+                selected,
+                Is.True,
+                "family selection refused the fixture material; family="
+                + family);
+
+            var attested = UnityMaterialSemantics
+                .TryCaptureClosedAlphaMaterials(
+                    new[] { material },
+                    new[] { family },
+                    captureRequest,
+                    AlphaPolicyBounds.Inert,
+                    out var capturedList);
+            Assert.That(
+                attested,
+                Is.True,
+                "attested closed capture refused the fixture material;"
+                + " family=" + family);
+
+            var semantics =
+                UnityMaterialSemantics.AnalyzeAlphaMaterial(capturedList[0]);
+            Assert.That(
+                semantics.Alpha.IsComplete,
+                Is.True,
+                "alpha analysis did not resolve for the fixture material;"
+                + " family=" + family
+                + " alphaKind=" + semantics.Alpha.GetCompleteValue().Kind);
+        }
+
+        /// <summary>
+        /// Reproduces the barrier's evidence capture for the fixture
+        /// renderer outside the NDMF build and names what the capture
+        /// admitted. An empty admitted set explains a zero-candidate build
+        /// with zero refusal buckets: every slot then resolves without
+        /// texture evidence and classifies all-unknown silently.
+        /// </summary>
+        [Test]
+        public void EvidenceCaptureAdmitsTheFixtureMaterial()
+        {
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+            quadrantTexture = Track(ImportQuadrantAlphaTexture());
+            var shader = Shader.Find("Hidden/lilToonTransparent");
+            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+
+            var root = new GameObject("AMUSE evidence probe root");
+            Track(root);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var controller = Track(
+                UnityEditor.Animations.AnimatorController
+                    .CreateAnimatorControllerAtPath(
+                        TempFolder + "/evidence-probe.controller"));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+            var material = Track(NewTransparentMaterial(shader));
+            CreateTexturedRenderer(root, material);
+            var renderer = root.GetComponentInChildren<SkinnedMeshRenderer>();
+            var rendererPath = AnimationUtility.CalculateTransformPath(
+                renderer.transform, root.transform);
+
+            var bindings = VRChatPlatformAnimatorBindings.Instance;
+            var graph = CommittedControllerGraph.Enumerate(root, bindings);
+            var evidence = UnityAnimationEvidenceCapture.Capture(
+                rendererPath,
+                renderer.sharedMaterials,
+                graph,
+                bindings,
+                AlphaPolicyBounds.Inert,
+                out var admittedLiveMaterials);
+
+            Assert.That(
+                evidence.AdmittedMaterials,
+                Is.Not.Empty,
+                "the animation evidence capture admitted none of the"
+                + " fixture's materials, so every slot resolves without"
+                + " evidence and classifies all-unknown; graphRefusal="
+                + graph.Refusal
+                + " closureFailure=" + evidence.ClosureFailure
+                + " isClosed=" + evidence.IsClosed
+                + " admittedLive=" + admittedLiveMaterials.Count);
+
+            var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                evidence.AdmittedMaterials, 4, 128);
+            var semantics =
+                UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    evidence.AdmittedMaterials[0]);
+            AlphaFieldProvider provider = (
+                TextureSourceId source,
+                TextureChannel channel,
+                out AlphaMipChain chain) =>
+                fields.TryGetValue((source, channel), out chain);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                semantics.Alpha, provider, 0);
+                Assert.That(
+                    resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.None),
+                "the in-build resolution pipeline failed: fields="
+                + fields.Count
+                + " alphaComplete=" + semantics.Alpha.IsComplete
+                + " alphaKind=" + (semantics.Alpha.IsComplete
+                    ? semantics.Alpha.GetCompleteValue().Kind.ToString()
+                    : "<unknown>"));
+        }
+
         // --- fixture construction -------------------------------------------
 
         private void CreateTexturedRenderer(
@@ -174,12 +301,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var mesh = new Mesh { name = "AMUSE AAO fixture mesh" };
             Track(mesh);
 
-            // Three triangles, each with three private vertices and UVs:
-            // the first strictly inside the opaque quadrant, the second
-            // strictly inside the transparent quadrant, the third
-            // straddling the boundary between them. UV space: x below one
-            // half samples opaque texels, x above one half samples
-            // transparent texels.
             mesh.vertices = new[]
             {
                 new Vector3(0f, 0f, 0f),
@@ -231,14 +352,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// An 8x8 RGBA32 mipmapped texture: the left half fully opaque, the
-        /// right half fully transparent. The quadrant edge sits exactly on
-        /// the texel grid so the strict-quadrant triangles sample texels of
-        /// one verdict only.
+        /// A 128x128 RGBA32 mipmapped texture: the left half fully opaque,
+        /// the right half fully transparent. The quadrant edge sits exactly
+        /// on the texel grid so the strict-quadrant triangles sample texels
+        /// of one verdict only.
         /// </summary>
         private Texture2D ImportQuadrantAlphaTexture()
         {
-            const int size = 8;
+            // 128 pixels: the shipped component default refuses textures
+            // smaller than 128 as capture evidence, so a smaller fixture
+            // would silently classify every triangle all-unknown. The
+            // quadrant edge stays on the texel grid at every mip level,
+            // including the default mip cap of four.
+            const int size = 128;
             var pixels = new Color32[size * size];
             for (var y = 0; y < size; y++)
             {
@@ -299,7 +425,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 state.AnalyzedRendererCount,
                 Is.GreaterThanOrEqualTo(1),
                 "AMUSE must analyze the avatar after the optimizer merge; a"
-                + " zero means the passes did not run on this platform");
+                + " zero means the passes did not run on this platform or"
+                + " an avatar-scope gate refused: reachedAnalysis="
+                + state.ReachedRendererAnalysis
+                + " avatarRefusal=" + state.AvatarRefusal
+                + " lifecycle=" + (state.Lifecycle != null
+                    ? state.Lifecycle.ToString()
+                    : "<null>")
+                + " consentDeclined=" + state.ConsentDeclined
+                + " alphaPolicyActive=" + state.AlphaPolicyActive
+                + " refusedRenderers=" + state.SemanticallyRefusedRendererCount
+                + DescribeRendererRefusals(state)
+                + " builtRenderers=" + DescribeBuiltRenderers(root));
 
             var generated = new HashSet<Material>(
                 state.Separation?.CreatedClones
@@ -313,7 +450,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + DescribeSlotRefusals(state)
                 + " analyzed=" + state.AnalyzedRendererCount
                 + " refusedRenderers=" + state.SemanticallyRefusedRendererCount
-                + " opaqueCandidates=" + state.OpaqueCandidateTriangleCount);
+                + " opaqueCandidates=" + state.OpaqueCandidateTriangleCount
+                + " separation=" + DescribeSeparation(state)
+                + " builtRenderers=" + DescribeBuiltRenderers(root));
+
 
             var renderers =
                 root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
@@ -378,6 +518,104 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.GreaterThanOrEqualTo(3),
                 "fixture precondition: the built avatar must still carry"
                 + " the fixture triangles");
+        }
+
+        /// <summary>
+        /// Names exactly what the barrier analyzed: the post-optimizer
+        /// renderer shapes, slot shader names, submesh counts, UV0
+        /// presence, and property-block presence. A slot carrying an
+        /// unexpected shader, a mesh whose UV0 was dropped or resized by
+        /// optimizer mesh processing, or a property block AAO wrote on the
+        /// renderer explains a silent refusal that the analyzed count
+        /// alone does not.
+        /// </summary>
+        private static string DescribeBuiltRenderers(GameObject root)
+        {
+            var renderers =
+                root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            var parts = new List<string>();
+            foreach (var renderer in renderers)
+            {
+                var mesh = renderer.sharedMesh;
+                var uvs = mesh != null ? mesh.uv : null;
+                var shaders = new List<string>();
+                foreach (var slot in renderer.sharedMaterials)
+                {
+                    shaders.Add(slot != null && slot.shader != null
+                        ? slot.shader.name
+                        : "<null>");
+                }
+
+                parts.Add(renderer.name + " slots=["
+                    + string.Join(", ", shaders) + "]"
+                    + " submeshes=" + (mesh != null
+                        ? mesh.subMeshCount.ToString()
+                        : "<no mesh>")
+                    + " vertices=" + (mesh != null
+                        ? mesh.vertexCount.ToString()
+                        : "<no mesh>")
+                    + " uv0=" + (uvs != null
+                        ? uvs.Length.ToString()
+                        : "<missing>")
+                    + " propertyBlock=" + renderer.HasPropertyBlock());
+            }
+
+            return parts.Count == 0
+                ? "none"
+                : string.Join("; ", parts);
+        }
+
+        /// <summary>
+        /// Prints every non-empty renderer-scoped refusal bucket, so a
+        /// zero-analyzed build with a reached analysis names the exact
+        /// refusal each renderer hit instead of vanishing between the
+        /// structural check and the analyzed counter.
+        /// </summary>
+        private static string DescribeRendererRefusals(
+            AmusePlatformFinishState state)
+        {
+            var parts = new List<string>();
+            foreach (RendererAnalysisRefusal reason in Enum.GetValues(
+                         typeof(RendererAnalysisRefusal)))
+            {
+                if (reason == RendererAnalysisRefusal.None)
+                {
+                    continue;
+                }
+
+                var count = state.RendererRefusalCount(reason);
+                if (count != 0)
+                {
+                    parts.Add(" " + reason + "=" + count);
+                }
+            }
+
+            return parts.Count == 0 ? "" : " buckets:" + string.Join(
+                "", parts);
+        }
+
+
+        /// <summary>
+        /// Names what the barrier retained, so a zero-clone failure splits
+        /// into "no renderer ever had a candidate slot" (separation none or
+        /// empty: admission or slot lookup failed silently) versus
+        /// "prepared renderers exist with zero proven triangles"
+        /// (resolution succeeded, classification received bad inputs).
+        /// </summary>
+        private static string DescribeSeparation(AmusePlatformFinishState state)
+        {
+            var separation = state.Separation;
+            if (separation == null) return "none";
+            var parts = new List<string>();
+            foreach (var renderer in separation.Renderers)
+            {
+                parts.Add(renderer.RendererPath + " slots="
+                    + renderer.CandidateSlots.Count);
+            }
+
+            return parts.Count == 0
+                ? "empty"
+                : string.Join("; ", parts);
         }
 
         private static string DescribeSlotRefusals(
