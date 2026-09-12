@@ -1140,10 +1140,56 @@ namespace Alrauna.Amuse.Editor.Build
             for (var slot = 0; slot < slots.Length; slot++)
             {
                 slots[slot] = new CapturedMaterialSlotEvidence(
-                    slot, admittedBySlot[slot]);
+                    slot,
+                    admittedBySlot[slot],
+                    CaptureRefusalsFor(evidence, admittedBySlot[slot]));
             }
 
             return slots;
+        }
+
+        /// <summary>
+        /// Collects one slot's named capture refusals from its admitted
+        /// materials' evidence, in the slot's admitted order, with duplicates
+        /// collapsed: the same texture source can serve two admitted materials
+        /// of one slot, and a refusal is a fact about the capture, not about
+        /// the material that hit it. The records name the texture and the
+        /// reason family for the report; they refuse nothing by themselves.
+        /// </summary>
+        private static IReadOnlyList<TextureCaptureRefusal> CaptureRefusalsFor(
+            CapturedAnimationEvidence evidence,
+            IReadOnlyList<int> admittedIndices)
+        {
+            var refusals = new List<TextureCaptureRefusal>();
+            var seen = new HashSet<
+                (string Property,
+                 bool HasSource,
+                 string Source,
+                 TextureChannel Channel,
+                 TextureCaptureRefusalReason Reason)>();
+            foreach (var index in admittedIndices)
+            {
+                foreach (var refusal in evidence
+                             .AdmittedMaterials[index]
+                             .Evidence
+                             .CaptureRefusals)
+                {
+                    var key = (
+                        refusal.PropertyName,
+                        refusal.HasSourceIdentity,
+                        refusal.HasSourceIdentity
+                            ? refusal.SourceIdentity.Value
+                            : null,
+                        refusal.Channel,
+                        refusal.Reason);
+                    if (seen.Add(key))
+                    {
+                        refusals.Add(refusal);
+                    }
+                }
+            }
+
+            return refusals;
         }
 
     }

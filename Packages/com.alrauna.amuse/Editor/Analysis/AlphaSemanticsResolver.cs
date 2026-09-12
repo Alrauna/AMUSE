@@ -305,7 +305,10 @@ namespace Alrauna.Amuse.Editor.Analysis
             // AMUSE cannot know which, so one non-opaque level refutes the proof.
             // MustRemainTransparent is absorbing, so returning on it cannot change
             // the result. Unknown must NOT exit early - a later level may be
-            // MustRemainTransparent, which outranks it.
+            // MustRemainTransparent, which outranks it. A level flagged without
+            // evidence - a non-resident consulted mip - refutes the proof for every
+            // triangle exactly as an Unknown verdict would, whatever its placeholder
+            // grid contains, so its provenance is consulted before the grid.
             // Identity remains structurally on the historical classifier path;
             // non-identity UV0 uses the affine helper's Lemma P exact result or
             // conservative envelope before every mip is considered. The
@@ -335,6 +338,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             var sawUnknown = false;
             for (var index = 0; index < _chain.Count; index++)
             {
+                if (_chain.IsLevelWithoutEvidence(index))
+                {
+                    sawUnknown = true;
+                    continue;
+                }
+
                 var outcome = TriangleAlphaClassifier.Classify(
                     transformed, _chain[index], _sampling, envelope,
                     _maxNoiseTexelPercent);

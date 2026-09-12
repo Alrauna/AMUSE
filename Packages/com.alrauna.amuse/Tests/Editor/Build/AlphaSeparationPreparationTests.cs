@@ -625,6 +625,174 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
 
+        // --- Named texture-capture refusal surfacing -------------------------
+
+        /// <summary>
+        /// A texture the capture route must refuse is recorded as a NAMED
+        /// refusal on its own slot's slot record, and unknown information
+        /// invalidates only the conclusions that depend on it: the refused
+        /// slot's submesh stays Unchanged with its polygons on the original
+        /// material, the sibling slot on the same renderer still captures,
+        /// proves and converts, the renderer is not refused, and no
+        /// transformation refusal bucket moves.
+        /// <para>
+        /// Falsifies: a capture that drops the naming while still refusing
+        /// the chain, a refusal record that poisons the sibling slot's
+        /// evidence or the renderer's accounting, and any change to a proven
+        /// outcome driven by the refusal instead of by the missing chain.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            RefusedCaptureSurfacesOnItsSlotAndTheSiblingSlotStaysConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE refused capture sibling");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material refusedMaterial = null;
+            Material convertedMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                refusedMaterial = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportRefusedFormatMipmap("refused_slot"),
+                    Vector2.one, Vector2.zero);
+                convertedMaterial = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportFullyOpaqueMipmap("convertible_slot"),
+                    Vector2.one, Vector2.zero);
+                AddTwoTriangleRenderer(
+                    root, refusedMaterial, convertedMaterial, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                };
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the refused capture may refuse only its own slot's " +
+                    "proof, never the renderer");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "only the sibling slot may prove its triangle opaque");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "the capture refusal must not move any " +
+                        "transformation refusal bucket: " + reason);
+                }
+
+                Assert.That(amuse.Separation, Is.Not.Null);
+                Assert.That(amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                var prepared = amuse.Separation.Renderers[0];
+                Assert.That(prepared.CandidateSlots, Has.Count.EqualTo(1),
+                    "only the sibling slot may become a candidate");
+                Assert.That(
+                    prepared.CandidateSlots[0].Plan
+                        .SourceMaterialBindingIndex,
+                    Is.EqualTo(1));
+                Assert.That(
+                    prepared.CandidateSlots[0].OpaqueOfAdmitted[
+                        convertedMaterial],
+                    Is.Not.SameAs(convertedMaterial),
+                    "the sibling slot must still convert to a generated " +
+                    "clone");
+                var refusedSubmesh = prepared.Plan.Submeshes.Single(
+                    submesh => submesh.SourceMaterialBindingIndex == 0);
+                Assert.That(
+                    refusedSubmesh.Disposition,
+                    Is.EqualTo(SubmeshSeparationDisposition.Unchanged),
+                    "the refused slot's submesh must keep its polygons on " +
+                    "the original material");
+
+                // The named refusal surfaces on the refused slot's own slot
+                // record, through the production slot-record construction
+                // the barrier itself uses, and on no sibling record.
+                var slotRecords = AmusePlatformFinishPass.MaterialSlotsFor(
+                    prepared.Evidence, prepared.RendererPath);
+                Assert.That(
+                    slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
+                var refusal = slotRecords[0].CaptureRefusals[0];
+                Assert.That(refusal.PropertyName, Is.EqualTo("_MainTex"));
+                Assert.That(
+                    refusal.Channel, Is.EqualTo(TextureChannel.Alpha));
+                Assert.That(
+                    refusal.Reason,
+                    Is.EqualTo(TextureCaptureRefusalReason
+                        .UnsupportedFormat));
+                Assert.That(
+                    refusal.HasSourceIdentity, Is.True,
+                    "the imported asset resolves its identity before the " +
+                    "format gate refuses");
+                Assert.That(
+                    slotRecords[1].CaptureRefusals, Is.Empty,
+                    "the convertible sibling slot must carry no refusal");
+
+                // Exactly one admitted material's main texture carries a
+                // captured chain: the route refused exactly one texture and
+                // captured the other in the same renderer capture.
+                var capturedChains = 0;
+                foreach (var admitted in prepared.Evidence.AdmittedMaterials)
+                {
+                    if (admitted.Family !=
+                            CapturedAlphaMaterialFamily.Poiyomi ||
+                        !admitted.Evidence.TryGetTexture(
+                            "_MainTex", out var assignment) ||
+                        !assignment.IsAssigned ||
+                        !assignment.Texture.HasAlphaChannel)
+                    {
+                        continue;
+                    }
+
+                    capturedChains++;
+                }
+
+                Assert.That(
+                    capturedChains, Is.EqualTo(1),
+                    "exactly the sibling's texture may have a captured " +
+                    "chain");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (refusedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(refusedMaterial);
+                }
+
+                if (convertedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(convertedMaterial);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Defect A regression: avatar-wide deduplication ------------------
 
         [Test]
@@ -5428,6 +5596,44 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return loaded;
             }
 
+            /// <summary>
+            /// Imports a real, mipmap-enabled asset texture whose storage
+            /// format is outside the capture route's closed allowlist, so the
+            /// capture refuses it while every other fixture texture captures.
+            /// The Standalone platform override reaches RGBAHalf exactly as
+            /// the alpha-field suite's format-refusal fixtures do.
+            /// </summary>
+            internal Texture2D ImportRefusedFormatMipmap(string name)
+            {
+                var path = TempFolder + "/" + name + ".png";
+                var staging = new Texture2D(
+                    4, 4, TextureFormat.RGBA32, false);
+                staging.SetPixels32(FullyOpaquePixels());
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = true;
+                importer.textureCompression =
+                    TextureImporterCompression.Uncompressed;
+                var settings = importer.GetPlatformTextureSettings(
+                    "Standalone");
+                settings.overridden = true;
+                settings.format = TextureImporterFormat.RGBAHalf;
+                importer.SetPlatformTextureSettings(settings);
+                importer.SaveAndReimport();
+
+                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    loaded, Is.Not.Null,
+                    $"Imported texture '{path}' must load.");
+                return loaded;
+            }
+
             private static Color32[] FullyOpaquePixels()
             {
                 var pixels = new Color32[4 * 4];
@@ -5439,7 +5645,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return pixels;
             }
         }
-
         /// <summary>
         /// One cutout conversion arm: a transient single-triangle renderer
         /// fixture over a caller-owned texture plus the barrier run over it,

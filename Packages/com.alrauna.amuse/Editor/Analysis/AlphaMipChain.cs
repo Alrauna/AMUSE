@@ -5,7 +5,14 @@ namespace Alrauna.Amuse.Editor.Analysis
 {
     /// <summary>
     /// One texture's ordered alpha mip chain: the existing per-level grids the
-    /// classifier already consumes, mip 0 first.
+    /// classifier already consumes, mip 0 first, plus per-level provenance
+    /// naming the levels the capture could not examine. A level flagged
+    /// without evidence - a non-resident consulted mip under the active
+    /// mipmap limit - has no effective alpha for playback, so no grid can
+    /// stand in for the fact and the fold must degrade it to Unknown for
+    /// every triangle. The flagged levels still carry their declared
+    /// dimensions, so shape validation and the geometric size scope keep
+    /// working unchanged.
     /// <para>
     /// It guarantees <em>shape</em> and nothing else: non-empty, ordered, no null
     /// element, and each level's width and height independently equal
@@ -30,8 +37,22 @@ namespace Alrauna.Amuse.Editor.Analysis
     internal sealed class AlphaMipChain
     {
         private readonly AlphaTextureData[] _levels;
+        private readonly bool[] _levelsWithoutEvidence;
 
         internal AlphaMipChain(IReadOnlyList<AlphaTextureData> levelsFromMipZero)
+            : this(levelsFromMipZero, AllEvidence(levelsFromMipZero))
+        {
+        }
+
+        /// <summary>
+        /// The provenance overload: a level whose entry is true was captured
+        /// with no usable evidence. Its grid is a placeholder that keeps the
+        /// declared shape; consumers must consult the provenance before the
+        /// grid, because the placeholder's bytes prove nothing.
+        /// </summary>
+        internal AlphaMipChain(
+            IReadOnlyList<AlphaTextureData> levelsFromMipZero,
+            IReadOnlyList<bool> levelsWithoutEvidenceFromMipZero)
         {
             if (levelsFromMipZero == null)
             {
@@ -43,8 +64,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                     "A mip chain must contain at least mip 0.",
                     nameof(levelsFromMipZero));
             }
+            if (levelsWithoutEvidenceFromMipZero == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(levelsWithoutEvidenceFromMipZero));
+            }
+            if (levelsWithoutEvidenceFromMipZero.Count !=
+                levelsFromMipZero.Count)
+            {
+                throw new ArgumentException(
+                    "The per-level provenance must name every level.",
+                    nameof(levelsWithoutEvidenceFromMipZero));
+            }
 
             var levels = new AlphaTextureData[levelsFromMipZero.Count];
+            var withoutEvidence = new bool[levelsFromMipZero.Count];
             for (var index = 0; index < levelsFromMipZero.Count; index++)
             {
                 var level = levelsFromMipZero[index];
@@ -70,14 +104,49 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
 
                 levels[index] = level;
+                withoutEvidence[index] = levelsWithoutEvidenceFromMipZero[index];
             }
 
             _levels = levels;
+            _levelsWithoutEvidence = withoutEvidence;
+        }
+
+        // The chaining argument of the evidence-default constructor: it must
+        // reject a null list itself, because argument evaluation runs before
+        // the chained constructor's own null check.
+        private static bool[] AllEvidence(
+            IReadOnlyList<AlphaTextureData> levelsFromMipZero)
+        {
+            if (levelsFromMipZero == null)
+            {
+                throw new ArgumentNullException(nameof(levelsFromMipZero));
+            }
+
+            return new bool[levelsFromMipZero.Count];
         }
 
         internal int Count => _levels.Length;
 
         internal AlphaTextureData this[int index] => _levels[index];
+
+        /// <summary>
+        /// Whether the capture could examine this level. A level without
+        /// evidence - a non-resident consulted mip under the active mipmap
+        /// limit - has no effective alpha for playback: the sampler may
+        /// select it, so the fold degrades it to Unknown for every triangle
+        /// and must never read the level's placeholder grid. The proof's
+        /// geometric scope computations stay provenance-blind, because the
+        /// flag says nothing about level dimensions.
+        /// </summary>
+        internal bool IsLevelWithoutEvidence(int index)
+        {
+            if (index < 0 || index >= _levels.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _levelsWithoutEvidence[index];
+        }
 
         /// <summary>
         /// The prefix of this chain from mip 0 through
@@ -106,7 +175,10 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             var prefix = new AlphaTextureData[maxMipLevel + 1];
             Array.Copy(_levels, prefix, prefix.Length);
-            return new AlphaMipChain(prefix);
+            var prefixProvenance = new bool[prefix.Length];
+            Array.Copy(_levelsWithoutEvidence, prefixProvenance,
+                prefixProvenance.Length);
+            return new AlphaMipChain(prefix, prefixProvenance);
         }
 
         /// <summary>

@@ -241,5 +241,126 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => chain.MaximumLevelAtOrAbove(0));
         }
+
+        // --- Per-level without-evidence provenance -----------------------------
+
+        [Test]
+        public void ProvenanceDefaultsToEvidenceAtEveryLevel()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) });
+
+            for (var level = 0; level < chain.Count; level++)
+            {
+                Assert.That(
+                    chain.IsLevelWithoutEvidence(level),
+                    Is.False,
+                    "level " + level);
+            }
+        }
+
+        [Test]
+        public void FlaggedLevelsReportProvenancePerLevel()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) },
+                new[] { true, false });
+
+            Assert.That(chain.IsLevelWithoutEvidence(0), Is.True);
+            Assert.That(chain.IsLevelWithoutEvidence(1), Is.False);
+        }
+
+        [Test]
+        public void ProvenanceOfTheWrongLengthThrows()
+        {
+            Assert.Throws<ArgumentException>(
+                () => new AlphaMipChain(
+                    new[] { Level(2, 2, 1) },
+                    new[] { true, false }));
+        }
+
+        [Test]
+        public void NullProvenanceThrows()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => new AlphaMipChain(
+                    new[] { Level(2, 2, 1) },
+                    null));
+        }
+
+        [Test]
+        public void ProvenanceIndexOutOfRangeThrows()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) },
+                new[] { false, true });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => chain.IsLevelWithoutEvidence(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => chain.IsLevelWithoutEvidence(2));
+        }
+
+        [Test]
+        public void MutatingTheSuppliedProvenanceDoesNotChangeTheChain()
+        {
+            var provenance = new[] { false, false };
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) },
+                provenance);
+
+            provenance[0] = true;
+
+            Assert.That(chain.IsLevelWithoutEvidence(0), Is.False);
+        }
+
+        /// <summary>
+        /// The mip cap is the user's policy scope; the residency degradation
+        /// is the capture's fact. A prefix must carry the provenance of the
+        /// levels it keeps, so a flagged level inside the cap still degrades
+        /// the proof after the cap.
+        /// </summary>
+        [Test]
+        public void LimitedToKeepsTheProvenanceOfThePrefix()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(4, 4, 1), Level(2, 2, 2), Level(1, 1, 3) },
+                new[] { true, false, false });
+
+            var capped = chain.LimitedTo(1);
+
+            Assert.That(capped.Count, Is.EqualTo(2));
+            Assert.That(capped.IsLevelWithoutEvidence(0), Is.True);
+            Assert.That(capped.IsLevelWithoutEvidence(1), Is.False);
+        }
+
+        [Test]
+        public void LimitedToBeyondTheLastLevelKeepsTheProvenanceOfTheSameInstance()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(2, 2, 1), Level(1, 1, 2) },
+                new[] { true, false });
+
+            Assert.That(chain.LimitedTo(1), Is.SameAs(chain));
+            Assert.That(chain.LimitedTo(9), Is.SameAs(chain));
+            Assert.That(chain.IsLevelWithoutEvidence(0), Is.True);
+        }
+
+        /// <summary>
+        /// The minimum-texture-size scope is a geometric rule over the
+        /// declared level dimensions. Provenance says nothing about geometry,
+        /// so a flagged level keeps its declared dimensions in this
+        /// computation: the fold degrades the level, the scope does not.
+        /// </summary>
+        [Test]
+        public void MaximumLevelAtOrAboveIsProvenanceBlind()
+        {
+            var chain = new AlphaMipChain(
+                new[] { Level(4, 4, 0), Level(2, 2, 0) },
+                new[] { true, false });
+
+            Assert.That(chain.MaximumLevelAtOrAbove(4), Is.EqualTo(0));
+            Assert.That(chain.MaximumLevelAtOrAbove(2), Is.EqualTo(1));
+        }
     }
 }

@@ -94,6 +94,19 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return Chain(Field(2, 2, 255), Field(1, 1, 0));
         }
 
+        /// <summary>
+        /// A chain whose per-level provenance the capture flagged. The grids
+        /// are deliberately fully opaque: a fold that consults a flagged
+        /// grid instead of its provenance answers ProvenOpaque, which is
+        /// exactly the leak the flag exists to close.
+        /// </summary>
+        private static AlphaMipChain ChainWithProvenance(
+            bool[] levelsWithoutEvidence,
+            params AlphaTextureData[] levels)
+        {
+            return new AlphaMipChain(levels, levelsWithoutEvidence);
+        }
+
         private static AlphaFieldProvider Providing(AlphaTextureData field)
         {
             return Providing(new AlphaMipChain(new[] { field }));
@@ -1159,6 +1172,103 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        // --- Per-level without-evidence provenance -----------------------------
+
+        /// <summary>
+        /// Mip 0 carries no evidence (the capture flagged it, e.g. a
+        /// non-resident consulted level) and its grid is fully opaque. A fold
+        /// that consults the grid answers ProvenOpaque here; only the
+        /// provenance forces Unknown for every triangle.
+        /// </summary>
+        [Test]
+        public void ALevelWithoutEvidenceForcesUnknownEvenWhenEveryGridIsOpaque()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { true, false }, Field(2, 2, 255), Field(1, 1, 255)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ALastLevelWithoutEvidenceForcesUnknown()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// MustRemainTransparent is absorbing, so a flagged level's Unknown
+        /// must not swallow a later level's refusal either.
+        /// </summary>
+        [Test]
+        public void TransparencyStillOutranksALevelWithoutEvidence()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { true, false }, Field(2, 2, 255), Field(1, 1, 0)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// The consulted prefix is the proof's scope: a flagged level above
+        /// the mip cap is outside every checked configuration, so it must not
+        /// degrade a proof the cap already delimits.
+        /// </summary>
+        [Test]
+        public void AFlaggedLevelAboveThePolicyCapDoesNotDegradeTheProof()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255))
+                    .LimitedTo(0),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AProviderChainWithAFlaggedLevelClassifiesUnknown()
+        {
+            var resolution = ResolveSample(
+                Sample(),
+                TextureChannel.Alpha,
+                Providing(ChainWithProvenance(
+                    new[] { true, false },
+                    Field(2, 2, 255), Field(1, 1, 255))));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         // --- A7 widenings: trilinear and anisotropic --------------------
