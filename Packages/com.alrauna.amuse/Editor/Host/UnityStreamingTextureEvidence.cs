@@ -50,20 +50,14 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
-                    TextureChannel channel, int cutoffBits), AlphaMipChain> Cache = new();
-
-        internal static bool TryCapture(
-            Texture2D source,
-            TextureChannel channel,
-            out AlphaMipChain chain)
-        {
-            return TryCapture(source, channel, 1.0f, out chain);
-        }
+                    TextureChannel channel, int cutoffBits,
+                    AlphaPolicyBounds bounds), AlphaMipChain> Cache = new();
 
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out AlphaMipChain chain)
         {
             if (source == null)
@@ -83,12 +77,16 @@ namespace Alrauna.Amuse.Editor.Host
             var sourceFile = new FileInfo(path);
             var metaFile = new FileInfo(path + ".meta");
             var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
+            // The bounds ride in the key: two policies can share a cutoff
+            // while building different chains, so a policy change must
+            // re-capture instead of serving the other policy's evidence.
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
                 metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
                 channel,
-                cutoffBits);
+                cutoffBits,
+                bounds);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -97,7 +95,7 @@ namespace Alrauna.Amuse.Editor.Host
             // Try direct uncompressed disk source reading first to bypass
             // Unity downsampling and BC7/DXT loss.
             if (SourceImageAlphaReader.TryReadSourceAlphaChain(
-                    source, channel, cutoffThreshold, out chain))
+                    source, channel, cutoffThreshold, bounds, out chain))
             {
                 Cache[key] = chain;
                 return true;
@@ -163,6 +161,15 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // Published-chain limitation: the clone's coarser
+                // levels arrive pre-averaged, so masked re-averaging is
+                // not available here and each texel resolves at its own
+                // level. The loop honors the bounds rather than
+                // refusing the capture, so the evidence always matches
+                // the bounds in the cache key, and a policy-active
+                // texture whose only route is this clone keeps a
+                // capture route.
+                var threshold = Mathf.Clamp01(cutoffThreshold);
                 var levels = new AlphaTextureData[clone.mipmapCount];
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
@@ -191,9 +198,16 @@ namespace Alrauna.Amuse.Editor.Host
                         var value = channel == TextureChannel.Red
                             ? pixels[index].r
                             : pixels[index].a;
-                        var threshold = Mathf.Clamp01(cutoffThreshold);
-                        flags[index] =
-                            value >= threshold ? byte.MaxValue : (byte)0;
+                        var decoded = SourceImageMaskedChain.DecodeByte(value);
+                        var isErased = threshold >= 1.0f &&
+                            bounds.NoiseBound > 0 &&
+                            decoded < bounds.NoiseBound;
+                        var isOpaque = threshold >= 1.0f
+                            ? decoded >= bounds.OpaqueBound
+                            : value >= threshold;
+                        flags[index] = isErased
+                            ? AlphaTextureData.ErasedFlag
+                            : isOpaque ? byte.MaxValue : (byte)0;
                     }
 
                     levels[mip] = new AlphaTextureData(width, height, flags);

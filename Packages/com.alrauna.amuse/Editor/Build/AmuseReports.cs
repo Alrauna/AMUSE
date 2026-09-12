@@ -100,7 +100,8 @@ namespace Alrauna.Amuse.Editor.Build
             int analyzedRenderers,
             int movedTriangles,
             int untouchedRenderers,
-            AmuseBuildPath buildPath)
+            AmuseBuildPath buildPath,
+            bool alphaPolicyActive)
         {
             var summary = string.Format(
                 AmuseReportStrings.Get(
@@ -108,22 +109,41 @@ namespace Alrauna.Amuse.Editor.Build
                 analyzedRenderers,
                 movedTriangles,
                 untouchedRenderers);
+            var policySentence = alphaPolicyActive
+                ? " " + AmuseReportStrings.Get(
+                    "amuse.summary.PolicyActive:description")
+                : "";
 
             AmuseBuildStatusStore.Record(
                 avatarRoot.GetInstanceID(),
                 (buildPath == AmuseBuildPath.ApplyOnPlay
                     ? "Last play mode run: "
-                    : "Last upload: ") + summary);
+                    : "Last upload: ") + summary + policySentence);
 
             using (ErrorReport.WithContextObject(avatarRoot))
             {
+                var reportArguments = new List<object>
+                {
+                    analyzedRenderers,
+                    movedTriangles,
+                    untouchedRenderers,
+                };
+                if (alphaPolicyActive)
+                {
+                    // The policy disclosure rides in the report arguments.
+                    // The description format keeps its three slots, so the
+                    // inert report composes exactly its previous text, and
+                    // the status store line above is where the sentence
+                    // surfaces.
+                    reportArguments.Add(AmuseReportStrings.Get(
+                        "amuse.summary.PolicyActive:description"));
+                }
+
                 ErrorReport.ReportError(
                     Localizer,
                     ErrorSeverity.Information,
                     "amuse.summary.Title",
-                    analyzedRenderers,
-                    movedTriangles,
-                    untouchedRenderers);
+                    reportArguments.ToArray());
             }
         }
     }

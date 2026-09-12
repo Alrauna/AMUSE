@@ -959,9 +959,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return TriangleAlphaClassifier.Classify(triangle, texture, new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), AlphaUvEnvelope.Zero);
         }
 
+        // A null density routes the four-argument Classify; a value
+        // routes the five-argument Classify with that density policy.
         private static TriangleAlphaOutcome[] ClassifyInputCase(
             FixtureInputCatalog inputs,
-            string caseId)
+            string caseId,
+            int? maxNoiseTexelPercent = null)
         {
             var fixtureCase = ReferenceFixtureData.FindCase(inputs, caseId);
             var textureRecord = inputs.textures.Single(item => item.id == fixtureCase.textureId);
@@ -989,16 +992,25 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var i1 = meshRecord.triangleVertexIndices[offset + 1];
                 var i2 = meshRecord.triangleVertexIndices[offset + 2];
                 var triangle = CreateTriangleInput(meshRecord, i0, i1, i2);
-                results[triangleIndex] = TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
+                results[triangleIndex] = maxNoiseTexelPercent.HasValue
+                    ? TriangleAlphaClassifier.Classify(
+                        triangle,
+                        texture,
+                        sampling,
+                        AlphaUvEnvelope.Zero,
+                        maxNoiseTexelPercent.Value)
+                    : TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
             }
 
             return results;
         }
 
-        private static void AssertCaseMatchesOracle(string caseId)
+        private static void AssertCaseMatchesOracle(
+            string caseId,
+            int? maxNoiseTexelPercent = null)
         {
             var catalogs = ReferenceFixtureData.Load();
-            var actual = ClassifyInputCase(catalogs.Inputs, caseId);
+            var actual = ClassifyInputCase(catalogs.Inputs, caseId, maxNoiseTexelPercent);
             var expected = ReferenceFixtureData.FindExpectation(
                     catalogs.Expectations,
                     caseId)
@@ -1057,6 +1069,183 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Array.Fill(alpha, byte.MaxValue);
             alpha[y * 8 + x] = 0;
             return new AlphaTextureData(8, 8, alpha);
+        }
+
+        private static TriangleAlphaOutcome ClassifyFullCover(
+            AlphaTextureData texture,
+            AlphaFilterMode filter,
+            int maxNoiseTexelPercent)
+        {
+            // A triangle whose UV0 footprint covers every texel of the
+            // 2x2 texture: the corner (1, 1) sits on the exact boundary
+            // x + y = 2, so the closed domain intersects all four texel
+            // cells and the scan consults all four.
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+            return TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                new AlphaSamplingSettings(filter, AlphaWrapMode.Clamp),
+                AlphaUvEnvelope.Zero,
+                maxNoiseTexelPercent);
+        }
+
+        [Test]
+        public void SparseErasedStrayProvesOpaqueUnderTheGate()
+        {
+            // Four consulted texels, one erased: 1 * 100 < 50 * 4 is
+            // true, so the stray substitutes and the triangle proves.
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DenseErasedNoiseRefusesUnderTheGate()
+        {
+            // Three erased among four: 3 * 100 < 50 * 4 is false, so
+            // erasure does not fire and the triangle stays unproven.
+            var bytes = new byte[]
+            {
+                255, AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void EqualityAtTheCoverageBoundMoves()
+        {
+            // Two erased among four consulted: 2 * 100 <= 50 * 4 is
+            // true, so exact equality moves. The coverage policy counts
+            // a share at or under the cap, so this kills the strict <
+            // the prefix gate used and any > in place of >=.
+            var bytes = new byte[]
+            {
+                255, 255,
+                AlphaTextureData.ErasedFlag,
+                AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 50),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ZeroDensityKeepsErasureInert()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 0),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void WitnessByteAlwaysBlocksRegardlessOfDensity()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, 200,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Point, 99),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void FourArgumentClassifyTreatsTheFlagAsWitness()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    new AlphaSamplingSettings(
+                        AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void BilinearClampSharesTheDensityRule()
+        {
+            var bytes = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var texture = new AlphaTextureData(2, 2, bytes);
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Bilinear, 50),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                ClassifyFullCover(
+                    texture, AlphaFilterMode.Bilinear, 0),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DensityPercentOutsideZeroToHundredIsAProgrammingDefect()
+        {
+            var texture = new AlphaTextureData(2, 2, new byte[] { 255, 255, 255, 255 });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => ClassifyFullCover(texture, AlphaFilterMode.Point, 101));
+            Assert.DoesNotThrow(
+                () => ClassifyFullCover(texture, AlphaFilterMode.Point, 100));
+        }
+
+        [TestCase("fully-opaque-texture")]
+        [TestCase("alpha-254-boundary")]
+        [TestCase("fully-transparent-texture")]
+        [TestCase("mixed-alpha-texture")]
+        [TestCase("triangle-in-opaque-region")]
+        [TestCase("triangle-in-transparent-region")]
+        [TestCase("triangle-crosses-alpha-boundary")]
+        public void InertPolicyMatchesOracle(string caseId)
+        {
+            // Runs the oracle cases through the five-argument Classify
+            // with density 0 and the bounds-inert four-argument path,
+            // asserting both agree with the reference fixture oracle.
+            AssertCaseMatchesOracle(caseId);
+            AssertCaseMatchesOracle(caseId, 0);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -165,6 +166,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
             out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
@@ -187,7 +189,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                     materials[index], request);
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, bounds);
             var result = BuildCapturedAlphaMaterials(
                 materials, families, shaders, evidence);
             foreach (var material in result)
@@ -216,6 +219,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
             IReadOnlyCollection<string> grantedShaderNames,
             out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
@@ -239,7 +243,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                     materials[index], request);
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, bounds);
             var result = BuildCapturedAlphaMaterials(
                 materials, families, shaders, evidence);
             for (var index = 0; index < result.Count; index++)

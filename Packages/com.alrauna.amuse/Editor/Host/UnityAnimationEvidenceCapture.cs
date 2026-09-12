@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf.animator;
 using UnityEditor.Animations;
@@ -76,11 +77,18 @@ namespace Alrauna.Amuse.Editor.Host
     /// partial captured result to the caller: <paramref name="captured"/> must
     /// be left null or empty, never a prefix of the batch.
     /// </para>
+    /// <param name="bounds">
+    /// The user's alpha policy as exact byte bounds. Capture applies them
+    /// to every alpha field it gathers, so the proof's evidence is the
+    /// policy's evidence. The inert bounds reproduce the base exact-255
+    /// contract.
+    /// </param>
     /// </summary>
     internal delegate bool ClosedAlphaMaterialCapturer(
         IReadOnlyList<Material> materials,
         IReadOnlyList<CapturedAlphaMaterialFamily> families,
         MaterialEvidenceRequest request,
+        AlphaPolicyBounds bounds,
         out IReadOnlyList<CapturedAlphaMaterial> captured);
 
     internal static class UnityAnimationEvidenceCapture
@@ -126,6 +134,7 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
+            AlphaPolicyBounds bounds,
             out IReadOnlyList<Material> admittedLiveMaterials,
             ClosedAlphaMaterialCapturer capturer = null,
             bool ignoreOutOfRangeSlots = false)
@@ -135,6 +144,7 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 bindings,
+                bounds,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials,
@@ -155,11 +165,15 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false)
         {
+            // The closure-mechanics seam stays policy-free: it captures
+            // under the inert bounds, which reproduce the base exact-255
+            // contract. Policy enters at the production entries.
             return CaptureObserved(
                 rendererPath,
                 observations,
                 currentSlots,
                 graph,
+                AlphaPolicyBounds.Inert,
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
@@ -173,11 +187,15 @@ namespace Alrauna.Amuse.Editor.Host
             CommittedControllerGraphResult graph,
             bool ignoreOutOfRangeSlots = false)
         {
+            // The closure-mechanics seam stays policy-free: it captures
+            // under the inert bounds, which reproduce the base exact-255
+            // contract. Policy enters at the production entries.
             return CaptureObserved(
                 rendererPath,
                 observations,
                 currentSlots,
                 graph,
+                AlphaPolicyBounds.Inert,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out _,
@@ -189,6 +207,7 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
+            AlphaPolicyBounds bounds,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
@@ -199,6 +218,7 @@ namespace Alrauna.Amuse.Editor.Host
                 currentSlots,
                 graph,
                 bindings,
+                bounds,
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
@@ -210,6 +230,7 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
+            AlphaPolicyBounds bounds,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
@@ -242,6 +263,7 @@ namespace Alrauna.Amuse.Editor.Host
                 observations,
                 currentSlots,
                 graph,
+                bounds,
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
@@ -253,6 +275,7 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
+            AlphaPolicyBounds bounds,
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
@@ -436,6 +459,7 @@ namespace Alrauna.Amuse.Editor.Host
                         attestedMaterials,
                         attestedFamilies,
                         captureRequest,
+                        bounds,
                         out var capturedMaterials))
                 {
                     return Failed(

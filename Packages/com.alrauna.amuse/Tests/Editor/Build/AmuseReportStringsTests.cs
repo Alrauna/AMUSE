@@ -84,6 +84,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void EveryTextureCaptureRefusalReasonHasPlainEnglishStrings()
+        {
+            foreach (TextureCaptureRefusalReason reason in Enum.GetValues(
+                         typeof(TextureCaptureRefusalReason)))
+            {
+                if (reason == TextureCaptureRefusalReason.None)
+                {
+                    continue;
+                }
+
+                var key = AmuseReportStrings.TextureCaptureKey(reason);
+                Assert.That(
+                    AmuseReportStrings.Has(key), Is.True,
+                    "missing title for " + reason);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":description"), Is.True,
+                    "missing description for " + reason);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":hint"), Is.True,
+                    "missing hint for " + reason);
+            }
+        }
+
+        [Test]
         public void ConsentAndSummaryStringsExist()
         {
             Assert.That(

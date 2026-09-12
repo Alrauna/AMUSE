@@ -25,12 +25,14 @@ namespace Alrauna.Amuse.Editor.Host
     /// <para>
     /// The evidence it produces is <em>predicate-equivalent</em> to effective shader
     /// alpha at <em>every captured declared mip</em>, not byte-identical to GPU
-    /// memory: at each level, byte 255 marks exactly the texels whose sampled alpha
-    /// is exactly one, and every other byte marks a value strictly below one. That
-    /// is the contract <see cref="AlphaFieldProvider"/> states and the only property
-    /// <see cref="TriangleAlphaClassifier"/> reads. The chain is the texture's
-    /// complete declared mip chain, mip 0 first: the hardware may select any level
-    /// and the resolver cannot know which.
+    /// memory. At each level each byte is the policy verdict over the sampled
+    /// channel: 255 at or above the policy's opaque bound, 1
+    /// (<see cref="Analysis.AlphaTextureData.ErasedFlag"/>) strictly below its
+    /// noise bound, and 0 otherwise. The inert bounds reduce the verdict to the
+    /// base exact-255 contract: byte 255 marks exactly the texels whose sampled
+    /// alpha is exactly one, and every other byte marks a value strictly below
+    /// one. The chain is the texture's complete declared mip chain, mip 0 first:
+    /// the hardware may select any level and the resolver cannot know which.
     /// </para>
     /// <para>
     /// The values come from the <em>GPU-decoded imported representation</em>, read
@@ -39,6 +41,12 @@ namespace Alrauna.Amuse.Editor.Host
     /// <see cref="IsAdmittedFormat"/>: a format is admitted only where durable
     /// characterization through this route and an authoritative decode rule both
     /// support it.
+    /// </para>
+    /// <para>
+    /// The levels the effective mipmap limit removes from the GPU have no
+    /// effective alpha for playback, so the capture marks them without evidence
+    /// (<see cref="Analysis.AlphaMipChain.IsLevelWithoutEvidence"/>) and the
+    /// fold degrades them to Unknown instead of reading a verdict.
     /// </para>
     /// </summary>
     internal sealed class UnityAlphaFieldEvidence
@@ -129,7 +137,9 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// Captures the complete immutable alpha field for one supported
-        /// texture. Kept for the historical call shape.
+        /// texture. Kept for the historical call shape. It captures
+        /// under the inert bounds, which reproduce the base exact-255
+        /// contract.
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
@@ -137,19 +147,27 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, TextureChannel.Alpha, 1.0f, out source, out chain);
+                texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                out source, out chain, out _);
         }
 
         internal static bool TryCapture(
             Texture texture,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out TextureSourceId source,
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, TextureChannel.Alpha, cutoffThreshold, out source, out chain);
+                texture, TextureChannel.Alpha, cutoffThreshold, bounds,
+                out source, out chain, out _);
         }
 
+        /// <summary>
+        /// Captures under the inert bounds, which reproduce the base
+        /// exact-255 contract. Callers that know the active policy pass
+        /// it to the full overload.
+        /// </summary>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
@@ -157,7 +175,8 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain)
         {
             return TryCapture(
-                texture, channel, 1.0f, out source, out chain);
+                texture, channel, 1.0f, AlphaPolicyBounds.Inert,
+                out source, out chain, out _);
         }
 
         /// <summary>
@@ -168,16 +187,33 @@ namespace Alrauna.Amuse.Editor.Host
         /// decode-proof because the sRGB transfer is monotone and fixes
         /// exactly 1.0, so byte 255 still marks exactly the texels whose
         /// sampled value is one.
+        /// <para>
+        /// The bounds are the user's alpha policy as exact bytes, and every
+        /// capture route honors them. The inert bounds reproduce the base
+        /// exact-255 contract. The cached routes carry the bounds in their
+        /// cache keys, so two policies never share a cached chain, and the
+        /// direct GPU route applies them in its predicate shader.
+        /// </para>
         /// </summary>
+        /// <param name="refusal">
+        /// The named reason family the capture refused for, or
+        /// <see cref="TextureCaptureRefusalReason.None"/> when the chain was
+        /// captured. The reason names the first refusing gate: the gates are
+        /// evaluated in a fixed order, so one texture always refuses with the
+        /// same family.
+        /// </param>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out TextureSourceId source,
-            out AlphaMipChain chain)
+            out AlphaMipChain chain,
+            out TextureCaptureRefusalReason refusal)
         {
             source = default;
             chain = null;
+            refusal = TextureCaptureRefusalReason.None;
 
             if (!Enum.IsDefined(typeof(TextureChannel), channel))
             {
@@ -187,6 +223,7 @@ namespace Alrauna.Amuse.Editor.Host
             if (channel != TextureChannel.Alpha &&
                 channel != TextureChannel.Red)
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
@@ -197,11 +234,13 @@ namespace Alrauna.Amuse.Editor.Host
             var texture2D = texture as Texture2D;
             if (texture2D == null)
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
             if (!UnityTextureEvidence.TryGetSourceId(texture2D, out source))
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
@@ -210,15 +249,44 @@ namespace Alrauna.Amuse.Editor.Host
                 // Every policy gate precedes the first allocation. The format
                 // allowlist in particular is checked before any GPU call, so a
                 // compressed source never reaches a route that would log a
-                // Unity error. The mipmap limit refuses for both routes: the
-                // limit changes which levels exist, and evidence for a
-                // truncated chain is not evidence for what playback samples.
-                if (!IsAdmittedBuildTarget(EditorUserBuildSettings.activeBuildTarget) ||
-                    !IsAdmittedFormat(texture2D.format) ||
-                    !MipLimitGatesPass(texture2D.activeMipmapLimit) ||
-                    !AreDimensionsUsable(
-                        texture2D.width, texture2D.height, texture2D.mipmapCount))
+                // Unity error. The mipmap limit degrades per level: the
+                // limit removes the texture's highest-resolution mips from
+                // the GPU, those levels have no effective alpha for
+                // playback, and the capture marks them without evidence
+                // instead of refusing - the whole-texture refusal is left
+                // for the case where no level remains resident.
+                // Each gate names its reason family in the gate's own order,
+                // so a refusal always explains the first gate that refused.
+                if (!IsAdmittedBuildTarget(
+                        EditorUserBuildSettings.activeBuildTarget))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
+                    source = default;
+                    return false;
+                }
+
+                if (!IsAdmittedFormat(texture2D.format))
+                {
+                    refusal = TextureCaptureRefusalReason.UnsupportedFormat;
+                    source = default;
+                    return false;
+                }
+
+                if (!MipLimitGatesPass(
+                        texture2D.activeMipmapLimit,
+                        texture2D.mipmapCount))
+                {
+                    refusal = TextureCaptureRefusalReason.NonResidentMips;
+                    source = default;
+                    return false;
+                }
+
+                if (!AreDimensionsUsable(
+                        texture2D.width,
+                        texture2D.height,
+                        texture2D.mipmapCount))
+                {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -228,12 +296,17 @@ namespace Alrauna.Amuse.Editor.Host
                 if (GeneratedTextureAttestation.TryIdentifyProducer(texture2D, out _))
                 {
                     if (!UnityGeneratedTextureEvidence.TryCapture(
-                            texture2D, channel, cutoffThreshold, out chain))
+                            texture2D, channel, cutoffThreshold, bounds,
+                            out chain))
                     {
+                        refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;
                         chain = null;
                         return false;
                     }
+
+                    chain = WithResidencyProvenance(
+                        chain, texture2D.activeMipmapLimit);
 
                     return true;
                 }
@@ -246,17 +319,25 @@ namespace Alrauna.Amuse.Editor.Host
                 if (texture2D.streamingMipmaps)
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
-                            texture2D, channel, cutoffThreshold, out chain))
+                            texture2D, channel, cutoffThreshold, bounds,
+                            out chain))
                     {
+                        refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;
                         chain = null;
                         return false;
                     }
 
+                    chain = WithResidencyProvenance(
+                        chain, texture2D.activeMipmapLimit);
+
                     return true;
                 }
 
-
+                // The bounds reach this route through the predicate shader:
+                // the shaders emit the three-state verdict under _OpaqueBound
+                // and _NoiseBound, so the policy governs the primary path for
+                // imported avatar textures too.
                 if (!HostCapabilitiesPass(
                         SystemInfo.supportsAsyncGPUReadback,
                         SystemInfo.IsFormatSupported(PredicateTarget, FormatUsage.Render),
@@ -266,6 +347,7 @@ namespace Alrauna.Amuse.Editor.Host
                             SystemInfo.IsFormatSupported(
                                 texture2D.graphicsFormat, FormatUsage.Sample))))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -276,6 +358,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
                 if (!IsShaderUsable(shader != null, shader != null && shader.isSupported))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -285,12 +368,25 @@ namespace Alrauna.Amuse.Editor.Host
                 // there is no version of TryCapture that returns a chain without it.
                 if (!HostCapabilityCheckPasses(channel))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
 
-                if (!TryCaptureChain(texture2D, shader, out chain))
+                // Spec section 3: a texel between the noise gate and the
+                // shader cutoff is discarded at runtime and must never read
+                // opaque, so a shader cutoff source keeps the policy inert
+                // on this route, exactly as on the other three. The inert
+                // bounds reproduce the base exact-255 contract, which is
+                // what the cutoff arm binarizes by here.
+                var effectiveBounds = cutoffThreshold < 1f
+                    ? AlphaPolicyBounds.Inert
+                    : bounds;
+                if (!TryCaptureChain(
+                        texture2D, shader, effectiveBounds,
+                        texture2D.activeMipmapLimit, out chain))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     chain = null;
                     return false;
@@ -304,6 +400,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // Measured: raised by any member access on a destroyed object,
                 // including isReadable, and its base type is SystemException rather
                 // than UnityException. Guards every Unity-object read above.
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 source = default;
                 chain = null;
                 return false;
@@ -311,16 +408,27 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Captures every declared mip and constructs the chain only after exactly
-        /// mipmapCount successes. A single failed level refuses the whole texture:
-        /// there is no code path on which a partially populated chain exists, so
-        /// none can escape.
+        /// Captures every declared mip and constructs the chain only after
+        /// every resident level succeeded. Levels the effective mipmap limit
+        /// removes from the GPU are never blitted: a non-resident source has
+        /// no defined readback, so the level keeps a placeholder grid with
+        /// its declared dimensions and the chain flags it without evidence,
+        /// which degrades the level to Unknown at the fold. A failed level
+        /// that should have been resident still refuses the whole texture:
+        /// there is no code path on which a partially populated chain of
+        /// resident evidence exists, so none can escape. The bounds ride
+        /// along to every acquired level.
         /// </summary>
         private static bool TryCaptureChain(
-            Texture2D texture, Shader shader, out AlphaMipChain chain)
+            Texture2D texture,
+            Shader shader,
+            AlphaPolicyBounds bounds,
+            int activeMipmapLimit,
+            out AlphaMipChain chain)
         {
             chain = null;
             var levels = new AlphaTextureData[texture.mipmapCount];
+            var withoutEvidence = new bool[levels.Length];
 
             // One material per texture, not per level: Graphics.Blit sets _MainTex
             // on it and only _Mip varies between levels.
@@ -329,7 +437,14 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
-                    if (!TryAcquireLevel(texture, mip, material, out var level))
+                    if (!IsLevelResident(mip, activeMipmapLimit))
+                    {
+                        levels[mip] = WithoutEvidencePlaceholder(texture, mip);
+                        withoutEvidence[mip] = true;
+                        continue;
+                    }
+
+                    if (!TryAcquireLevel(texture, mip, material, bounds, out var level))
                     {
                         return false;
                     }
@@ -342,14 +457,75 @@ namespace Alrauna.Amuse.Editor.Host
                 UnityEngine.Object.DestroyImmediate(material);
             }
 
-            chain = new AlphaMipChain(levels);
+            chain = new AlphaMipChain(levels, withoutEvidence);
             return true;
+        }
+
+        /// <summary>
+        /// The placeholder grid of a level the capture could not examine. Its
+        /// bytes are all witnesses and prove nothing: the chain flags the
+        /// level, and the fold consults the flag before any grid content, so
+        /// the placeholder exists only to keep the chain's declared shape.
+        /// Internal because the generated capture route skips its
+        /// non-resident levels with the same placeholder, and a second
+        /// builder would be a second place for the shape rule to drift.
+        /// </summary>
+        internal static AlphaTextureData WithoutEvidencePlaceholder(
+            Texture2D texture,
+            int mip)
+        {
+            var width = Mathf.Max(1, texture.width >> mip);
+            var height = Mathf.Max(1, texture.height >> mip);
+            return new AlphaTextureData(width, height, new byte[width * height]);
+        }
+
+        /// <summary>
+        /// Applies the declared residency provenance to a chain a route
+        /// captured: the levels the effective limit removes from the GPU have
+        /// no effective alpha for playback, so they are flagged without
+        /// evidence whatever the route read for them - the routes' own reads
+        /// describe importer or GPU content, not what playback samples. The
+        /// GPU route flags its skipped levels itself; the flags OR, so
+        /// re-wrapping its chain is exact. An unlimited texture is returned
+        /// unchanged. Internal, like the other gate predicates, so the test
+        /// assembly can exercise the composition whose live Unity state
+        /// cannot safely be induced on a conforming host; production is its
+        /// caller, so it IS the residency composition rather than a
+        /// parallel restatement of it.
+        /// </summary>
+        internal static AlphaMipChain WithResidencyProvenance(
+            AlphaMipChain chain,
+            int activeMipmapLimit)
+        {
+            if (chain == null)
+            {
+                throw new ArgumentNullException(nameof(chain));
+            }
+
+            if (activeMipmapLimit <= 0)
+            {
+                return chain;
+            }
+
+            var levels = new AlphaTextureData[chain.Count];
+            var withoutEvidence = new bool[chain.Count];
+            for (var level = 0; level < chain.Count; level++)
+            {
+                levels[level] = chain[level];
+                withoutEvidence[level] =
+                    level < activeMipmapLimit ||
+                    chain.IsLevelWithoutEvidence(level);
+            }
+
+            return new AlphaMipChain(levels, withoutEvidence);
         }
 
         /// <summary>
         /// The one GPU acquisition core: Blit through the predicate shader into an
         /// exact R8_UNorm target, read the bytes back synchronously, validate, and
-        /// build one grid.
+        /// build one grid. It writes the policy bounds to the material as
+        /// normalized floats, a bound byte over 255, so the shader's verdict
+        /// bands are the caller's policy at every level.
         /// <para>
         /// It holds no identity, build-target, format-allowlist, mip-limit,
         /// streaming, or capability gate. Those belong to its callers, and repeating
@@ -362,7 +538,11 @@ namespace Alrauna.Amuse.Editor.Host
         /// </para>
         /// </summary>
         private static bool TryAcquireLevel(
-            Texture2D texture, int mip, Material material, out AlphaTextureData level)
+            Texture2D texture,
+            int mip,
+            Material material,
+            AlphaPolicyBounds bounds,
+            out AlphaTextureData level)
         {
             level = null;
 
@@ -370,6 +550,12 @@ namespace Alrauna.Amuse.Editor.Host
             var height = Mathf.Max(1, texture.height >> mip);
 
             material.SetInt("_Mip", mip);
+
+            // Normalized floats: a stored byte b samples exactly b/255 on
+            // every admitted decode, so the shaders' comparisons order the
+            // stored bytes exactly as the bytes order.
+            material.SetFloat("_OpaqueBound", bounds.OpaqueBound / 255f);
+            material.SetFloat("_NoiseBound", bounds.NoiseBound / 255f);
 
             var descriptor = new RenderTextureDescriptor(width, height, PredicateTarget, 0)
             {
@@ -421,7 +607,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var bytes = new byte[width * height];
                 data.CopyTo(bytes);
 
-                if (!IsBinaryPredicateBuffer(bytes))
+                if (!IsPredicateFlagBuffer(bytes))
                 {
                     return false;
                 }
@@ -499,6 +685,14 @@ namespace Alrauna.Amuse.Editor.Host
         };
 
         /// <summary>
+        /// The one fixture texel that carries the noise-band byte 3 instead
+        /// of 128, for the erased-encoding re-measurement. Under the inert
+        /// run it reads 0 like its neighbors, so the orientation pattern is
+        /// unchanged.
+        /// </summary>
+        private const int NoiseFixtureTexel = 7;
+
+        /// <summary>
         /// Gate 12. Row order is soundness-critical - a vertical flip would
         /// attribute alpha to the wrong triangles and could yield a false
         /// ProvenOpaque - and the orientation agreement was measured on one graphics
@@ -512,10 +706,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// is no partial credit and no retry.
         /// </para>
         /// <para>
-        /// It proves that this host's production route preserves the expected
-        /// orientation and binary R8 encoding. It does NOT independently attest the
-        /// decode or swizzle behaviour of any compressed format; the fixture is one
-        /// uncompressed texture.
+        /// The inert run proves that this host's production route preserves
+        /// the expected orientation and the exact R8 encoding of 255 and 0.
+        /// The inert bounds never reach the erased verdict, so a second,
+        /// bounds-on acquisition re-measures the erased encoding once per
+        /// AppDomain. The claim is narrow: deviations that leave the flag
+        /// grid fail the capture, and the erased encoding is pinned by this
+        /// gate measurement on the hardware that runs the gate. It does NOT
+        /// independently attest the decode or swizzle behaviour of any
+        /// compressed format; the fixture is one uncompressed texture.
         /// </para>
         /// <para>
         /// The fixture is built in memory and so has no asset identity, which is why
@@ -577,21 +776,31 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     // The fixture encodes the orientation pattern in the
                     // channel under test: alpha for the alpha predicate,
-                    // red for the mask predicate.
-                    var marked = ExpectedOrientationPattern[index] ==
-                                 byte.MaxValue;
+                    // red for the mask predicate. One unmarked texel
+                    // carries the noise-band byte 3 instead of 128. Both
+                    // read 0 under the inert bounds, so the orientation
+                    // pattern is unchanged, and the bounds-on second run
+                    // reads that texel as the erased flag.
+                    var channelByte = ExpectedOrientationPattern[index] ==
+                                      byte.MaxValue
+                        ? (byte)255
+                        : index == NoiseFixtureTexel ? (byte)3 : (byte)128;
                     pixels[index] = channel == TextureChannel.Red
-                        ? new Color32(
-                            marked ? (byte)255 : (byte)128, 32, 16, 255)
-                        : new Color32(
-                            64, 32, 16, marked ? (byte)255 : (byte)128);
+                        ? new Color32(channelByte, 32, 16, 255)
+                        : new Color32(64, 32, 16, channelByte);
                 }
 
                 texture.SetPixels32(pixels);
                 texture.Apply(false, false);
 
                 material = new Material(shader);
-                if (!TryAcquireLevel(texture, 0, material, out var level))
+
+                // The inert run pins the orientation and the 255 and 0
+                // encodings: the fixture's expectations are the base binary
+                // output the inert contract guarantees.
+                if (!TryAcquireLevel(
+                        texture, 0, material, AlphaPolicyBounds.Inert,
+                        out var level))
                 {
                     return false;
                 }
@@ -605,7 +814,26 @@ namespace Alrauna.Amuse.Editor.Host
                     }
                 }
 
-                return MatchesExpectedPattern(actual, ExpectedOrientationPattern);
+                if (!MatchesExpectedPattern(actual, ExpectedOrientationPattern))
+                {
+                    return false;
+                }
+
+                // The inert run cannot reach the erased verdict: the noise
+                // bound 0 never fires. This second, bounds-on acquisition
+                // re-measures the erased encoding once per AppDomain: the
+                // noise-band texel must store exactly byte 1 through the
+                // R8_UNorm write.
+                if (!TryAcquireLevel(
+                        texture, 0, material, AlphaPolicyBounds.From(80, 2),
+                        out var boundsOnLevel))
+                {
+                    return false;
+                }
+
+                return boundsOnLevel.GetAlpha(
+                    NoiseFixtureTexel % 4, NoiseFixtureTexel / 4)
+                    == AlphaTextureData.ErasedFlag;
             }
             finally
             {
@@ -673,21 +901,41 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// A gate on declared state. activeMipmapLimit is the per-texture effective
         /// limit and already folds in the global limit and any mipmap-limit group.
-        /// A nonzero limit refuses for every capture route: the limit changes
-        /// which levels exist, and evidence over a truncated chain is not
-        /// evidence over what playback samples. Streaming is not a limit and
-        /// is no longer refused here: a streaming texture captures through the
-        /// readable-clone route because its GPU read is measured
-        /// untrustworthy, however resident it reports.
+        /// The limit removes exactly the activeMipmapLimit highest-resolution
+        /// levels of the declared chain from the GPU, so the gate passes while
+        /// at least one level remains resident: the capture then consults the
+        /// resident levels and marks the removed prefix without evidence. It
+        /// refuses - naming NonResidentMips - only when no level remains
+        /// resident, because a capture with no usable level has nothing to
+        /// degrade. Streaming is not a limit and is not refused here: a
+        /// streaming texture captures through the readable-clone route
+        /// because its GPU read is measured untrustworthy, however resident
+        /// it reports.
         /// <para>
-        /// This is a pure predicate because its false branch cannot be constructed
-        /// without mutating project or importer state, which production must never
-        /// do.
+        /// This is a pure predicate because its false branch cannot be
+        /// constructed without mutating project or importer state, which
+        /// production must never do.
         /// </para>
         /// </summary>
-        internal static bool MipLimitGatesPass(int activeMipmapLimit)
+        internal static bool MipLimitGatesPass(int activeMipmapLimit, int mipmapCount)
         {
-            return activeMipmapLimit == 0;
+            return activeMipmapLimit < mipmapCount;
+        }
+
+        /// <summary>
+        /// The per-level shape of the same declared-state gate: under the
+        /// effective limit, the chain's first activeMipmapLimit levels - the
+        /// highest-resolution ones - are not uploaded, so a level is resident
+        /// exactly when its index is at or above the limit. Like
+        /// <see cref="MipLimitGatesPass"/>, it is deliberately a predicate
+        /// over declared state rather than an inference from a readback: a
+        /// readback's dimensions are the dimensions of a destination this
+        /// code allocated, so they cannot establish that the requested source
+        /// level was resident.
+        /// </summary>
+        internal static bool IsLevelResident(int mipLevel, int activeMipmapLimit)
+        {
+            return mipLevel >= activeMipmapLimit;
         }
 
         internal static bool AreDimensionsUsable(int width, int height, int mipmapCount)
@@ -792,13 +1040,16 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// One responsibility: the shader emits only 0 or 1, which an R8_UNorm
-        /// target stores as 0 or 255. Anything between means the value was
-        /// filtered, rescaled, or transfer-converted on the way out, and the
-        /// predicate would no longer be the predicate. Length is
-        /// <see cref="IsExpectedBufferLength"/>'s job.
+        /// One responsibility: every byte is one of the three flag states the
+        /// predicate shaders emit, which an R8_UNorm target stores exactly.
+        /// 255 is the opaque verdict, AlphaTextureData.ErasedFlag is the
+        /// erased verdict, and 0 is the witness. Anything else means the value
+        /// was filtered, rescaled, or transfer-converted on the way out, and
+        /// the predicate would no longer be the predicate. Length is
+        /// <see cref="IsExpectedBufferLength"/>'s job, checked earlier and
+        /// against the length Unity returned.
         /// </summary>
-        internal static bool IsBinaryPredicateBuffer(byte[] bytes)
+        internal static bool IsPredicateFlagBuffer(byte[] bytes)
         {
             if (bytes == null)
             {
@@ -807,7 +1058,9 @@ namespace Alrauna.Amuse.Editor.Host
 
             foreach (var value in bytes)
             {
-                if (value != 0 && value != byte.MaxValue)
+                if (value != 0 &&
+                    value != AlphaTextureData.ErasedFlag &&
+                    value != byte.MaxValue)
                 {
                     return false;
                 }

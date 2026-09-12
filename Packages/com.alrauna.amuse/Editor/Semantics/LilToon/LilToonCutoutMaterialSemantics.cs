@@ -141,7 +141,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel),
+                        TextureEvidenceKinds.AlphaChannel,
+                        // The cutout runtime clips by the shader cutoff, so
+                        // the capture declares it: every route binarizes by
+                        // the cutoff and keeps the alpha policy inert for
+                        // this source (spec section 3).
+                        CutoffProperty),
 
                     // The alpha mask rides _MainTex's sampler, so this
                     // request deliberately asks for no sampling facts of

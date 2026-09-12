@@ -94,6 +94,19 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return Chain(Field(2, 2, 255), Field(1, 1, 0));
         }
 
+        /// <summary>
+        /// A chain whose per-level provenance the capture flagged. The grids
+        /// are deliberately fully opaque: a fold that consults a flagged
+        /// grid instead of its provenance answers ProvenOpaque, which is
+        /// exactly the leak the flag exists to close.
+        /// </summary>
+        private static AlphaMipChain ChainWithProvenance(
+            bool[] levelsWithoutEvidence,
+            params AlphaTextureData[] levels)
+        {
+            return new AlphaMipChain(levels, levelsWithoutEvidence);
+        }
+
         private static AlphaFieldProvider Providing(AlphaTextureData field)
         {
             return Providing(new AlphaMipChain(new[] { field }));
@@ -161,6 +174,21 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.05f, 0.95f));
         }
 
+        /// <summary>
+        /// A nondegenerate triangle whose UV0 domain contains the whole
+        /// unit square, so a 2x2 field is consulted in full.
+        /// </summary>
+        private static TriangleAlphaInput FlatTriangle()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(2.5f, 0f),
+                new Vector2(0f, 2.5f));
+        }
+
         // --- Task 1: resolution boundary --------------------------------------
 
         [Test]
@@ -168,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Unknown(),
-                ProvidingNothing());
+                ProvidingNothing(), 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -181,7 +209,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 default(SemanticOutput<ScalarSemanticValue>),
-                ProvidingNothing());
+                ProvidingNothing(), 0);
 
             Assert.That(
                 resolution.Failure,
@@ -193,7 +221,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Unknown(),
-                ProvidingNothing());
+                ProvidingNothing(), 0);
 
             Assert.Throws<InvalidOperationException>(
                 () => resolution.Classify(OpaqueCornerTriangle()));
@@ -205,7 +233,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.Throws<ArgumentNullException>(() => AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f)),
-                null));
+                null, 0));
         }
 
         // --- Task 2: constant alpha forms -------------------------------------
@@ -215,7 +243,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(value)),
-                ProvidingNothing());
+                ProvidingNothing(), 0);
         }
 
         [Test]
@@ -283,7 +311,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f)),
-                provider);
+                provider, 0);
 
             Assert.That(consulted, Is.False);
         }
@@ -298,7 +326,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Texture(sample, channel)),
-                provider);
+                provider, 0);
+        }
+
+        private static SemanticOutput<ScalarSemanticValue> SampledAlpha()
+        {
+            return SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Texture(Sample(), TextureChannel.Alpha));
         }
 
         [Test]
@@ -715,7 +749,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.TextureTimesConstant(
                         Sample(), TextureChannel.Alpha, multiplier)),
-                provider);
+                provider, 0);
         }
 
         [Test]
@@ -796,7 +830,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
                         TextureChannel.Alpha,
                         0.5f)),
-                Providing(MixedField()));
+                Providing(MixedField()), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -907,7 +941,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             {
                 AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Unknown(),
-                    ProvidingNothing()),
+                    ProvidingNothing(), 0),
                 ResolveConstant(1f),
                 ResolveConstant(0.25f),
                 ResolveConstant(3f),
@@ -935,7 +969,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             {
                 AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Unknown(),
-                    ProvidingNothing()),
+                    ProvidingNothing(), 0),
                 ResolveSample(Sample(), TextureChannel.Alpha, ProvidingNothing()),
                 ResolveMultiplied(2f, Providing(MixedField())),
                 ResolveSample(
@@ -986,7 +1020,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // Deliberately a field whose every texel is opaque, so a
             // `Classify`-based implementation would look uniform.
             var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 255)), new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.TryGetUniformOutcome(out var outcome), Is.False);
@@ -1028,7 +1062,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Chain(Field(2, 2, 255)),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Point, AlphaWrapMode.Clamp),
-                new UvMapping(1, Vector2.one, Vector2.zero)));
+                new UvMapping(1, Vector2.one, Vector2.zero), 0));
         }
 
         // --- Mip chain aggregation --------------------------------------------
@@ -1036,7 +1070,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void EveryLevelOpaqueIsProvenOpaque()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1046,7 +1080,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ALowerLevelTransparencyDefeatsAMipZeroOpaqueProof()
         {
-            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1056,7 +1090,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void MipZeroTransparencyIsNotOverriddenByALowerOpaqueLevel()
         {
-            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 0), Field(1, 1, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 0), Field(1, 1, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1071,7 +1105,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void TransparencyOutranksUnknownEvenWhenItComesLast()
         {
-            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 0)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 0)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -1087,7 +1121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void OneUnknownLevelWithNoTransparencyIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -1105,7 +1139,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void EveryLevelUnknownIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             var noUv = TriangleAlphaInput.MissingUv0(
                 Vector3.zero, Vector3.right, Vector3.up);
@@ -1121,7 +1155,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ADisagreeingChainIsNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -1134,10 +1168,107 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AnAgreeingChainIsStillNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero));
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        // --- Per-level without-evidence provenance -----------------------------
+
+        /// <summary>
+        /// Mip 0 carries no evidence (the capture flagged it, e.g. a
+        /// non-resident consulted level) and its grid is fully opaque. A fold
+        /// that consults the grid answers ProvenOpaque here; only the
+        /// provenance forces Unknown for every triangle.
+        /// </summary>
+        [Test]
+        public void ALevelWithoutEvidenceForcesUnknownEvenWhenEveryGridIsOpaque()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { true, false }, Field(2, 2, 255), Field(1, 1, 255)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ALastLevelWithoutEvidenceForcesUnknown()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        /// <summary>
+        /// MustRemainTransparent is absorbing, so a flagged level's Unknown
+        /// must not swallow a later level's refusal either.
+        /// </summary>
+        [Test]
+        public void TransparencyStillOutranksALevelWithoutEvidence()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { true, false }, Field(2, 2, 255), Field(1, 1, 0)),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// The consulted prefix is the proof's scope: a flagged level above
+        /// the mip cap is outside every checked configuration, so it must not
+        /// degrade a proof the cap already delimits.
+        /// </summary>
+        [Test]
+        public void AFlaggedLevelAboveThePolicyCapDoesNotDegradeTheProof()
+        {
+            var resolution = AlphaResolution.Classified(
+                ChainWithProvenance(
+                    new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255))
+                    .LimitedTo(0),
+                new AlphaSamplingSettings(
+                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AProviderChainWithAFlaggedLevelClassifiesUnknown()
+        {
+            var resolution = ResolveSample(
+                Sample(),
+                TextureChannel.Alpha,
+                Providing(ChainWithProvenance(
+                    new[] { true, false },
+                    Field(2, 2, 255), Field(1, 1, 255))));
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         // --- A7 widenings: trilinear and anisotropic --------------------
@@ -1154,7 +1285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 AllOpaqueChain(),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
             Assert.That(
                 allOpaque.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
@@ -1163,7 +1294,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 OpaqueThenTransparentChain(),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
             Assert.That(
                 opaqueThenTransparent.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
@@ -1182,7 +1313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     AlphaFilterMode.Bilinear,
                     AlphaWrapMode.Repeat,
                     AlphaAnisoMode.Anisotropic),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1202,7 +1333,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     AlphaFilterMode.Point,
                     AlphaWrapMode.Clamp,
                     AlphaAnisoMode.Anisotropic),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1222,7 +1353,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     AlphaFilterMode.Point,
                     AlphaWrapMode.Clamp,
                     AlphaAnisoMode.Anisotropic),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1287,7 +1418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void ProductWithMultiplierAboveOneRefuses()
         {
             var resolution = AlphaSemanticsResolver.Resolve(
-                ProductValue(1.5f), ProvidingNothing());
+                ProductValue(1.5f), ProvidingNothing(), 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -1302,7 +1433,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // factors are bounded in [0,1] by the field contract, so a
             // factor strictly below one keeps the product below one.
             var resolution = AlphaSemanticsResolver.Resolve(
-                ProductValue(0.5f), ProvidingNothing());
+                ProductValue(0.5f), ProvidingNothing(), 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1318,7 +1449,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()));
+                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1336,7 +1467,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
                 ProvidingTwo(
-                    AllOpaqueChain(), OpaqueThenTransparentChain()));
+                    AllOpaqueChain(), OpaqueThenTransparentChain()), 0);
 
             // MustRemainTransparent is absorbing: the mask's transparent
             // mip vetoes the triangle even though the main field proves.
@@ -1351,7 +1482,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
                 ProvidingTwo(
-                    AllOpaqueChain(), Chain(BudgetExceedingLevel())));
+                    AllOpaqueChain(), Chain(BudgetExceedingLevel())), 0);
 
             // Unknown must not exit early as ProvenOpaque: against the
             // spanning triangle the second factor's budget-exceeding level
@@ -1367,7 +1498,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(AllOpaqueChain(), null, provideMask: false));
+                ProvidingTwo(AllOpaqueChain(), null, provideMask: false), 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -1380,7 +1511,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(Chain(MixedField()), Chain(MixedField())));
+                ProvidingTwo(Chain(MixedField()), Chain(MixedField())), 0);
 
             // Both factors are opaque only over the bottom half: the
             // corner triangle proves, the spanning triangle does not.
@@ -1391,5 +1522,39 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 resolution.Classify(SpanningTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
+
+        // --- noise density percent (2026-09-11 policy thresholds) ------------
+
+        /// <summary>
+        /// The percent travels from Resolve to the classifier: the same
+        /// evidence proves with density 50 and refuses with density 0, so
+        /// the value cannot be lost on the way.
+        /// </summary>
+        [Test]
+        public void DensityPercentReachesClassificationThroughResolve()
+        {
+            // A chain whose sole level holds one erased texel beside
+            // three opaque ones. The triangle covers the whole 2x2
+            // region. Resolve with density 50 proves; Resolve with
+            // density 0 does not. Same evidence, same provider.
+            var flags = new byte[]
+            {
+                255, 255,
+                255, AlphaTextureData.ErasedFlag,
+            };
+            var chain = Chain(new AlphaTextureData(2, 2, flags));
+            var proven = AlphaSemanticsResolver.Resolve(
+                SampledAlpha(), Providing(chain), 50);
+            var refused = AlphaSemanticsResolver.Resolve(
+                SampledAlpha(), Providing(chain), 0);
+
+            Assert.That(
+                proven.Classify(FlatTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                refused.Classify(FlatTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
     }
 }

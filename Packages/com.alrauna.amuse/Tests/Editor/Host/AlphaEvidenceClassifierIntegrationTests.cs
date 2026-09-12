@@ -108,7 +108,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
 
             var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
-            return AlphaSemanticsResolver.Resolve(alpha, evidence.TryGetAlphaField);
+            return AlphaSemanticsResolver.Resolve(
+                alpha, evidence.TryGetAlphaField, 0);
         }
 
         private static TriangleAlphaInput Triangle(Vector2 uv0, Vector2 uv1, Vector2 uv2)

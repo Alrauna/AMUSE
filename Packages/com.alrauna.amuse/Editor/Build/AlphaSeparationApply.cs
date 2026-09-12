@@ -53,7 +53,8 @@ namespace Alrauna.Amuse.Editor.Build
                     state.AnalyzedRendererCount,
                     state.AppliedOpaqueTriangleCount,
                     state.SemanticallyRefusedRendererCount,
-                    state.Lifecycle.BuildPath);
+                    state.Lifecycle.BuildPath,
+                    state.AlphaPolicyActive);
             }
         }
 

@@ -23,7 +23,7 @@ namespace Alrauna.Amuse.Runtime
         /// the user accepts that the GPU may sample them when the avatar
         /// renders very small. The default of 4 is a rule of thumb that
         /// matches normal viewing distances. The inspector shows it as
-        /// "Preserve Transparency Maximum Mipmap".
+        /// "Smallest Tested Mipmap".
         /// </summary>
         [SerializeField]
         private int _preserveTransparencyMaxMipLevel = 4;
@@ -35,8 +35,8 @@ namespace Alrauna.Amuse.Runtime
         /// height falls below this size. A texture already smaller than
         /// this size has no consulted levels and never converts. The
         /// default of 128 is a rule of thumb that matches normal
-        /// viewing distances. The inspector shows it as "Preserve
-        /// Transparency Minimum Texture Size".
+        /// viewing distances. The inspector shows it as "Smallest
+        /// Tested Texture".
         /// </summary>
         [SerializeField]
         private int _preserveTransparencyMinTextureSize = 128;
@@ -48,11 +48,50 @@ namespace Alrauna.Amuse.Runtime
         /// share can cost more CPU than it saves GPU work. The value 0
         /// always splits when at least one triangle is proven opaque.
         /// The default of 25 percent is a rule of thumb. The inspector
-        /// shows it as "Minimum Opaque Coverage Percentage".
+        /// shows it as "Minimum Opaque Coverage (Per Material)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
         private int _minimumOpaqueCoveragePercent = 25;
+
+        /// <summary>
+        /// The smallest alpha percentage that counts as opaque evidence
+        /// for materials without a shader cutoff. Alpha at or above this
+        /// value is opaque evidence. Alpha between this value and full
+        /// opacity becomes fully opaque after a move, so a value below
+        /// 100 consents to that flattening. The default of 100 is inert:
+        /// only exact full opacity is opaque evidence, as before. The
+        /// inspector shows it as "Alpha Upper Clamp (Per Texture)".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _minimumOpaqueAlphaPercent = 100;
+
+        /// <summary>
+        /// The alpha percentage that bounds the per-polygon stray band.
+        /// Texels below this value are strays for materials without a
+        /// shader cutoff. AMUSE ignores strays only where they are
+        /// sparse, and the coverage slider sets how sparse. Ignored
+        /// strays become fully opaque after a move, so a value below
+        /// 100 consents to that flattening. The default of 100 is
+        /// inert: nothing is a stray. The inspector shows it as
+        /// "Alpha Upper Clamp (Per Polygon)".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _polygonAlphaUpperClampPercent = 100;
+
+        /// <summary>
+        /// The smallest share of a polygon's consulted texels, in
+        /// percent, that must stay non-stray before AMUSE ignores the
+        /// strays. Lowering it lets AMUSE ignore denser strays. The
+        /// default of 100 is inert: no share of strays is ever
+        /// ignored. The inspector shows it as "Minimum Opaque Coverage
+        /// (Per Polygon)".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _polygonMinimumOpaqueCoveragePercent = 100;
 
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots;
@@ -86,6 +125,27 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int MinimumOpaqueCoveragePercent =>
             _minimumOpaqueCoveragePercent;
+
+        /// <summary>
+        /// The smallest alpha percentage that counts as opaque evidence
+        /// for materials without a shader cutoff.
+        /// </summary>
+        public int MinimumOpaqueAlphaPercent =>
+            _minimumOpaqueAlphaPercent;
+
+        /// <summary>
+        /// The alpha percentage that bounds the per-polygon stray band
+        /// for materials without a shader cutoff.
+        /// </summary>
+        public int PolygonAlphaUpperClampPercent =>
+            _polygonAlphaUpperClampPercent;
+
+        /// <summary>
+        /// The smallest non-stray share, in percent of a polygon's
+        /// consulted texels, before AMUSE ignores the strays.
+        /// </summary>
+        public int PolygonMinimumOpaqueCoveragePercent =>
+            _polygonMinimumOpaqueCoveragePercent;
 
         /// <summary>
         /// When true, AMUSE ignores animation bindings that target material

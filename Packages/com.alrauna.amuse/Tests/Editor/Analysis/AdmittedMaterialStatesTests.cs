@@ -430,6 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 bindings,
                 Relevance,
                 NoAlphaFields,
+                0,
                 VerifiedAlphaOnly);
         }
 
@@ -681,6 +682,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new[] { (binding, reference) },
                 Relevance,
                 NoAlphaFields,
+                0,
                 VerifiedAlphaOnly));
         }
 
@@ -720,6 +722,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                 Relevance,
                 NoAlphaFields,
+                0,
                 material => ReferenceEquals(material, admitted[0])
                     ? VerifiedAlphaOnly(material)
                     : UnityMaterialSemantics.AllUnknown());
@@ -1090,6 +1093,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                     Relevance,
                     provider,
+                    0,
                     VerifiedAlphaOnly);
 
                 Assert.That(result.IsResolved, Is.True);
@@ -1137,7 +1141,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Point, AlphaWrapMode.Clamp),
-                new UvMapping(0, Vector2.one, Vector2.zero));
+                new UvMapping(0, Vector2.one, Vector2.zero), 0);
         }
 
         [Test]
