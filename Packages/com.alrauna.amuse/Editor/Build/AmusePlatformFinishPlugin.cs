@@ -436,15 +436,16 @@ namespace Alrauna.Amuse.Editor.Build
             var minTextureSize = MinTextureSizeFrom(optimizer);
             var minimumOpaqueCoveragePercent = MinimumCoverageFrom(optimizer);
             var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
-            var noiseGatePercent = NoisePercentFrom(optimizer);
-            var maxNoiseTexelPercent = MaxNoiseTexelPercentFrom(optimizer);
+            var polygonClampPercent = PolygonClampPercentFrom(optimizer);
+            var densityCapPercent =
+                DensityCapFromCoveragePercent(optimizer);
             var alphaPolicyBounds =
-                AlphaPolicyBounds.From(opaqueAlphaPercent, noiseGatePercent);
+                AlphaPolicyBounds.From(opaqueAlphaPercent, polygonClampPercent);
             // The disclosure marker follows the spec's exact rule: the
             // summary names the policy only when a setting left its inert
             // default. The density alone never marks a build.
             state.AlphaPolicyActive =
-                opaqueAlphaPercent < 100 || noiseGatePercent > 0;
+                opaqueAlphaPercent < 100 || polygonClampPercent > 0;
             var ignoreOutOfRangeSlots =
                 optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
 
@@ -514,7 +515,7 @@ namespace Alrauna.Amuse.Editor.Build
                         : null);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
-                    minTextureSize, maxNoiseTexelPercent);
+                    minTextureSize, densityCapPercent);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -652,40 +653,60 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var stored = optimizer.MinimumOpaqueAlphaPercent;
-            return stored < 0 ? 0 : stored > 100 ? 100 : stored;
+            if (stored <= 0)
+            {
+                // A fully transparent texel can never be opaque
+                // evidence, so a clamp at or below zero admits
+                // invisible texels and reads as the inert exact-255
+                // contract instead.
+                return 100;
+            }
+
+            return stored > 100 ? 100 : stored;
         }
 
         /// <summary>
-        /// Maps the optimizer's "Transparency Noise Gate Percentage"
-        /// policy to the proof's noise percent: the same defensive
-        /// clamps as <see cref="OpaquePercentFrom"/>, then the
-        /// inspector clamp that keeps the gate strictly below the
+        /// Maps the optimizer's "Alpha Upper Clamp (Per Polygon)"
+        /// policy to the proof's noise percent. The clamp is the upper
+        /// bound of the tolerated stray band, so a clamp of 100 admits
+        /// nothing and maps to the inert 0. Otherwise the same
+        /// defensive clamps as <see cref="OpaquePercentFrom"/>, then
+        /// the inspector clamp that keeps the band strictly below the
         /// opaque percent. A missing component maps to the inert 0.
         /// </summary>
-        private static int NoisePercentFrom(
+        private static int PolygonClampPercentFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
+            {
+                return 0;
+            }
+
+            var stored = optimizer.PolygonAlphaUpperClampPercent;
+            stored = stored < 0 ? 0 : stored > 100 ? 100 : stored;
+            if (stored >= 100)
             {
                 return 0;
             }
 
             var opaque = OpaquePercentFrom(optimizer);
-            var stored = optimizer.TransparencyNoiseGatePercent;
-            stored = stored < 0 ? 0 : stored > 100 ? 100 : stored;
             return AlphaPolicyBounds.ClampNoise(opaque, stored);
         }
 
         /// <summary>
-        /// Maps the optimizer's "Maximum Noise Texel Percentage" policy
-        /// to the classifier's density bound. A stored value below zero
-        /// is treated as the inert 0, which never substitutes. A stored
-        /// value above 100 is rejected here rather than at the first
-        /// Classify: the classifier throws outside this range, and a
-        /// wiring-time failure names the component before any build
-        /// work starts. A missing component maps to the inert 0.
+        /// Maps the optimizer's "Minimum Opaque Coverage (Per
+        /// Polygon)" policy to the classifier's density bound. The
+        /// coverage share and the tolerated stray share are
+        /// complements, so a coverage of 98 maps to a density bound
+        /// of 2. A coverage of 100 maps to the inert 0, which never
+        /// substitutes. A stored value below zero is treated as the
+        /// inert 100. A stored value above 100 is rejected here
+        /// rather than at the first Classify: the classifier throws
+        /// outside this range, and a wiring-time failure names the
+        /// component before any build work starts. A missing
+        /// component maps to the inert 0.
         /// </summary>
-        private static int MaxNoiseTexelPercentFrom(
+        private static int DensityCapFromCoveragePercent(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
@@ -693,7 +714,7 @@ namespace Alrauna.Amuse.Editor.Build
                 return 0;
             }
 
-            var stored = optimizer.MaximumNoiseTexelPercent;
+            var stored = optimizer.PolygonMinimumOpaqueCoveragePercent;
             if (stored < 0)
             {
                 return 0;
@@ -702,11 +723,12 @@ namespace Alrauna.Amuse.Editor.Build
             if (stored > 100)
             {
                 throw new InvalidOperationException(
-                    "AMUSE Maximum Noise Texel Percentage is stored as " +
-                    stored + ", outside the 0 to 100 range.");
+                    "AMUSE Minimum Opaque Coverage (Per Polygon) is " +
+                    "stored as " + stored + ", outside the 0 to 100 " +
+                    "range.");
             }
 
-            return stored;
+            return 100 - stored;
         }
 
         /// <summary>
@@ -795,7 +817,7 @@ namespace Alrauna.Amuse.Editor.Build
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
                 int maxMipLevel = int.MaxValue,
                 int minTextureSize = 1,
-                int maxNoiseTexelPercent = 0)
+                int densityCapPercent = 0)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -907,7 +929,7 @@ namespace Alrauna.Amuse.Editor.Build
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
                     AlphaFields,
-                    maxNoiseTexelPercent,
+                    densityCapPercent,
                     resolveSemantics);
                 if (!resolved.IsResolved)
                 {

@@ -1129,10 +1129,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
-        public void EqualityAtTheDensityBoundRefuses()
+        public void EqualityAtTheCoverageBoundMoves()
         {
-            // Two erased among four consulted: 2 * 100 < 50 * 4 is
-            // false, so exact equality refuses. Kills >= in place of >.
+            // Two erased among four consulted: 2 * 100 <= 50 * 4 is
+            // true, so exact equality moves. The coverage policy counts
+            // a share at or under the cap, so this kills the strict <
+            // the prefix gate used and any > in place of >=.
             var bytes = new byte[]
             {
                 255, 255,
@@ -1143,7 +1145,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 ClassifyFullCover(
                     texture, AlphaFilterMode.Point, 50),
-                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]
