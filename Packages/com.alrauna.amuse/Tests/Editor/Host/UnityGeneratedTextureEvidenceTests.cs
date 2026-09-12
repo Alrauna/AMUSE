@@ -250,6 +250,119 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(chain[3].IsFullyNonOpaque, Is.True);
         }
 
+        /// <summary>
+        /// The generated route's per-level residency degradation, exercised
+        /// through the simulated-limit parameter of the full overload. The
+        /// live global mipmap limit cannot be induced in EditMode, so this is
+        /// the same declared-state seam the gate predicates use: the capture
+        /// must skip the non-resident prefix (no blit of a level the GPU does
+        /// not hold), keep its declared shape as a flagged placeholder, and
+        /// still capture the resident levels.
+        /// </summary>
+        [Test]
+        public void ALimitedGeneratedCaptureSkipsNonResidentLevelsAndFlagsThem()
+        {
+            var multiMipTex = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            for (var m = 0; m < multiMipTex.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 8 >> m);
+                var px = new Color32[dim * dim];
+                // Even mips are fully opaque 255. Odd mips are transparent 0.
+                var alpha = (byte)(m % 2 == 0 ? 255 : 0);
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, alpha);
+                }
+
+                multiMipTex.SetPixels32(px, m);
+            }
+
+            multiMipTex.Apply(false, false);
+            multiMipTex.name = "MipResidency (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(multiMipTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var ok = UnityGeneratedTextureEvidence.TryCapture(
+                multiMipTex,
+                TextureChannel.Alpha,
+                1.0f,
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident,
+                AlphaPolicyBounds.Inert,
+                1,
+                out var chain);
+
+            Assert.That(ok, Is.True);
+            Assert.That(chain.Count, Is.EqualTo(multiMipTex.mipmapCount));
+            Assert.That(
+                chain.IsLevelWithoutEvidence(0), Is.True,
+                "the simulated limit removes the highest-resolution mip");
+            for (var level = 1; level < chain.Count; level++)
+            {
+                Assert.That(
+                    chain.IsLevelWithoutEvidence(level), Is.False,
+                    "level " + level);
+            }
+
+            // The captured resident levels keep the mip-isolation pattern,
+            // so the skip pinned the right prefix and captured the rest.
+            Assert.That(chain[1].IsFullyNonOpaque, Is.True);
+            Assert.That(chain[2].IsFullyOpaque, Is.True);
+            Assert.That(chain[3].IsFullyNonOpaque, Is.True);
+        }
+
+        /// <summary>
+        /// The active limit rides in the session key: a chain captured under
+        /// one limit carries provenance for exactly that limit, so the
+        /// unlimited capture that follows must not be served the flagged
+        /// limited chain from the cache.
+        /// </summary>
+        [Test]
+        public void DifferentLimitsDoNotShareTheGeneratedSessionCache()
+        {
+            var texture = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            for (var m = 0; m < texture.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 8 >> m);
+                var px = new Color32[dim * dim];
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, 255);
+                }
+
+                texture.SetPixels32(px, m);
+            }
+
+            texture.Apply(false, false);
+            texture.name = "CacheKey (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(texture, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var limitedOk = UnityGeneratedTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                1.0f,
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident,
+                AlphaPolicyBounds.Inert,
+                1,
+                out var limited);
+            var unlimitedOk = UnityGeneratedTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                1.0f,
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident,
+                AlphaPolicyBounds.Inert,
+                0,
+                out var unlimited);
+
+            Assert.That(limitedOk, Is.True);
+            Assert.That(unlimitedOk, Is.True);
+            Assert.That(limited.IsLevelWithoutEvidence(0), Is.True);
+            Assert.That(
+                unlimited.IsLevelWithoutEvidence(0), Is.False,
+                "The unlimited capture must not serve the limited chain.");
+            Assert.That(unlimited[0].IsFullyOpaque, Is.True);
+        }
+
         [Test]
         public void CutoffBoundary_StrictlyRefusesBelowCutoffByte()
         {
@@ -384,6 +497,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 1.0f,
                 _ => false,
                 AlphaPolicyBounds.Inert,
+                _streamingSubTex.activeMipmapLimit,
                 out var chain);
 
             Assert.That(ok, Is.False);

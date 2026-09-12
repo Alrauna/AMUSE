@@ -826,15 +826,35 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityAlphaFieldEvidence.IsAdmittedBuildTarget(target), Is.EqualTo(admitted));
         }
 
-        [TestCase(0, true)]
-        [TestCase(1, false)]
-        [TestCase(2, false)]
-        public void TheMipLimitGateAdmitsOnlyAnUnlimitedTexture(
-            int activeMipmapLimit, bool admitted)
+        [TestCase(0, 4, true)]
+        [TestCase(1, 4, true)]
+        [TestCase(3, 4, true)]
+        [TestCase(4, 4, false)]
+        [TestCase(5, 4, false)]
+        [TestCase(0, 1, true)]
+        [TestCase(1, 1, false)]
+        public void TheMipLimitGatePassesWhileAnyLevelRemainsResident(
+            int activeMipmapLimit, int mipmapCount, bool admitted)
         {
             Assert.That(
-                UnityAlphaFieldEvidence.MipLimitGatesPass(activeMipmapLimit),
+                UnityAlphaFieldEvidence.MipLimitGatesPass(
+                    activeMipmapLimit, mipmapCount),
                 Is.EqualTo(admitted));
+        }
+
+        [TestCase(0, 0, true)]
+        [TestCase(0, 1, false)]
+        [TestCase(1, 1, true)]
+        [TestCase(1, 2, false)]
+        [TestCase(2, 2, true)]
+        [TestCase(3, 2, true)]
+        public void ThePerLevelResidencyGateAdmitsOnlyLevelsAtOrAboveTheLimit(
+            int mipLevel, int activeMipmapLimit, bool resident)
+        {
+            Assert.That(
+                UnityAlphaFieldEvidence.IsLevelResident(
+                    mipLevel, activeMipmapLimit),
+                Is.EqualTo(resident));
         }
 
         [TestCase(4, 4, 3, true)]
@@ -1260,6 +1280,88 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
+        // --- Mip residency degradation ------------------------------------------
+
+        /// <summary>
+        /// The residency composition over a real captured chain. The live
+        /// global mipmap limit cannot be induced on this editor - in EditMode
+        /// the texture's effective limit reads zero after the global limit is
+        /// set - so the composition is exercised at the seam with a simulated
+        /// limit, exactly like the gate predicates whose Unity state cannot
+        /// safely be induced on a conforming host. The wrap shares the
+        /// captured grids, so the pin is copy integrity - the same
+        /// <see cref="AlphaTextureData"/> references come out - plus the
+        /// flagged prefix; the acquisition path's byte identity is pinned by
+        /// the route and equivalence tests.
+        /// </summary>
+        [Test]
+        public void ResidencyProvenanceFlagsTheLimitedPrefixAndKeepsResidentLevelsIntact()
+        {
+            var texture = ImportMipmapped(
+                "residency_degrade", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+            Assert.That(
+                texture.mipmapCount, Is.GreaterThan(1),
+                "fixture precondition: the fixture must declare a mip chain");
+            Assert.That(
+                TryChain(texture, out var unlimited), Is.True,
+                "fixture precondition: the texture captures with no limit");
+
+            var degraded = UnityAlphaFieldEvidence.WithResidencyProvenance(
+                unlimited, 1);
+
+            Assert.That(degraded.Count, Is.EqualTo(texture.mipmapCount));
+            Assert.That(
+                degraded.IsLevelWithoutEvidence(0), Is.True,
+                "the limit removes the highest-resolution mip first");
+            for (var level = 1; level < degraded.Count; level++)
+            {
+                Assert.That(
+                    degraded.IsLevelWithoutEvidence(level), Is.False,
+                    "level " + level);
+                Assert.That(
+                    degraded[level], Is.SameAs(unlimited[level]),
+                    "resident level " + level + " is the same captured grid");
+            }
+        }
+
+        [Test]
+        public void ResidencyProvenanceReturnsTheIdenticalChainWhenTheLimitIsZero()
+        {
+            var texture = ImportMipmapped(
+                "residency_unlimited_wrap", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+
+            Assert.That(TryChain(texture, out var unlimited), Is.True);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.WithResidencyProvenance(unlimited, 0),
+                Is.SameAs(unlimited),
+                "An unlimited texture must not churn the captured chain.");
+        }
+
+        /// <summary>
+        /// Characterization guard for the provenance default: an unlimited
+        /// capture must flag no level, so every existing byte-identity pin
+        /// keeps describing a chain with full evidence.
+        /// </summary>
+        [Test]
+        public void AnUnlimitedCaptureFlagsNoLevelWithoutEvidence()
+        {
+            var texture = ImportMipmapped(
+                "residency_unlimited", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+
+            Assert.That(TryChain(texture, out var chain), Is.True);
+            for (var level = 0; level < chain.Count; level++)
+            {
+                Assert.That(
+                    chain.IsLevelWithoutEvidence(level),
+                    Is.False,
+                    "level " + level);
+            }
+        }
+
         /// <summary>
         /// The three-state verdict through the real R8 predicate route, with
         /// the opaque bound pinned. Under the gate-on bounds From(80, 2) the
@@ -1396,7 +1498,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityAlphaFieldEvidence.TryCapture(
                     texture, TextureChannel.Red, 1.0f,
                     AlphaPolicyBounds.From(80, 2),
-                    out _, out var chain),
+                    out _, out var chain, out _),
                 Is.True);
             var field = chain[0];
 

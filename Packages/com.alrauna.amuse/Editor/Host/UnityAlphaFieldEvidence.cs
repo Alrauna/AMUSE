@@ -42,6 +42,12 @@ namespace Alrauna.Amuse.Editor.Host
     /// characterization through this route and an authoritative decode rule both
     /// support it.
     /// </para>
+    /// <para>
+    /// The levels the effective mipmap limit removes from the GPU have no
+    /// effective alpha for playback, so the capture marks them without evidence
+    /// (<see cref="Analysis.AlphaMipChain.IsLevelWithoutEvidence"/>) and the
+    /// fold degrades them to Unknown instead of reading a verdict.
+    /// </para>
     /// </summary>
     internal sealed class UnityAlphaFieldEvidence
     {
@@ -142,7 +148,7 @@ namespace Alrauna.Amuse.Editor.Host
         {
             return TryCapture(
                 texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
-                out source, out chain);
+                out source, out chain, out _);
         }
 
         internal static bool TryCapture(
@@ -154,7 +160,7 @@ namespace Alrauna.Amuse.Editor.Host
         {
             return TryCapture(
                 texture, TextureChannel.Alpha, cutoffThreshold, bounds,
-                out source, out chain);
+                out source, out chain, out _);
         }
 
         /// <summary>
@@ -170,7 +176,7 @@ namespace Alrauna.Amuse.Editor.Host
         {
             return TryCapture(
                 texture, channel, 1.0f, AlphaPolicyBounds.Inert,
-                out source, out chain);
+                out source, out chain, out _);
         }
 
         /// <summary>
@@ -189,16 +195,25 @@ namespace Alrauna.Amuse.Editor.Host
         /// direct GPU route applies them in its predicate shader.
         /// </para>
         /// </summary>
+        /// <param name="refusal">
+        /// The named reason family the capture refused for, or
+        /// <see cref="TextureCaptureRefusalReason.None"/> when the chain was
+        /// captured. The reason names the first refusing gate: the gates are
+        /// evaluated in a fixed order, so one texture always refuses with the
+        /// same family.
+        /// </param>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
             float cutoffThreshold,
             AlphaPolicyBounds bounds,
             out TextureSourceId source,
-            out AlphaMipChain chain)
+            out AlphaMipChain chain,
+            out TextureCaptureRefusalReason refusal)
         {
             source = default;
             chain = null;
+            refusal = TextureCaptureRefusalReason.None;
 
             if (!Enum.IsDefined(typeof(TextureChannel), channel))
             {
@@ -208,6 +223,7 @@ namespace Alrauna.Amuse.Editor.Host
             if (channel != TextureChannel.Alpha &&
                 channel != TextureChannel.Red)
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
@@ -218,11 +234,13 @@ namespace Alrauna.Amuse.Editor.Host
             var texture2D = texture as Texture2D;
             if (texture2D == null)
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
             if (!UnityTextureEvidence.TryGetSourceId(texture2D, out source))
             {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
             }
 
@@ -231,15 +249,44 @@ namespace Alrauna.Amuse.Editor.Host
                 // Every policy gate precedes the first allocation. The format
                 // allowlist in particular is checked before any GPU call, so a
                 // compressed source never reaches a route that would log a
-                // Unity error. The mipmap limit refuses for both routes: the
-                // limit changes which levels exist, and evidence for a
-                // truncated chain is not evidence for what playback samples.
-                if (!IsAdmittedBuildTarget(EditorUserBuildSettings.activeBuildTarget) ||
-                    !IsAdmittedFormat(texture2D.format) ||
-                    !MipLimitGatesPass(texture2D.activeMipmapLimit) ||
-                    !AreDimensionsUsable(
-                        texture2D.width, texture2D.height, texture2D.mipmapCount))
+                // Unity error. The mipmap limit degrades per level: the
+                // limit removes the texture's highest-resolution mips from
+                // the GPU, those levels have no effective alpha for
+                // playback, and the capture marks them without evidence
+                // instead of refusing - the whole-texture refusal is left
+                // for the case where no level remains resident.
+                // Each gate names its reason family in the gate's own order,
+                // so a refusal always explains the first gate that refused.
+                if (!IsAdmittedBuildTarget(
+                        EditorUserBuildSettings.activeBuildTarget))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
+                    source = default;
+                    return false;
+                }
+
+                if (!IsAdmittedFormat(texture2D.format))
+                {
+                    refusal = TextureCaptureRefusalReason.UnsupportedFormat;
+                    source = default;
+                    return false;
+                }
+
+                if (!MipLimitGatesPass(
+                        texture2D.activeMipmapLimit,
+                        texture2D.mipmapCount))
+                {
+                    refusal = TextureCaptureRefusalReason.NonResidentMips;
+                    source = default;
+                    return false;
+                }
+
+                if (!AreDimensionsUsable(
+                        texture2D.width,
+                        texture2D.height,
+                        texture2D.mipmapCount))
+                {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -252,10 +299,14 @@ namespace Alrauna.Amuse.Editor.Host
                             texture2D, channel, cutoffThreshold, bounds,
                             out chain))
                     {
+                        refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;
                         chain = null;
                         return false;
                     }
+
+                    chain = WithResidencyProvenance(
+                        chain, texture2D.activeMipmapLimit);
 
                     return true;
                 }
@@ -271,10 +322,14 @@ namespace Alrauna.Amuse.Editor.Host
                             texture2D, channel, cutoffThreshold, bounds,
                             out chain))
                     {
+                        refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;
                         chain = null;
                         return false;
                     }
+
+                    chain = WithResidencyProvenance(
+                        chain, texture2D.activeMipmapLimit);
 
                     return true;
                 }
@@ -292,6 +347,7 @@ namespace Alrauna.Amuse.Editor.Host
                             SystemInfo.IsFormatSupported(
                                 texture2D.graphicsFormat, FormatUsage.Sample))))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -302,6 +358,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
                 if (!IsShaderUsable(shader != null, shader != null && shader.isSupported))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -311,6 +368,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // there is no version of TryCapture that returns a chain without it.
                 if (!HostCapabilityCheckPasses(channel))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     return false;
                 }
@@ -325,8 +383,10 @@ namespace Alrauna.Amuse.Editor.Host
                     ? AlphaPolicyBounds.Inert
                     : bounds;
                 if (!TryCaptureChain(
-                        texture2D, shader, effectiveBounds, out chain))
+                        texture2D, shader, effectiveBounds,
+                        texture2D.activeMipmapLimit, out chain))
                 {
+                    refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
                     chain = null;
                     return false;
@@ -340,6 +400,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // Measured: raised by any member access on a destroyed object,
                 // including isReadable, and its base type is SystemException rather
                 // than UnityException. Guards every Unity-object read above.
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 source = default;
                 chain = null;
                 return false;
@@ -347,19 +408,27 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Captures every declared mip and constructs the chain only after exactly
-        /// mipmapCount successes. A single failed level refuses the whole texture:
-        /// there is no code path on which a partially populated chain exists, so
-        /// none can escape. The bounds ride along to every level.
+        /// Captures every declared mip and constructs the chain only after
+        /// every resident level succeeded. Levels the effective mipmap limit
+        /// removes from the GPU are never blitted: a non-resident source has
+        /// no defined readback, so the level keeps a placeholder grid with
+        /// its declared dimensions and the chain flags it without evidence,
+        /// which degrades the level to Unknown at the fold. A failed level
+        /// that should have been resident still refuses the whole texture:
+        /// there is no code path on which a partially populated chain of
+        /// resident evidence exists, so none can escape. The bounds ride
+        /// along to every acquired level.
         /// </summary>
         private static bool TryCaptureChain(
             Texture2D texture,
             Shader shader,
             AlphaPolicyBounds bounds,
+            int activeMipmapLimit,
             out AlphaMipChain chain)
         {
             chain = null;
             var levels = new AlphaTextureData[texture.mipmapCount];
+            var withoutEvidence = new bool[levels.Length];
 
             // One material per texture, not per level: Graphics.Blit sets _MainTex
             // on it and only _Mip varies between levels.
@@ -368,6 +437,13 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
+                    if (!IsLevelResident(mip, activeMipmapLimit))
+                    {
+                        levels[mip] = WithoutEvidencePlaceholder(texture, mip);
+                        withoutEvidence[mip] = true;
+                        continue;
+                    }
+
                     if (!TryAcquireLevel(texture, mip, material, bounds, out var level))
                     {
                         return false;
@@ -381,8 +457,67 @@ namespace Alrauna.Amuse.Editor.Host
                 UnityEngine.Object.DestroyImmediate(material);
             }
 
-            chain = new AlphaMipChain(levels);
+            chain = new AlphaMipChain(levels, withoutEvidence);
             return true;
+        }
+
+        /// <summary>
+        /// The placeholder grid of a level the capture could not examine. Its
+        /// bytes are all witnesses and prove nothing: the chain flags the
+        /// level, and the fold consults the flag before any grid content, so
+        /// the placeholder exists only to keep the chain's declared shape.
+        /// Internal because the generated capture route skips its
+        /// non-resident levels with the same placeholder, and a second
+        /// builder would be a second place for the shape rule to drift.
+        /// </summary>
+        internal static AlphaTextureData WithoutEvidencePlaceholder(
+            Texture2D texture,
+            int mip)
+        {
+            var width = Mathf.Max(1, texture.width >> mip);
+            var height = Mathf.Max(1, texture.height >> mip);
+            return new AlphaTextureData(width, height, new byte[width * height]);
+        }
+
+        /// <summary>
+        /// Applies the declared residency provenance to a chain a route
+        /// captured: the levels the effective limit removes from the GPU have
+        /// no effective alpha for playback, so they are flagged without
+        /// evidence whatever the route read for them - the routes' own reads
+        /// describe importer or GPU content, not what playback samples. The
+        /// GPU route flags its skipped levels itself; the flags OR, so
+        /// re-wrapping its chain is exact. An unlimited texture is returned
+        /// unchanged. Internal, like the other gate predicates, so the test
+        /// assembly can exercise the composition whose live Unity state
+        /// cannot safely be induced on a conforming host; production is its
+        /// caller, so it IS the residency composition rather than a
+        /// parallel restatement of it.
+        /// </summary>
+        internal static AlphaMipChain WithResidencyProvenance(
+            AlphaMipChain chain,
+            int activeMipmapLimit)
+        {
+            if (chain == null)
+            {
+                throw new ArgumentNullException(nameof(chain));
+            }
+
+            if (activeMipmapLimit <= 0)
+            {
+                return chain;
+            }
+
+            var levels = new AlphaTextureData[chain.Count];
+            var withoutEvidence = new bool[chain.Count];
+            for (var level = 0; level < chain.Count; level++)
+            {
+                levels[level] = chain[level];
+                withoutEvidence[level] =
+                    level < activeMipmapLimit ||
+                    chain.IsLevelWithoutEvidence(level);
+            }
+
+            return new AlphaMipChain(levels, withoutEvidence);
         }
 
         /// <summary>
@@ -766,21 +901,41 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// A gate on declared state. activeMipmapLimit is the per-texture effective
         /// limit and already folds in the global limit and any mipmap-limit group.
-        /// A nonzero limit refuses for every capture route: the limit changes
-        /// which levels exist, and evidence over a truncated chain is not
-        /// evidence over what playback samples. Streaming is not a limit and
-        /// is no longer refused here: a streaming texture captures through the
-        /// readable-clone route because its GPU read is measured
-        /// untrustworthy, however resident it reports.
+        /// The limit removes exactly the activeMipmapLimit highest-resolution
+        /// levels of the declared chain from the GPU, so the gate passes while
+        /// at least one level remains resident: the capture then consults the
+        /// resident levels and marks the removed prefix without evidence. It
+        /// refuses - naming NonResidentMips - only when no level remains
+        /// resident, because a capture with no usable level has nothing to
+        /// degrade. Streaming is not a limit and is not refused here: a
+        /// streaming texture captures through the readable-clone route
+        /// because its GPU read is measured untrustworthy, however resident
+        /// it reports.
         /// <para>
-        /// This is a pure predicate because its false branch cannot be constructed
-        /// without mutating project or importer state, which production must never
-        /// do.
+        /// This is a pure predicate because its false branch cannot be
+        /// constructed without mutating project or importer state, which
+        /// production must never do.
         /// </para>
         /// </summary>
-        internal static bool MipLimitGatesPass(int activeMipmapLimit)
+        internal static bool MipLimitGatesPass(int activeMipmapLimit, int mipmapCount)
         {
-            return activeMipmapLimit == 0;
+            return activeMipmapLimit < mipmapCount;
+        }
+
+        /// <summary>
+        /// The per-level shape of the same declared-state gate: under the
+        /// effective limit, the chain's first activeMipmapLimit levels - the
+        /// highest-resolution ones - are not uploaded, so a level is resident
+        /// exactly when its index is at or above the limit. Like
+        /// <see cref="MipLimitGatesPass"/>, it is deliberately a predicate
+        /// over declared state rather than an inference from a readback: a
+        /// readback's dimensions are the dimensions of a destination this
+        /// code allocated, so they cannot establish that the requested source
+        /// level was resident.
+        /// </summary>
+        internal static bool IsLevelResident(int mipLevel, int activeMipmapLimit)
+        {
+            return mipLevel >= activeMipmapLimit;
         }
 
         internal static bool AreDimensionsUsable(int width, int height, int mipmapCount)

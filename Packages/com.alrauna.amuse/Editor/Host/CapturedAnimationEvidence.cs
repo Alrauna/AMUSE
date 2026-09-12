@@ -89,12 +89,22 @@ namespace Alrauna.Amuse.Editor.Host
     /// carries exactly one index — its current assignment — so the current
     /// material is resolved rather than dropped.
     /// </para>
+    /// <para>
+    /// <see cref="CaptureRefusals"/> carries the slot's named texture-capture
+    /// refusals: one record per requested field that refused on one of this
+    /// slot's admitted materials, naming the texture property, its identity,
+    /// the channel, and the reason family. The blast radius is the slot and
+    /// nothing else: a refusal here refuses no renderer, no other slot, and
+    /// no other material, and it changes no classification outcome — it only
+    /// names what the capture could not prove for this slot.
+    /// </para>
     /// </summary>
     internal sealed class CapturedMaterialSlotEvidence
     {
         internal CapturedMaterialSlotEvidence(
             int slotIndex,
-            IReadOnlyList<int> admittedMaterialIndices)
+            IReadOnlyList<int> admittedMaterialIndices,
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null)
         {
             if (slotIndex < 0)
             {
@@ -109,10 +119,22 @@ namespace Alrauna.Amuse.Editor.Host
             SlotIndex = slotIndex;
             AdmittedMaterialIndices = new ReadOnlyCollection<int>(
                 new List<int>(admittedMaterialIndices));
+            CaptureRefusals = captureRefusals == null
+                ? new ReadOnlyCollection<TextureCaptureRefusal>(
+                    new List<TextureCaptureRefusal>())
+                : new ReadOnlyCollection<TextureCaptureRefusal>(
+                    new List<TextureCaptureRefusal>(captureRefusals));
         }
 
         internal int SlotIndex { get; }
         internal IReadOnlyList<int> AdmittedMaterialIndices { get; }
+
+        /// <summary>
+        /// This slot's named texture-capture refusals, in the slot's
+        /// admitted-material order with duplicates collapsed. Empty when
+        /// every requested field of every admitted material captured.
+        /// </summary>
+        internal IReadOnlyList<TextureCaptureRefusal> CaptureRefusals { get; }
     }
 
     internal sealed class CapturedAnimationEvidence
