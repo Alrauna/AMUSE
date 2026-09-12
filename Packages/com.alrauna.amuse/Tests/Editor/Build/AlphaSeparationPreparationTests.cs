@@ -39,6 +39,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE prepared candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -101,6 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE prepared without mutation");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -147,6 +149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE no candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -191,6 +194,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE already opaque");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -253,6 +257,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE no split no clone");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -295,6 +300,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // Baseline: unanimated, the slot converts.
             var baselineRoot = new GameObject("AMUSE zwrite unanimated");
+            FixtureAvatarIdentity.AttachVrcDescriptor(baselineRoot);
             baselineRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(baselineRoot);
             Material baselineMaterial = null;
@@ -330,6 +336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // admission refuses, but the alpha analysis is bit-for-bit
             // unaffected.
             var refusedRoot = new GameObject("AMUSE zwrite animated to 0");
+            FixtureAvatarIdentity.AttachVrcDescriptor(refusedRoot);
             refusedRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(refusedRoot);
             Material refusedMaterial = null;
@@ -386,6 +393,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // (b) Animated to the serialized default: the slot prepares.
             var preparedRoot = new GameObject("AMUSE zwrite animated to 1");
+            FixtureAvatarIdentity.AttachVrcDescriptor(preparedRoot);
             preparedRoot.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(preparedRoot);
             Material preparedMaterial = null;
@@ -450,6 +458,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // mapping corrupting the other's.
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mixed family slot");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
@@ -545,6 +554,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // the map-to-self slot, or a clone created for it.
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE lilToon sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
@@ -648,6 +658,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE refused capture sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material refusedMaterial = null;
@@ -800,6 +811,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE shared source dedup");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -863,6 +875,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE overwrite before conversion");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -969,6 +982,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE shared source per renderer");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -1085,6 +1099,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout conversion candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -1262,6 +1277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 using var assets = new OverrideTemporaryDirectoryScope(null);
                 var root = new GameObject(
                     "AMUSE poiyomi nonidentity st content decided");
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -1365,6 +1381,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 using var assets = new OverrideTemporaryDirectoryScope(null);
                 var root = new GameObject(
                     "AMUSE poiyomi nonidentity st migrates");
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -1457,6 +1474,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st animated default");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -1536,6 +1554,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st non singleton");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -1613,6 +1632,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE poiyomi st source preserved");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -2024,6 +2044,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE streaming clone candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -2115,6 +2136,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AssetDatabase.SaveAssets();
 
             var root = new GameObject("AMUSE generated texture e2e");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -2462,6 +2484,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixtures = new LilToonCutoutConversionFixtures();
             fixtures.BaseSetUp();
             var root = new GameObject("AMUSE cutout policy " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -2530,6 +2553,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int? minTextureSize = null)
         {
             var root = new GameObject("AMUSE mip policy " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -2609,6 +2633,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixtures = new LilToonCutoutConversionFixtures();
             fixtures.BaseSetUp();
             var root = new GameObject("AMUSE alpha policy " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -2894,6 +2919,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // (a) The end-to-end prepared-clone contract.
                 var root = new GameObject(
                     "AMUSE transparent clone contract");
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -3472,6 +3498,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 scenario.Source.SetTexture("_MainTex", texture);
                 scenario.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(scenario.root);
+                FixtureAvatarIdentity.AttachVrcDescriptor(scenario.root);
 
                 scenario.mesh = new Mesh
                 {
@@ -3887,6 +3914,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     var root = new GameObject(
                         "AMUSE transparent unknown " + unknownCase.Label);
+                    FixtureAvatarIdentity.AttachVrcDescriptor(root);
                     root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                     FixtureProofScope.PinAllSizes(root);
                     Material material = null;
@@ -4604,6 +4632,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             string secondChild)
             {
                 var root = new GameObject(rootName);
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -4709,6 +4738,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonCutoutConversionFixtures();
             var root = new GameObject("AMUSE cutout refused sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material convertible = null;
@@ -4828,6 +4858,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE cutout poiyomi siblings");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
@@ -4934,6 +4965,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE mixed poiyomi cutout slot");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material poiyomi = null;
@@ -5042,6 +5074,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unsupported family closure");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material cutout = null;
@@ -5834,6 +5867,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion = null,
             VerifiedLilToonConversion lilToonConversion = null)
         {
+            // Every arm and scenario fixture runs through this one build
+            // entry. The descriptor goes on here so each fixture creator
+            // keeps its own shape and no fixture builds without it.
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var context = AvatarProcessor.ProcessAvatar(
                 root, PreparationTestPlatform.Instance);
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =

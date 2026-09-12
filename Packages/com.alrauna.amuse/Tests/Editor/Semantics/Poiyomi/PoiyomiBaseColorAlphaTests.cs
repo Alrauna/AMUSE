@@ -146,11 +146,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var material = NewFixtureMaterial();
             var texture = ImportTexture("basecolor_tinted");
             material.SetTexture("_MainTex", texture);
-            var tint = new Color(0.25f, 0.5f, 0.75f, 1f);
-            material.SetColor("_Color", tint);
+            material.SetColor("_Color", new Color(0.25f, 0.5f, 0.75f, 1f));
 
             var value = BaseColor(Interpret(material));
 
+            // In a Linear project the material round-trips the colour on
+            // set and get, so the stored tint can sit one ULP off the
+            // authored literal and the exact multiplier comparison must
+            // read the property back, as NearOneTintStaysAnExactTexture-
+            // Multiplier already does.
+            var tint = material.GetColor("_Color");
             var expected = ColorSemanticValue.TextureTimesConstant(
                 new TextureSample(
                     new TextureSourceId(ExpectedToken(texture)),

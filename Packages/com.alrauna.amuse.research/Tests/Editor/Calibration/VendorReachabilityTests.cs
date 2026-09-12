@@ -333,40 +333,31 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         }
 
         /// <summary>
-        /// Gate case 2b, a NEGATIVE reachability result and the most
-        /// consequential observation of the Lab run.
-        /// <para>
-        /// lilToon 2.3.4 is installed, and 2.3.4 is exactly the version
-        /// LilToonSourceAttestation pins - yet no lilToon material is attested
-        /// in this environment, in any configuration tried. Every one reports
-        /// SemanticsUnknown with no attestation. lilToon regenerates its shader
-        /// assets from per-project settings and attestation digests those
-        /// generated assets, so a real install can legitimately differ from the
-        /// pinned digests.
-        /// </para>
-        /// <para>
-        /// This is asserted as observed so that the day it changes, the change
-        /// is noticed. It implements nothing and alters no attestation: a
-        /// census run in this environment must be read as measuring zero
-        /// lilToon coverage, and that is a statement about AMUSE, not about
-        /// any avatar.
-        /// </para>
+        /// Gate case 2b, the positive reachability result. lilToon 2.3.4 is
+        /// installed, 2.3.4 is exactly the version LilToonSourceAttestation
+        /// pins, and a plain opaque lilToon material attests and proves
+        /// opaque through the production path. This replaces the negative
+        /// pin recorded before this project installed the vendor package.
+        /// That pin was asserted as observed, so its flip was noticed the
+        /// day the install landed.
         /// </summary>
         [Test]
-        public void LilToonIsNotAttestedInThisEnvironmentDespiteMatchingItsPin()
+        public void LilToonReachesProvenOpaqueThroughTheProductionPath()
         {
             var presence = CensusVendorProbe.Probe(CensusVendorFamily.LilToon);
             if (!presence.IsInstalled)
             {
-                Assert.That(presence.Shader, Is.Null);
-                return;
+                Assert.Ignore(
+                    "jp.lilxyzw.liltoon is not installed in this project." +
+                    " The lilToon reachability gate needs the attested" +
+                    " vendor package; install it to prove this reach.");
             }
 
             Assert.That(
                 presence.InstalledPackageVersion,
                 Is.EqualTo(presence.ExpectedPackageVersion),
                 "Precondition: the installed lilToon must be the pinned "
-                + "version for this observation to mean what it says.");
+                + "version for this reach to mean what it says.");
 
             var material = _scene.NewMaterial(presence.Shader, "GateLilToon");
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -375,12 +366,17 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
 
             Assert.That(
                 submesh.ShaderFamilyAttestation,
-                Is.EqualTo(ShaderFamilyAttestation.None),
-                "lilToon is now attested. That is good news and this test "
-                + "should be replaced by a positive reachability assertion.");
+                Is.EqualTo(ShaderFamilyAttestation.LilToon),
+                "An installed, version-matched lilToon must attest.");
             Assert.That(
                 submesh.AlphaFailure,
-                Is.EqualTo(AlphaResolutionFailure.SemanticsUnknown));
+                Is.EqualTo(AlphaResolutionFailure.None),
+                "The lilToon alpha equation refused a plain opaque " +
+                "material.");
+            Assert.That(
+                submesh.ProvenOpaqueTriangleCount,
+                Is.EqualTo(submesh.TriangleCount),
+                "lilToon did not prove a plain opaque material opaque.");
         }
 
         /// <summary>
@@ -395,10 +391,11 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         /// visible, and a reader scanning names must not be able to miss it.
         /// </para>
         /// <para>
-        /// Assert.Ignore is deliberately not used anywhere in this file: an
-        /// ignored test in the Lab, where a vendor package might genuinely have
-        /// gone missing, reports a pass-shaped result for a condition that must
-        /// abort a census.
+        /// This test itself stays pass-shaped by design. The one
+        /// Assert.Ignore in this file, in the lilToon gate, names the
+        /// missing vendor package loudly instead of reporting a silent
+        /// vacuous pass; an ignored run still needs a human look before a
+        /// census.
         /// </para>
         /// </summary>
         [Test]
@@ -420,10 +417,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     + "establish that AMUSE reaches ProvenOpaque. A census run "
                     + "in this environment must abort rather than report.");
             }
-
-            Assert.Pass(
-                "VENDOR REACHABILITY EXERCISED for: "
-                + string.Join(", ", installed));
+        }
         }
     }
-}
