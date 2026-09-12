@@ -5,7 +5,7 @@ Date: 2026-09-11. Status: diagnosis complete, fix pending.
 Privacy note: this record is sanitized. The avatar, its materials, and
 its textures are named by role only. Exact triangle counts are recorded
 as ranges or fractions. The private lab project is named by role as the
-lab editor instance.
+lab editor instance. Publicly available tools are named.
 
 ## Symptom
 
@@ -19,20 +19,32 @@ fully transparent stayed on the original materials. Polygons whose
 texels are only partially transparent moved and turned solid.
 
 The user reports that this did not happen before the alpha policy
-feature branch. The trigger was isolated to the Merge Skinned Mesh
-option of the third party avatar optimizer on the avatar. The same
-build without that option does not show the problem. A second third
-party optimizer on the same avatar was ruled out as the cause.
+feature branch. The trigger is AAO, anatawa12's Avatar Optimizer. Its
+TraceAndOptimize component has a Merge Skinned Mesh option. With that
+option on, the build shows the problem. With it off, the build does
+not. A second public optimizer, d4rkAvatarOptimizer, is present on the
+avatar and was ruled out as the cause.
 
 ## What the merged build state looks like
 
-The merge combines thirty five skinned mesh renderers into two. The
-large merged renderer holds eighteen material slots and roughly one
-hundred eighty thousand triangles. After the bake, AMUSE appended three
-opaque submeshes to that renderer: one for the dress, one for the
-sleeves, and one for a floral decoration material. The appended
-submeshes hold roughly nine tenths of the dress polygons and roughly
-nine tenths of the sleeve polygons.
+AAO TraceAndOptimize runs before NDMF's PlatformFinish passes, so AMUSE
+analyzes the merged renderer that AAO produces. The merge combines
+thirty five skinned mesh renderers into two. The large merged renderer
+holds eighteen material slots and roughly one hundred eighty thousand
+triangles. After the bake, AMUSE appended three opaque submeshes to
+that renderer: one for the dress, one for the sleeves, and one for a
+floral decoration material. The appended submeshes hold roughly nine
+tenths of the dress polygons and roughly nine tenths of the sleeve
+polygons.
+
+## Where the failure occurs
+
+The failure occurs inside AMUSE, not inside AAO. AAO TraceAndOptimize
+only changes the renderer state that AMUSE analyzes. On the merged
+renderer, the material evidence capture for the dress material binds an
+empty first texture slot, and the alpha resolution turns that unbound
+main texture sample into a constant of full opacity. Both stages run in
+the AmusePlatformFinishPass.
 
 ## Material and texture facts
 
@@ -85,15 +97,18 @@ the moved polygons.
 
 ## Analysis
 
-The working hypothesis: when the texture evidence for a required alpha
-sample fails to bind (the first texture slot is empty), the alpha
-resolution falls back to a constant instead of failing closed. A
-constant of full opacity proves every polygon of the material, which
-matches the observed move fraction. A capture refusal of this shape is
-expected on this machine: the lab editor's texture quality settings
-leave mip levels non-resident, and a probe capture of the same texture
-through the production-shaped predicate path returned null for that
-reason during this investigation.
+The failure point is the material evidence capture and the alpha
+resolution that consumes it, both of which run in the
+AmusePlatformFinishPass on the AAO merged renderer. The working
+hypothesis: when the texture evidence for a required alpha sample fails
+to bind (the first texture slot is empty), the alpha resolution falls
+back to a constant instead of failing closed. A constant of full
+opacity proves every polygon of the material, which matches the
+observed move fraction. A capture refusal of this shape is expected on
+this machine: the lab editor's texture quality settings leave mip
+levels non-resident, and a probe capture of the same texture through
+the production-shaped predicate path returned null for that reason
+during this investigation.
 
 Two smaller defects were found and fixed on this branch during the same
 round and are recorded for completeness:

@@ -12,11 +12,21 @@ proves opaque and moves to opaque materials, while the same polygons
 render translucent at runtime. The contract requires the opposite: a
 conversion may only rest on evidence that exists.
 
+The observed failure: AAO, anatawa12's Avatar Optimizer, merges the
+avatar's skinned mesh renderers through its TraceAndOptimize
+component's Merge Skinned Mesh option before NDMF's PlatformFinish
+passes run. On the AAO merged renderer, the material evidence capture
+binds an empty first texture slot for a lilToon transparent material
+with an alpha mask, and the alpha resolution turns the unbound main
+texture sample into a constant of full opacity. The failure point is
+the capture and the resolution inside the AmusePlatformFinishPass, not
+AAO. AAO only changes the renderer state that AMUSE analyzes.
+
 The failure class includes: a capture that refuses for any named
 reason, a chain missing from the captured evidence, and mip levels that
 are not resident because the editor's texture quality settings limit
-them. The third party Merge Skinned Mesh option is a trigger context
-because it changes the state AMUSE analyzes, but the invariant is
+them. AAO TraceAndOptimize's Merge Skinned Mesh option is a trigger
+context because it changes the state AMUSE analyzes. The invariant is
 general and does not depend on that tool.
 
 ## Contract
