@@ -160,6 +160,163 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(empty.IsAssigned, Is.False);
         }
 
+        // --- Named capture refusals -----------------------------------------
+
+        [Test]
+        public void UncapturableTextureRecordsANamedRefusalWithoutAChain()
+        {
+            // Falsifies: the silent refusal of the pre-refusal capture, which
+            // recorded HasAlphaChannel == false and nothing about why no
+            // chain exists; and a refusal record that fires for a field that
+            // did capture or for an unassigned slot.
+            var material = NewMaterial(PoiyomiFixtureShader);
+            var texture = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+            try
+            {
+                material.SetTexture("_MainTex", texture);
+                var request = Request(textures: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex",
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.AlphaChannel),
+                });
+
+                var evidence = Capture(material, request);
+
+                Assert.That(
+                    evidence.TryGetTexture("_MainTex", out var assignment),
+                    Is.True,
+                    "fixture precondition: the assignment itself exists");
+                Assert.That(assignment.IsAssigned, Is.True);
+                Assert.That(
+                    assignment.Texture.HasAlphaChannel, Is.False,
+                    "the refused capture must produce no chain");
+                Assert.That(assignment.Texture.AlphaChannel, Is.Null);
+                Assert.That(
+                    assignment.CaptureRefusals, Has.Count.EqualTo(1),
+                    "exactly the refused alpha field may carry a refusal");
+                var refusal = assignment.CaptureRefusals[0];
+                Assert.That(refusal.PropertyName, Is.EqualTo("_MainTex"));
+                Assert.That(
+                    refusal.Channel, Is.EqualTo(TextureChannel.Alpha));
+                Assert.That(
+                    refusal.Reason,
+                    Is.EqualTo(TextureCaptureRefusalReason
+                        .UnavailableCapture),
+                    "an in-memory texture has no source identity, so the " +
+                    "identity gate is the first gate that refuses");
+                Assert.That(refusal.HasSourceIdentity, Is.False);
+                Assert.That(
+                    evidence.CaptureRefusals, Has.Count.EqualTo(1),
+                    "the material evidence must aggregate exactly its " +
+                    "assignment's refusal");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
+        [Test]
+        public void UnsupportedFormatRefusalNamesTheAssetTexture()
+        {
+            // Falsifies: a capture refusal that cannot tell the reader which
+            // gate refused, or one that loses the asset identity even though
+            // the identity gate passes before the format gate.
+            var material = NewMaterial(PoiyomiFixtureShader);
+            var texture = ImportRefusedFormat(
+                TempFolder + "/refused-format.png");
+            material.SetTexture("_MainTex", texture);
+            var request = Request(textures: new[]
+            {
+                new TexturePropertyEvidenceRequest(
+                    "_MainTex",
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.AlphaChannel),
+            });
+
+            var evidence = Capture(material, request);
+
+            Assert.That(
+                evidence.TryGetTexture("_MainTex", out var assignment),
+                Is.True);
+            Assert.That(
+                assignment.Texture.HasAlphaChannel, Is.False,
+                "the refused format must produce no chain");
+            Assert.That(assignment.CaptureRefusals, Has.Count.EqualTo(1));
+            var refusal = assignment.CaptureRefusals[0];
+            Assert.That(refusal.PropertyName, Is.EqualTo("_MainTex"));
+            Assert.That(
+                refusal.Reason,
+                Is.EqualTo(TextureCaptureRefusalReason.UnsupportedFormat));
+            Assert.That(
+                refusal.HasSourceIdentity, Is.True,
+                "an imported asset resolves its identity before the " +
+                "format gate refuses");
+        }
+
+        [Test]
+        public void RefusedTextureLeavesTheSiblingMaterialEvidenceUntouched()
+        {
+            // Falsifies: a batch-wide poisoning where one refused capture
+            // clears every material's chains, and a refusal record that
+            // names the sibling's texture or lands on the sibling's
+            // assignment.
+            var refusedMaterial = NewMaterial(PoiyomiFixtureShader);
+            var refusedTexture =
+                new Texture2D(8, 8, TextureFormat.RGBA32, false);
+            var capturedMaterial = NewMaterial(PoiyomiFixtureShader);
+            var capturedTexture = ImportAsymmetric(
+                TempFolder + "/refusal-sibling.png");
+            try
+            {
+                refusedMaterial.SetTexture("_MainTex", refusedTexture);
+                capturedMaterial.SetTexture("_MainTex", capturedTexture);
+                var request = Request(textures: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex",
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.AlphaChannel),
+                });
+
+                var evidence = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        refusedMaterial, request),
+                    new MaterialEvidenceCaptureInput(
+                        capturedMaterial, request),
+                });
+
+                Assert.That(
+                    evidence[0].TryGetTexture("_MainTex", out var refused),
+                    Is.True);
+                Assert.That(refused.Texture.HasAlphaChannel, Is.False);
+                Assert.That(refused.CaptureRefusals, Has.Count.EqualTo(1));
+                Assert.That(
+                    refused.CaptureRefusals[0].PropertyName,
+                    Is.EqualTo("_MainTex"));
+
+                Assert.That(
+                    evidence[1].TryGetTexture("_MainTex", out var sibling),
+                    Is.True);
+                Assert.That(
+                    sibling.Texture.HasAlphaChannel, Is.True,
+                    "the sibling's texture must capture its chain in the " +
+                    "same batch");
+                Assert.That(sibling.Texture.AlphaChannel, Is.Not.Null);
+                Assert.That(
+                    sibling.CaptureRefusals, Is.Empty,
+                    "the unaffected sibling must carry no refusal record");
+                Assert.That(evidence[1].CaptureRefusals, Is.Empty);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(refusedTexture);
+            }
+        }
+
         [Test]
         public void FamilyAlphaRequestsExcludeUnconsumedAndOtherFamilyProperties()
         {
@@ -666,6 +823,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(after, Is.EqualTo(value));
         }
 
+
         /// <summary>
         /// The primitive carries no admission policy. Finiteness, agreement
         /// between animated sources, and equality with the admitted material's
@@ -781,6 +939,34 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Imports a real asset texture whose storage format is outside the
+        /// capture route's closed allowlist, through the same Standalone
+        /// platform override the alpha-field tests use. The result has a
+        /// resolvable identity: only the format gate refuses it.
+        /// </summary>
+        private static Texture2D ImportRefusedFormat(string path)
+        {
+            var staging = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            staging.SetPixels32(UniformPixels(255));
+            staging.Apply();
+            File.WriteAllBytes(path, staging.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(staging);
+
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.mipmapEnabled = false;
+            importer.isReadable = true;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            var settings = importer.GetPlatformTextureSettings("Standalone");
+            settings.overridden = true;
+            settings.format = TextureImporterFormat.RGBAHalf;
+            importer.SetPlatformTextureSettings(settings);
+            importer.SaveAndReimport();
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         private static Texture2D ImportAsymmetric(string path)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -801,6 +802,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { material },
                 new[] { CapturedAlphaMaterialFamily.LilToon },
                 LilToonMaterialSemantics.AlphaEvidenceRequest,
+                AlphaPolicyBounds.Inert,
                 out var captured);
 
             Assert.That(success, Is.False);
@@ -819,6 +821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { material },
                 new[] { CapturedAlphaMaterialFamily.Poiyomi },
                 PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                AlphaPolicyBounds.Inert,
                 out var captured);
 
             Assert.That(success, Is.False);

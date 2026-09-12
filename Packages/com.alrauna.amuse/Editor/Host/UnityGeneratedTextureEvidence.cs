@@ -17,7 +17,10 @@ namespace Alrauna.Amuse.Editor.Host
     {
         private const GraphicsFormat TargetFormat = GraphicsFormat.R8G8B8A8_UNorm;
 
-        private static readonly Dictionary<(int instanceId, TextureChannel channel, float cutoff), AlphaMipChain>
+        // The active mipmap limit rides in the key: a chain captured under
+        // one limit carries provenance for exactly that limit, so chains
+        // captured under different limits must never share a cache entry.
+        private static readonly Dictionary<(int instanceId, TextureChannel channel, float cutoff, AlphaPolicyBounds bounds, int activeMipmapLimit), AlphaMipChain>
             SessionCache = new();
 
         /// <summary>
@@ -29,33 +32,47 @@ namespace Alrauna.Amuse.Editor.Host
             SessionCache.Clear();
         }
 
-        internal static bool TryCapture(
-            Texture2D texture,
-            TextureChannel channel,
-            out AlphaMipChain chain)
-        {
-            return TryCapture(texture, channel, 1.0f, out chain);
-        }
-
+        /// <summary>
+        /// Captures under the inert bounds, which reproduce the base
+        /// exact-255 contract. Callers that know the active policy pass
+        /// it to the full overload.
+        /// </summary>
         internal static bool TryCapture(
             Texture2D texture,
             TextureChannel channel,
             float cutoffThreshold,
+            AlphaPolicyBounds bounds,
             out AlphaMipChain chain)
         {
+            // Argument evaluation runs before the full overload's own null
+            // guard, so the limit is read only for a live texture. TryCapture
+            // refuses null textures unchanged, and the value is inert there.
+            var activeMipmapLimit = texture != null ? texture.activeMipmapLimit : 0;
             return TryCapture(
                 texture,
                 channel,
                 cutoffThreshold,
                 IsStreamingMipmapResident,
+                bounds,
+                activeMipmapLimit,
                 out chain);
         }
 
+        /// <summary>
+        /// The bounds and the active mipmap limit ride in the session key,
+        /// so two policies that share a cutoff, and two limit states, never
+        /// share a cached chain. The limit is the per-texture effective
+        /// value: levels below it are skipped exactly as on the GPU route,
+        /// because a non-resident source has no defined readback and the
+        /// spec promises per-level degradation, not a refusal.
+        /// </summary>
         internal static bool TryCapture(
             Texture2D texture,
             TextureChannel channel,
             float cutoffThreshold,
             Func<Texture2D, bool> residencyPredicate,
+            AlphaPolicyBounds bounds,
+            int activeMipmapLimit,
             out AlphaMipChain chain)
         {
             chain = null;
@@ -81,7 +98,8 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             var threshold = Mathf.Clamp01(cutoffThreshold);
-            var key = (texture.GetInstanceID(), channel, threshold);
+            var key = (texture.GetInstanceID(), channel, threshold, bounds,
+                activeMipmapLimit);
             if (SessionCache.TryGetValue(key, out chain))
             {
                 return true;
@@ -114,14 +132,29 @@ namespace Alrauna.Amuse.Editor.Host
 
                 var material = new Material(shader);
                 var levels = new AlphaTextureData[mipCount];
+                var withoutEvidence = new bool[mipCount];
 
                 try
                 {
                     for (var m = 0; m < mipCount; m++)
                     {
+                        if (!UnityAlphaFieldEvidence.IsLevelResident(
+                                m, activeMipmapLimit))
+                        {
+                            // Declared non-resident: a blit would sample a
+                            // source the GPU does not hold, and the readback
+                            // proves nothing. The level keeps its declared
+                            // shape as a placeholder, flagged without
+                            // evidence, which degrades it to Unknown at the
+                            // fold instead of refusing the texture.
+                            levels[m] = UnityAlphaFieldEvidence
+                                .WithoutEvidencePlaceholder(texture, m);
+                            withoutEvidence[m] = true;
+                            continue;
+                        }
+
                         var width = Mathf.Max(1, texture.width >> m);
                         var height = Mathf.Max(1, texture.height >> m);
-
                         material.SetInt("_Mip", m);
 
                         var descriptor = new RenderTextureDescriptor(width, height, TargetFormat, 0)
@@ -160,10 +193,23 @@ namespace Alrauna.Amuse.Editor.Host
                             var flags = new byte[data.Length];
                             for (var i = 0; i < data.Length; i++)
                             {
+                                // The generated route's proof channel is
+                                // .r at the exact arm and .g under a
+                                // shader cutoff; that packing is pinned
+                                // by the existing blit shader. Erasure
+                                // reads the same byte the opaque test
+                                // reads, and only in the exact arm,
+                                // because shader-cutoff sources are
+                                // gate-inert.
+                                var isErased = threshold >= 1.0f &&
+                                    bounds.NoiseBound > 0 &&
+                                    data[i].r < bounds.NoiseBound;
                                 var isOpaque = threshold >= 1.0f
-                                    ? data[i].r == 255
+                                    ? data[i].r >= bounds.OpaqueBound
                                     : (data[i].g / 255f) >= threshold;
-                                flags[i] = isOpaque ? byte.MaxValue : (byte)0;
+                                flags[i] = isErased
+                                    ? AlphaTextureData.ErasedFlag
+                                    : isOpaque ? byte.MaxValue : (byte)0;
                             }
 
                             levels[m] = new AlphaTextureData(width, height, flags);
@@ -179,7 +225,7 @@ namespace Alrauna.Amuse.Editor.Host
                     UnityEngine.Object.DestroyImmediate(material);
                 }
 
-                chain = new AlphaMipChain(levels);
+                chain = new AlphaMipChain(levels, withoutEvidence);
                 SessionCache[key] = chain;
                 return true;
             }

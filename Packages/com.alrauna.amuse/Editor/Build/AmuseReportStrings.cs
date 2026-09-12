@@ -293,6 +293,35 @@ namespace Alrauna.Amuse.Editor.Build
                 "Update the listed packages to versions AMUSE has " +
                 "verified, or accept the warning on the next upload.",
 
+            // --- Texture capture refusals ---
+            ["amuse.texture.UnavailableCapture"] =
+                "AMUSE could not read one material texture.",
+            ["amuse.texture.UnavailableCapture:description"] =
+                "The capture of one texture on a material slot refused, so " +
+                "AMUSE has no proof for the triangles that sample it. Those " +
+                "triangles stay on the original material.",
+            ["amuse.texture.UnavailableCapture:hint"] =
+                "Check that the texture is a real imported asset and that " +
+                "the project supports texture capture.",
+            ["amuse.texture.NonResidentMips"] =
+                "One material texture is missing mipmap levels.",
+            ["amuse.texture.NonResidentMips:description"] =
+                "The texture's mipmap limit removes levels the proof must " +
+                "read, so AMUSE has no proof for the triangles that sample " +
+                "it. Those triangles stay on the original material.",
+            ["amuse.texture.NonResidentMips:hint"] =
+                "Lower the project's texture mipmap limit, or remove the " +
+                "texture's own limit.",
+            ["amuse.texture.UnsupportedFormat"] =
+                "One material texture uses a format AMUSE cannot read.",
+            ["amuse.texture.UnsupportedFormat:description"] =
+                "The texture's storage format is outside the formats AMUSE " +
+                "can prove, so AMUSE has no proof for the triangles that " +
+                "sample it. Those triangles stay on the original material.",
+            ["amuse.texture.UnsupportedFormat:hint"] =
+                "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
+                "DXT5, or BC7.",
+
             // --- Avatar summary ---
             ["amuse.summary.Title"] =
                 "AMUSE finished this avatar.",
@@ -301,6 +330,10 @@ namespace Alrauna.Amuse.Editor.Build
                 "opaque materials. {2} renderers kept everything original.",
             ["amuse.summary.Title:hint"] =
                 "Open this component to see the same status.",
+            ["amuse.summary.PolicyActive:description"] =
+                "AMUSE moved triangles while the alpha policy was " +
+                "active, so some moved triangles rest on your alpha " +
+                "settings rather than on exact proof.",
         };
 
         /// <summary>True when the table holds a string for the key.</summary>
@@ -328,6 +361,17 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string HostKey(HostLifecycleRefusal cause)
         {
             return Prefix + "host." + cause;
+        }
+        /// <summary>
+        /// The report key for one texture capture refusal family. The slot
+        /// resolution carries the refusal records; a report names the exact
+        /// family through this key, in the shape every other refusal
+        /// vocabulary uses.
+        /// </summary>
+        internal static string TextureCaptureKey(
+            TextureCaptureRefusalReason cause)
+        {
+            return Prefix + "texture." + cause;
         }
     }
 }

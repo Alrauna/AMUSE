@@ -321,7 +321,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
                     captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, chain));
+                alpha, ProvidingFor(captured, chain), 0);
         }
 
         private Material NewGateOffMaterialWithOpaqueTexture(string textureName)
@@ -473,7 +473,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
                     captured);
             var resolution = AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, AllOpaqueChain()));
+                alpha, ProvidingFor(captured, AllOpaqueChain()), 0);
 
             // Falsifies: ignoring _Color.a — the cutout pass multiplies the
             // sample by it, so 0.8 is a scaled sample, and the multiplier
@@ -539,7 +539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
                     captured);
             var resolution = AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, AllOpaqueChain()));
+                alpha, ProvidingFor(captured, AllOpaqueChain()), 0);
 
             // Falsifies: reusing Poiyomi's `<= 1` rule at the classification
             // layer — 0.9999 is the provable bound and must still complete.
@@ -718,7 +718,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonCutoutMaterialSemantics
                 .InterpretVerifiedCutoutAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingForMasked(captured, mainChain, maskChain));
+                alpha, ProvidingForMasked(captured, mainChain, maskChain), 0);
         }
 
         /// <summary>
@@ -737,7 +737,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     chain = null;
                     return false;
-                });
+                }, 0);
         }
 
 
@@ -993,7 +993,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "expected an alpha diagnostic naming _IDMaskControlsDissolve");
 
             var resolution = AlphaSemanticsResolver.Resolve(
-                result.Semantics.Alpha, ProvidingNothing());
+                result.Semantics.Alpha, ProvidingNothing(), 0);
             Assert.That(
                 resolution.IsResolved,
                 Is.False,

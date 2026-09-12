@@ -218,7 +218,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, chain));
+                alpha, ProvidingFor(captured, chain), 0);
         }
 
         private Material NewGateOffMaterialWithOpaqueTexture(string textureName)
@@ -662,7 +662,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingForMasked(captured, mainChain, maskChain));
+                alpha, ProvidingForMasked(captured, mainChain, maskChain), 0);
         }
 
         /// <summary>
@@ -681,9 +681,85 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     chain = null;
                     return false;
-                });
+                }, 0);
         }
 
+
+        /// <summary>
+        /// Resolves the transparent alpha against the evidence shape the
+        /// texture evidence failure class produces: the mask's red field is
+        /// bound, while the main texture's alpha chain — the one required
+        /// sample — is absent. The preconditions keep the falsifier from
+        /// passing vacuously: the fixture must interpret completely with
+        /// every gate satisfied, and the resolved value must actually
+        /// request the absent main field.
+        /// </summary>
+        private AlphaResolution ResolveWithMissingMainChain(
+            Material material,
+            AlphaMipChain maskChain)
+        {
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+
+            Assert.That(
+                alpha.IsComplete,
+                Is.True,
+                "fixture precondition: every gate passes and the value " +
+                "requests the main sample, so a refusal can only come " +
+                "from the missing chain");
+            Assert.That(
+                captured.TryGetTexture(MainTextureProperty, out var main),
+                Is.True,
+                "the transparent request captures _MainTex");
+            Assert.That(
+                captured.TryGetTexture("_AlphaMask", out var mask),
+                Is.True,
+                "the transparent request captures _AlphaMask");
+            Assert.That(
+                main.IsAssigned && main.Texture.HasSourceIdentity &&
+                mask.IsAssigned && mask.Texture.HasSourceIdentity,
+                Is.True,
+                "the missing-chain seam keys both slots on resolved " +
+                "identities");
+
+            var mainSource = main.Texture.SourceIdentity;
+            var maskSource = mask.Texture.SourceIdentity;
+            var consultedMain = false;
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                (TextureSourceId source, TextureChannel channel,
+                    out AlphaMipChain result) =>
+                {
+                    if (source.Equals(mainSource) &&
+                        channel == TextureChannel.Alpha)
+                    {
+                        consultedMain = true;
+                        result = null;
+                        return false;
+                    }
+
+                    if (source.Equals(maskSource) &&
+                        channel == TextureChannel.Red)
+                    {
+                        result = maskChain;
+                        return true;
+                    }
+
+                    result = null;
+                    return false;
+                },
+                0);
+
+            Assert.That(
+                consultedMain,
+                Is.True,
+                "the resolved value must depend on the main texture's " +
+                "alpha sample, or the absent chain is never on its " +
+                "evidence path and the refusal proves nothing");
+
+            return resolution;
+        }
 
         private static void AssertUniformOutcome(
             AlphaResolution resolution,
@@ -914,6 +990,99 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 resolution.Classify(CornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        // --- texture evidence failure soundness (2026-09-11 design) -------
+
+        // --- Falsifier 1: an unbound main sample resolves a full-opacity constant ---
+
+        /// <summary>
+        /// The conversion may only rest on evidence that exists. When the
+        /// required main-texture alpha sample has no bound chain, the
+        /// material's polygons render translucent at runtime, so a
+        /// full-opacity answer would prove exactly the triangles the
+        /// conversion must not touch; unknown keeps them on their original
+        /// material (texture evidence failure design, contract clauses 1
+        /// and 2).
+        /// </summary>
+        [Test]
+        public void MissingMainChain_Mode2SaturatedValue_IsUnknownAndNeverProvesTheHole()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    "t_ev_main_sat", 4, 4,
+                    MainGridWithAlphaHole(4, 4, 1, 1)));
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 1f);
+            AssignAllWhiteMask(material, "t_ev_mask_sat");
+
+            // The mask term is provably one here, so the alpha value is
+            // the plain _MainTex alpha sample: a fully bound mask cannot
+            // rescue the sample whose chain is absent.
+            var resolution = ResolveWithMissingMainChain(
+                material, AllOpaqueChain());
+
+            Assert.That(
+                resolution.IsResolved,
+                Is.False,
+                "a required sample with no bound chain must leave the " +
+                "alpha unknown, never a constant of full opacity");
+
+            // A refused resolution has no triangle outcome, so the hole
+            // triangle's outcome is Unknown exactly when the resolution
+            // refused; the ternary keeps this row meaningful against the
+            // falsified implementation, whose constant answer would
+            // classify the same triangle ProvenOpaque.
+            Assert.That(
+                resolution.IsResolved
+                    ? resolution.Classify(CornerTriangle())
+                    : TriangleAlphaOutcome.Unknown,
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "a triangle over the alpha hole must not prove opaque " +
+                "while the main evidence is absent");
+        }
+
+        /// <summary>
+        /// The same falsifier through the composed route: with the mask
+        /// term a true sample (scale 1, value 0) the alpha value is the
+        /// product of the main and mask samples, and one absent factor
+        /// must refuse the whole product instead of dissolving into a
+        /// constant of one.
+        /// </summary>
+        [Test]
+        public void MissingMainChain_Mode2SampledValue_IsUnknownAndNeverProvesTheHole()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    "t_ev_main_smp", 4, 4,
+                    MainGridWithAlphaHole(4, 4, 1, 1)));
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+            AssignAllWhiteMask(material, "t_ev_mask_smp");
+
+            var resolution = ResolveWithMissingMainChain(
+                material, AllOpaqueChain());
+
+            Assert.That(
+                resolution.IsResolved,
+                Is.False,
+                "a required product factor with no bound chain must " +
+                "leave the alpha unknown, never a constant of full " +
+                "opacity");
+
+            Assert.That(
+                resolution.IsResolved
+                    ? resolution.Classify(CornerTriangle())
+                    : TriangleAlphaOutcome.Unknown,
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "a triangle over the alpha hole must not prove opaque " +
+                "while the main evidence is absent");
         }
 
         [Test]

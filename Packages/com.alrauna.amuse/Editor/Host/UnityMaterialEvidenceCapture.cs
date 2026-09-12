@@ -37,9 +37,20 @@ namespace Alrauna.Amuse.Editor.Host
         internal string PropertyName { get; }
         internal TextureEvidenceKinds Evidence { get; }
 
+        /// <summary>
+        /// The shader property whose value is this texture's alpha cutoff,
+        /// or null when the alpha is read unclipped. A declared cutoff
+        /// below one binarizes the capture by the cutoff and keeps the
+        /// alpha policy inert for the source: a texel between the noise
+        /// gate and the shader cutoff is discarded at runtime and must
+        /// never read opaque (spec section 3).
+        /// </summary>
+        internal string CutoffScalarProperty { get; }
+
         internal TexturePropertyEvidenceRequest(
             string propertyName,
-            TextureEvidenceKinds evidence)
+            TextureEvidenceKinds evidence,
+            string cutoffScalarProperty = null)
         {
             if (string.IsNullOrWhiteSpace(propertyName))
             {
@@ -51,9 +62,17 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 throw new ArgumentOutOfRangeException(nameof(evidence));
             }
+            if (cutoffScalarProperty != null &&
+                string.IsNullOrWhiteSpace(cutoffScalarProperty))
+            {
+                throw new ArgumentException(
+                    "A declared cutoff property name must be non-empty.",
+                    nameof(cutoffScalarProperty));
+            }
 
             PropertyName = propertyName;
             Evidence = evidence;
+            CutoffScalarProperty = cutoffScalarProperty;
         }
     }
 
@@ -120,6 +139,8 @@ namespace Alrauna.Amuse.Editor.Host
             var vectors = new SortedSet<string>(StringComparer.Ordinal);
             var textures = new SortedDictionary<string, TextureEvidenceKinds>(
                 StringComparer.Ordinal);
+            var textureCutoffs = new SortedDictionary<string, string>(
+                StringComparer.Ordinal);
 
             foreach (var request in requests)
             {
@@ -139,6 +160,23 @@ namespace Alrauna.Amuse.Editor.Host
                     textures.TryGetValue(
                         texture.PropertyName, out var existing);
                     textures[texture.PropertyName] = existing | texture.Evidence;
+                    if (texture.CutoffScalarProperty == null)
+                    {
+                        continue;
+                    }
+
+                    if (textureCutoffs.TryGetValue(
+                            texture.PropertyName, out var declared) &&
+                        declared != texture.CutoffScalarProperty)
+                    {
+                        throw new ArgumentException(
+                            "One texture property cannot declare two " +
+                            "different cutoff properties.",
+                            nameof(requests));
+                    }
+
+                    textureCutoffs[texture.PropertyName] =
+                        texture.CutoffScalarProperty;
                 }
             }
 
@@ -146,8 +184,9 @@ namespace Alrauna.Amuse.Editor.Host
                 textures.Count);
             foreach (var texture in textures)
             {
+                textureCutoffs.TryGetValue(texture.Key, out var cutoff);
                 textureRequests.Add(new TexturePropertyEvidenceRequest(
-                    texture.Key, texture.Value));
+                    texture.Key, texture.Value, cutoff));
             }
 
             return new MaterialEvidenceRequest(
@@ -266,6 +305,23 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool HasRedChannel { get; }
         internal AlphaMipChain RedChannel { get; }
 
+        /// <summary>
+        /// Why the requested alpha-field capture refused, or
+        /// <see cref="TextureCaptureRefusalReason.None"/> when it captured or
+        /// was not requested. The refusal is a fact about this texture's
+        /// capture, recorded beside the absence it explains: a reader of
+        /// <c>HasAlphaChannel == false</c> can name what stopped.
+        /// </summary>
+        internal TextureCaptureRefusalReason AlphaCaptureRefusal { get; }
+
+        /// <summary>
+        /// The red-channel counterpart of <see cref="AlphaCaptureRefusal"/>.
+        /// The two channels fail independently - the per-channel host
+        /// capability gate can refuse one and pass the other - so each
+        /// carries its own reason.
+        /// </summary>
+        internal TextureCaptureRefusalReason RedCaptureRefusal { get; }
+
         internal CapturedTextureEvidence(
             bool hasSourceIdentity,
             TextureSourceId sourceIdentity,
@@ -277,8 +333,10 @@ namespace Alrauna.Amuse.Editor.Host
             bool isCanonicalNormalMap,
             bool hasAlphaChannel,
             AlphaMipChain alphaChannel,
+            TextureCaptureRefusalReason alphaCaptureRefusal,
             bool hasRedChannel,
-            AlphaMipChain redChannel)
+            AlphaMipChain redChannel,
+            TextureCaptureRefusalReason redCaptureRefusal)
         {
             HasSourceIdentity = hasSourceIdentity;
             SourceIdentity = sourceIdentity;
@@ -290,8 +348,10 @@ namespace Alrauna.Amuse.Editor.Host
             IsCanonicalNormalMap = isCanonicalNormalMap;
             HasAlphaChannel = hasAlphaChannel;
             AlphaChannel = alphaChannel;
+            AlphaCaptureRefusal = alphaCaptureRefusal;
             HasRedChannel = hasRedChannel;
             RedChannel = redChannel;
+            RedCaptureRefusal = redCaptureRefusal;
         }
     }
 
@@ -304,20 +364,38 @@ namespace Alrauna.Amuse.Editor.Host
         internal Vector2 Offset { get; }
         internal CapturedTextureEvidence Texture { get; }
 
+        /// <summary>
+        /// This assignment's named capture refusals: one per requested
+        /// channel that refused, each naming this property, the texture's
+        /// identity when the capture knows one, the channel, and the reason
+        /// family. Empty when nothing was assigned or every requested field
+        /// captured. The records are slot-scoped facts: they refuse nothing
+        /// and exist so the slot resolution and the report can name the
+        /// capture failure.
+        /// </summary>
+        internal IReadOnlyList<TextureCaptureRefusal> CaptureRefusals { get; }
+
         internal CapturedTextureAssignment(
             bool isAssigned,
             TextureEvidenceKinds requestedEvidence,
             bool hasScaleOffset,
             Vector2 scale,
             Vector2 offset,
-            CapturedTextureEvidence texture)
+            CapturedTextureEvidence texture,
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals)
         {
+            if (captureRefusals == null)
+            {
+                throw new ArgumentNullException(nameof(captureRefusals));
+            }
+
             IsAssigned = isAssigned;
             RequestedEvidence = requestedEvidence;
             HasScaleOffset = hasScaleOffset;
             Scale = scale;
             Offset = offset;
             Texture = texture;
+            CaptureRefusals = captureRefusals;
         }
     }
 
@@ -334,6 +412,15 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool HasActiveColorSpace { get; }
         internal ColorSpace ActiveColorSpace { get; }
         internal IReadOnlyCollection<CapturedTextureEvidence> Textures { get; }
+
+        /// <summary>
+        /// Every named capture refusal across this evidence's texture
+        /// assignments, in assignment order, aggregated once from the
+        /// assignments themselves. Derivations cannot drop or invent a
+        /// refusal: the assignment array is shared unchanged and the
+        /// aggregate is rebuilt from it on every construction.
+        /// </summary>
+        internal IReadOnlyList<TextureCaptureRefusal> CaptureRefusals { get; }
 
         internal CapturedMaterialEvidence(
             bool hasShaderName,
@@ -363,6 +450,29 @@ namespace Alrauna.Amuse.Editor.Host
             _vectors = vectors;
             _textureAssignments = textureAssignments;
             Textures = textures;
+            CaptureRefusals = AggregateCaptureRefusals(textureAssignments);
+        }
+
+        /// <summary>
+        /// One pass over the adopted assignment array. Unassigned slots and
+        /// assignments without refusals contribute nothing.
+        /// </summary>
+        private static IReadOnlyList<TextureCaptureRefusal>
+            AggregateCaptureRefusals(
+                TextureEntry[] textureAssignments)
+        {
+            var refusals = new List<TextureCaptureRefusal>();
+            foreach (var entry in textureAssignments)
+            {
+                if (!entry.HasValue)
+                {
+                    continue;
+                }
+
+                refusals.AddRange(entry.Value.CaptureRefusals);
+            }
+
+            return refusals;
         }
 
         internal bool HasProperty(string name)
@@ -673,6 +783,18 @@ namespace Alrauna.Amuse.Editor.Host
         internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
             IReadOnlyList<MaterialEvidenceCaptureInput> inputs)
         {
+            // Semantics-interpretation captures keep the inert bounds, which
+            // reproduce the base exact-255 contract: the policy widens the
+            // proof's evidence, never an admission decision. The closed-batch
+            // proof capture threads the active policy through the full
+            // overload.
+            return Capture(inputs, AlphaPolicyBounds.Inert);
+        }
+
+        internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
+            IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
+            AlphaPolicyBounds bounds)
+        {
             if (inputs == null)
             {
                 throw new ArgumentNullException(nameof(inputs));
@@ -732,6 +854,7 @@ namespace Alrauna.Amuse.Editor.Host
                     shared.Evidence,
                     true,
                     shared.Source,
+                    bounds,
                     shared.CutoutThreshold);
             }
 
@@ -765,6 +888,7 @@ namespace Alrauna.Amuse.Editor.Host
                                 texture.RequestedEvidence,
                                 false,
                                 default,
+                                bounds,
                                 texture.CutoutThreshold);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
@@ -777,7 +901,11 @@ namespace Alrauna.Amuse.Editor.Host
                         texture.HasScaleOffset,
                         texture.Scale,
                         texture.Offset,
-                        capturedTexture);
+                        capturedTexture,
+                        BuildCaptureRefusals(
+                            texture.Name,
+                            texture.Texture,
+                            capturedTexture));
                     textureEntries[textureIndex] =
                         new CapturedMaterialEvidence.TextureEntry(
                             texture.Name, true, assignment);
@@ -854,7 +982,25 @@ namespace Alrauna.Amuse.Editor.Host
                     : null;
                 var hasScaleOffset = hasValue &&
                     (textureRequest.Evidence & TextureEvidenceKinds.ScaleOffset) != 0;
+                // A family that declares its cutoff scalar hands the real
+                // value to the capture, whose routes binarize by it and
+                // keep the alpha policy inert for the source. A family
+                // that declares none reads the unclipped exact-255 arm,
+                // where the policy applies.
                 var cutoutThreshold = 1.0f;
+                if (textureRequest.CutoffScalarProperty != null)
+                {
+                    var cutoffFact =
+                        facts[textureRequest.CutoffScalarProperty];
+                    if (isLive && cutoffFact.HasType &&
+                        (cutoffFact.Type == ShaderPropertyType.Float ||
+                         cutoffFact.Type == ShaderPropertyType.Range))
+                    {
+                        cutoutThreshold = material.GetFloat(
+                            textureRequest.CutoffScalarProperty);
+                    }
+                }
+
                 builder.Textures.Add(new TextureAssignmentBuilder
                 {
                     Name = textureRequest.PropertyName,
@@ -981,6 +1127,7 @@ namespace Alrauna.Amuse.Editor.Host
             TextureEvidenceKinds evidence,
             bool hasKnownSource,
             TextureSourceId knownSource,
+            AlphaPolicyBounds bounds,
             float cutoffThreshold = 1.0f)
         {
             var hasSource = hasKnownSource &&
@@ -1002,18 +1149,34 @@ namespace Alrauna.Amuse.Editor.Host
                 (evidence & TextureEvidenceKinds.CanonicalNormalMap) != 0 &&
                 UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
             AlphaMipChain alphaChannel = null;
+            var alphaRefusal = TextureCaptureRefusalReason.None;
+            // Both channels read under the active policy: the red channel
+            // serves alpha-mask products, so the same alpha policy governs
+            // every field the proof consults. A refused channel carries its
+            // named reason beside the absence it explains; an unrequested
+            // channel never calls the capture and carries None.
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, cutoffThreshold, out _, out alphaChannel);
+                    texture,
+                    TextureChannel.Alpha,
+                    cutoffThreshold,
+                    bounds,
+                    out _,
+                    out alphaChannel,
+                    out alphaRefusal);
             AlphaMipChain redChannel = null;
+            var redRefusal = TextureCaptureRefusalReason.None;
             var hasRedChannel =
                 (evidence & TextureEvidenceKinds.RedChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
                     texture,
                     TextureChannel.Red,
+                    1.0f,
+                    bounds,
                     out _,
-                    out redChannel);
+                    out redChannel,
+                    out redRefusal);
             return new CapturedTextureEvidence(
                 hasSource,
                 source,
@@ -1025,8 +1188,55 @@ namespace Alrauna.Amuse.Editor.Host
                 canonicalNormal,
                 hasAlphaChannel,
                 alphaChannel,
+                alphaRefusal,
                 hasRedChannel,
-                redChannel);
+                redChannel,
+                redRefusal);
+        }
+
+        /// <summary>
+        /// The named refusals of one texture assignment: one record per
+        /// requested channel whose capture refused, naming the property, the
+        /// identity the capture knows, the channel, and the reason family. An
+        /// unassigned slot captured nothing and refuses nothing, and a
+        /// captured field never carries a refusal.
+        /// </summary>
+        private static IReadOnlyList<TextureCaptureRefusal> BuildCaptureRefusals(
+            string propertyName,
+            Texture texture,
+            CapturedTextureEvidence captured)
+        {
+            if (texture == null || captured == null)
+            {
+                return Array.Empty<TextureCaptureRefusal>();
+            }
+
+            var refusals = new List<TextureCaptureRefusal>(2);
+            if (captured.AlphaCaptureRefusal !=
+                TextureCaptureRefusalReason.None)
+            {
+                refusals.Add(new TextureCaptureRefusal(
+                    propertyName,
+                    captured.HasSourceIdentity,
+                    captured.SourceIdentity,
+                    TextureChannel.Alpha,
+                    captured.AlphaCaptureRefusal));
+            }
+
+            if (captured.RedCaptureRefusal !=
+                TextureCaptureRefusalReason.None)
+            {
+                refusals.Add(new TextureCaptureRefusal(
+                    propertyName,
+                    captured.HasSourceIdentity,
+                    captured.SourceIdentity,
+                    TextureChannel.Red,
+                    captured.RedCaptureRefusal));
+            }
+
+            return refusals.Count == 0
+                ? Array.Empty<TextureCaptureRefusal>()
+                : new ReadOnlyCollection<TextureCaptureRefusal>(refusals);
         }
 
         private readonly struct PropertyFact

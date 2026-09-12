@@ -589,7 +589,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f));
             var resolution = AlphaSemanticsResolver.Resolve(
-                SemanticOutput<ScalarSemanticValue>.Complete(value), provider);
+                SemanticOutput<ScalarSemanticValue>.Complete(value), provider, 0);
 
             // Falsifies: dropping _MainTex ST after the attested Poiyomi gates.
             Assert.That(sample.Coordinates.Channel, Is.Zero);

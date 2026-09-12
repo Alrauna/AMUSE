@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 
 namespace Alrauna.Amuse.Editor
@@ -76,6 +77,7 @@ namespace Alrauna.Amuse.Editor
             DrawMipCapPopup();
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
+            DrawAlphaPolicyControls();
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -96,22 +98,29 @@ namespace Alrauna.Amuse.Editor
                 : Mathf.Min(stored + 1, options.Length - 1);
             var selected = EditorGUILayout.Popup(
                 new GUIContent(
-                    "Preserve Transparency Maximum Mipmap",
-                    "A mipmap level is a smaller copy of the texture. " +
-                    "Each level is half the size of the level before it. " +
-                    "The GPU uses the small levels when the avatar is far " +
-                    "away or small on screen.\n\n" +
-                    "A transparent texture often fades at small levels. " +
-                    "Averaging mixes transparent texels into texels that " +
-                    "were solid. A texel is one pixel of a texture. " +
-                    "AMUSE checks texture levels before it moves a " +
-                    "triangle onto an opaque material. One faded texel in " +
-                    "a checked level stops the move.\n\n" +
-                    "This setting sets the largest level AMUSE checks. " +
-                    "AMUSE ignores every level above it. Mip 4 fits most " +
-                    "viewing distances and keeps most conversions. " +
-                    "Select All Mips to check every level. This is the " +
-                    "safest choice.\n\n" +
+                    "Smallest Tested Mipmap",
+                    "A mipmap is a smaller copy of a texture. Each " +
+                    "copy is half the size of the copy before it. " +
+                    "The GPU shows the small copies when the avatar " +
+                    "is far away or small on screen.\n\n" +
+                    "A transparent texture often fades at small " +
+                    "copies, because averaging mixes transparent " +
+                    "texels into solid ones. A texel is one pixel of " +
+                    "a texture. AMUSE checks the copies before it " +
+                    "moves a triangle onto an opaque material. One " +
+                    "faded texel in a checked copy stops the move. " +
+                    "Textures with transparency can fail at a small " +
+                    "copy for this reason.\n\n" +
+                    "This setting sets the smallest copy AMUSE " +
+                    "checks. AMUSE ignores every smaller copy. " +
+                    "Moving toward mip 0 can improve performance at " +
+                    "the cost of quality at a distance. Moving away " +
+                    "from mip 0 can improve quality at a distance at " +
+                    "the cost of performance. Mip 0 is the full " +
+                    "texture. A 2048 by 2048 texture renders at 128 " +
+                    "by 128 at mip 4. The default of Mip 4 fits most " +
+                    "viewing distances. Select All Mips to check " +
+                    "every copy. This is the safest choice.\n\n" +
                     "Select a larger level when a part looks solid " +
                     "at long distance where it should show through. " +
                     "Select a smaller level when AMUSE moves too few " +
@@ -150,20 +159,22 @@ namespace Alrauna.Amuse.Editor
 
             var selectedSize = EditorGUILayout.Popup(
                 new GUIContent(
-                    "Preserve Transparency Minimum Texture Size",
-                    "A mipmap level is a smaller copy of the texture. " +
-                    "This setting sets the smallest level size AMUSE " +
-                    "checks. AMUSE stops checking a texture when a " +
-                    "level is smaller than this size on either side. " +
-                    "A texture smaller than this size on either side " +
-                    "is never checked, so its triangles never move." +
-                    "\n\n" +
-                    "Select All Sizes to check every level of every " +
+                    "Smallest Tested Texture",
+                    "This setting works like Smallest Tested " +
+                    "Mipmap, but as an absolute size in texels " +
+                    "instead of a mipmap number. A mipmap is a " +
+                    "smaller copy of a texture. AMUSE stops checking " +
+                    "a texture when a copy is smaller than this size " +
+                    "on either side. A texture smaller than this " +
+                    "size on either side is never checked, so its " +
+                    "triangles never move.\n\n" +
+                    "Select All Sizes to check every copy of every " +
                     "texture. Select a smaller size to check more " +
-                    "levels when a part looks solid far away where it " +
-                    "should show through. Select a larger size to " +
-                    "check fewer levels when AMUSE moves too few " +
-                    "triangles."),
+                    "copies when a part looks solid far away where " +
+                    "it should show through. Select a larger size to " +
+                    "check fewer copies when AMUSE moves too few " +
+                    "triangles. The default of 128 fits most " +
+                    "viewing distances."),
                 sizeIndex,
                 sizeOptions);
             sizeProperty.intValue = selectedSize == 0
@@ -177,7 +188,7 @@ namespace Alrauna.Amuse.Editor
                 "_minimumOpaqueCoveragePercent");
             coverageProperty.intValue = EditorGUILayout.IntSlider(
                 new GUIContent(
-                    "Minimum Opaque Coverage Percentage",
+                    "Minimum Opaque Coverage (Per Material)",
                     "AMUSE moves proven opaque triangles of a mixed " +
                     "material onto a separate opaque material. Each " +
                     "split adds one draw call, and draw calls cost " +
@@ -191,6 +202,100 @@ namespace Alrauna.Amuse.Editor
                     "that move too little."),
                 Mathf.Clamp(coverageProperty.intValue, 0, 100),
                 0, 100);
+        }
+
+        private void DrawAlphaPolicyControls()
+        {
+            var alphaProperty = serializedObject.FindProperty(
+                "_minimumOpaqueAlphaPercent");
+            var minimumOpaqueAlpha = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Alpha Upper Clamp (Per Texture)",
+                    "Alpha is how strong transparency is. A value " +
+                    "of 100 is fully opaque. Some mixed transparent " +
+                    "and opaque materials hold texels that are " +
+                    "nearly opaque but not truly opaque. Alpha at " +
+                    "or above this value counts as opaque evidence. " +
+                    "Lowering this value admits more nearly opaque " +
+                    "texels. A texel is one pixel of a texture." +
+                    "\n\n" +
+                    "Admitted texels render fully opaque after a " +
+                    "move, so alpha gradients can show edges between " +
+                    "the split materials. The default of 100 is the " +
+                    "safest choice. Lower the value when a material " +
+                    "holds nearly opaque texels that keep its solid " +
+                    "parts on the transparent material."),
+                Mathf.Clamp(alphaProperty.intValue, 0, 100),
+                0, 100);
+            alphaProperty.intValue = minimumOpaqueAlpha;
+
+            var coverageProperty = serializedObject.FindProperty(
+                "_polygonMinimumOpaqueCoveragePercent");
+            var polygonCoverage = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Minimum Opaque Coverage (Per Polygon)",
+                    "The minimum percentage of a polygon's texels " +
+                    "that must stay at or above the per-polygon " +
+                    "clamp before AMUSE moves the polygon onto an " +
+                    "opaque material. Texels below the clamp are " +
+                    "strays. This keeps a few stray texels from " +
+                    "keeping an intentional opaque face on the " +
+                    "transparent material, which wastes performance " +
+                    "on overdraw." +
+                    "\n\n" +
+                    "Lowering this value lets AMUSE ignore denser " +
+                    "strays. Ignored strays render fully opaque " +
+                    "after a move. The default of 100 is the safest " +
+                    "choice: no stray share is ever ignored."),
+                Mathf.Clamp(coverageProperty.intValue, 0, 100),
+                0, 100);
+            coverageProperty.intValue = polygonCoverage;
+
+            var clampProperty = serializedObject.FindProperty(
+                "_polygonAlphaUpperClampPercent");
+            var polygonClamp = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    "Alpha Upper Clamp (Per Polygon)",
+                    "Alpha below this value is a stray texel on the " +
+                    "polygon. AMUSE ignores strays only while the " +
+                    "coverage slider passes. Lowering this value " +
+                    "admits higher alpha values as strays, including " +
+                    "nearly opaque ones. A texel is one pixel of a " +
+                    "texture." +
+                    "\n\n" +
+                    "Ignored strays render fully opaque after a " +
+                    "move, so alpha gradients can lose their " +
+                    "transparency. The default of 100 admits nothing " +
+                    "and is the safest choice. Lower this value " +
+                    "together with the coverage slider when faint " +
+                    "strays keep an intentional opaque face on the " +
+                    "transparent material."),
+                Mathf.Clamp(clampProperty.intValue, 0, 100),
+                0, 100);
+            clampProperty.intValue =
+                NormalizePolygonClamp(minimumOpaqueAlpha, polygonClamp);
+        }
+
+        /// <summary>
+        /// Normalizes the drawn per-polygon clamp. A drawn clamp of 100
+        /// is the inert sentinel: the build maps it to the inert noise
+        /// bound, so the inspector must keep the stored 100 instead of
+        /// pushing it to opaque minus one. A stored opaque clamp at or
+        /// below zero reads as the inert 100, mirroring the build's
+        /// mapper, so the drawn clamp keeps its value. Otherwise the
+        /// inspector clamp keeps the tolerated band strictly below the
+        /// opaque percent.
+        /// </summary>
+        internal static int NormalizePolygonClamp(
+            int opaquePercent, int drawnClamp)
+        {
+            if (drawnClamp >= 100)
+            {
+                return 100;
+            }
+
+            var opaque = opaquePercent <= 0 ? 100 : opaquePercent;
+            return AlphaPolicyBounds.ClampNoise(opaque, drawnClamp);
         }
 
         /// <summary>

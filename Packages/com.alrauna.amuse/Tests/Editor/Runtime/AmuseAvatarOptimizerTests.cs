@@ -144,5 +144,46 @@ namespace Alrauna.Amuse.Tests.Editor
                 UnityEngine.Object.DestroyImmediate(go);
             }
         }
+
+        [Test]
+        public void AlphaPolicyFieldsRoundTripAndDefaultInert()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+
+                var alpha = serializedObject.FindProperty(
+                    "_minimumOpaqueAlphaPercent");
+                var clamp = serializedObject.FindProperty(
+                    "_polygonAlphaUpperClampPercent");
+                var coverage = serializedObject.FindProperty(
+                    "_polygonMinimumOpaqueCoveragePercent");
+                Assert.That(alpha, Is.Not.Null);
+                Assert.That(clamp, Is.Not.Null);
+                Assert.That(coverage, Is.Not.Null);
+                Assert.That(alpha.intValue, Is.EqualTo(100));
+                Assert.That(clamp.intValue, Is.EqualTo(100));
+                Assert.That(coverage.intValue, Is.EqualTo(100));
+
+                alpha.intValue = 99;
+                clamp.intValue = 5;
+                coverage.intValue = 10;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.MinimumOpaqueAlphaPercent, Is.EqualTo(99));
+                Assert.That(
+                    optimizer.PolygonAlphaUpperClampPercent, Is.EqualTo(5));
+                Assert.That(
+                    optimizer.PolygonMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(10));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
     }
 }
