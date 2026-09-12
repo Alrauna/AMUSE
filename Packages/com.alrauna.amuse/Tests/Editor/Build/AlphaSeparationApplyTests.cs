@@ -59,8 +59,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private GameObject CreateAvatarRoot(string name)
         {
+            // Installed optimizer packages resolve a fixture without a
+            // VRCAvatarDescriptor as a Generic avatar and process it with
+            // assumptions production avatars never see. Every fixture root
+            // carries the descriptor, as production avatars do.
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
             var root = Track(new GameObject(name));
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             FixtureProofScope.PinAllSizes(root);
             return root;
         }

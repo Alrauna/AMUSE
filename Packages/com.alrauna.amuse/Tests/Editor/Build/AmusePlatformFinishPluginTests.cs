@@ -32,6 +32,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE NDMF phase fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -61,6 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE produced-state fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var renderer = root.AddComponent<SkinnedMeshRenderer>();
@@ -116,6 +118,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE semantic refusal fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -144,6 +147,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE lifecycle refusal fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -174,6 +178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unopted avatar fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<LineRenderer>();
 
             try
@@ -205,6 +210,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE child-opted avatar fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var child = new GameObject("opt-in child");
             child.transform.SetParent(root.transform);
             child.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -242,6 +248,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE disabled-optin fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -274,6 +281,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE consent declined fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -304,6 +312,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE consent granted fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -337,6 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE play-path fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -369,6 +379,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE lifecycle refusal fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -409,6 +420,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE none-refusal guard fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
@@ -427,6 +439,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void AvatarSummaryNamesTheRunKind()
         {
             var root = new GameObject("AMUSE summary label fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
@@ -455,6 +468,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void SummaryNamesPolicyOnlyWhileAlphaPolicyIsActive()
         {
             var root = new GameObject("AMUSE summary policy fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
@@ -602,6 +616,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             string mapperName)
         {
             var root = new GameObject("AMUSE policy mapper " + mapperName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             try
             {
                 var component =
@@ -628,6 +643,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE summary applied count fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -663,6 +679,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE bindings capture fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -677,23 +694,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(captured, Is.Not.Null,
                     "the capture pass did not retain the host's animator bindings");
 
-                // The SDK-free public project resolves this host platform to
-                // NDMF's exact GenericPlatformAnimatorBindings singleton. This
-                // assertion pins the retained value; the sibling active-context
-                // mutation test pins that AMUSE acquired it through
-                // AnimatorServicesContext rather than constructing a stand-in.
-                //
-                // LIMITATION, stated so this is not read as more than it proves:
-                // NDMF picks VRChatPlatformAnimatorBindings only for a root
-                // carrying a VRCAvatarDescriptor under NDMF_VRCSDK3_AVATARS, and
-                // the public project has no VRChat SDK, so every reachable branch
-                // yields the GenericPlatformAnimatorBindings singleton. Reference
-                // identity therefore cannot alone distinguish a context read from
-                // hard-coding; CaptureRequiresTheActiveAnimatorServicesContext
+                // The capture must retain the exact host binding
+                // reference, never a copy. Which singleton the host
+                // resolves depends on the environment: with com.vrchat.avatars
+                // installed, a root carrying a VRCAvatarDescriptor under
+                // the VRChat platform resolves the platform's own
+                // VRChatPlatformAnimatorBindings; on a fresh clone
+                // without the SDK, every reachable branch yields the
+                // GenericPlatformAnimatorBindings singleton. Reference
+                // identity still cannot alone distinguish a context read
+                // from hard-coding;
+                // CaptureRequiresTheActiveAnimatorServicesContext
                 // remains the acquisition-route proof.
+#if AMUSE_VRCSDK3_AVATARS
+                Assert.That(captured,
+                    Is.SameAs(VRChatPlatformAnimatorBindings.Instance),
+                    "AMUSE did not retain the exact host binding reference");
+#else
                 Assert.That(captured,
                     Is.SameAs(GenericPlatformAnimatorBindings.Instance),
                     "AMUSE did not retain the exact host binding reference");
+#endif
             }
             finally
             {
@@ -706,6 +727,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE capture acquisition-route fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -747,6 +769,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE two-pass fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -773,6 +796,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE post-barrier lifecycle fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -813,6 +837,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE retained bindings operability fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -841,6 +866,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE active-extension barrier fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -894,6 +920,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var armed = SyntheticPluginScope.Arm();
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE correct-placement control fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -935,6 +962,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unallowlisted behaviour fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var controller = new AnimatorController { name = "unallowlisted" };
@@ -997,6 +1025,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE avatar refusal report fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var controller = new AnimatorController { name = "unallowlisted" };
@@ -1054,6 +1083,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE clean committed graph fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var controller = new AnimatorController { name = "clean" };
@@ -1099,6 +1129,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unattested materials fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1247,6 +1278,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE object-curve material property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1321,6 +1353,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE build lower mip");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Mesh mesh = null;
@@ -1436,6 +1469,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unrelated object curve");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1489,6 +1523,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE indexed material property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1565,6 +1600,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE transparent current opaque swap");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1618,6 +1654,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE two distinct opaque states");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1666,6 +1703,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE runtime-state accounting");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var refusedObject = new GameObject("refused");
@@ -1746,6 +1784,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE all-Unknown envelope");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1806,6 +1845,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE structural mesh replacement");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1861,6 +1901,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE structural slot count");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -1924,6 +1965,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE independent material slots");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var materials = new List<Material>();
@@ -2030,6 +2072,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE additive material property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2072,6 +2115,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE direct material property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2116,6 +2160,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE additive flag only");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2158,6 +2203,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE agreeing property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2196,6 +2242,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE differing property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2230,6 +2277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE non-finite-exact property");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2274,6 +2322,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE absent property in swap");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2313,6 +2362,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE closed texture request");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2373,6 +2423,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE immutable material evidence");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2457,6 +2508,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE immutable runtime-state host");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var child = new GameObject("Body");
@@ -2520,6 +2572,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE missing bindings fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -2555,6 +2608,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE exact renderer refusal fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -2590,6 +2644,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE distinct refusal reasons fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             root.AddComponent<LineRenderer>();
@@ -2630,6 +2685,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE refusal continuation fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
 
@@ -2677,6 +2733,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE none-is-not-a-refusal fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2723,6 +2780,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void RendererAnalysisRaisesDefectsInsteadOfNamingThemRefusals()
         {
             var root = new GameObject("AMUSE renderer defect fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var renderer = root.AddComponent<SkinnedMeshRenderer>();
@@ -2754,6 +2812,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE defect propagation fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
@@ -2832,6 +2891,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             GameObject root)
         {
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            // The accounting fixtures must build under the same platform
+            // resolution production uses; installed optimizer packages
+            // process a descriptor-less fixture as a Generic avatar and
+            // destroy the animation state these tests count.
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             FixtureProofScope.PinAllSizes(root);
             var context = AvatarProcessor.ProcessAvatar(
                 root, TestGenericPlatform.Instance);
@@ -3211,6 +3276,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE renderer-scoped swap closure");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixtureA = default(AnalyzableRendererFixture);
@@ -3340,6 +3406,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE post-closure slot refusal");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material refusing = null;
@@ -3443,6 +3510,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE unattested sibling slot");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material resolving = null;
@@ -3548,6 +3616,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE every slot refuses");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material first = null;
@@ -3683,6 +3752,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 out int opaqueCandidateTriangleCount)
         {
             var root = new GameObject("AMUSE single-slot control");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Mesh mesh = null;

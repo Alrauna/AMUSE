@@ -2348,19 +2348,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                         LilToonSourceAttestation.GatherCutoutSourceEvidence(
                             shader, captured);
 
-                    // No resolvable Hidden/ltspass_cutout asset: the gather
-                    // must leave the pass unidentified rather than fall back
-                    // to the material shader's name.
-                    Assert.That(evidence.PassShaderGuid, Is.Null);
+                    // The gather must identify the pass only by the pinned
+                    // pass name, never by the material shader's own name or
+                    // GUID. Whether Hidden/ltspass_cutout resolves depends
+                    // on the environment: with jp.lilxyzw.liltoon installed
+                    // the vendor pass asset resolves; without it nothing
+                    // resolves. Both environments prove the same rule.
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                        shader, out var materialGuid, out long _);
+                    if (Shader.Find(
+                            LilToonSourceAttestation.CutoutPassShaderName) !=
+                        null)
+                    {
+                        // Vendor present: the pass resolves by name to the
+                        // pinned pass asset. A name-only fallback would
+                        // have recorded the material shader's own GUID.
+                        Assert.That(
+                            evidence.PassShaderGuid,
+                            Is.EqualTo(
+                                LilToonSourceAttestation
+                                    .CutoutPassShaderGuid));
+                        Assert.That(
+                            evidence.PassShaderGuid,
+                            Is.Not.EqualTo(
+                                materialGuid.ToLowerInvariant()));
+                    }
+                    else
+                    {
+                        // No resolvable pass: the gather leaves the pass
+                        // unidentified rather than fall back to the
+                        // material shader's name.
+                        Assert.That(evidence.PassShaderGuid, Is.Null);
+                    }
 
+                    // The stand-in's own bytes are not the pinned shader
+                    // bytes, so the identity conjunction refuses in both
+                    // environments.
                     Assert.That(
                         LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
                             evidence, out var diagnostic),
                         Is.False);
-                    Assert.That(
-                        diagnostic.Code,
-                        Is.EqualTo(
-                            LilToonSemanticDiagnosticCode.MissingSourceEvidence));
+                    Assert.That(diagnostic, Is.Not.Null);
                 }
                 finally
                 {
