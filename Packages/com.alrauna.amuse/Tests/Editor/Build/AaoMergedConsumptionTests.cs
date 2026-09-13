@@ -57,6 +57,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string TraceAndOptimizeTypeName =
             "Anatawa12.AvatarOptimizer.TraceAndOptimize,"
             + "com.anatawa12.avatar-optimizer.runtime";
+        private const string DaoComponentTypeName =
+            "d4rkAvatarOptimizer, d4rkpl4y3r.d4rkavataroptimizer.Editor";
 
         /// <summary>The alpha bands of the fixture texture, in UV x
         /// order. The band boundaries sit at exact quarter fractions so
@@ -86,6 +88,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             internal string Key;
             internal TriangleExpectation Expectation;
+            // The instance id of the source material's main texture, so
+            // the converted triangle's canonical material can be checked
+            // to sample the same texture.
+            internal int SourceMainTexId;
             // Count of still-unmatched output triangles for this key.
             // Identical position triples are legitimate - two renderers
             // may author the same shape - so matching is a multiset, and
@@ -1142,6 +1148,89 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " Install it to run them.");
         }
 
+        /// <summary>
+        /// The many-slot reproduction: a merged renderer carrying many
+        /// material slots - mixed-alpha materials on fully-opaque
+        /// neighbors, in shuffled slot order - must still classify every
+        /// triangle by its own slot's texture. Any cross-slot evidence
+        /// leak converts whole mixed slots, which this test fails on.
+        /// </summary>
+        [Test]
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ManySlotMergedRendererKeepsMixedAlphaTrianglesOnTheirSlots(
+            bool includeDao)
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out var cutoutShader);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE many slot merged"
+                + (includeDao ? " with DAO" : ""));
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                var traceAndOptimize =
+                    root.AddComponent(traceAndOptimizeType);
+                ConfigureTraceAndOptimize(
+                    traceAndOptimize, mergeSkinnedMesh: true,
+                    optimizeTexture: false,
+                    allowShuffleMaterialSlots: true,
+                    includeDao: includeDao);
+                AttachAnimationFixture(root, "many-slots");
+
+                var banded =
+                    Track(ImportBandedAlphaTexture("banded_many"));
+                var opaque =
+                    Track(ImportSolidAlphaTexture("solid_opaque"));
+
+                const int rendererCount = 10;
+                var firstTriangleIndex = 0;
+                for (var index = 0; index < rendererCount; index++)
+                {
+                    // The real avatar's dress family are per-renderer
+                    // material clones: distinct instances with identical
+                    // content, one set per source renderer. The fixture
+                    // mirrors that instead of sharing one instance.
+                    var mixed = Track(NewTransparentMaterial(
+                        transparentShader, banded));
+                    var fullyOpaque = Track(NewTransparentMaterial(
+                        transparentShader, opaque));
+                    // Even renderers lead with the mixed slot; odd ones
+                    // lead with the opaque slot, so both orders exist for
+                    // the shuffler.
+                    var mixedFirst = index % 2 == 0;
+                    var materials = mixedFirst
+                        ? new[] { mixed, fullyOpaque }
+                        : new[] { fullyOpaque, mixed };
+                    var mixedSubmesh = mixedFirst ? 0 : 1;
+                    var opaqueSubmesh = mixedFirst ? 1 : 0;
+                    CreateSkinnedRenderer(
+                        root, "AMUSE many slot renderer " + index,
+                        "AMUSE many slot mesh " + index,
+                        materials,
+                        new[] { Band.Partial, Band.Opaque, Band.Opaque },
+                        new[]
+                        {
+                            mixedSubmesh, mixedSubmesh, opaqueSubmesh,
+                        },
+                        firstTriangleIndex);
+                    firstTriangleIndex += 3;
+                }
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                AssertBuiltTrianglesMatchAuthoring(context, root);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         private static void RequireIntegrationEnvironment(
             out Type traceAndOptimizeType,
             out Shader transparentShader,
@@ -1160,7 +1249,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private void ConfigureTraceAndOptimize(
             Component traceAndOptimize,
             bool mergeSkinnedMesh,
-            bool optimizeTexture)
+            bool optimizeTexture,
+            bool allowShuffleMaterialSlots = false)
+        {
+            ConfigureTraceAndOptimize(
+                traceAndOptimize, mergeSkinnedMesh, optimizeTexture,
+                allowShuffleMaterialSlots, includeDao: false);
+        }
+
+        private void ConfigureTraceAndOptimize(
+            Component traceAndOptimize,
+            bool mergeSkinnedMesh,
+            bool optimizeTexture,
+            bool allowShuffleMaterialSlots,
+            bool includeDao)
         {
             // The component type is public, but the vendor does not
             // promise a scripting configuration API, so the fixture goes
@@ -1173,8 +1275,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "TraceAndOptimize.mergeSkinnedMesh field (AAO version pin)");
             Assert.That(texture, Is.Not.Null,
                 "TraceAndOptimize.optimizeTexture field (AAO version pin)");
+            var shuffle = serialized.FindProperty(
+                "allowShuffleMaterialSlots");
+            Assert.That(shuffle, Is.Not.Null,
+                "TraceAndOptimize.allowShuffleMaterialSlots field"
+                + " (AAO version pin)");
+            shuffle.boolValue = allowShuffleMaterialSlots;
             merge.boolValue = mergeSkinnedMesh;
             texture.boolValue = optimizeTexture;
+            if (includeDao)
+            {
+                // d4rkAvatarOptimizer's defaults match the observed real
+                // avatar configuration: mesh merging on, static property
+                // writes off, different-property material merging off,
+                // same-dimension texture merging off.
+                var daoType = Type.GetType(DaoComponentTypeName);
+                Assert.That(daoType, Is.Not.Null,
+                    "d4rkAvatarOptimizer component (version pin)");
+                traceAndOptimize.gameObject.AddComponent(daoType);
+            }
+
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -1308,6 +1428,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root.transform);
                 if (!authored.TryGetValue(authoredKey, out var entry))
                 {
+                    var sourceMaterial =
+                        materials[triangleSubmesh[i]];
+                    var sourceTextureId = sourceMaterial != null
+                        && sourceMaterial.HasProperty("_MainTex")
+                        && sourceMaterial.GetTexture("_MainTex") != null
+                        ? sourceMaterial.GetTexture("_MainTex")
+                            .GetInstanceID()
+                        : 0;
                     entry = new AuthoredTriangle
                     {
                         Key = authoredKey,
@@ -1317,6 +1445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             : bands[i] == Band.Opaque
                                 ? TriangleExpectation.ConvertsToOpaque
                                 : TriangleExpectation.StaysTransparent,
+                        SourceMainTexId = sourceTextureId,
                     };
                     authored.Add(authoredKey, entry);
                 }
@@ -1492,6 +1621,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             return ImportAlphaTexture(
                 assetName, size, pixels, streaming);
+        }
+
+        /// <summary>
+        /// A fully opaque RGBA texture: every texel's alpha is 255. Faces
+        /// over it are legitimately provable opaque.
+        /// </summary>
+        private Texture2D ImportSolidAlphaTexture(string assetName)
+        {
+            const int size = 128;
+            var pixels = new Color32[size * size];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(255, 255, 255, 255);
+            }
+
+            return ImportAlphaTexture(assetName, size, pixels);
         }
 
         /// <summary>
@@ -1759,6 +1904,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 : "")
                             + "; builtRenderers="
                             + DescribeBuiltRenderers(root));
+                        if (isGenerated && match.SourceMainTexId != 0)
+                        {
+                            // A canonical opaque material must sample the
+                            // source texture of the triangles assigned to
+                            // it. The real-avatar defect grouped
+                            // conversions from different source textures
+                            // under one canonical, rendering other
+                            // materials' faces with the wrong pixels.
+                            var outputTextureId = material.HasProperty(
+                                "_MainTex")
+                                && material.GetTexture("_MainTex") != null
+                                ? material.GetTexture("_MainTex")
+                                    .GetInstanceID()
+                                : 0;
+                            Assert.That(
+                                outputTextureId,
+                                Is.EqualTo(match.SourceMainTexId),
+                                "converted triangle " + key + " renders"
+                                + " with a canonical material sampling a"
+                                + " different texture than its source:"
+                                + " expected tex="
+                                + match.SourceMainTexId
+                                + " got tex=" + outputTextureId
+                                + " (slot material " + slotName + ")");
+                        }
                     }
                 }
             }
