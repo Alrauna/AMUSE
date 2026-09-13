@@ -5,7 +5,8 @@
         "Alrauna.Amuse.Editor",
         "Alrauna.Amuse.Runtime",
         "nadena.dev.ndmf",
-        "nadena.dev.ndmf.runtime"
+        "nadena.dev.ndmf.runtime",
+        "VRC.SDKBase.Editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -15,7 +16,9 @@
     "overrideReferences": true,
     "precompiledReferences": [
         "VRCSDK3A.dll",
-        "VRCSDKBase.dll"
+        "VRCSDK3A-Editor.dll",
+        "VRCSDKBase.dll",
+        "VRCSDKBase-Editor.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],
