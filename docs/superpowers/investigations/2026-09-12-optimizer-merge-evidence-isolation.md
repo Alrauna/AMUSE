@@ -273,3 +273,26 @@ Status on 2026-09-12: The approved test plan executed through its test-only boun
 10. Editor stability: the dev editor instance crashed once during the session after repeated native `mprotect` exceptions. A crash dump moved out of the repository. The instance was relaunched and re-verified before further work.
 
 The repair plan must cover request selection, shared capture, and field lookup together, and must decide the AAO 32-bit and packed-atlas interactions against the conservative-refusal contract.
+
+## Census Lab avatar run, 2026-09-12 (late session)
+
+Status on 2026-09-12: The shared-capture threshold repair was validated in-repo (four regressions green, full assembly at baseline) but the user's real-avatar symptom persisted. A sanitized end-to-end probe ran the avatar prefab through the installed SDK preprocess chain (Modular Avatar, VRCFury, AAO 1.9.17 Trace and Optimize with mesh merge, material-slot shuffle, and texture optimization enabled, DAO 4.5.4, AMUSE) in the private Lab project. Results, all counts as observed:
+
+1. The merge collapsed 35 renderers into one body renderer with 19 material slots. Two AMUSE canonical opaque submeshes appeared: one from the dress-family materials holding 31,190 triangles and one from the flowers material holding 12,136 triangles - the user's reported 43,326 total.
+2. The conversion is wholesale at submesh granularity: every triangle of the contributing source submeshes converted, including translucent-band faces. The dress texture's own alpha distribution is 27 percent opaque, 24 percent translucent, 47 percent fully transparent - its translucent band renders fully opaque on the queue-2000 canonical, which is the visible defect.
+3. A cross-texture placement was also observed: 3,200 triangles from a crown accessory slot (different source texture) were converted under the dress-texture canonical material. That is a texture-identity violation beyond the alpha issue.
+4. The flowers conversion (12,136 triangles, same texture as its canonical) is correct, matching the no-merge baseline.
+5. Probe blind spots that initially hid the defect: per-triangle corner-plus-center sampling of source texture alpha at mip 0 cannot see faces whose interiors span mixed texel regions (the lace pattern), and 16,396 triangles whose positions changed during merge (mesh removals, welds) were position-unmatched and unverified.
+6. Additional environment facts: NDMF's VRChat commit path crashes on null descriptor layer arrays (a fresh descriptor carries null arrays); fixture materialization of both layer arrays avoids it. The capture admission admits only the Windows 64-bit build target. A Lab editor instance crashed once during repeated probe builds and was relaunched.
+
+Next diagnostic: dump the captured alpha field for the dress texture during the merged run (via the test assembly's internals access in the development project, or the Lab probe's reflection path) to decide whether the captured field itself reads opaque in translucent regions (capture corruption) or the field is correct and the per-triangle proof under-samples (classification coverage).
+
+## Field diagnostic verdict, 2026-09-13
+
+Status on 2026-09-13: The field-dump diagnostic ran on the MSM prefab through the Lab editor's recompiled probe (assembly marker v6-fieldreport verified by reflection before execution).
+
+The captured alpha chain for the dress texture is **correct and identical pre- and post-build**: every level reports fullyOpaque=False, fullyNonOpaque=False, with the sampled opaque share at 10-16 percent and the transparent share at 83-89 percent - matching the direct texture histogram's non-opaque majority. The capture did not corrupt the field, and the merged build did not alter it.
+
+**The defect is therefore in classification coverage (mechanism 2)**: with the captured field correctly marking the dress texture's translucent and transparent texels non-opaque, the merged-renderer analysis still proved 31,190 triangles - entire contributing submeshes wholesale - opaque and moved them to the canonical opaque material. The conversion matrix shows five source slots (two dress clones, two sleeve clones, one crown clone) converting their full triangle counts into one canonical slot.
+
+The fix site is AMUSE's merged-renderer slot analysis: the per-slot resolution, per-triangle domain sampling, or slot-to-evidence mapping inside `AmusePlatformFinishPass`'s classify path (with AAO's slot shuffle and compaction active). Two candidate failure shapes: the per-triangle domain sampling under-covers faces whose interiors span mixed texel regions (corner-dominated sampling), and the slot-to-field resolution crossing after AAO compacts slots (observed once as crown triangles converting under the dress-texture canonical).
