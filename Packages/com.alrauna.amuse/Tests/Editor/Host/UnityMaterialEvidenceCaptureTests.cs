@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
@@ -24,14 +25,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
 
         private readonly List<Material> _materials = new List<Material>();
+        private bool _ownsTempFolder;
 
         [SetUp]
         public void SetUp()
         {
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder("Assets", "AmuseTests_MaterialEvidence");
-            }
+            _ownsTempFolder = false;
+            Assert.That(Directory.Exists(TempFolder), Is.False,
+                "The test must not reuse an existing asset folder.");
+            Assert.That(File.Exists(TempFolder + ".meta"), Is.False,
+                "The test must not replace existing folder metadata.");
+            var folderId = AssetDatabase.CreateFolder(
+                "Assets", "AmuseTests_MaterialEvidence");
+            _ownsTempFolder = !string.IsNullOrEmpty(folderId);
+            Assert.That(_ownsTempFolder, Is.True);
         }
 
         [TearDown]
@@ -46,10 +53,131 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             _materials.Clear();
-            if (AssetDatabase.IsValidFolder(TempFolder))
+            if (_ownsTempFolder && AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
             }
+            _ownsTempFolder = false;
+        }
+
+        // A shared texture must not transfer a cutout predicate to transparent alpha.
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SharedCutoutTextureDoesNotProveTransparentPartialAlpha(bool reverse)
+        {
+            var texture = CreateIsolationTexture();
+            var transparent = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest");
+            var cutout = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            transparent.SetTexture("_MainTex", texture);
+            transparent.SetFloat("_Cutoff", 0.01f);
+            cutout.SetTexture("_MainTex", texture);
+            cutout.SetFloat("_Cutoff", 0.25f);
+            var transparentInput = new MaterialEvidenceCaptureInput(
+                transparent, LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
+            var cutoutInput = new MaterialEvidenceCaptureInput(
+                cutout, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+
+            var alone = UnityMaterialEvidenceCapture.Capture(
+                new[] { transparentInput })[0];
+            Assert.That(ClassifyIsolationRegion(alone, 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(ClassifyIsolationRegion(alone, 0.75f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            var captured = UnityMaterialEvidenceCapture.Capture(reverse
+                ? new[] { cutoutInput, transparentInput }
+                : new[] { transparentInput, cutoutInput });
+            var subject = captured[reverse ? 1 : 0];
+            Assert.That(ClassifyIsolationRegion(subject, 0.05f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(ClassifyIsolationRegion(subject, 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(ClassifyIsolationRegion(subject, 0.75f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        // Taking the lower threshold would incorrectly prove the stricter material.
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SharedCutoutTextureKeepsEachMaterialsThreshold(bool reverse)
+        {
+            var texture = CreateIsolationTexture();
+            var lower = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            var higher = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            lower.SetTexture("_MainTex", texture);
+            lower.SetFloat("_Cutoff", 0.25f);
+            higher.SetTexture("_MainTex", texture);
+            higher.SetFloat("_Cutoff", 0.75f);
+            var lowerInput = new MaterialEvidenceCaptureInput(
+                lower, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+            var higherInput = new MaterialEvidenceCaptureInput(
+                higher, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest);
+
+            var alone = UnityMaterialEvidenceCapture.Capture(new[] { higherInput })[0];
+            Assert.That(ClassifyIsolationRegion(alone, 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(ClassifyIsolationRegion(alone, 0.75f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            var captured = UnityMaterialEvidenceCapture.Capture(reverse
+                ? new[] { higherInput, lowerInput }
+                : new[] { lowerInput, higherInput });
+            Assert.That(ClassifyIsolationRegion(captured[reverse ? 1 : 0], 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(ClassifyIsolationRegion(captured[reverse ? 0 : 1], 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        private static Texture2D CreateIsolationTexture()
+        {
+            var path = TempFolder + "/predicate-isolation.asset";
+            var container = ScriptableObject.CreateInstance<
+                nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, path);
+            var texture = new Texture2D(128, 128, TextureFormat.RGBA32, false, true)
+            {
+                name = "Synthetic (AAO UV Packed)",
+                filterMode = FilterMode.Point,
+                wrapMode = UnityEngine.TextureWrapMode.Clamp
+            };
+            AssetDatabase.AddObjectToAsset(texture, path);
+            var pixels = new Color32[128 * 128];
+            for (var y = 0; y < 128; y++)
+            for (var x = 0; x < 128; x++)
+            {
+                var alpha = (byte)(x < 42 ? 0 : x < 84 ? 128 : 255);
+                pixels[y * 128 + x] = new Color32(255, 255, 255, alpha);
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            AssetDatabase.SaveAssets();
+            Assert.That(
+                GeneratedTextureAttestation.TryIdentifyProducer(texture, out _),
+                Is.True,
+                "The fixture must enter the generated capture route.");
+            return texture;
+        }
+
+        private static TriangleAlphaOutcome ClassifyIsolationRegion(
+            CapturedMaterialEvidence material, float left)
+        {
+            Assert.That(material.TryGetTexture("_MainTex", out var assignment), Is.True);
+            Assert.That(assignment.Texture.HasAlphaChannel, Is.True,
+                "Missing evidence is not this regression.");
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(left, 0.1f),
+                new Vector2(left + 0.1f, 0.1f),
+                new Vector2(left, 0.2f));
+            return TriangleAlphaClassifier.Classify(
+                triangle,
+                assignment.Texture.AlphaChannel[0],
+                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                AlphaUvEnvelope.Zero);
         }
 
         [Test]
