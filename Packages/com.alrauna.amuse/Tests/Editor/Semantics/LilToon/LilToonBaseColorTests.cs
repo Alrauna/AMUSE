@@ -24,7 +24,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(baseColor.IsComplete, Is.True);
             var value = baseColor.GetCompleteValue();
             Assert.That(value.Kind, Is.EqualTo(ColorSemanticValueKind.Constant));
-            var linear = new Color(0.5f, 0.25f, 0.75f, 1f).linear;
+            // In a Linear project the material converts every colour
+            // between sRGB and linear on set and get, so the stored value
+            // can sit one ULP off the authored literal. The proof reads
+            // the value the shader actually sees, so the expectation
+            // derives from the stored value, not from the literal.
+            var linear = material.GetColor("_Color").linear;
             Assert.That(
                 value.GetConstantValue(),
                 Is.EqualTo(new Vector3(linear.r, linear.g, linear.b)));

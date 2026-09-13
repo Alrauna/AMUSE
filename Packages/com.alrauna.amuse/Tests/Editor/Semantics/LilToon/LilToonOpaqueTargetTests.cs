@@ -578,8 +578,40 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void PrepareCanonicalOpaqueClone_DefaultVerifierWithStandIn_FailsOnPassShaderNotGuid()
+        public void PrepareCanonicalOpaqueClone_DefaultVerifier_AcceptsTheGenuineTargetAndRejectsStandIns()
         {
+            var vendorTarget = Shader.Find(
+                LilToonSourceAttestation.SupportedShaderName);
+            if (vendorTarget != null)
+            {
+                // jp.lilxyzw.liltoon is installed: the genuine opaque
+                // target resolves by name, and the default verifier must
+                // accept it against the pinned identity. No stand-in is
+                // imported here: the pinned GUID is the vendor asset's own
+                // GUID, and a second asset carrying it corrupts asset
+                // resolution.
+                var source = Track(ConversionEligibleStandIn());
+                var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        source,
+                        LilToonTransparentSourceEligibility
+                            .ConversionEvidenceRequest),
+                })[0];
+
+                var clone = Track(
+                    LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                        source, captured));
+
+                Assert.That(clone, Is.Not.Null);
+                Assert.That(clone.shader, Is.SameAs(vendorTarget));
+                return;
+            }
+
+            // Vendor absent: a stand-in carries the pinned GUID and name,
+            // so the verifier must pass the identity checks that depend on
+            // the material and refuse on the pass the profile names, which
+            // nothing in this project then resolves.
             ImportTempShader(
                 "lilToon",
                 "lilToon.shader",
@@ -591,7 +623,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     new MaterialEvidenceCaptureInput(
                         source,
-                        LilToonTransparentSourceEligibility.ConversionEvidenceRequest),
+                        LilToonTransparentSourceEligibility
+                            .ConversionEvidenceRequest),
                 })[0];
 
                 var ex = Assert.Throws<InvalidOperationException>(() =>
