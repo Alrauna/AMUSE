@@ -801,7 +801,9 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             var materials = new MaterialBuilder[inputs.Count];
-            var identified = new Dictionary<TextureSourceId, SharedTextureBuilder>();
+            var identified = new Dictionary<
+                TextureSourceId,
+                Dictionary<float, SharedTextureBuilder>>();
             for (var index = 0; index < inputs.Count; index++)
             {
                 var input = inputs[index];
@@ -820,42 +822,54 @@ namespace Alrauna.Amuse.Editor.Host
                         continue;
                     }
 
-                    if (!identified.TryGetValue(source, out var shared))
+                    if (!identified.TryGetValue(source, out var sharedByThreshold))
                     {
-                        shared = new SharedTextureBuilder(
-                            texture.Texture, source);
-                        identified.Add(source, shared);
+                        sharedByThreshold =
+                            new Dictionary<float, SharedTextureBuilder>();
+                        identified.Add(source, sharedByThreshold);
                     }
 
-                    // Evidence for one texture source is captured once for the
-                    // whole batch, so this union is deliberately batch-wide: the
-                    // single captured object handed to every assignment of that
-                    // source may carry facts a different material's request asked
-                    // for. That is a capture-cost decision, not a widening of any
-                    // request - a consumer must still read only the facts its own
-                    // request named, exactly as the material-property getters
-                    // enforce by throwing for an unrequested name. Only Poiyomi
-                    // requests texture evidence today, so no material can observe
-                    // another's facts. If a second texture-consuming request is
-                    // ever added, narrow CapturedTextureAssignment's view to its
-                    // own RequestedEvidence: that is the enforcement point.
-                    shared.Evidence |= texture.RequestedEvidence;
-                    if (texture.CutoutThreshold < shared.CutoutThreshold)
+                    if (!sharedByThreshold.TryGetValue(
+                            texture.CutoutThreshold, out var shared))
                     {
-                        shared.CutoutThreshold = texture.CutoutThreshold;
+                        shared = new SharedTextureBuilder(
+                            texture.Texture, source, texture.CutoutThreshold);
+                        sharedByThreshold.Add(
+                            texture.CutoutThreshold, shared);
                     }
+
+                    // Evidence for one texture source at one alpha predicate
+                    // is captured once for the whole batch, so this union is
+                    // deliberately batch-wide within the bucket: the single
+                    // captured object handed to every assignment of that
+                    // source and threshold may carry facts a different
+                    // material's request asked for. That is a capture-cost
+                    // decision, not a widening of any request - a consumer
+                    // must still read only the facts its own request named,
+                    // exactly as the material-property getters enforce by
+                    // throwing for an unrequested name. The binarization
+                    // threshold is part of the field's meaning: a texel
+                    // between two materials' declared cutoffs is opaque
+                    // under the lower cutoff and not under the higher, so
+                    // assignments with different thresholds must never
+                    // share one field, whichever material was captured
+                    // first.
+                    shared.Evidence |= texture.RequestedEvidence;
                     texture.Shared = shared;
                 }
             }
-            foreach (var shared in identified.Values)
+            foreach (var sharedByThreshold in identified.Values)
             {
-                shared.Captured = CaptureTexture(
-                    shared.Texture,
-                    shared.Evidence,
-                    true,
-                    shared.Source,
-                    bounds,
-                    shared.CutoutThreshold);
+                foreach (var shared in sharedByThreshold.Values)
+                {
+                    shared.Captured = CaptureTexture(
+                        shared.Texture,
+                        shared.Evidence,
+                        true,
+                        shared.Source,
+                        bounds,
+                        shared.CutoutThreshold);
+                }
             }
 
             var results = new CapturedMaterialEvidence[materials.Length];
@@ -1286,15 +1300,18 @@ namespace Alrauna.Amuse.Editor.Host
         {
             internal readonly Texture Texture;
             internal readonly TextureSourceId Source;
+            internal readonly float CutoutThreshold;
             internal TextureEvidenceKinds Evidence;
-            internal float CutoutThreshold = 1.0f;
             internal CapturedTextureEvidence Captured;
+
             internal SharedTextureBuilder(
                 Texture texture,
-                TextureSourceId source)
+                TextureSourceId source,
+                float cutoutThreshold)
             {
                 Texture = texture;
                 Source = source;
+                CutoutThreshold = cutoutThreshold;
             }
         }
     }
