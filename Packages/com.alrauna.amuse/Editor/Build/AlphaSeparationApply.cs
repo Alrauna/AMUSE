@@ -143,6 +143,32 @@ namespace Alrauna.Amuse.Editor.Build
                 // carried through untouched.
                 var live = renderer.sharedMaterials;
 
+                // A proof survives revalidation only if the renderer still
+                // shows the effective state it was proven under: the block
+                // state at preparation. A changed block means every value
+                // the renderer now shows is one the candidate was never
+                // proven against, whatever the serialized materials say.
+                // The write path below still works from the original live
+                // references.
+                if (!EffectiveMaterialMaterialization.BlockStateEquals(
+                        prepared.BlockStateAtPreparation,
+                        EffectiveMaterialMaterialization.CaptureBlockState(
+                            renderer)))
+                {
+                    foreach (var candidate in prepared.CandidateSlots)
+                    {
+                        state.RecordSlotRefusal(
+                            AlphaSeparationSlotRefusal
+                                .RuntimeMaterialValueNotMapped);
+                    }
+
+                    rendererSurvivors.Add(
+                        new List<PreparedSlotSeparation>());
+                    rendererLive.Add(live);
+                    rendererTargetBindings.Add(targetBindings);
+                    continue;
+                }
+
                 // The captured object bindings of this renderer, keyed by the
                 // exact triple a live binding is compared against. A target
                 // binding whose triple is absent was not recorded by the
