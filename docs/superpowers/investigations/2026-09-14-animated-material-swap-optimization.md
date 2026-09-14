@@ -76,3 +76,39 @@ To achieve static-level optimization, AMUSE must isolate failures to individual 
 1. Float curve admission refuses if swapped materials have differing properties.
 2. Semantic resolution refuses if any swapped material is unattested.
 3. Preparation drops the slot if any swapped material cannot convert to an opaque recipe.
+
+## Follow-up investigation 2026-09-14
+
+Status: open. The first implementation pass landed on this branch, but a
+manual avatar still does not split its animated swap slots.
+
+### Measured in the Census Lab editor, 2026-09-14
+
+A probe ran the production capture, runtime-state resolution, and
+classification against the private swap prefab. It names renderers by
+role: two top garment renderers and one skirt renderer. All three carry
+attested transparent lilToon materials with identity scale and offset.
+
+1. The two top garment renderers resolve with no refusal, and the swap
+   admits both materials. Classification proves zero of 3876 and zero of
+   29079 triangles opaque. The alpha semantics are complete texture
+   samples, so the failure sits in the texture field lookup at
+   classification time. Prime suspect: the alpha mip chains never reach
+   the field set for these streaming textures. Unconfirmed.
+2. The skirt renderer refuses with AdmittedMaterialSemanticsUnknown even
+   with no animation bound. The lilToon transparent frontend reports
+   UnsupportedFeature on _UseMain2ndTex: the material enables the second
+   main texture layer, and the frontend has an exact-off gate on it.
+   This is a coverage gap, not a defect.
+3. The Lab compiles the package through a symlink. Unity does not
+   detect source changes behind that symlink, so a stale assembly can
+   survive a refresh and a restart. Manual tests must verify the
+   assembly file changed after every branch update.
+
+### Reporting added on this date
+
+Every refused renderer, every refused material slot, and every texture
+capture refusal now reports one exact line through the NDMF error
+report. A manual build names the slot index, the material, the texture
+property, and the refusal family, so the open questions above can be
+answered from the build itself.
