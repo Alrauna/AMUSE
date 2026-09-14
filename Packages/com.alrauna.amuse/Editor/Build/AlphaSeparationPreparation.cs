@@ -305,6 +305,9 @@ namespace Alrauna.Amuse.Editor.Build
                 var mapping = new Dictionary<Material, Material>();
                 var pendingClones = new List<Material>();
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
+                var unconvertedCount = 0;
+                var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
+                var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
                 foreach (var admittedIndex in
                              slots[slotIndex].AdmittedMaterialIndices)
                 {
@@ -342,7 +345,7 @@ namespace Alrauna.Amuse.Editor.Build
                         captured.Family, out var familyBindings);
                     conversionPropertyNamesByFamily.TryGetValue(
                         captured.Family, out var familyPropertyNames);
-                    slotRefusal = ConvertAdmittedMaterial(
+                    var conversionRefusal = ConvertAdmittedMaterial(
                         captured,
                         live,
                         familyBindings,
@@ -351,17 +354,36 @@ namespace Alrauna.Amuse.Editor.Build
                         poiyomiConversion,
                         lilToonConversion,
                         out var opaque);
-                    if (slotRefusal != AlphaSeparationSlotRefusal.None)
+                    if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
-                        break;
+                        lastConversionRefusal = conversionRefusal;
+                        if (isMultiMaterialSlot)
+                        {
+                            // In a multi-material swap, an unconverted material falls back
+                            // to identity on the appended submesh, preserving its appearance.
+                            opaque = live;
+                            unconvertedCount++;
+                        }
+                        else
+                        {
+                            slotRefusal = conversionRefusal;
+                            break;
+                        }
                     }
-
                     mapping.Add(live, opaque);
                     if (!ReferenceEquals(opaque, live) &&
                         !ReferenceEquals(opaque, preparedOpaque))
                     {
                         pendingClones.Add(opaque);
                     }
+                }
+                if (isMultiMaterialSlot &&
+                    unconvertedCount >= slots[slotIndex].AdmittedMaterialIndices.Count &&
+                    slotRefusal == AlphaSeparationSlotRefusal.None)
+                {
+                    // Every admitted material in this swap failed conversion: refuse the slot
+                    // with the last conversion failure rather than creating an un-optimized clone.
+                    slotRefusal = lastConversionRefusal;
                 }
 
                 if (slotRefusal != AlphaSeparationSlotRefusal.None)
