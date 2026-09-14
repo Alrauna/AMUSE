@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Alrauna.Amuse.Editor.Analysis
 {
@@ -203,7 +204,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             MaterialEvidenceRequest relevance,
             AlphaFieldSet alphaFields,
             int maxNoiseTexelPercent,
-            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
+            IReadOnlyList<BlockStateEntry> slotBlockEntries = null)
         {
             if (slot == null) throw new ArgumentNullException(nameof(slot));
             if (admittedMaterials == null)
@@ -224,10 +226,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var material = admittedMaterials[index];
 
                 // Each admitted material accumulates its own derivations from
-                // its own captured evidence. Nothing crosses between materials.
                 if (!TryAdmitDerivedEvidence(
                         material, slotBindings, relevance,
-                        out var evidence, out var refusal))
+                        out var evidence, out var refusal,
+                        slotBlockEntries))
                 {
                     // No partial prefix: resolutions gathered for earlier
                     // admitted materials authorize nothing once the slot
@@ -304,7 +306,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                            AnimatedPropertyRef Reference)> bindings,
             MaterialEvidenceRequest relevance,
             out CapturedMaterialEvidence derived,
-            out RendererAnalysisRefusal refusal)
+            out RendererAnalysisRefusal refusal,
+            IReadOnlyList<BlockStateEntry> slotBlockEntries = null)
         {
             if (material == null) throw new ArgumentNullException(nameof(material));
             if (bindings == null) throw new ArgumentNullException(nameof(bindings));
@@ -313,9 +316,51 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             derived = material.Evidence;
             refusal = RendererAnalysisRefusal.None;
+
+            if (slotBlockEntries != null && slotBlockEntries.Count > 0)
+            {
+                var animatedProperties = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var (_, reference) in bindings)
+                {
+                    animatedProperties.Add(reference.PropertyName);
+                }
+
+                foreach (var entry in slotBlockEntries)
+                {
+                    if (animatedProperties.Contains(entry.Name))
+                    {
+                        continue;
+                    }
+
+                    switch (entry.Type)
+                    {
+                        case ShaderPropertyType.Float:
+                        case ShaderPropertyType.Range:
+                        case ShaderPropertyType.Int:
+                            if (derived.TryGetScalar(entry.Name, out _))
+                            {
+                                derived = derived.WithScalar(entry.Name, entry.FloatValue);
+                            }
+                            break;
+                        case ShaderPropertyType.Color:
+                            if (derived.TryGetColor(entry.Name, out _))
+                            {
+                                derived = derived.WithColor(entry.Name, entry.ColorValue);
+                            }
+                            break;
+                        case ShaderPropertyType.Vector:
+                            if (derived.TryGetVector(entry.Name, out _))
+                            {
+                                derived = derived.WithVector(entry.Name, entry.VectorValue);
+                            }
+                            break;
+                    }
+                }
+            }
+
             foreach (var group in GroupByProperty(bindings))
             {
-                refusal = Admit(group, relevance, ref derived);
+                refusal = Admit(group, relevance, ref derived, slotBlockEntries);
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     derived = material.Evidence;
@@ -368,7 +413,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static RendererAnalysisRefusal Admit(
             AnimatedPropertyGroup group,
             MaterialEvidenceRequest relevance,
-            ref CapturedMaterialEvidence evidence)
+            ref CapturedMaterialEvidence evidence,
+            IReadOnlyList<BlockStateEntry> slotBlockEntries)
         {
             switch (group.Kind)
             {
@@ -384,6 +430,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                     {
                         return RendererAnalysisRefusal
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
+                    }
+
+                    if (TryGetBlockFloat(slotBlockEntries, group.PropertyName, out var blockFloat))
+                    {
+                        if (!(blockFloat == serialized))
+                        {
+                            return RendererAnalysisRefusal
+                                .AnimatedMaterialPropertyNotSingleton;
+                        }
                     }
 
                     var outcome = AdmitScalar(
@@ -406,6 +461,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
 
+                    if (TryGetBlockColor(slotBlockEntries, group.PropertyName, out var blockColor))
+                    {
+                        if (!(blockColor == serialized))
+                        {
+                            return RendererAnalysisRefusal
+                                .AnimatedMaterialPropertyNotSingleton;
+                        }
+                    }
+
                     var outcome = AdmitColor(
                         group.ComponentBindings(), serialized, out var admitted);
                     if (outcome != AdmittedPropertyOutcome.Singleton)
@@ -426,6 +490,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
 
+                    if (TryGetBlockVector(slotBlockEntries, group.PropertyName, out var blockVector))
+                    {
+                        if (!(blockVector == serialized))
+                        {
+                            return RendererAnalysisRefusal
+                                .AnimatedMaterialPropertyNotSingleton;
+                        }
+                    }
+
                     var outcome = AdmitVector(
                         group.ComponentBindings(), serialized, out var admitted);
                     if (outcome != AdmittedPropertyOutcome.Singleton)
@@ -436,7 +509,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                     evidence = evidence.WithVector(group.PropertyName, admitted);
                     return RendererAnalysisRefusal.None;
                 }
-
                 case AnimatedPropertyKind.TextureScaleOffsetComponent:
                 {
                     // Presence, the serialized default, and in V1 the resolved
@@ -727,6 +799,76 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return outcome;
+        }
+        private static bool TryGetBlockFloat(
+            IReadOnlyList<BlockStateEntry> slotBlockEntries,
+            string propertyName,
+            out float value)
+        {
+            if (slotBlockEntries != null)
+            {
+                for (var i = 0; i < slotBlockEntries.Count; i++)
+                {
+                    var entry = slotBlockEntries[i];
+                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
+                        (entry.Type == ShaderPropertyType.Float ||
+                         entry.Type == ShaderPropertyType.Range ||
+                         entry.Type == ShaderPropertyType.Int))
+                    {
+                        value = entry.FloatValue;
+                        return true;
+                    }
+                }
+            }
+
+            value = 0f;
+            return false;
+        }
+
+        private static bool TryGetBlockColor(
+            IReadOnlyList<BlockStateEntry> slotBlockEntries,
+            string propertyName,
+            out Color value)
+        {
+            if (slotBlockEntries != null)
+            {
+                for (var i = 0; i < slotBlockEntries.Count; i++)
+                {
+                    var entry = slotBlockEntries[i];
+                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
+                        entry.Type == ShaderPropertyType.Color)
+                    {
+                        value = entry.ColorValue;
+                        return true;
+                    }
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        private static bool TryGetBlockVector(
+            IReadOnlyList<BlockStateEntry> slotBlockEntries,
+            string propertyName,
+            out Vector4 value)
+        {
+            if (slotBlockEntries != null)
+            {
+                for (var i = 0; i < slotBlockEntries.Count; i++)
+                {
+                    var entry = slotBlockEntries[i];
+                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
+                        entry.Type == ShaderPropertyType.Vector)
+                    {
+                        value = entry.VectorValue;
+                        return true;
+                    }
+                }
+            }
+
+            value = default;
+            return false;
         }
     }
 }
