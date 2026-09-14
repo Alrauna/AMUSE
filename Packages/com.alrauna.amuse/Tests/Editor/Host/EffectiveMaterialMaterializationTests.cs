@@ -104,7 +104,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             renderer.SetPropertyBlock(block);
 
             var result = EffectiveMaterialMaterialization.Materialize(
-                renderer, slots, out var clones);
+                renderer, slots, out var clones, textureOnly: true);
 
             Assert.That(result, Is.SameAs(slots));
             Assert.That(clones, Is.Empty);
@@ -122,7 +122,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             renderer.SetPropertyBlock(block);
 
             var result = EffectiveMaterialMaterialization.Materialize(
-                renderer, slots, out var clones);
+                renderer, slots, out var clones, textureOnly: true);
             var entries = EffectiveMaterialMaterialization.CaptureBlockState(renderer);
 
             Assert.That(result, Is.SameAs(slots), "Scalar-only override must not clone.");

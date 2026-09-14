@@ -36,7 +36,8 @@ namespace Alrauna.Amuse.Editor.Host
         internal static Material[] Materialize(
             Renderer renderer,
             Material[] slotMaterials,
-            out List<Material> createdClones)
+            out List<Material> createdClones,
+            bool textureOnly = false)
         {
             createdClones = new List<Material>();
             if (!renderer.HasPropertyBlock())
@@ -61,9 +62,12 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 var material = slotMaterials[index];
                 var schema = SchemaFor(material, schemas);
-                if (schema != null &&
-                    (TouchesTextureSchema(schema, wide) ||
-                        TouchesTextureSchema(schema, perIndex[index])))
+                var touches = textureOnly
+                    ? (TouchesTextureSchema(schema, wide) ||
+                        TouchesTextureSchema(schema, perIndex[index]))
+                    : (TouchesSchema(schema, wide) ||
+                        TouchesSchema(schema, perIndex[index]));
+                if (schema != null && touches)
                 {
                     var clone = UnityEngine.Object.Instantiate(material);
                     createdClones.Add(clone);
