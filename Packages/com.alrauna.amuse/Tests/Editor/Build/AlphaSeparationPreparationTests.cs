@@ -2796,7 +2796,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 foreach (var animated in
                          CutoutAnimatedPropertyCases(probe.Material))
                 {
-                    if (!animated.AlphaRelevant)
+                    if (!animated.AlphaRelevant || animated.Label.Contains("_ST."))
                     {
                         continue;
                     }
@@ -2836,6 +2836,48 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Assert.That(amuse.Separation.CreatedClones,
                         Has.Count.EqualTo(1), animated.Label);
                 }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// When Unity animates a single component of an _ST vector curve,
+        /// Unity's animation runtime writes a degenerate vector (x, 0, 0, 0)
+        /// into the renderer's MaterialPropertyBlock, zeroing the other three
+        /// components. A rendered gradient probe proves the GPU actually
+        /// samples with that degenerate vector (v coordinate collapses to 0).
+        /// AMUSE proves the shown values through the materialized clone and
+        /// fails closed over the degenerate UV envelope with
+        /// AdmittedMaterialSemanticsUnknown. This test pins that exact
+        /// engine-limited fail-closed behavior.
+        /// </summary>
+        [Test]
+        public void CutoutAnimationOfDegenerateStComponentVectorRefuses()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap("cutout_st_degenerate");
+                using var arm = CutoutArmFixture.Create(
+                    texture,
+                    "AMUSE cutout degenerate ST",
+                    null,
+                    "material._MainTex_ST.x",
+                    1f);
+                var amuse = arm.Run();
+
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "animating a single ST component writes a degenerate vector (x, 0, 0, 0) " +
+                    "that collapses UV space and must refuse fail-closed");
             }
             finally
             {
