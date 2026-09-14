@@ -337,19 +337,19 @@ namespace Alrauna.Amuse.Editor.Analysis
                         case ShaderPropertyType.Float:
                         case ShaderPropertyType.Range:
                         case ShaderPropertyType.Int:
-                            if (derived.TryGetScalar(entry.Name, out _))
+                            if (ContainsName(relevance.ScalarProperties, entry.Name))
                             {
                                 derived = derived.WithScalar(entry.Name, entry.FloatValue);
                             }
                             break;
                         case ShaderPropertyType.Color:
-                            if (derived.TryGetColor(entry.Name, out _))
+                            if (ContainsName(relevance.ColorProperties, entry.Name))
                             {
                                 derived = derived.WithColor(entry.Name, entry.ColorValue);
                             }
                             break;
                         case ShaderPropertyType.Vector:
-                            if (derived.TryGetVector(entry.Name, out _))
+                            if (ContainsName(relevance.VectorProperties, entry.Name))
                             {
                                 derived = derived.WithVector(entry.Name, entry.VectorValue);
                             }
@@ -880,5 +880,25 @@ namespace Alrauna.Amuse.Editor.Analysis
             value = default;
             return false;
         }
+        private static bool ContainsName(
+            IEnumerable<string> names,
+            string targetName)
+        {
+            if (names == null || targetName == null)
+            {
+                return false;
+            }
+
+            foreach (var name in names)
+            {
+                if (string.Equals(name, targetName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
     }
 }

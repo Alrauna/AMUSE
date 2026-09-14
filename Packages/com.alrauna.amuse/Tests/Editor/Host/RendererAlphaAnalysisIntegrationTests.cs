@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine.Rendering;
 using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
@@ -272,12 +274,27 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials[slot] = extraction.Snapshot.Materials[slot];
                 }
 
+                var blockState = EffectiveMaterialMaterialization.CaptureBlockState(renderer);
                 var verified = new HashSet<CapturedAlphaMaterial>();
                 for (var index = 0; index < capturedEvidence.Count; index++)
                 {
+                    var evidence = capturedEvidence[index];
+                    var slotIdx = slotIndices[index];
+                    foreach (var entry in blockState)
+                    {
+                        if (entry.SlotIndex != slotIdx) continue;
+                        if ((entry.Type == ShaderPropertyType.Float ||
+                             entry.Type == ShaderPropertyType.Range ||
+                             entry.Type == ShaderPropertyType.Int) &&
+                            PoiyomiMaterialSemantics.AlphaEvidenceRequest.ScalarProperties.Contains(entry.Name))
+                        {
+                            evidence = evidence.WithScalar(entry.Name, entry.FloatValue);
+                        }
+                    }
+
                     var material = new CapturedAlphaMaterial(
                         CapturedAlphaMaterialFamily.Unsupported,
-                        capturedEvidence[index],
+                        evidence,
                         default(PoiyomiSourceEvidence),
                         null);
                     materials[slotIndices[index]] = material;
