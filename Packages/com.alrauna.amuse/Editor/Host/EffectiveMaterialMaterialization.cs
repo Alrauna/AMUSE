@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -35,7 +36,8 @@ namespace Alrauna.Amuse.Editor.Host
         internal static Material[] Materialize(
             Renderer renderer,
             Material[] slotMaterials,
-            out List<Material> createdClones)
+            out List<Material> createdClones,
+            bool textureOnly = false)
         {
             createdClones = new List<Material>();
             if (!renderer.HasPropertyBlock())
@@ -60,11 +62,14 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 var material = slotMaterials[index];
                 var schema = SchemaFor(material, schemas);
-                if (schema != null &&
-                    (TouchesSchema(schema, wide) ||
-                        TouchesSchema(schema, perIndex[index])))
+                var touches = textureOnly
+                    ? (TouchesTextureSchema(schema, wide) ||
+                        TouchesTextureSchema(schema, perIndex[index]))
+                    : (TouchesSchema(schema, wide) ||
+                        TouchesSchema(schema, perIndex[index]));
+                if (schema != null && touches)
                 {
-                    var clone = Object.Instantiate(material);
+                    var clone = UnityEngine.Object.Instantiate(material);
                     createdClones.Add(clone);
                     ApplyBlock(clone, schema, wide);
                     ApplyBlock(clone, schema, perIndex[index]);
@@ -116,21 +121,28 @@ namespace Alrauna.Amuse.Editor.Host
                 if (schema != null)
                 {
                     var slot = SingleOccupiedSlot(slotMaterials, material);
-                    var wideTouches = TouchesSchema(schema, wide);
-                    if (wideTouches || slot >= 0)
+                    var wideTouches = TouchesTextureSchema(schema, wide);
+                    var slotTouches = false;
+                    MaterialPropertyBlock slotBlock = null;
+                    if (slot >= 0)
                     {
-                        effective = Object.Instantiate(material);
+                        slotBlock = new MaterialPropertyBlock();
+                        renderer.GetPropertyBlock(slotBlock, slot);
+                        slotTouches = TouchesTextureSchema(schema, slotBlock);
+                    }
+
+                    if (wideTouches || slotTouches)
+                    {
+                        effective = UnityEngine.Object.Instantiate(material);
                         createdClones.Add(effective);
                         if (wideTouches)
                         {
                             ApplyBlock(effective, schema, wide);
                         }
 
-                        if (slot >= 0)
+                        if (slotTouches)
                         {
-                            var perIndex = new MaterialPropertyBlock();
-                            renderer.GetPropertyBlock(perIndex, slot);
-                            ApplyBlock(effective, schema, perIndex);
+                            ApplyBlock(effective, schema, slotBlock);
                         }
 
                         materializedAny = true;
@@ -338,6 +350,29 @@ namespace Alrauna.Amuse.Editor.Host
 
             return false;
         }
+        private static bool TouchesTextureSchema(
+            List<SchemaEntry> schema,
+            MaterialPropertyBlock block)
+        {
+            foreach (var entry in schema)
+            {
+                if (entry.Type != ShaderPropertyType.Texture &&
+                    !entry.Name.EndsWith("_ST", StringComparison.Ordinal) &&
+                    !entry.Name.EndsWith("_TexelSize", StringComparison.Ordinal) &&
+                    !entry.Name.EndsWith("_HDR", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (block.HasProperty(entry.Name))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
 
         private static void ApplyBlock(
             Material clone,

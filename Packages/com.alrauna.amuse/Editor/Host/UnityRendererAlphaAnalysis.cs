@@ -397,7 +397,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var effective = materials == null
                     ? materials
                     : EffectiveMaterialMaterialization.Materialize(
-                        renderer, materials, out effectiveClones);
+                        renderer, materials, out effectiveClones, textureOnly: true);
                 try
                 {
                     var captured =

@@ -90,9 +90,28 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result, Is.SameAs(slots));
             Assert.That(clones, Is.Empty);
         }
+        [Test]
+        public void ScalarAndColorOverridesDoNotCreateClones()
+        {
+            var first = NewFixtureMaterial();
+            var second = NewFixtureMaterial();
+            var renderer = NewTwoSlotRenderer(first, second);
+            var slots = renderer.sharedMaterials;
+            var block = new MaterialPropertyBlock();
+            block.SetFloat("_AlphaForceOpaque", 1f);
+            block.SetFloat("_Cutoff", 0.25f);
+            block.SetColor("_Color", Color.red);
+            renderer.SetPropertyBlock(block);
+
+            var result = EffectiveMaterialMaterialization.Materialize(
+                renderer, slots, out var clones, textureOnly: true);
+
+            Assert.That(result, Is.SameAs(slots));
+            Assert.That(clones, Is.Empty);
+        }
 
         [Test]
-        public void RendererWideFloatOverrideLandsOnEverySlotClone()
+        public void RendererWideFloatOverrideLandsInBlockStateSnapshot()
         {
             var first = NewFixtureMaterial();
             var second = NewFixtureMaterial();
@@ -103,31 +122,22 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             renderer.SetPropertyBlock(block);
 
             var result = EffectiveMaterialMaterialization.Materialize(
-                renderer, slots, out var clones);
+                renderer, slots, out var clones, textureOnly: true);
+            var entries = EffectiveMaterialMaterialization.CaptureBlockState(renderer);
 
-            Assert.That(clones.Count, Is.EqualTo(2));
-            Assert.That(
-                result[0], Is.Not.SameAs(slots[0]), "Slot 0 must materialize.");
-            Assert.That(
-                result[1], Is.Not.SameAs(slots[1]), "Slot 1 must materialize.");
-            Assert.That(
-                slots[0].GetFloat("_AlphaForceOpaque"), Is.EqualTo(0f),
-                "The original material must keep its serialized value.");
-            Assert.That(
-                slots[1].GetFloat("_AlphaForceOpaque"), Is.EqualTo(0f));
-            Assert.That(
-                result[0].GetFloat("_AlphaForceOpaque"), Is.EqualTo(1f));
-            Assert.That(
-                result[1].GetFloat("_AlphaForceOpaque"), Is.EqualTo(1f));
+            Assert.That(result, Is.SameAs(slots), "Scalar-only override must not clone.");
+            Assert.That(clones, Is.Empty);
+            Assert.That(entries.Count, Is.EqualTo(2));
+            Assert.That(entries[0].FloatValue, Is.EqualTo(1f));
+            Assert.That(entries[1].FloatValue, Is.EqualTo(1f));
         }
 
         [Test]
-        public void PerIndexBlockOverridesRendererWide()
+        public void PerIndexBlockOverridesRendererWideInBlockStateSnapshot()
         {
             var first = NewFixtureMaterial();
             var second = NewFixtureMaterial();
             var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
             var wide = new MaterialPropertyBlock();
             wide.SetFloat("_Cutoff", 0.5f);
             renderer.SetPropertyBlock(wide);
@@ -135,14 +145,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             perIndex.SetFloat("_Cutoff", 0.25f);
             renderer.SetPropertyBlock(perIndex, 0);
 
-            var result = Materialize(renderer, out var clones);
+            var entries = EffectiveMaterialMaterialization.CaptureBlockState(renderer);
 
-            Assert.That(clones.Count, Is.EqualTo(2));
-            Assert.That(
-                result[0].GetFloat("_Cutoff"), Is.EqualTo(0.25f),
+            Assert.That(entries[0].FloatValue, Is.EqualTo(0.25f),
                 "The per-index entry must replace the renderer-wide one.");
-            Assert.That(
-                result[1].GetFloat("_Cutoff"), Is.EqualTo(0.5f),
+            Assert.That(entries[1].FloatValue, Is.EqualTo(0.5f),
                 "Slot 1 must still see the renderer-wide entry.");
         }
 
