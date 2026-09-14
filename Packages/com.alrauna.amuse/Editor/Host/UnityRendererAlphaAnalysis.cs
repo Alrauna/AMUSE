@@ -18,7 +18,6 @@ namespace Alrauna.Amuse.Editor.Host
     {
         None,
         UnsupportedRendererType,
-        MaterialPropertyOverridesPresent,
         MaterialDependencyClosureFailed,
         UnrecognizedAnimatedMaterialBinding,
         MissingMesh,
@@ -197,15 +196,15 @@ namespace Alrauna.Amuse.Editor.Host
     /// It reads only. It uses <c>sharedMesh</c> and <c>sharedMaterials</c>
     /// exclusively, because <c>MeshFilter.mesh</c> and <c>Renderer.materials</c>
     /// instantiate copies as a side effect of being read. It never bakes,
-    /// imports, writes, or creates an asset, and it never calls
-    /// <c>GetPropertyBlock</c>.
+    /// imports, writes, or creates an asset, and it never attaches or clears
+    /// a property block.
     /// </para>
     /// <para>
-    /// It analyzes the current/base material state only. Animator state,
-    /// animation clips, material swaps, and property-block contents are outside
-    /// its claim — and because a property block can override the properties a
-    /// proof rests on, a renderer that carries one is refused outright rather
-    /// than analyzed under an assumption.
+    /// It analyzes the effective material state captured by the caller:
+    /// property blocks reach the proof through materialization, so a block's
+    /// declared entries are analyzed values and its presence alone is never a
+    /// refusal. Animator state, animation clips, and material swaps stay
+    /// outside this claim; the animation closure proves them elsewhere.
     /// </para>
     /// </summary>
     internal static class UnityRendererAlphaAnalysis
@@ -390,13 +389,32 @@ namespace Alrauna.Amuse.Editor.Host
             var capturedSlots = new CapturedAlphaMaterial[materialSlotCount];
             if (capturedMaterialSlots == null)
             {
-                var captured =
-                    UnityMaterialSemantics.CaptureAlphaMaterials(materials);
-                for (var index = 0; index < captured.Count; index++)
+                // The proof reads effective material state: the block entries
+                // the renderer actually shows, materialized onto transient
+                // clones. The clones are capture inputs and die in this
+                // scope; captured records hold values, never live objects.
+                var effectiveClones = new List<Material>();
+                var effective = materials == null
+                    ? materials
+                    : EffectiveMaterialMaterialization.Materialize(
+                        renderer, materials, out effectiveClones);
+                try
                 {
-                    capturedSlots[index] = materials[index] == null
-                        ? null
-                        : captured[index];
+                    var captured =
+                        UnityMaterialSemantics.CaptureAlphaMaterials(effective);
+                    for (var index = 0; index < captured.Count; index++)
+                    {
+                        capturedSlots[index] = effective[index] == null
+                            ? null
+                            : captured[index];
+                    }
+                }
+                finally
+                {
+                    foreach (var clone in effectiveClones)
+                    {
+                        UnityEngine.Object.DestroyImmediate(clone);
+                    }
                 }
             }
             else
@@ -409,23 +427,43 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 legacySemantics = new Dictionary<
                     CapturedAlphaMaterial, MaterialSemantics>();
-                var byLiveMaterial = new Dictionary<Material, MaterialSemantics>();
-                for (var index = 0; index < materials.Length; index++)
+                // The provider must see the same effective state the capture
+                // proved: materialized block state, not the serialized
+                // original. The clones die in this scope.
+                var effectiveClones = new List<Material>();
+                var effective = materials == null
+                    ? materials
+                    : EffectiveMaterialMaterialization.Materialize(
+                        renderer, materials, out effectiveClones);
+                try
                 {
-                    var material = materials[index];
-                    if (material == null || capturedSlots[index] == null)
+                    var byLiveMaterial =
+                        new Dictionary<Material, MaterialSemantics>();
+                    for (var index = 0; index < effective.Length; index++)
                     {
-                        continue;
-                    }
+                        var material = effective[index];
+                        if (material == null || capturedSlots[index] == null)
+                        {
+                            continue;
+                        }
 
-                    if (!byLiveMaterial.TryGetValue(material, out var semantics))
+                        if (!byLiveMaterial.TryGetValue(
+                                material, out var semantics))
+                        {
+                            semantics = legacySemanticsProvider(material)
+                                ?? UnityMaterialSemantics.AllUnknown();
+                            byLiveMaterial.Add(material, semantics);
+                        }
+
+                        legacySemantics.Add(capturedSlots[index], semantics);
+                    }
+                }
+                finally
+                {
+                    foreach (var clone in effectiveClones)
                     {
-                        semantics = legacySemanticsProvider(material)
-                            ?? UnityMaterialSemantics.AllUnknown();
-                        byLiveMaterial.Add(material, semantics);
+                        UnityEngine.Object.DestroyImmediate(clone);
                     }
-
-                    legacySemantics.Add(capturedSlots[index], semantics);
                 }
             }
 
@@ -461,13 +499,6 @@ namespace Alrauna.Amuse.Editor.Host
             mesh = null;
             if (!IsSupportedRendererType(renderer))
                 return RendererAnalysisRefusal.UnsupportedRendererType;
-
-            // Presence only. Reading the block's contents would be
-            // effective-state analysis, which this milestone does not do; a
-            // block that overrides nothing alpha-relevant is refused anyway,
-            // which is a false negative and therefore the safe direction.
-            if (renderer.HasPropertyBlock())
-                return RendererAnalysisRefusal.MaterialPropertyOverridesPresent;
 
             mesh = SharedMeshOf(renderer);
             return mesh == null

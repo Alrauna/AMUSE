@@ -60,10 +60,12 @@ namespace Alrauna.Amuse.Editor.Build
         MarkerClipCarriesSlotBinding,
 
         /// <summary>A live runtime material value for this slot is absent
-        /// from its mapping — whether it arrives from a curve keyframe or
-        /// from the live current assignment. One member, because the
-        /// condition is identical and the arrival route carries no
-        /// information.</summary>
+        /// from its mapping — whether it arrives from a curve keyframe, from
+        /// the live current assignment, or because the renderer's effective
+        /// block state changed since the proof, so the state the slot now
+        /// shows was never proven. One member, because the condition is
+        /// identical in kind: the live state no longer maps onto what was
+        /// prepared.</summary>
         RuntimeMaterialValueNotMapped,
 
         /// <summary>A target binding exists live that the captured evidence
@@ -208,7 +210,8 @@ namespace Alrauna.Amuse.Editor.Build
             string rendererPath,
             MeshSeparationPlan plan,
             CapturedAnimationEvidence evidence,
-            IReadOnlyList<PreparedSlotSeparation> candidateSlots)
+            IReadOnlyList<PreparedSlotSeparation> candidateSlots,
+            IReadOnlyList<BlockStateEntry> blockStateAtPreparation)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             // Empty is the avatar root's animation path and is valid; only an
@@ -220,12 +223,16 @@ namespace Alrauna.Amuse.Editor.Build
                 ?? throw new ArgumentNullException(nameof(evidence));
             if (candidateSlots == null)
                 throw new ArgumentNullException(nameof(candidateSlots));
+            if (blockStateAtPreparation == null)
+                throw new ArgumentNullException(
+                    nameof(blockStateAtPreparation));
 
             var copy = new PreparedSlotSeparation[candidateSlots.Count];
             for (var index = 0; index < copy.Length; index++)
                 copy[index] = candidateSlots[index];
 
             CandidateSlots = Array.AsReadOnly(copy);
+            BlockStateAtPreparation = blockStateAtPreparation;
         }
 
         internal UnityRendererMutationTarget Target { get; }
@@ -238,6 +245,14 @@ namespace Alrauna.Amuse.Editor.Build
         /// finalized on, or null when no surviving slot requires one.
         /// </summary>
         internal Mesh MeshClone { get; set; }
+
+        /// <summary>
+        /// The renderer's effective block state, captured when this
+        /// separation was prepared. Revalidation proves the candidate stale
+        /// whenever the renderer no longer shows this state.
+        /// </summary>
+        internal IReadOnlyList<BlockStateEntry> BlockStateAtPreparation
+        { get; }
 
         /// <summary>Candidate slots in ascending material-slot order.</summary>
         internal IReadOnlyList<PreparedSlotSeparation> CandidateSlots { get; }

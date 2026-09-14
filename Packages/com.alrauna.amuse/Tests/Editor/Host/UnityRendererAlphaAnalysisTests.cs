@@ -109,13 +109,19 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// A property block can override the very properties the shader
-        /// frontends read to prove alpha, so a base-material ProvenOpaque
-        /// conclusion could be false for this renderer. The guard reads the
-        /// presence bit only; the block's contents are never inspected.
+        /// A property block is effective-state evidence, not a refusal: its
+        /// declared entries reach the proof through materialization, and keys
+        /// no shader property declares cannot change rendering. The
+        /// structural layer therefore accepts a blocked renderer while the
+        /// other structural checks keep firing for their own fixtures, and
+        /// capture must leave the block exactly as it found it.
+        /// <para>
+        /// Justification for replacing the former refusal pin: the structural
+        /// refusal contract changed by approved design on 2026-09-14.
+        /// </para>
         /// </summary>
         [Test]
-        public void APropertyBlockRefusesTheWholeRenderer()
+        public void DeliberateBlockIsAcceptedAndStructuralChecksStay()
         {
             var renderer = NewSkinned(Quad(), NewMaterial());
             renderer.SetPropertyBlock(ColorOverrideBlock());
@@ -125,23 +131,48 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.True,
                 "The fixture must attach a real block, or it proves nothing.");
 
-            var result = UnityRendererAlphaAnalysis.Analyze(renderer);
+            Assert.That(
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(renderer),
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
+                    Track(new GameObject("amuse-test-line")
+                        .AddComponent<LineRenderer>())),
+                Is.EqualTo(RendererAnalysisRefusal.UnsupportedRendererType));
+            Assert.That(
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
+                    NewSkinned(null, NewMaterial())),
+                Is.EqualTo(RendererAnalysisRefusal.MissingMesh));
+
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
 
             Assert.That(
-                result.Refusal,
-                Is.EqualTo(
-                    RendererAnalysisRefusal.MaterialPropertyOverridesPresent));
-            Assert.That(result.Plan, Is.Null);
+                renderer.HasPropertyBlock(),
+                Is.True,
+                "Capture must not clear the block it reads.");
+            var readBack = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(readBack);
+            Assert.That(
+                readBack.GetColor("_Color"),
+                Is.EqualTo(new Color(1f, 1f, 1f, 0.25f)),
+                "Capture must not attach or alter the block's contents.");
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None),
+                "Presence is no longer a refusal: capture proceeds with " +
+                "the materialized effective state.");
         }
 
         /// <summary>
-        /// Verifies the guard is not blind to a block attached to one material
-        /// index rather than the whole renderer. If HasPropertyBlock() does not
-        /// report this, the guard has a hole and implementation must stop for
-        /// architectural review rather than reach for a wider API.
+        /// Capture still reads per-material-index blocks, and the
+        /// materialization fast path leans on the presence bit: verifies
+        /// <c>HasPropertyBlock()</c> is not blind to a block attached to one
+        /// material index. If it does not report this, effective-state
+        /// capture would silently skip the block; implementation must stop
+        /// for architectural review rather than reach for a wider API.
         /// </summary>
         [Test]
-        public void APerMaterialIndexPropertyBlockAlsoRefuses()
+        public void APerMaterialIndexPropertyBlockIsStillReportedPresent()
         {
             var renderer = NewSkinned(Quad(), NewMaterial());
             renderer.SetPropertyBlock(ColorOverrideBlock(), 0);
@@ -150,15 +181,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 renderer.HasPropertyBlock(),
                 Is.True,
                 "STOP CONDITION: HasPropertyBlock() does not report a " +
-                "per-material-index block, so the guard has a hole. Escalate " +
-                "for architectural review; do not widen the API here.");
-
-            var result = UnityRendererAlphaAnalysis.Analyze(renderer);
+                "per-material-index block, so effective-state capture has " +
+                "a hole. Escalate for architectural review; do not widen " +
+                "the API here.");
 
             Assert.That(
-                result.Refusal,
-                Is.EqualTo(
-                    RendererAnalysisRefusal.MaterialPropertyOverridesPresent));
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(renderer),
+                Is.EqualTo(RendererAnalysisRefusal.None),
+                "Presence is evidence now; the structural layer accepts it.");
         }
 
         [Test]

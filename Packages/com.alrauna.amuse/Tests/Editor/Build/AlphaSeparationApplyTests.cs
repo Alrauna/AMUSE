@@ -848,6 +848,76 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
+        // --- Falsifier: prepared under a block, block removed at apply ---
+
+        /// <summary>
+        /// The candidate the barrier prepared under a forced-opaque block is
+        /// stale once that override is gone: the renderer then shows the
+        /// serialized sampled equation, which this fixture's serialized
+        /// state does not prove. Apply must refuse the slot instead of
+        /// writing a proof the renderer no longer shows.
+        /// </summary>
+        [Test]
+        public void
+            CandidatePreparedUnderABlockingProofDoesNotApplyAfterTheBlockIsRemoved()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE removed block apply");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = Track(VerifiedTransparentMaterial());
+                var mesh = Track(SingleTriangleMesh());
+                var renderer = AddRenderer(root, "body", mesh, material);
+
+                var block = new MaterialPropertyBlock();
+                block.SetFloat("_AlphaForceOpaque", 1f);
+                renderer.SetPropertyBlock(block);
+
+                BuildContext context;
+                using (new ProbeScope(_ =>
+                {
+                    renderer.SetPropertyBlock(new MaterialPropertyBlock());
+                }))
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
+
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the blocked renderer must " +
+                    "analyze through its materialized state at the barrier");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation under the block");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RuntimeMaterialValueNotMapped),
+                    Is.EqualTo(1),
+                    "With the override gone the renderer shows the " +
+                    "serialized state, which this candidate was never " +
+                    "proven against.");
+                Assert.That(
+                    renderer.sharedMaterials[0], Is.SameAs(material),
+                    "The stale candidate must not replace the original " +
+                    "material.");
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                    "No stale write may touch the mesh.");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
 
         // --- Falsifier 6: every swap value maps at identical times ---------
 
