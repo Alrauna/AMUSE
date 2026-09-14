@@ -279,7 +279,24 @@ namespace Alrauna.Amuse.Editor.Host
     internal readonly struct MaterialEvidenceCaptureInput
     {
         internal Material SourceMaterial { get; }
+
+        /// <summary>The schema this capture gathers: in the closed batch
+        /// path, the union of every admitted family's request, so one
+        /// capture serves all readers.</summary>
         internal MaterialEvidenceRequest Request { get; }
+
+        /// <summary>
+        /// The source material's own family alpha request, or null when the
+        /// caller captured outside the closed batch. Texture cutoff
+        /// declarations are per-family predicates, so the batch union's
+        /// declaration for a texture property binarizes a field only for a
+        /// material whose own family declared it. Without this gate, one
+        /// cutout material in a merged renderer would binarize every
+        /// sibling's field for the same texture property, and the sibling's
+        /// exact-alpha interpretation would read those verdict bytes as
+        /// "alpha exactly one".
+        /// </summary>
+        internal MaterialEvidenceRequest PredicateRequest { get; }
 
         internal MaterialEvidenceCaptureInput(
             Material sourceMaterial,
@@ -287,6 +304,17 @@ namespace Alrauna.Amuse.Editor.Host
         {
             SourceMaterial = sourceMaterial;
             Request = request;
+            PredicateRequest = null;
+        }
+
+        internal MaterialEvidenceCaptureInput(
+            Material sourceMaterial,
+            MaterialEvidenceRequest request,
+            MaterialEvidenceRequest predicateRequest)
+        {
+            SourceMaterial = sourceMaterial;
+            Request = request;
+            PredicateRequest = predicateRequest;
         }
     }
 
@@ -294,6 +322,27 @@ namespace Alrauna.Amuse.Editor.Host
     {
         internal bool HasSourceIdentity { get; }
         internal TextureSourceId SourceIdentity { get; }
+
+        /// <summary>
+        /// The alpha arm's capture predicate: the declared shader cutoff
+        /// this field was binarized by, clamped the way the capture routes
+        /// clamp it, or one when the source was captured exact. The value
+        /// rides beside the chain because the chain's bytes carry the
+        /// predicate's meaning - 255 marks "satisfied this capture's
+        /// opaque test" - and a field consumed under a different predicate
+        /// would read that test's verdict as an exact-one fact.
+        /// </summary>
+        internal float CaptureThreshold { get; }
+
+        /// <summary>
+        /// The alpha policy bounds this capture ran under. With a declared
+        /// cutoff below one the capture kept the policy inert for the
+        /// source, which the field key derives from the threshold; the raw
+        /// bounds are stored so both arms key exactly as they were
+        /// captured.
+        /// </summary>
+        internal AlphaPolicyBounds CaptureBounds { get; }
+
         internal bool HasSampling { get; }
         internal TextureSampling Sampling { get; }
         internal bool HasColorInterpretation { get; }
@@ -325,6 +374,8 @@ namespace Alrauna.Amuse.Editor.Host
         internal CapturedTextureEvidence(
             bool hasSourceIdentity,
             TextureSourceId sourceIdentity,
+            float captureThreshold,
+            AlphaPolicyBounds captureBounds,
             bool hasSampling,
             TextureSampling sampling,
             bool hasColorInterpretation,
@@ -340,6 +391,8 @@ namespace Alrauna.Amuse.Editor.Host
         {
             HasSourceIdentity = hasSourceIdentity;
             SourceIdentity = sourceIdentity;
+            CaptureThreshold = captureThreshold;
+            CaptureBounds = captureBounds;
             HasSampling = hasSampling;
             Sampling = sampling;
             HasColorInterpretation = hasColorInterpretation;
@@ -412,6 +465,17 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool HasActiveColorSpace { get; }
         internal ColorSpace ActiveColorSpace { get; }
         internal IReadOnlyCollection<CapturedTextureEvidence> Textures { get; }
+
+        /// <summary>
+        /// The named texture assignments this evidence was captured under,
+        /// in request order. The unnamed <see cref="Textures"/> aggregate
+        /// serves consumers that reason about texture contents; the named
+        /// assignments serve consumers that must know which requested
+        /// property produced a field - the predicate-scoped field lookup.
+        /// The array is adopted, never mutated after construction.
+        /// </summary>
+        internal IReadOnlyList<TextureEntry> TextureAssignments
+            => _textureAssignments;
 
         /// <summary>
         /// Every named capture refusal across this evidence's texture
@@ -1000,9 +1064,14 @@ namespace Alrauna.Amuse.Editor.Host
                 // value to the capture, whose routes binarize by it and
                 // keep the alpha policy inert for the source. A family
                 // that declares none reads the unclipped exact-255 arm,
-                // where the policy applies.
+                // where the policy applies. The declaration is a
+                // per-family predicate: in the closed batch the union
+                // carries every family's schema, so a sibling family's
+                // declaration must not binarize this material's field -
+                // this material's own alpha request decides.
                 var cutoutThreshold = 1.0f;
-                if (textureRequest.CutoffScalarProperty != null)
+                if (textureRequest.CutoffScalarProperty != null &&
+                    DeclaresCutoffFor(input, textureRequest.PropertyName))
                 {
                     var cutoffFact =
                         facts[textureRequest.CutoffScalarProperty];
@@ -1033,6 +1102,38 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return builder;
+        }
+
+        /// <summary>
+        /// Whether the input's own family alpha request declares a cutoff
+        /// scalar for this texture property. A null predicate request -
+        /// a capture outside the closed batch - keeps the union request's
+        /// declaration, which is then the caller's own. The gate is what
+        /// keeps one family's cutoff declaration from binarizing another
+        /// family's field when both share one batch.
+        /// </summary>
+        private static bool DeclaresCutoffFor(
+            MaterialEvidenceCaptureInput input,
+            string propertyName)
+        {
+            var predicate = input.PredicateRequest;
+            if (predicate == null)
+            {
+                return true;
+            }
+
+            foreach (var texture in predicate.TextureProperties)
+            {
+                if (string.Equals(
+                        texture.PropertyName,
+                        propertyName,
+                        StringComparison.Ordinal))
+                {
+                    return texture.CutoffScalarProperty != null;
+                }
+            }
+
+            return false;
         }
 
         private static IEnumerable<string> AllRequestedNames(
@@ -1191,9 +1292,16 @@ namespace Alrauna.Amuse.Editor.Host
                     out _,
                     out redChannel,
                     out redRefusal);
+            // The alpha arm's predicate rides beside the chain: the routes
+            // binarize a declared cutoff into the stored verdicts, so the
+            // field's key must carry the threshold the bytes mean. Clamped
+            // exactly as the routes clamp it.
+            var captureThreshold = Mathf.Clamp01(cutoffThreshold);
             return new CapturedTextureEvidence(
                 hasSource,
                 source,
+                captureThreshold,
+                bounds,
                 hasSampling,
                 sampling,
                 hasColorInterpretation,

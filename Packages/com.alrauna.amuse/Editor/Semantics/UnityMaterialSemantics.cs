@@ -186,7 +186,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ? null
                     : materials[index].shader;
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
+                    materials[index],
+                    request,
+                    AlphaRequestForFamily(families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -240,7 +242,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ? null
                     : materials[index].shader;
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
+                    materials[index],
+                    request,
+                    AlphaRequestForFamily(families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -538,7 +542,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             return ClassifyShaderName(material.shader.name).family;
         }
 
-        private static MaterialEvidenceRequest AlphaRequestForFamily(
+        internal static MaterialEvidenceRequest AlphaRequestForFamily(
             CapturedAlphaMaterialFamily family)
         {
             switch (family)

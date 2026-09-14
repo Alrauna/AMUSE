@@ -85,6 +85,58 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return loaded;
         }
 
+        /// <summary>
+        /// Imports a streaming RGBA32 texture whose source file is an
+        /// EXR image: the source-image reader refuses the extension, so
+        /// the capture reaches the readable-clone fallback this test
+        /// exercises. Four vertical alpha bands of 0, 32, 64, and 255
+        /// keep the cutoff verdicts separated per texel band.
+        /// </summary>
+        private Texture2D ImportExrStreamingBandTexture(string name)
+        {
+            const int size = 64;
+            var path = TempFolder + "/" + name + ".exr";
+            var staging = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var alpha = x < size / 4
+                        ? (byte)0
+                        : x < size / 2
+                            ? (byte)32
+                            : x < size * 3 / 4 ? (byte)64 : (byte)255;
+                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                }
+            }
+
+            staging.SetPixels32(pixels);
+            staging.Apply();
+            File.WriteAllBytes(path, staging.EncodeToEXR());
+            UnityEngine.Object.DestroyImmediate(staging);
+
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.mipmapEnabled = true;
+            importer.isReadable = true;
+            importer.textureCompression =
+                TextureImporterCompression.Uncompressed;
+            importer.streamingMipmaps = true;
+            importer.SaveAndReimport();
+
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(
+                loaded, Is.Not.Null,
+                $"Streaming texture '{path}' must load.");
+            Assert.That(
+                loaded.width, Is.EqualTo(size),
+                "fixture precondition: the EXR import must keep the " +
+                "band grid");
+            return loaded;
+        }
+
         [Test]
         public void StreamingCache_DoesNotServeInertEvidenceUnderGateOnBounds()
         {
@@ -127,6 +179,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 gateOnChain[0].GetAlpha(0, 0),
                 Is.EqualTo(AlphaTextureData.ErasedFlag));
+        }
+
+        /// <summary>
+        /// The readable-clone fallback's cutoff binarization compares
+        /// decoded texel alphas against the material's declared cutoff.
+        /// A texel whose decoded alpha sits below the cutoff is
+        /// discarded at runtime and must never read opaque, so the
+        /// comparison runs on the decoded [0,1] value, never on the raw
+        /// stored byte.
+        /// </summary>
+        [Test]
+        public void CloneRoute_BinarizesByTheDecodedCutoffNotTheRawByte()
+        {
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_clone_cutoff");
+
+            var ok = UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                0.25f,
+                AlphaPolicyBounds.Inert,
+                out var chain);
+            Assert.That(ok, Is.True, "the clone fallback must capture");
+
+            // Mip 0 bands at 64ths: alpha 0, 32, 64, 255. Byte 32
+            // decodes to 0.125 - below the 0.25 cutoff - so it must
+            // stay a witness, and byte 64 decodes to 0.251 - at or
+            // above the cutoff - so it may read opaque.
+            Assert.That(chain[0].GetAlpha(8, 32), Is.EqualTo(0));
+            Assert.That(chain[0].GetAlpha(24, 32), Is.EqualTo(0));
+            Assert.That(
+                chain[0].GetAlpha(40, 32), Is.EqualTo(byte.MaxValue));
+            Assert.That(
+                chain[0].GetAlpha(56, 32), Is.EqualTo(byte.MaxValue));
         }
     }
 }

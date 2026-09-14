@@ -54,6 +54,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "Hidden/lilToonTransparent";
         private const string LilToonCutoutShaderName =
             "Hidden/lilToonCutout";
+        private const string LilToonCutoutFamilyCutoff = "0.25";
         private const string TraceAndOptimizeTypeName =
             "Anatawa12.AvatarOptimizer.TraceAndOptimize,"
             + "com.anatawa12.avatar-optimizer.runtime";
@@ -305,11 +306,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var semantics =
                 UnityMaterialSemantics.AnalyzeAlphaMaterial(
                     evidence.AdmittedMaterials[0]);
+            var probeMaterial = evidence.AdmittedMaterials[0];
             AlphaFieldProvider provider = (
                 TextureSourceId source,
                 TextureChannel channel,
                 out AlphaMipChain chain) =>
-                fields.TryGetValue((source, channel), out chain);
+                fields.TryGetFor(
+                    probeMaterial.Evidence,
+                    UnityMaterialSemantics.AlphaRequestForFamily(
+                        probeMaterial.Family),
+                    source,
+                    channel,
+                    out chain);
             var resolution = AlphaSemanticsResolver.Resolve(
                 semantics.Alpha, provider, 0);
             Assert.That(
@@ -584,6 +592,93 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { Band.Partial },
                     new[] { 0 },
                     firstTriangleIndex: 3);
+
+                OptimizerMergeObservation.Reset();
+                OptimizerMergeObservation.Enabled = true;
+                try
+                {
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, AmbientPlatform.DefaultPlatform);
+
+                    AssertMergedRendererCarriedBothSourcesPreAmuse();
+                    AssertBuiltTrianglesMatchAuthoring(context, root);
+                }
+                finally
+                {
+                    OptimizerMergeObservation.Reset();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The generated-atlas reproduction of the real-avatar defect:
+        /// after Avatar Optimizer merges the group, a lilToon cutout slot
+        /// and a lilToon transparent slot share one generated atlas
+        /// texture, the shape Avatar Optimizer's texture packing produces
+        /// when a cutout material and a transparent material land in one
+        /// atlas. The cutout's own field is captured binarized by its
+        /// declared cutoff, and the transparent slot's field is captured
+        /// exact. A gather that collapses the two predicates into one
+        /// shared field lets the transparent slot's partial-band triangle
+        /// prove opaque under the cutout's cutoff and move to a generated
+        /// material, which this test fails on. The cutout slot's own
+        /// partial-band triangle legitimately converts under its own
+        /// predicate in both worlds.
+        /// </summary>
+        [Test]
+        public void MergedCutoutSlotSharingAGeneratedAtlasKeepsTheTransparentPredicate()
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out var cutoutShader);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE atlas cutout leak");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                var traceAndOptimize =
+                    root.AddComponent(traceAndOptimizeType);
+                ConfigureTraceAndOptimize(
+                    traceAndOptimize, mergeSkinnedMesh: true,
+                    optimizeTexture: false);
+                AttachAnimationFixture(root, "atlas-leak");
+                var atlas = CreateGeneratedAtlas("atlas_cutout_leak");
+                var cutout = Track(NewCutoutMaterial(
+                    cutoutShader, atlas, 0.25f));
+                var transparent = Track(NewTransparentMaterial(
+                    transparentShader, atlas));
+
+                // The cutout renderer leads the merge, so its binarized
+                // field is gathered first for the shared atlas source.
+                CreateSkinnedRenderer(
+                    root, "AMUSE atlas cutout renderer",
+                    "AMUSE atlas cutout mesh",
+                    new[] { cutout },
+                    new[] { Band.Partial, Band.Opaque },
+                    new[] { 0, 0 },
+                    firstTriangleIndex: 0,
+                    expectationOverrides: new TriangleExpectation?[]
+                    {
+                        // The cutout's own 0.25 cutoff admits the
+                        // partial band: it converts under its own
+                        // predicate whether or not fields are shared.
+                        TriangleExpectation.ConvertsToOpaque,
+                        null,
+                    });
+                CreateSkinnedRenderer(
+                    root, "AMUSE atlas transparent renderer",
+                    "AMUSE atlas transparent mesh",
+                    new[] { transparent },
+                    new[] { Band.Partial, Band.Opaque },
+                    new[] { 0, 0 },
+                    firstTriangleIndex: 2);
 
                 OptimizerMergeObservation.Reset();
                 OptimizerMergeObservation.Enabled = true;
@@ -1149,6 +1244,51 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The cutout-family trigger, isolated: one merged group where a
+        /// lilToon transparent slot and a lilToon cutout slot share the
+        /// same banded texture. The cutout slot's own predicate (cutoff
+        /// 0.25) legitimately proves its partial-band triangle; the
+        /// transparent slot's partial-band triangle must stay regardless.
+        /// If the cutout slot's binarized field leaks into the transparent
+        /// slot's classification, the transparent partial triangle
+        /// converts and this test fails on its soundness expectation.
+        /// </summary>
+        [Test]
+        public void CutoutFamilyPresenceKeepsTheTransparentSlotOutcome()
+        {
+            RequireLilToonEnvironment(out var transparentShader, out var cutoutShader);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE cutout presence");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                AttachAnimationFixture(root, "cutout-presence");
+                var texture = Track(ImportBandedAlphaTexture("banded_cutout_presence"));
+                var transparent = Track(NewTransparentMaterial(
+                    transparentShader, texture));
+                var cutout = Track(NewCutoutMaterial(cutoutShader, texture, 0.25f));
+
+                CreateSkinnedRenderer(
+                    root, "AMUSE cutout presence renderer",
+                    "AMUSE cutout presence mesh",
+                    new[] { transparent, cutout },
+                    new[] { Band.Partial, Band.Opaque, Band.Partial },
+                    new[] { 0, 0, 1 },
+                    firstTriangleIndex: 0);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                AssertBuiltTrianglesMatchAuthoring(context, root);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// The many-slot reproduction: a merged renderer carrying many
         /// material slots - mixed-alpha materials on fully-opaque
         /// neighbors, in shuffled slot order - must still classify every
@@ -1663,6 +1803,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             return ImportAlphaTexture("quadrant_alpha", size, pixels);
+        }
+
+        /// <summary>
+        /// Creates one AAO-shaped generated atlas: a banded RGBA32
+        /// mipmapped texture as a sub-asset of an NDMF SubAssetContainer,
+        /// named the way Avatar Optimizer's texture packing names its
+        /// outputs, so the shipped capture admits it through the
+        /// generated route with banded alpha.
+        /// </summary>
+        private Texture2D CreateGeneratedAtlas(string name)
+        {
+            const int size = 128;
+            var containerPath = TempFolder + "/" + name + "_container.asset";
+            var container = ScriptableObject.CreateInstance<
+                nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, containerPath);
+            var atlas = new Texture2D(size, size, TextureFormat.RGBA32, true);
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var alpha = x < size / 4
+                        ? (byte)0
+                        : x < size / 2 ? (byte)128 : (byte)255;
+                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                }
+            }
+
+            atlas.SetPixels32(pixels);
+            atlas.Apply(false, false);
+            atlas.name = name + " (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(atlas, containerPath);
+            AssetDatabase.SaveAssets();
+            return Track(atlas);
         }
 
         private Texture2D ImportAlphaTexture(
