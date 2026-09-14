@@ -3417,20 +3417,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                refusing = VerifiedForceOpaqueMaterial(0f);
                 resolving = VerifiedForceOpaqueMaterial(1f);
+                refusing = VerifiedForceOpaqueMaterial(0f);
                 var renderer = AddTwoSlotRenderer(
-                    root, refusing, resolving, out mesh);
+                    root, resolving, refusing, out mesh);
                 controller = AddRendererWideForceOpaqueGraph(root, out clip);
 
                 AssertTwoSlotTriangleFixture(mesh);
                 Assert.That(
-                    refusing.GetFloat("_AlphaForceOpaque"), Is.EqualTo(0f),
-                    "fixture precondition: slot 0's default must differ from the " +
+                    resolving.GetFloat("_AlphaForceOpaque"), Is.EqualTo(1f),
+                    "fixture precondition: slot 0's default must equal the " +
                     "animated singleton");
                 Assert.That(
-                    resolving.GetFloat("_AlphaForceOpaque"), Is.EqualTo(1f),
-                    "fixture precondition: slot 1's default must equal the " +
+                    refusing.GetFloat("_AlphaForceOpaque"), Is.EqualTo(0f),
+                    "fixture precondition: slot 1's default must differ from the " +
                     "animated singleton");
 
                 var evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
@@ -3441,21 +3441,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // the multi-slot loop does.
                 Assert.That(
                     AnalyzeSingleSlotUnderRendererWideForceOpaque(
+                        resolving, out var resolvedCandidates),
+                    Is.EqualTo(RendererAnalysisRefusal.None),
+                    "fixture precondition: slot 0's material must admit and resolve");
+                Assert.That(
+                    resolvedCandidates, Is.EqualTo(1),
+                    "fixture precondition: slot 0 must prove exactly one opaque " +
+                    "triangle on its own");
+                Assert.That(
+                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
                         refusing, out var refusedCandidates),
                     Is.EqualTo(RendererAnalysisRefusal
                         .AnimatedMaterialPropertyNotSingleton),
-                    "fixture precondition: slot 0's material must refuse admission");
+                    "fixture precondition: slot 1's material must refuse admission");
                 Assert.That(refusedCandidates, Is.Zero);
-                Assert.That(
-                    AnalyzeSingleSlotUnderRendererWideForceOpaque(
-                        resolving, out var resolvedCandidates),
-                    Is.EqualTo(RendererAnalysisRefusal.None),
-                    "fixture precondition: slot 1's material must admit and resolve");
-                Assert.That(
-                    resolvedCandidates, Is.EqualTo(1),
-                    "fixture precondition: slot 1 must prove exactly one opaque " +
-                    "triangle on its own");
-
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
