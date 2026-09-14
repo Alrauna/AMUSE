@@ -461,17 +461,23 @@ namespace Alrauna.Amuse.Editor.Analysis
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
 
+                    var componentBindings = group.ComponentBindings();
                     if (TryGetBlockColor(slotBlockEntries, group.PropertyName, out var blockColor))
                     {
-                        if (!(blockColor == serialized))
+                        var blockVec = new Vector4(blockColor.r, blockColor.g, blockColor.b, blockColor.a);
+                        var serVec = new Vector4(serialized.r, serialized.g, serialized.b, serialized.a);
+                        foreach (var component in componentBindings.Keys)
                         {
-                            return RendererAnalysisRefusal
-                                .AnimatedMaterialPropertyNotSingleton;
+                            if (!(blockVec[component] == serVec[component]))
+                            {
+                                return RendererAnalysisRefusal
+                                    .AnimatedMaterialPropertyNotSingleton;
+                            }
                         }
                     }
 
                     var outcome = AdmitColor(
-                        group.ComponentBindings(), serialized, out var admitted);
+                        componentBindings, serialized, out var admitted);
                     if (outcome != AdmittedPropertyOutcome.Singleton)
                     {
                         return RefusalFor(outcome);
@@ -490,17 +496,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
 
+                    var componentBindings = group.ComponentBindings();
                     if (TryGetBlockVector(slotBlockEntries, group.PropertyName, out var blockVector))
                     {
-                        if (!(blockVector == serialized))
+                        foreach (var component in componentBindings.Keys)
                         {
-                            return RendererAnalysisRefusal
-                                .AnimatedMaterialPropertyNotSingleton;
+                            if (!(blockVector[component] == serialized[component]))
+                            {
+                                return RendererAnalysisRefusal
+                                    .AnimatedMaterialPropertyNotSingleton;
+                            }
                         }
                     }
 
                     var outcome = AdmitVector(
-                        group.ComponentBindings(), serialized, out var admitted);
+                        componentBindings, serialized, out var admitted);
                     if (outcome != AdmittedPropertyOutcome.Singleton)
                     {
                         return RefusalFor(outcome);
