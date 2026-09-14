@@ -8,6 +8,7 @@ using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
@@ -427,6 +428,24 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 0,
                 VerifiedAlphaOnly);
         }
+        private static SlotResolutionResult ResolveSlotWithBlock(
+            IReadOnlyList<CapturedAlphaMaterial> admitted,
+            IReadOnlyList<int> admittedIndices,
+            IReadOnlyList<BlockStateEntry> blockEntries,
+            params (CapturedFloatBinding Binding,
+                    AnimatedPropertyRef Reference)[] bindings)
+        {
+            return AdmittedMaterialStates.ResolveSlot(
+                new CapturedMaterialSlotEvidence(0, admittedIndices),
+                admitted,
+                bindings,
+                Relevance,
+                NoAlphaFields,
+                0,
+                VerifiedAlphaOnly,
+                blockEntries);
+        }
+
 
         /// <summary>
         /// The proof-relevant reference is produced by Task 11's real
@@ -1359,6 +1378,64 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 distinct.Select(r => r.Classify(triangle)).Distinct().Count(),
                 Is.EqualTo(
                     full.Select(r => r.Classify(triangle)).Distinct().Count()));
+        }
+        [Test]
+        public void UnanimatedBlockOverrideForcesOpaqueInResolution()
+        {
+            var admitted = Admitted(MaterialWithForcedOpaque(false));
+            var control = ResolveSlot(admitted, new[] { 0 });
+            Assert.That(OutcomeOf(control.Resolutions[0]),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+
+            var block = new[]
+            {
+                new BlockStateEntry(
+                    0, "_AlphaForceOpaque", ShaderPropertyType.Float, 1f,
+                    default, default, null),
+            };
+            var result = ResolveSlotWithBlock(admitted, new[] { 0 }, block);
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(OutcomeOf(result.Resolutions[0]),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void AgreeingBlockEntryAdmitsAsSingleton()
+        {
+            var admitted = Admitted(MaterialWithForcedOpaque(true));
+            var block = new[]
+            {
+                new BlockStateEntry(
+                    0, "_AlphaForceOpaque", ShaderPropertyType.Float, 1f,
+                    default, default, null),
+            };
+            var result = ResolveSlotWithBlock(
+                admitted, new[] { 0 }, block,
+                Animated("_AlphaForceOpaque", 1f));
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(OutcomeOf(result.Resolutions[0]),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DisagreeingBlockEntryRefusesWithNotSingleton()
+        {
+            var admitted = Admitted(MaterialWithForcedOpaque(true));
+            var block = new[]
+            {
+                new BlockStateEntry(
+                    0, "_AlphaForceOpaque", ShaderPropertyType.Float, 0f,
+                    default, default, null),
+            };
+            var result = ResolveSlotWithBlock(
+                admitted, new[] { 0 }, block,
+                Animated("_AlphaForceOpaque", 1f));
+
+            Assert.That(result.IsResolved, Is.False);
+            Assert.That(result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton));
         }
     }
 }

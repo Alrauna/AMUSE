@@ -514,9 +514,11 @@ namespace Alrauna.Amuse.Editor.Build
                         ? (CapturedAlphaMaterialSemanticsResolver)
                             UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
                         : null);
+                var blockState =
+                    EffectiveMaterialMaterialization.CaptureBlockState(renderer);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
-                    minTextureSize, densityCapPercent);
+                    minTextureSize, densityCapPercent, blockState);
                 refusal = resolved.Refusal;
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -857,7 +859,8 @@ namespace Alrauna.Amuse.Editor.Build
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
                 int maxMipLevel = int.MaxValue,
                 int minTextureSize = 1,
-                int densityCapPercent = 0)
+                int densityCapPercent = 0,
+                IReadOnlyList<BlockStateEntry> blockState = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -955,6 +958,7 @@ namespace Alrauna.Amuse.Editor.Build
             var anySlotResolved = false;
             for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
             {
+                var slotEntries = FilterBlockEntriesForSlot(blockState, slotIndex);
                 var resolved = AdmittedMaterialStates.ResolveSlot(
                     slots[slotIndex],
                     evidence.AdmittedMaterials,
@@ -962,7 +966,8 @@ namespace Alrauna.Amuse.Editor.Build
                     evidence.AlphaRelevanceRequest,
                     fields,
                     densityCapPercent,
-                    resolveSemantics);
+                    resolveSemantics,
+                    slotEntries);
                 if (!resolved.IsResolved)
                 {
                     // Retained as it stands, refusal reason included, so the
@@ -1001,6 +1006,27 @@ namespace Alrauna.Amuse.Editor.Build
                 RendererAnalysisRefusal.None,
                 currentMaterials,
                 slotResults);
+        }
+
+        private static IReadOnlyList<BlockStateEntry> FilterBlockEntriesForSlot(
+            IReadOnlyList<BlockStateEntry> blockState,
+            int slotIndex)
+        {
+            if (blockState == null || blockState.Count == 0)
+            {
+                return null;
+            }
+
+            var list = new List<BlockStateEntry>();
+            for (var i = 0; i < blockState.Count; i++)
+            {
+                if (blockState[i].SlotIndex == slotIndex)
+                {
+                    list.Add(blockState[i]);
+                }
+            }
+
+            return list;
         }
 
         private static ResolvedRuntimeStates Refused(
