@@ -328,14 +328,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static MaterialEvidenceRequest Relevance
             => PoiyomiMaterialSemantics.AlphaEvidenceRequest;
 
-        private static bool NoAlphaFields(
-            TextureSourceId source,
-            TextureChannel channel,
-            out AlphaMipChain chain)
-        {
-            chain = null;
-            return false;
-        }
+        private static readonly AlphaFieldSet NoAlphaFields =
+            new(new Dictionary<AlphaFieldKey, AlphaMipChain>());
 
         private static MaterialSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
@@ -1073,26 +1067,30 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 material.SetFloat("_PoiInternalParallax", 0f);
 
                 var admitted = Admitted(material);
-                AlphaFieldProvider provider = (TextureSourceId source,
-                    TextureChannel channel, out AlphaMipChain chain) =>
+                var assignment = admitted[0].Evidence.Textures.Single(
+                    texture => texture.HasSourceIdentity);
+                var alpha = new byte[8 * 8];
+                for (var index = 0; index < alpha.Length; index++)
                 {
-                    var alpha = new byte[8 * 8];
-                    for (var index = 0; index < alpha.Length; index++)
-                    {
-                        alpha[index] = 255;
-                    }
-                    alpha[0] = 0;
-                    chain = new AlphaMipChain(
-                        new[] { new AlphaTextureData(8, 8, alpha) });
-                    return true;
-                };
+                    alpha[index] = 255;
+                }
+
+                alpha[0] = 0;
+                var key = AlphaFieldKey.ForAlpha(assignment);
+                var fields = AlphaFieldSet.WithField(
+                    key.Source,
+                    key.Channel,
+                    key.Threshold,
+                    key.Bounds,
+                    new AlphaMipChain(
+                        new[] { new AlphaTextureData(8, 8, alpha) }));
 
                 var result = AdmittedMaterialStates.ResolveSlot(
                     new CapturedMaterialSlotEvidence(0, new[] { 0 }),
                     admitted,
                     Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                     Relevance,
-                    provider,
+                    fields,
                     0,
                     VerifiedAlphaOnly);
 

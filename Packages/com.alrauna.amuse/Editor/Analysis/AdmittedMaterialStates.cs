@@ -201,7 +201,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             IReadOnlyList<(CapturedFloatBinding Binding,
                            AnimatedPropertyRef Reference)> slotBindings,
             MaterialEvidenceRequest relevance,
-            AlphaFieldProvider alphaFields,
+            AlphaFieldSet alphaFields,
             int maxNoiseTexelPercent,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
         {
@@ -244,9 +244,29 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.LilToonEvidence);
                 var semantics = resolveSemantics(admitted)
                     ?? UnityMaterialSemantics.AllUnknown();
+                // Field lookups are scoped to this admitted material's own
+                // captured predicates, so a shared texture captured under a
+                // sibling slot's shader cutoff answers nothing here. The
+                // derived evidence carries the same texture assignments as
+                // the capture: admission substitutes scalars only. The
+                // family's own alpha request decides which assignments the
+                // material actually samples.
+                var predicateRequest =
+                    UnityMaterialSemantics.AlphaRequestForFamily(
+                        material.Family);
+                AlphaFieldProvider materialFields =
+                    (TextureSourceId source,
+                        TextureChannel channel,
+                        out AlphaMipChain chain) =>
+                        alphaFields.TryGetFor(
+                            evidence,
+                            predicateRequest,
+                            source,
+                            channel,
+                            out chain);
                 var resolution =
                     AlphaSemanticsResolver.Resolve(
-                        semantics.Alpha, alphaFields, maxNoiseTexelPercent);
+                        semantics.Alpha, materialFields, maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
                     return SlotResolutionResult.Refused(

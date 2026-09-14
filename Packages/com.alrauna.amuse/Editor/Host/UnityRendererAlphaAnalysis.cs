@@ -496,26 +496,20 @@ namespace Alrauna.Amuse.Editor.Host
             resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
             var fields =
                 GatherAlphaFields(snapshot.Materials, int.MaxValue, 1);
+            // The density stays zero on this path. It is the structural
+            // refusal probe, so it must never convert a triangle on the
+            // strength of the noise allowance.
             return Analyze(
                 snapshot,
                 resolveSemantics,
-                (TextureSourceId source,
-                 TextureChannel channel,
-                 out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return fields.TryGetValue((source, channel), out chain);
-                },
-                // The density stays zero on this path. It is the structural
-                // refusal probe, so it must never convert a triangle on the
-                // strength of the noise allowance.
+                fields,
                 0);
         }
 
         private static RendererAlphaAnalysis Analyze(
             UnityRendererAlphaSnapshot snapshot,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
-            AlphaFieldProvider alphaFields,
+            AlphaFieldSet alphaFields,
             int maxNoiseTexelPercent)
         {
             var resolutions = new Dictionary<
@@ -554,7 +548,7 @@ namespace Alrauna.Amuse.Editor.Host
         private static AlphaResolution ResolveFor(
             CapturedAlphaMaterial material,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
-            AlphaFieldProvider alphaFields,
+            AlphaFieldSet alphaFields,
             Dictionary<CapturedAlphaMaterial, AlphaResolution> memo,
             int maxNoiseTexelPercent)
         {
@@ -566,8 +560,32 @@ namespace Alrauna.Amuse.Editor.Host
             var semantics = material == null
                 ? UnityMaterialSemantics.AllUnknown()
                 : resolveSemantics(material) ?? UnityMaterialSemantics.AllUnknown();
+            // The field lookup is scoped to this material's own captured
+            // predicates: a shared source captured under a sibling's cutoff
+            // answers nothing here. The family's own alpha request decides
+            // which assignments the material actually samples; the
+            // incomplete all-unknown semantic of a null material never
+            // reaches the provider.
+            var predicateRequest = material == null
+                ? null
+                : UnityMaterialSemantics.AlphaRequestForFamily(
+                    material.Family);
+            AlphaFieldProvider materialFields =
+                (TextureSourceId source,
+                    TextureChannel channel,
+                    out AlphaMipChain chain) =>
+                {
+                    chain = null;
+                    return material != null &&
+                        alphaFields.TryGetFor(
+                            material.Evidence,
+                            predicateRequest,
+                            source,
+                            channel,
+                            out chain);
+                };
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Alpha, alphaFields, maxNoiseTexelPercent);
+                semantics.Alpha, materialFields, maxNoiseTexelPercent);
 
             if (material != null)
             {
@@ -586,13 +604,22 @@ namespace Alrauna.Amuse.Editor.Host
         /// only the handed-out proof scope is capped. The minimum
         /// texture size drops a texture from the proof entirely when
         /// even mip 0 is smaller than the size.
+        /// <para>
+        /// The field key carries the capture predicate - the declared
+        /// shader cutoff and the policy bounds the chain was captured
+        /// under - not just the source and channel. A shader-cutoff
+        /// source's field is binarized by its cutoff, so its byte 255
+        /// means "alpha at or above the cutoff", while an exact source's
+        /// byte 255 means "alpha exactly one"; two materials sharing one
+        /// texture under different predicates must find two fields here,
+        /// whichever material was admitted first, and each consults its
+        /// own through <see cref="AlphaFieldSet.TryGetFor"/>.
+        /// </para>
         /// </summary>
-        internal static IReadOnlyDictionary<
-            (TextureSourceId source, TextureChannel channel),
-            AlphaMipChain> GatherAlphaFields(
-                IReadOnlyList<CapturedAlphaMaterial> materials,
-                int maxMipLevel,
-                int minTextureSize)
+        internal static AlphaFieldSet GatherAlphaFields(
+            IReadOnlyList<CapturedAlphaMaterial> materials,
+            int maxMipLevel,
+            int minTextureSize)
         {
             if (maxMipLevel < 0)
             {
@@ -607,8 +634,7 @@ namespace Alrauna.Amuse.Editor.Host
                     "The minimum texture size must be at least one texel.");
             }
 
-            var fields = new Dictionary<
-                (TextureSourceId, TextureChannel), AlphaMipChain>();
+            var fields = new Dictionary<AlphaFieldKey, AlphaMipChain>();
             foreach (var material in materials)
             {
                 if (material == null)
@@ -637,29 +663,31 @@ namespace Alrauna.Amuse.Editor.Host
                     }
 
                     var cap = Math.Min(maxMipLevel, sizeScope);
-                    var key =
-                        (texture.SourceIdentity, TextureChannel.Alpha);
-                    if (texture.HasAlphaChannel &&
-                        !fields.ContainsKey(key))
+                    if (texture.HasAlphaChannel)
                     {
-                        fields.Add(
-                            key,
-                            texture.AlphaChannel.LimitedTo(cap));
+                        var key = AlphaFieldKey.ForAlpha(texture);
+                        if (!fields.ContainsKey(key))
+                        {
+                            fields.Add(
+                                key,
+                                texture.AlphaChannel.LimitedTo(cap));
+                        }
                     }
 
-                    var redKey =
-                        (texture.SourceIdentity, TextureChannel.Red);
-                    if (texture.HasRedChannel &&
-                        !fields.ContainsKey(redKey))
+                    if (texture.HasRedChannel)
                     {
-                        fields.Add(
-                            redKey,
-                            texture.RedChannel.LimitedTo(cap));
+                        var redKey = AlphaFieldKey.ForRed(texture);
+                        if (!fields.ContainsKey(redKey))
+                        {
+                            fields.Add(
+                                redKey,
+                                texture.RedChannel.LimitedTo(cap));
+                        }
                     }
                 }
             }
 
-            return fields;
+            return new AlphaFieldSet(fields);
         }
 
         private static int TextureSizeScope(
