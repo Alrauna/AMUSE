@@ -2901,6 +2901,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var context = AvatarProcessor.ProcessAvatar(
                 root, TestGenericPlatform.Instance);
             SeedRetainedHostBindings(context);
+            ClearCommitAnimationPropertyBlocks(root);
             AmusePlatformFinishPass.Execute(
                 context,
                 SupportedFacts(),
@@ -3459,6 +3460,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
+                ClearCommitAnimationPropertyBlocks(root);
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
@@ -3652,6 +3654,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
+                ClearCommitAnimationPropertyBlocks(root);
                 AmusePlatformFinishPass.Execute(
                     context,
                     SupportedFacts(),
@@ -4003,6 +4006,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             if (fixture.Mesh != null) Object.DestroyImmediate(fixture.Mesh);
             if (fixture.Material != null) Object.DestroyImmediate(fixture.Material);
+        }
+
+        /// <summary>
+        /// Clears the renderer property blocks that Unity's animation
+        /// runtime writes when the build's committed animator samples
+        /// material property curves. The block is commit output, not
+        /// fixture input: the pass must classify the captured animation
+        /// bindings, so this transient sampled state is removed before
+        /// the pass runs. A block attached on purpose still refuses by
+        /// name; see UnityRendererAlphaAnalysisTests.
+        /// </summary>
+        private static void ClearCommitAnimationPropertyBlocks(
+            GameObject root)
+        {
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.SetPropertyBlock(null);
+            }
         }
 
         /// <summary>
