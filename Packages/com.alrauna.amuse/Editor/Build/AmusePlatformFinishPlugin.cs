@@ -496,7 +496,8 @@ namespace Alrauna.Amuse.Editor.Build
                         state.AnimatorBindings,
                         alphaPolicyBounds,
                         out admittedLiveMaterials,
-                        effectiveCapturer,
+                        CaptureThroughEffectiveMaterials(
+                            renderer, effectiveCapturer),
                         ignoreOutOfRangeSlots)
                     : UnityAnimationEvidenceCapture.CaptureGraphForTests(
                         rendererPath,
@@ -505,7 +506,7 @@ namespace Alrauna.Amuse.Editor.Build
                         state.AnimatorBindings,
                         alphaPolicyBounds,
                         selectRequest,
-                        capturer,
+                        CaptureThroughEffectiveMaterials(renderer, capturer),
                         out admittedLiveMaterials,
                         ignoreOutOfRangeSlots);
                 var effectiveResolver = resolveSemantics
@@ -558,6 +559,45 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
+        }
+        /// <summary>
+        /// Wraps a closed material capturer so the attested batch is captured
+        /// through each material's per-slot effective materialization: the
+        /// proof must read the values the renderer shows, block overrides
+        /// included. Identity flows stay on the live materials — the admitted
+        /// set, the swap-value matching, and the retained live pairing keep
+        /// the original references, so the write path still matches against
+        /// them. A null inner capturer keeps the production default. Every
+        /// clone dies inside the wrapper, on every exit path.
+        /// </summary>
+        private static ClosedAlphaMaterialCapturer
+            CaptureThroughEffectiveMaterials(
+                Renderer renderer,
+                ClosedAlphaMaterialCapturer inner)
+        {
+            inner ??= UnityMaterialSemantics.TryCaptureClosedAlphaMaterials;
+            return (
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
+                out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+            {
+                var effective = EffectiveMaterialMaterialization
+                    .MaterializeAdmitted(renderer, materials, out var clones);
+                try
+                {
+                    return inner(
+                        effective, families, request, bounds, out transferred);
+                }
+                finally
+                {
+                    foreach (var clone in clones)
+                    {
+                        UnityEngine.Object.DestroyImmediate(clone);
+                    }
+                }
+            };
         }
 
         /// <summary>

@@ -390,13 +390,32 @@ namespace Alrauna.Amuse.Editor.Host
             var capturedSlots = new CapturedAlphaMaterial[materialSlotCount];
             if (capturedMaterialSlots == null)
             {
-                var captured =
-                    UnityMaterialSemantics.CaptureAlphaMaterials(materials);
-                for (var index = 0; index < captured.Count; index++)
+                // The proof reads effective material state: the block entries
+                // the renderer actually shows, materialized onto transient
+                // clones. The clones are capture inputs and die in this
+                // scope; captured records hold values, never live objects.
+                var effectiveClones = new List<Material>();
+                var effective = materials == null
+                    ? materials
+                    : EffectiveMaterialMaterialization.Materialize(
+                        renderer, materials, out effectiveClones);
+                try
                 {
-                    capturedSlots[index] = materials[index] == null
-                        ? null
-                        : captured[index];
+                    var captured =
+                        UnityMaterialSemantics.CaptureAlphaMaterials(effective);
+                    for (var index = 0; index < captured.Count; index++)
+                    {
+                        capturedSlots[index] = effective[index] == null
+                            ? null
+                            : captured[index];
+                    }
+                }
+                finally
+                {
+                    foreach (var clone in effectiveClones)
+                    {
+                        UnityEngine.Object.DestroyImmediate(clone);
+                    }
                 }
             }
             else

@@ -187,6 +187,32 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return mesh;
         }
 
+        /// <summary>
+        /// One submesh, one triangle, wholly inside the non-opaque texel. The
+        /// falsifier mesh for block-override analysis: the serialized sampled
+        /// equation leaves this triangle unproven, so only analysis through
+        /// the materialized override can call it opaque.
+        /// </summary>
+        private Mesh BuildSingleTexelTriangleMesh()
+        {
+            var mesh = Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.01f, 0.01f),
+                new Vector2(0.2f, 0.01f),
+                new Vector2(0.01f, 0.2f)
+            };
+            mesh.subMeshCount = 1;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            return mesh;
+        }
+
         private SkinnedMeshRenderer NewRenderer(Mesh mesh, params Material[] slots)
         {
             var gameObject = Track(new GameObject("amuse-integration"));
@@ -200,71 +226,89 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// Captures the renderer normally, then substitutes the fixture's exact
         /// Poiyomi alpha request for nominated slots. Only immutable requested
         /// evidence and a captured-material resolver cross into analysis.
+        /// <para>
+        /// The capture and the verified substitution both read the renderer's
+        /// effective materials, so a block override reaches the proof exactly
+        /// once, through materialization. Without a block the effective array
+        /// is the live <c>sharedMaterials</c> and nothing changes.
+        /// </para>
         /// </summary>
         private static RendererAlphaAnalysis AnalyzeVerified(
             Renderer renderer,
             params Material[] verifiedSlots)
         {
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
-            Assert.That(
-                extraction.Refusal,
-                Is.EqualTo(RendererAnalysisRefusal.None));
-            Assert.That(
-                verifiedSlots.Length,
-                Is.EqualTo(extraction.Snapshot.Materials.Count));
-
-            var inputs = new List<MaterialEvidenceCaptureInput>();
-            var slotIndices = new List<int>();
-            for (var slot = 0; slot < verifiedSlots.Length; slot++)
+            var effectiveSlots = EffectiveMaterialMaterialization.Materialize(
+                renderer, renderer.sharedMaterials, out var effectiveClones);
+            try
             {
-                if (verifiedSlots[slot] == null)
+                var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+                Assert.That(
+                    extraction.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(
+                    verifiedSlots.Length,
+                    Is.EqualTo(extraction.Snapshot.Materials.Count));
+
+                var inputs = new List<MaterialEvidenceCaptureInput>();
+                var slotIndices = new List<int>();
+                for (var slot = 0; slot < verifiedSlots.Length; slot++)
                 {
-                    continue;
+                    if (verifiedSlots[slot] == null)
+                    {
+                        continue;
+                    }
+
+                    inputs.Add(new MaterialEvidenceCaptureInput(
+                        effectiveSlots[slot],
+                        PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+                    slotIndices.Add(slot);
                 }
 
-                inputs.Add(new MaterialEvidenceCaptureInput(
-                    verifiedSlots[slot],
-                    PoiyomiMaterialSemantics.AlphaEvidenceRequest));
-                slotIndices.Add(slot);
-            }
+                var capturedEvidence = UnityMaterialEvidenceCapture.Capture(inputs);
+                var materials = new CapturedAlphaMaterial[
+                    extraction.Snapshot.Materials.Count];
+                for (var slot = 0; slot < materials.Length; slot++)
+                {
+                    materials[slot] = extraction.Snapshot.Materials[slot];
+                }
 
-            var capturedEvidence = UnityMaterialEvidenceCapture.Capture(inputs);
-            var materials = new CapturedAlphaMaterial[
-                extraction.Snapshot.Materials.Count];
-            for (var slot = 0; slot < materials.Length; slot++)
+                var verified = new HashSet<CapturedAlphaMaterial>();
+                for (var index = 0; index < capturedEvidence.Count; index++)
+                {
+                    var material = new CapturedAlphaMaterial(
+                        CapturedAlphaMaterialFamily.Unsupported,
+                        capturedEvidence[index],
+                        default(PoiyomiSourceEvidence),
+                        null);
+                    materials[slotIndices[index]] = material;
+                    verified.Add(material);
+                }
+
+                var snapshot = new UnityRendererAlphaSnapshot(
+                    extraction.Snapshot.VertexCount,
+                    extraction.Snapshot.Positions,
+                    extraction.Snapshot.Uv0,
+                    extraction.Snapshot.HasUv0,
+                    extraction.Snapshot.Submeshes,
+                    materials);
+                return UnityRendererAlphaAnalysis.Analyze(
+                    snapshot,
+                    material => verified.Contains(material)
+                        ? new MaterialSemantics(
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                                material.Evidence),
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<NormalSemanticValue>.Unknown())
+                        : UnityMaterialSemantics.AllUnknown());
+            }
+            finally
             {
-                materials[slot] = extraction.Snapshot.Materials[slot];
+                foreach (var clone in effectiveClones)
+                {
+                    Object.DestroyImmediate(clone);
+                }
             }
-
-            var verified = new HashSet<CapturedAlphaMaterial>();
-            for (var index = 0; index < capturedEvidence.Count; index++)
-            {
-                var material = new CapturedAlphaMaterial(
-                    CapturedAlphaMaterialFamily.Unsupported,
-                    capturedEvidence[index],
-                    default(PoiyomiSourceEvidence),
-                    null);
-                materials[slotIndices[index]] = material;
-                verified.Add(material);
-            }
-
-            var snapshot = new UnityRendererAlphaSnapshot(
-                extraction.Snapshot.VertexCount,
-                extraction.Snapshot.Positions,
-                extraction.Snapshot.Uv0,
-                extraction.Snapshot.HasUv0,
-                extraction.Snapshot.Submeshes,
-                materials);
-            return UnityRendererAlphaAnalysis.Analyze(
-                snapshot,
-                material => verified.Contains(material)
-                    ? new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                            material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown())
-                    : UnityMaterialSemantics.AllUnknown());
         }
 
         [Test]
@@ -316,6 +360,47 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result.Plan.TransparentTriangleCount, Is.EqualTo(3));
             Assert.That(result.Plan.HasAnyOpaqueCandidates, Is.True);
             Assert.That(result.Plan.RequiresAnySplit, Is.True);
+        }
+
+        /// <summary>
+        /// The capture falsifier for effective-state analysis: a renderer-wide
+        /// block forces <c>_AlphaForceOpaque</c> to 1, so the proof must run
+        /// through the materialized override. An implementation that
+        /// classifies the serialized material instead of the materialized one
+        /// proves the wrong state: today it refuses the renderer outright,
+        /// and with the presence gate gone it still reports zero opaque
+        /// candidates, because the serialized sampled equation cannot prove a
+        /// triangle inside the non-opaque texel.
+        /// </summary>
+        [Test]
+        public void BlockForcedOpaqueOverrideAnalyzesThroughTheOverride()
+        {
+            var texture = ImportTexture("block_override", readable: true);
+            var supported = NewSampledAlphaMaterial(texture);
+            var renderer = NewRenderer(BuildSingleTexelTriangleMesh(), supported);
+            var block = new MaterialPropertyBlock();
+            block.SetFloat("_AlphaForceOpaque", 1f);
+            renderer.SetPropertyBlock(block);
+
+            var result = AnalyzeVerified(renderer, supported);
+
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None),
+                "A block is evidence, not a refusal; capture must analyze " +
+                "the materialized effective state.");
+            Assert.That(
+                result.Plan.OpaqueTriangleCount,
+                Is.EqualTo(1),
+                "An implementation that classifies the serialized material " +
+                "instead of the materialized one proves the wrong state: " +
+                "the serialized sampled equation leaves the texel-bound " +
+                "triangle unproven, so only the override proof reports it " +
+                "opaque.");
+            Assert.That(
+                supported.GetFloat("_AlphaForceOpaque"),
+                Is.EqualTo(0f),
+                "Materialization must not mutate the original material.");
         }
 
         /// <summary>
