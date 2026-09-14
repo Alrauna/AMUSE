@@ -128,6 +128,12 @@ namespace Alrauna.Amuse.Editor.Build
                         state.RecordSlotRefusal(
                             AlphaSeparationSlotRefusal
                                 .RendererChangedSincePreparation);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            AlphaSeparationSlotRefusal
+                                .RendererChangedSincePreparation);
+
                     }
 
                     rendererSurvivors.Add(survivors);
@@ -160,6 +166,12 @@ namespace Alrauna.Amuse.Editor.Build
                         state.RecordSlotRefusal(
                             AlphaSeparationSlotRefusal
                                 .RuntimeMaterialValueNotMapped);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            AlphaSeparationSlotRefusal
+                                .RuntimeMaterialValueNotMapped);
+
                     }
 
                     rendererSurvivors.Add(
@@ -222,6 +234,10 @@ namespace Alrauna.Amuse.Editor.Build
                     if (refusal != AlphaSeparationSlotRefusal.None)
                     {
                         state.RecordSlotRefusal(refusal);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            refusal);
                         continue;
                     }
 
