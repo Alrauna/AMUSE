@@ -229,7 +229,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 if (!TryAdmitDerivedEvidence(
                         material, slotBindings, relevance,
                         out var evidence, out var refusal,
-                        slotBlockEntries))
+                        slotBlockEntries,
+                        admittedMaterials))
                 {
                     // No partial prefix: resolutions gathered for earlier
                     // admitted materials authorize nothing once the slot
@@ -307,7 +308,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             MaterialEvidenceRequest relevance,
             out CapturedMaterialEvidence derived,
             out RendererAnalysisRefusal refusal,
-            IReadOnlyList<BlockStateEntry> slotBlockEntries = null)
+            IReadOnlyList<BlockStateEntry> slotBlockEntries = null,
+            IReadOnlyList<CapturedAlphaMaterial> allAdmittedMaterials = null)
         {
             if (material == null) throw new ArgumentNullException(nameof(material));
             if (bindings == null) throw new ArgumentNullException(nameof(bindings));
@@ -360,7 +362,9 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             foreach (var group in GroupByProperty(bindings))
             {
-                refusal = Admit(group, relevance, ref derived, slotBlockEntries);
+                var anyAdmittedDeclares = AnyAdmittedMaterialDeclaresProperty(
+                    allAdmittedMaterials, group.PropertyName, group.Kind, relevance);
+                refusal = Admit(group, relevance, ref derived, slotBlockEntries, anyAdmittedDeclares);
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     derived = material.Evidence;
@@ -369,6 +373,44 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return true;
+        }
+
+        private static bool AnyAdmittedMaterialDeclaresProperty(
+            IReadOnlyList<CapturedAlphaMaterial> admittedMaterials,
+            string propertyName,
+            AnimatedPropertyKind kind,
+            MaterialEvidenceRequest relevance)
+        {
+            if (admittedMaterials == null) return false;
+            for (var i = 0; i < admittedMaterials.Count; i++)
+            {
+                var evidence = admittedMaterials[i]?.Evidence;
+                if (evidence == null) continue;
+
+                switch (kind)
+                {
+                    case AnimatedPropertyKind.Scalar:
+                        if (evidence.TryGetScalar(propertyName, out _)) return true;
+                        break;
+                    case AnimatedPropertyKind.ColorComponent:
+                        if (evidence.TryGetColor(propertyName, out _)) return true;
+                        break;
+                    case AnimatedPropertyKind.VectorComponent:
+                        if (evidence.TryGetVector(propertyName, out _)) return true;
+                        break;
+                    case AnimatedPropertyKind.TextureScaleOffsetComponent:
+                    {
+                        var texture = OwningTextureProperty(relevance, propertyName);
+                        if (evidence.TryGetTexture(texture, out var assignment) &&
+                            assignment.HasScaleOffset)
+                        {
+                            return true;
+                        }
+                        break;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -414,7 +456,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             AnimatedPropertyGroup group,
             MaterialEvidenceRequest relevance,
             ref CapturedMaterialEvidence evidence,
-            IReadOnlyList<BlockStateEntry> slotBlockEntries)
+            IReadOnlyList<BlockStateEntry> slotBlockEntries,
+            bool anyAdmittedDeclares = false)
         {
             switch (group.Kind)
             {
@@ -428,6 +471,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (!evidence.TryGetScalar(
                             group.PropertyName, out var serialized))
                     {
+                        if (anyAdmittedDeclares)
+                        {
+                            return RendererAnalysisRefusal.None;
+                        }
+
                         return RendererAnalysisRefusal
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
@@ -457,6 +505,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (!evidence.TryGetColor(
                             group.PropertyName, out var serialized))
                     {
+                        if (anyAdmittedDeclares)
+                        {
+                            return RendererAnalysisRefusal.None;
+                        }
+
                         return RendererAnalysisRefusal
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
@@ -492,6 +545,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (!evidence.TryGetVector(
                             group.PropertyName, out var serialized))
                     {
+                        if (anyAdmittedDeclares)
+                        {
+                            return RendererAnalysisRefusal.None;
+                        }
+
                         return RendererAnalysisRefusal
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
@@ -538,6 +596,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (!evidence.TryGetTexture(texture, out var assignment) ||
                         !assignment.HasScaleOffset)
                     {
+                        if (anyAdmittedDeclares)
+                        {
+                            return RendererAnalysisRefusal.None;
+                        }
+
                         return RendererAnalysisRefusal
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
