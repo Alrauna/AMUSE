@@ -28,9 +28,6 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.RendererRefusal.None;
                 case RendererAnalysisRefusal.UnsupportedRendererType:
                     return Census.RendererRefusal.UnsupportedRendererType;
-                case RendererAnalysisRefusal.MaterialPropertyOverridesPresent:
-                    return Census.RendererRefusal
-                        .MaterialPropertyOverridesPresent;
                 case RendererAnalysisRefusal.MaterialDependencyClosureFailed:
                     return Census.RendererRefusal
                         .MaterialDependencyClosureFailed;
