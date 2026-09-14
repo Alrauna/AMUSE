@@ -23,6 +23,85 @@ namespace Alrauna.Amuse.Editor.Build
                     ("en-us", AmuseReportStrings.Get),
                 });
 
+        /// <summary>
+        /// One Information entry per refused material slot, so a build
+        /// names the exact slot and the exact rule that stopped its proof.
+        /// A <see cref="RendererAnalysisRefusal.None"/> is not a refusal,
+        /// so it throws.
+        /// </summary>
+        internal static void SlotAnalysisRefusal(
+            Renderer renderer,
+            int slotIndex,
+            RendererAnalysisRefusal cause)
+        {
+            if (cause == RendererAnalysisRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "RendererAnalysisRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.SlotAnalysisKey(cause),
+                    slotIndex,
+                    cause.ToString());
+            }
+        }
+
+        /// <summary>
+        /// One Information entry per slot whose prepared separation was
+        /// dropped, with the slot index and the exact separation refusal.
+        /// A <see cref="AlphaSeparationSlotRefusal.None"/> is not a
+        /// refusal, so it throws.
+        /// </summary>
+        internal static void SlotSeparationRefusal(
+            Renderer renderer,
+            int slotIndex,
+            AlphaSeparationSlotRefusal cause)
+        {
+            if (cause == AlphaSeparationSlotRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "AlphaSeparationSlotRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.SlotSeparationKey(cause),
+                    slotIndex,
+                    cause.ToString());
+            }
+        }
+
+        /// <summary>
+        /// One Information entry per texture whose capture refused, with
+        /// the slot index, the texture property, and the sampled channel:
+        /// the triangles that sample it have no proof and stay on the
+        /// original material.
+        /// </summary>
+        internal static void TextureCaptureRefusal(
+            Renderer renderer,
+            int slotIndex,
+            TextureCaptureRefusal refusal)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.TextureCaptureKey(refusal.Reason),
+                    slotIndex,
+                    refusal.PropertyName,
+                    refusal.Channel.ToString());
+            }
+        }
+
         internal static void RendererRefusal(
             Renderer renderer, RendererAnalysisRefusal cause)
         {

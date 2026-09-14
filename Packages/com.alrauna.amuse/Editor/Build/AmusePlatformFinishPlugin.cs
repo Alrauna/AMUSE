@@ -520,6 +520,24 @@ namespace Alrauna.Amuse.Editor.Build
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState);
                 refusal = resolved.Refusal;
+                // Every refused slot reports its own exact reason, even
+                // when the renderer as a whole continues or the first
+                // refusal names the renderer: one line per slot, no
+                // aggregation, so a manual test can read the full list.
+                for (var slotIndex = 0;
+                     slotIndex < resolved.SlotResults.Length;
+                     slotIndex++)
+                {
+                    if (resolved.SlotResults[slotIndex].IsResolved)
+                    {
+                        continue;
+                    }
+
+                    AmuseReports.SlotAnalysisRefusal(
+                        renderer,
+                        slotIndex,
+                        resolved.SlotResults[slotIndex].Refusal);
+                }
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
                 {
@@ -532,6 +550,21 @@ namespace Alrauna.Amuse.Editor.Build
                             extraction.Snapshot,
                             resolved.SlotResults);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                        var slots = MaterialSlotsFor(evidence, rendererPath);
+                        for (var slotIndex = 0;
+                             slotIndex < slots.Count;
+                             slotIndex++)
+                        {
+                            foreach (var textureRefusal in
+                                     slots[slotIndex].CaptureRefusals)
+                            {
+                                AmuseReports.TextureCaptureRefusal(
+                                    renderer,
+                                    slotIndex,
+                                    textureRefusal);
+                            }
+                        }
+
                         RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
@@ -562,6 +595,7 @@ namespace Alrauna.Amuse.Editor.Build
                     opaqueCandidateTriangleCount;
             }
         }
+
         /// <summary>
         /// Wraps a closed material capturer so the attested batch is captured
         /// through each material's per-slot effective materialization: the

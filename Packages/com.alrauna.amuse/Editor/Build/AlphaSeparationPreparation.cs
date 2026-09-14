@@ -161,6 +161,7 @@ namespace Alrauna.Amuse.Editor.Build
                                 .UnrecognizedMaterialBinding)
                         {
                             return RefuseEveryCandidateSlot(
+                                target,
                                 state,
                                 plan,
                                 AlphaSeparationSlotRefusal
@@ -184,6 +185,7 @@ namespace Alrauna.Amuse.Editor.Build
                 if (conversionBindings.Count > 0 && evidence.HasAdditiveLayer)
                 {
                     return RefuseEveryCandidateSlot(
+                        target,
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
@@ -194,6 +196,7 @@ namespace Alrauna.Amuse.Editor.Build
                     evidence.HasUnnormalizedDirectBlendTree)
                 {
                     return RefuseEveryCandidateSlot(
+                        target,
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
@@ -247,6 +250,11 @@ namespace Alrauna.Amuse.Editor.Build
                     state.RecordSlotRefusal(
                         AlphaSeparationSlotRefusal
                             .OpaqueCoverageBelowMinimum);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        submesh.SourceMaterialBindingIndex,
+                        AlphaSeparationSlotRefusal
+                            .OpaqueCoverageBelowMinimum);
                     continue;
                 }
 
@@ -297,6 +305,11 @@ namespace Alrauna.Amuse.Editor.Build
                 if (markerCarries)
                 {
                     state.RecordSlotRefusal(
+                        AlphaSeparationSlotRefusal
+                            .MarkerClipCarriesSlotBinding);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        slotIndex,
                         AlphaSeparationSlotRefusal
                             .MarkerClipCarriesSlotBinding);
                     continue;
@@ -389,6 +402,10 @@ namespace Alrauna.Amuse.Editor.Build
                 if (slotRefusal != AlphaSeparationSlotRefusal.None)
                 {
                     state.RecordSlotRefusal(slotRefusal);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        slotIndex,
+                        slotRefusal);
                     // The slot is dropped with nothing registered: clones
                     // created for its earlier admitted materials would be
                     // unreachable and unknown to the apply pass's sweep. They
@@ -469,17 +486,24 @@ namespace Alrauna.Amuse.Editor.Build
         /// nothing for the renderer.
         /// </summary>
         private static PreparedRendererSeparation RefuseEveryCandidateSlot(
+            UnityRendererMutationTarget target,
             AmusePlatformFinishState state,
             MeshSeparationPlan plan,
             AlphaSeparationSlotRefusal reason)
         {
             foreach (var submesh in plan.Submeshes)
             {
-                if (submesh.Disposition !=
+                if (submesh.Disposition ==
                     SubmeshSeparationDisposition.Unchanged)
                 {
-                    state.RecordSlotRefusal(reason);
+                    continue;
                 }
+
+                state.RecordSlotRefusal(reason);
+                AmuseReports.SlotSeparationRefusal(
+                    target.Renderer,
+                    submesh.SourceMaterialBindingIndex,
+                    reason);
             }
 
             return null;
