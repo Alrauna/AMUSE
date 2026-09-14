@@ -902,14 +902,6 @@ namespace Alrauna.Amuse.Editor.Build
                 evidence.AdmittedMaterials,
                 maxMipLevel,
                 minTextureSize);
-            bool AlphaFields(
-                TextureSourceId source,
-                TextureChannel channel,
-                out AlphaMipChain chain)
-            {
-                chain = null;
-                return fields.TryGetValue((source, channel), out chain);
-            }
 
             // Every slot is resolved; no slot's failure stops the loop. A
             // slot's admission failure is a fact about that slot's own admitted
@@ -928,7 +920,7 @@ namespace Alrauna.Amuse.Editor.Build
                     evidence.AdmittedMaterials,
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
-                    AlphaFields,
+                    fields,
                     densityCapPercent,
                     resolveSemantics);
                 if (!resolved.IsResolved)
@@ -1056,11 +1048,12 @@ namespace Alrauna.Amuse.Editor.Build
                 slot.Resolutions.Count);
             foreach (var resolution in slot.Resolutions)
             {
-                perResolution.Add(UnityRendererAlphaAnalysis.Classify(
+                var outcomes = UnityRendererAlphaAnalysis.Classify(
                     submesh.Indices,
                     snapshot.Positions,
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
-                    resolution));
+                    resolution);
+                perResolution.Add(outcomes);
             }
 
             return UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
