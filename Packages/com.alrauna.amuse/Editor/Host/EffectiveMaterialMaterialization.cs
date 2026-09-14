@@ -163,6 +163,117 @@ namespace Alrauna.Amuse.Editor.Host
 
             return found;
         }
+        /// <summary>
+        /// Snapshots the renderer's effective block state: for every slot,
+        /// the winning value of each schema entry that slot's material's
+        /// shader declares, after per-index-over-renderer-wide precedence.
+        /// Empty when no block is present. The snapshot holds no live block
+        /// object, so it can be retained on prepared state and compared
+        /// after the fact.
+        /// </summary>
+        internal static IReadOnlyList<BlockStateEntry> CaptureBlockState(
+            Renderer renderer)
+        {
+            var entries = new List<BlockStateEntry>();
+            if (!renderer.HasPropertyBlock())
+            {
+                return entries;
+            }
+
+            var slotMaterials = renderer.sharedMaterials;
+            var schemas = new Dictionary<Shader, List<SchemaEntry>>();
+            var wide = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(wide);
+            for (var index = 0; index < slotMaterials.Length; index++)
+            {
+                var schema = SchemaFor(slotMaterials[index], schemas);
+                if (schema == null)
+                {
+                    continue;
+                }
+
+                var perIndex = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(perIndex, index);
+                foreach (var entry in schema)
+                {
+                    if (perIndex.HasProperty(entry.Name))
+                    {
+                        entries.Add(ReadEntry(index, entry, perIndex));
+                    }
+                    else if (wide.HasProperty(entry.Name))
+                    {
+                        entries.Add(ReadEntry(index, entry, wide));
+                    }
+                }
+            }
+
+            return entries;
+        }
+
+        /// <summary>
+        /// Exact comparison of two snapshots of the same renderer. The
+        /// enumeration order is a pure function of slot order and shader
+        /// property order, so equal states enumerate identically; a changed
+        /// schema — a foreign material swap — also changes the enumeration
+        /// and reads as a mismatch, which is the conservative direction.
+        /// </summary>
+        internal static bool BlockStateEquals(
+            IReadOnlyList<BlockStateEntry> first,
+            IReadOnlyList<BlockStateEntry> second)
+        {
+            if (ReferenceEquals(first, second))
+            {
+                return true;
+            }
+
+            if (first == null || second == null ||
+                first.Count != second.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < first.Count; index++)
+            {
+                if (!first[index].Equals(second[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static BlockStateEntry ReadEntry(
+            int slotIndex,
+            SchemaEntry schema,
+            MaterialPropertyBlock block)
+        {
+            switch (schema.Type)
+            {
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                case ShaderPropertyType.Int:
+                    return new BlockStateEntry(
+                        slotIndex, schema.Name, schema.Type,
+                        block.GetFloat(schema.Name), default, default, null);
+                case ShaderPropertyType.Color:
+                    return new BlockStateEntry(
+                        slotIndex, schema.Name, schema.Type, 0f,
+                        block.GetColor(schema.Name), default, null);
+                case ShaderPropertyType.Vector:
+                    return new BlockStateEntry(
+                        slotIndex, schema.Name, schema.Type, 0f, default,
+                        block.GetVector(schema.Name), null);
+                case ShaderPropertyType.Texture:
+                    return new BlockStateEntry(
+                        slotIndex, schema.Name, schema.Type, 0f, default,
+                        default, block.GetTexture(schema.Name));
+                default:
+                    return new BlockStateEntry(
+                        slotIndex, schema.Name, schema.Type, 0f, default,
+                        default, null);
+            }
+        }
 
         private readonly struct SchemaEntry
         {

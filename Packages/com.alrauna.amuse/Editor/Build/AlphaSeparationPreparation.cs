@@ -403,7 +403,9 @@ namespace Alrauna.Amuse.Editor.Build
                 rendererPath,
                 plan,
                 evidence,
-                candidateSlots);
+                candidateSlots,
+                EffectiveMaterialMaterialization.CaptureBlockState(
+                    target.Renderer));
 
             // A mesh clone is created only when the plan requires a split and
             // at least one Split slot survived preparation; clones abandoned
