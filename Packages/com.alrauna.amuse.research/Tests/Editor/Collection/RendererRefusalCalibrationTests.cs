@@ -1,5 +1,7 @@
 using Alrauna.Amuse.Research.Census;
 using Alrauna.Amuse.Research.Collection;
+using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -82,8 +84,14 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             Assert.That(observed.TriangleCount, Is.Null);
         }
 
+        /// <summary>
+        /// A block is effective-state evidence: the observation succeeds, and
+        /// the analysis input the provider receives carries the overridden
+        /// <c>_Cutoff</c> rather than the serialized default, because capture
+        /// materializes block state before any material is read.
+        /// </summary>
         [Test]
-        public void PropertyBlockRefusalStillCountsTheMesh()
+        public void BlockedRendererObservesTheOverriddenCutoff()
         {
             var root = _scene.NewRoot("Block");
             var go = _scene.NewMeshRenderer(
@@ -94,17 +102,31 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             block.SetFloat("_Cutoff", 0.25f);
             renderer.SetPropertyBlock(block);
 
-            var observed = Observe(renderer);
+            var observedCutoff = float.NaN;
+            var observed = RendererObservationBuilder.Build(
+                renderer, "Path", new CensusShaderFamily(),
+                material =>
+                {
+                    observedCutoff = material.GetFloat("_Cutoff");
+                    return UnityMaterialSemantics.AllUnknown();
+                });
 
-            Assert.That(
-                observed.Refusal,
-                Is.EqualTo(RendererRefusal.MaterialPropertyOverridesPresent));
+            Assert.That(observed.Refusal, Is.EqualTo(RendererRefusal.None));
             Assert.That(observed.SubmeshCount, Is.EqualTo(1));
             Assert.That(observed.TriangleCount, Is.EqualTo(1));
-            Assert.That(observed.Submeshes, Is.Empty);
+            Assert.That(
+                observed.Submeshes[0].AlphaFailure,
+                Is.EqualTo(AlphaResolutionFailure.SemanticsUnknown),
+                "Standard stays unattested; only the effective input " +
+                "changes, not the family verdict.");
+            Assert.That(
+                observedCutoff,
+                Is.EqualTo(0.25f),
+                "The analysis must read the materialized override, not " +
+                "the serialized default of 0.5.");
         }
 
-        [Test]
+            [Test]
         public void UnprovenSlotMappingStillCountsTheMesh()
         {
             var root = _scene.NewRoot("Slots");

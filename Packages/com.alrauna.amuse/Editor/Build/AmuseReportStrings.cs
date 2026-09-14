@@ -28,16 +28,6 @@ namespace Alrauna.Amuse.Editor.Build
                 "Nothing on this renderer is wrong. AMUSE just does not " +
                 "work with this renderer type yet.",
 
-            ["amuse.renderer.MaterialPropertyOverridesPresent"] =
-                "This renderer has material property overrides.",
-            ["amuse.renderer.MaterialPropertyOverridesPresent:description"] =
-                "A material property block changes this renderer's " +
-                "materials while the game runs. AMUSE cannot prove what " +
-                "the renderer shows, so it changed nothing.",
-            ["amuse.renderer.MaterialPropertyOverridesPresent:hint"] =
-                "If you do not need the property overrides, remove them " +
-                "and AMUSE can analyze this renderer.",
-
             ["amuse.renderer.MaterialDependencyClosureFailed"] =
                 "AMUSE could not read this renderer's animations.",
             ["amuse.renderer.MaterialDependencyClosureFailed:description"] =
