@@ -2344,7 +2344,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
                 Assert.That(result.Refusal, Is.EqualTo(
                     RendererAnalysisRefusal
-                        .AnimatedPropertyAbsentFromAdmittedMaterial));
+                        .AdmittedMaterialSemanticsUnknown));
             }
             finally
             {
