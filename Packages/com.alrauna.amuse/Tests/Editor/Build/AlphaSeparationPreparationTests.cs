@@ -5853,23 +5853,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         // --- Fixture helpers ---------------------------------------------------
 
-        /// <summary>
-        /// Clears the renderer property blocks that Unity's animation
-        /// runtime writes when the build's committed animator samples
-        /// material property curves. The block is commit output, not
-        /// fixture input: the barrier must classify the captured
-        /// animation bindings, so this transient sampled state is
-        /// removed before the pass runs. A block attached on purpose
-        /// still refuses by name; see UnityRendererAlphaAnalysisTests.
-        /// </summary>
-        private static void ClearCommitAnimationPropertyBlocks(
-            GameObject root)
-        {
-            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
-            {
-                renderer.SetPropertyBlock(null);
-            }
-        }
 
         /// <summary>
         /// Drives the real bindings-capture and barrier passes through the
@@ -5894,7 +5877,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, PreparationTestPlatform.Instance);
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
                 GenericPlatformAnimatorBindings.Instance;
-            ClearCommitAnimationPropertyBlocks(root);
 
             AmusePlatformFinishPass.Execute(
                 context,
