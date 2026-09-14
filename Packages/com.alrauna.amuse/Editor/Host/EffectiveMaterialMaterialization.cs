@@ -79,6 +79,90 @@ namespace Alrauna.Amuse.Editor.Host
 
             return materializedAnySlot ? result : slotMaterials;
         }
+        /// <summary>
+        /// Materializes the effective state of admitted materials against one
+        /// renderer: the renderer-wide block applies to every admitted
+        /// material, and a per-material-index block applies when the shared
+        /// materials hold the material in exactly one slot. A material held by
+        /// several slots — or by none, a pure swap state — materializes from
+        /// the renderer-wide block alone, because one material-scoped evidence
+        /// record cannot carry slot disagreement; stage 2's per-property
+        /// domains replace this scalar materialization and remove that corner.
+        /// Clones are transient capture inputs: the caller destroys every
+        /// entry of <paramref name="createdClones"/> in the receiving scope.
+        /// </summary>
+        internal static IReadOnlyList<Material> MaterializeAdmitted(
+            Renderer renderer,
+            IReadOnlyList<Material> admittedMaterials,
+            out List<Material> createdClones)
+        {
+            createdClones = new List<Material>();
+            if (admittedMaterials.Count == 0 || !renderer.HasPropertyBlock())
+            {
+                return admittedMaterials;
+            }
+
+            var wide = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(wide);
+            var slotMaterials = renderer.sharedMaterials;
+            var schemas = new Dictionary<Shader, List<SchemaEntry>>();
+            var result = new Material[admittedMaterials.Count];
+            var materializedAny = false;
+            for (var index = 0; index < admittedMaterials.Count; index++)
+            {
+                var material = admittedMaterials[index];
+                var schema = SchemaFor(material, schemas);
+                var effective = material;
+                if (schema != null)
+                {
+                    var slot = SingleOccupiedSlot(slotMaterials, material);
+                    var wideTouches = TouchesSchema(schema, wide);
+                    if (wideTouches || slot >= 0)
+                    {
+                        effective = Object.Instantiate(material);
+                        createdClones.Add(effective);
+                        if (wideTouches)
+                        {
+                            ApplyBlock(effective, schema, wide);
+                        }
+
+                        if (slot >= 0)
+                        {
+                            var perIndex = new MaterialPropertyBlock();
+                            renderer.GetPropertyBlock(perIndex, slot);
+                            ApplyBlock(effective, schema, perIndex);
+                        }
+
+                        materializedAny = true;
+                    }
+                }
+
+                result[index] = effective;
+            }
+
+            return materializedAny ? result : admittedMaterials;
+        }
+
+        private static int SingleOccupiedSlot(
+            Material[] slotMaterials,
+            Material material)
+        {
+            var found = -1;
+            for (var slot = 0; slot < slotMaterials.Length; slot++)
+            {
+                if (ReferenceEquals(slotMaterials[slot], material))
+                {
+                    if (found >= 0)
+                    {
+                        return -1;
+                    }
+
+                    found = slot;
+                }
+            }
+
+            return found;
+        }
 
         private readonly struct SchemaEntry
         {
