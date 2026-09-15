@@ -308,3 +308,27 @@ Next session: rerun the suite on the fresh editor, read the
 its caller by renaming the classify parameter (the compiler then
 names every call site). Then finish the scroll full-domain slice,
 remove the diagnostics, and validate.
+
+## 11. Stage B root cause found, 2026-09-15
+
+The end-to-end uv1 failure's cause is identified and the fix is
+written:
+
+- The extraction read the legacy `mesh.uv2` getter. The test fixture
+  allocates the uv1 channel through `Mesh.SetUVs(1, ...)`, and the
+  legacy getter does not return data written through `SetUVs`, so the
+  extraction saw the channel as absent, the resolution classified
+  every triangle Unknown, and the renderer proved nothing while
+  refusing nothing.
+- The fix on disk reads every layer channel through
+  `Mesh.GetUVs(channel, list)`, which sees data from both the legacy
+  properties and `SetUVs`. The malformed-data refusal is unchanged.
+- The superseded stage A pin that expected uv mode one to refuse is
+  removed; the channel selection falsifiers replace it.
+
+Blocked on the dev editor's compile pipeline, which stopped rebuilding
+assemblies mid-session even across forced refreshes and source touches;
+an editor restart is needed. Then: run the suite, expect the uv1
+falsifier and the report falsifier green, remove the `AMUSE-DBG`
+temporary diagnostics, commit, validate stage B in the Lab, and open
+the pull request.
