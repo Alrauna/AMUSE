@@ -315,6 +315,19 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.texture.UnsupportedFormat:hint"] =
                 "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
                 "DXT5, or BC7.",
+            ["amuse.texture.NoAlphaChannel"] =
+                "A material texture on slot {0} has no alpha channel.",
+            ["amuse.texture.NoAlphaChannel:description"] =
+                "Texture property {1} on material slot {0} imports from " +
+                "a source with no alpha channel, so every texel samples " +
+                "alpha one. AMUSE proved the triangles that sample it " +
+                "opaque from that fact. The material may be set up " +
+                "wrongly: a transparent or cutout shader cannot show " +
+                "transparency through a texture that has none.",
+            ["amuse.texture.NoAlphaChannel:hint"] =
+                "Check the material setup. A texture without an alpha " +
+                "channel cannot make transparency, so an opaque shader " +
+                "usually matches this content better.",
 
             // --- Avatar summary ---
             ["amuse.summary.Title"] =
@@ -491,6 +504,15 @@ namespace Alrauna.Amuse.Editor.Build
             TextureCaptureRefusalReason cause)
         {
             return Prefix + "texture." + cause;
+        }
+
+        /// <summary>
+        /// The report key for one texture property whose source has no alpha
+        /// channel. The report names the slot and the texture property.
+        /// </summary>
+        internal static string TextureAlphaMissingKey
+        {
+            get { return Prefix + "texture.NoAlphaChannel"; }
         }
 
         /// <summary>

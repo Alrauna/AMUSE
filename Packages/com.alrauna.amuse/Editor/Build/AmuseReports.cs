@@ -122,6 +122,29 @@ namespace Alrauna.Amuse.Editor.Build
                     refusal.Channel.ToString());
             }
         }
+        /// <summary>
+        /// One Information entry per texture whose source has no alpha
+        /// channel. The classification proved those triangles from the
+        /// format theorem; this report only names the likely material
+        /// misconfiguration, so the author can fix the shader type. It
+        /// refuses nothing and changes no classification outcome.
+        /// </summary>
+        internal static void TextureAlphaMissing(
+            Renderer renderer,
+            int slotIndex,
+            string propertyName)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.TextureAlphaMissingKey,
+                    slotIndex,
+                    propertyName);
+            }
+        }
+
         internal static void RendererRefusal(
             Renderer renderer, RendererAnalysisRefusal cause)
         {
