@@ -129,6 +129,60 @@ namespace Alrauna.Amuse.Editor.Host
                 clip.name, isSpecialMotion, floats, objects);
         }
 
+        /// <summary>
+        /// The virtual-clip counterpart of <see cref="ObserveClip"/>. NDMF's
+        /// committed controllers carry virtual clips whose curves live in
+        /// memory, so the same facts must be observable without an
+        /// <see cref="AnimationClip"/> asset. The binding order matches
+        /// the real-clip observation through the virtual clip's own
+        /// accessors.
+        /// </summary>
+        internal static LiveClipObservation ObserveVirtualClip(
+            nadena.dev.ndmf.animator.VirtualClip clip,
+            bool isSpecialMotion)
+        {
+            if (clip == null) throw new ArgumentNullException(nameof(clip));
+
+            var floats = new List<LiveFloatObservation>();
+            foreach (var binding in clip.GetFloatCurveBindings())
+            {
+                var curve = clip.GetFloatCurve(binding);
+                var keys = curve.keys;
+                var values = new float[keys.Length];
+                for (var index = 0; index < keys.Length; index++)
+                {
+                    values[index] = keys[index].value;
+                }
+
+                floats.Add(new LiveFloatObservation(
+                    binding.path,
+                    binding.type.FullName,
+                    binding.propertyName,
+                    IsFiniteExact(keys),
+                    values));
+            }
+
+            var objects = new List<LiveObjectObservation>();
+            foreach (var binding in clip.GetObjectCurveBindings())
+            {
+                var keys = clip.GetObjectCurve(binding);
+                var values = new UnityEngine.Object[keys.Length];
+                for (var index = 0; index < keys.Length; index++)
+                {
+                    values[index] = keys[index].value;
+                }
+
+                objects.Add(new LiveObjectObservation(
+                    binding.path,
+                    binding.type.FullName,
+                    binding.propertyName,
+                    values));
+            }
+
+            return new LiveClipObservation(
+                clip.Name, isSpecialMotion, floats, objects);
+        }
+
         internal static bool TryParseMaterialSlotBinding(
             string propertyName,
             out int slotIndex)

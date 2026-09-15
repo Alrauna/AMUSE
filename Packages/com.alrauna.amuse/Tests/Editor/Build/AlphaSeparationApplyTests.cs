@@ -172,6 +172,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var sequence = InPhase(BuildPhase.PlatformFinish);
 
+                sequence.Run(
+                    "AMUSE test structural graph check",
+                    AmuseStructuralGraphCheck.Execute);
                 sequence.WithRequiredExtension(
                     typeof(AnimatorServicesContext),
                     inner => inner.Run(
@@ -1801,6 +1804,121 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
+        [Test]
+        public void AnimatedMaterialSwapWithPartialConversionSplitsAndRewritesAppendedCurve()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE partial swap split");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "partial_conversion_split"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var other = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE partial swap",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        clip,
+                        EditorCurveBinding.PPtrCurve(
+                            "split", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[0]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = split,
+                            },
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 1f, value = other,
+                            },
+                        });
+                    controller = NewController(
+                        root, "AMUSE partial graph", clip);
+
+                    Material generatedClone = null;
+                    using (new ConversionOverrideScope(
+                        (Material live, CapturedMaterialEvidence derived,
+                         Material preparedOpaque,
+                         out Material opaque,
+                         out PoiyomiOpaqueConversionRefusal refusal) =>
+                        {
+                            if (ReferenceEquals(live, split))
+                            {
+                                generatedClone = PoiyomiOpaqueConversion
+                                    .PrepareCanonicalOpaqueClone(live);
+                                opaque = generatedClone;
+                                refusal = PoiyomiOpaqueConversionRefusal.None;
+                                return true;
+                            }
+
+                            opaque = null;
+                            refusal = PoiyomiOpaqueConversionRefusal.UnattestedMaterial;
+                            return false;
+                        }))
+                    {
+                        var context = AvatarProcessor.ProcessAvatar(
+                            root, SeamTestPlatform.Instance);
+                        probe = context.GetState<AlphaSeparationSeamProbe>();
+                    }
+
+                    Assert.That(probe.Decision.IsPrepared, Is.True);
+                    Assert.That(probe.Decision.HasMutation, Is.True,
+                        "fixture precondition: the appended slot must produce a write");
+
+                    Assert.That(probe.Finalization.Writes, Has.Count.EqualTo(1));
+                    var write = probe.Finalization.Writes[0];
+                    Assert.That(write.CurveEdits, Has.Count.EqualTo(1));
+                    var appended = write.CurveEdits[0];
+                    Assert.That(
+                        appended.Binding.propertyName,
+                        Is.EqualTo("m_Materials.Array.data[2]"),
+                        "appended slot is index 2");
+                    Assert.That(appended.Curve, Has.Length.EqualTo(2));
+                    Assert.That(
+                        appended.Curve[0].time.ToString("R"),
+                        Is.EqualTo(0f.ToString("R")));
+                    Assert.That(
+                        appended.Curve[1].time.ToString("R"),
+                        Is.EqualTo(1f.ToString("R")));
+                    Assert.That(appended.Curve[0].value, Is.SameAs(generatedClone),
+                        "keyframe 0 maps to the converted canonical opaque clone");
+                    Assert.That(appended.Curve[0].value, Is.Not.SameAs(split));
+                    Assert.That(appended.Curve[1].value, Is.SameAs(other),
+                        "keyframe 1 maps to the unconverted sibling via identity fallback");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
 
         [Test]
         public void IgnoredOutOfRangeBindingAtAppendedSlotRefusesSplitCandidate()

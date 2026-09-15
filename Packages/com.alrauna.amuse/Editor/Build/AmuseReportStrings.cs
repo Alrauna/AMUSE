@@ -285,28 +285,32 @@ namespace Alrauna.Amuse.Editor.Build
 
             // --- Texture capture refusals ---
             ["amuse.texture.UnavailableCapture"] =
-                "AMUSE could not read one material texture.",
+                "AMUSE could not read a material texture on slot {0}.",
             ["amuse.texture.UnavailableCapture:description"] =
-                "The capture of one texture on a material slot refused, so " +
-                "AMUSE has no proof for the triangles that sample it. Those " +
-                "triangles stay on the original material.",
+                "The capture of texture property {1} (channel {2}) on " +
+                "material slot {0} refused, so AMUSE has no proof for " +
+                "the triangles that sample it. Those triangles stay on " +
+                "the original material.",
             ["amuse.texture.UnavailableCapture:hint"] =
                 "Check that the texture is a real imported asset and that " +
                 "the project supports texture capture.",
             ["amuse.texture.NonResidentMips"] =
-                "One material texture is missing mipmap levels.",
+                "A material texture on slot {0} is missing mipmap levels.",
             ["amuse.texture.NonResidentMips:description"] =
-                "The texture's mipmap limit removes levels the proof must " +
-                "read, so AMUSE has no proof for the triangles that sample " +
-                "it. Those triangles stay on the original material.",
+                "Texture property {1} (channel {2}) on material slot {0} " +
+                "has a mipmap limit that removes levels the proof must " +
+                "read, so AMUSE has no proof for the triangles that " +
+                "sample it. Those triangles stay on the original material.",
             ["amuse.texture.NonResidentMips:hint"] =
                 "Lower the project's texture mipmap limit, or remove the " +
                 "texture's own limit.",
             ["amuse.texture.UnsupportedFormat"] =
-                "One material texture uses a format AMUSE cannot read.",
+                "A material texture on slot {0} uses a format AMUSE " +
+                "cannot read.",
             ["amuse.texture.UnsupportedFormat:description"] =
-                "The texture's storage format is outside the formats AMUSE " +
-                "can prove, so AMUSE has no proof for the triangles that " +
+                "Texture property {1} (channel {2}) on material slot {0} " +
+                "uses a storage format outside the formats AMUSE can " +
+                "prove, so AMUSE has no proof for the triangles that " +
                 "sample it. Those triangles stay on the original material.",
             ["amuse.texture.UnsupportedFormat:hint"] =
                 "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
@@ -324,7 +328,132 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE moved triangles while the alpha policy was " +
                 "active, so some moved triangles rest on your alpha " +
                 "settings rather than on exact proof.",
+
+            // --- Slot-scoped analysis refusals. One key per vocabulary,
+            // not per cause: the renderer-level report already carries the
+            // per-cause text, and the slot report names the exact cause.
+            ["amuse.slotAnalysis.Refusal"] =
+                "AMUSE proved nothing for material slot {0} of renderer " +
+                "'{2}'.",
+            ["amuse.slotAnalysis.Refusal:description"] =
+                "Runtime state resolution refused material slot {0} of " +
+                "renderer '{2}'. Reason: {1}. The slot keeps its original " +
+                "material.",
+            ["amuse.slotAnalysis.Refusal:hint"] =
+                "The reason names the exact rule that stopped the proof " +
+                "for this slot.",
+
+            // --- Slot-scoped separation refusals ---
+            ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily:description"] =
+                "Material slot {0} of renderer '{2}' swaps to a shader AMUSE cannot convert " +
+                "to an opaque material. Reason: {1}. The slot keeps its " +
+                "original material and its swap animation.",
+            ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily:hint"] =
+                "The swapped materials must all come from families AMUSE " +
+                "can convert, or the slot stays unchanged.",
+            ["amuse.slotSeparation.OpaqueConversionRefused"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.OpaqueConversionRefused:description"] =
+                "The opaque conversion refused one material on slot {0} of renderer '{2}'. " +
+                "Reason: {1}. The slot keeps its original material.",
+            ["amuse.slotSeparation.OpaqueConversionRefused:hint"] =
+                "Check the conversion eligibility gates on the swapped " +
+                "materials of this slot.",
+            ["amuse.slotSeparation.ConversionStateNotAdmitted"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.ConversionStateNotAdmitted:description"] =
+                "A conversion-relevant animated property on slot {0} of renderer '{2}' is " +
+                "not a provable single value. Reason: {1}. The slot keeps " +
+                "its original material.",
+            ["amuse.slotSeparation.ConversionStateNotAdmitted:hint"] =
+                "The conversion recipes need their properties at one " +
+                "exact value while the slot animates.",
+            ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime:description"] =
+                "An animation overwrites a recipe property on slot {0} of renderer '{2}'. " +
+                "Reason: {1}. The slot keeps its original material.",
+            ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime:hint"] =
+                "Remove the animation curve that drives the recipe " +
+                "property, or accept the slot stays unchanged.",
+            ["amuse.slotSeparation.MarkerClipCarriesSlotBinding"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.MarkerClipCarriesSlotBinding:description"] =
+                "A special motion animates the material of slot {0} of renderer '{2}', and " +
+                "special motions cannot be edited safely. Reason: {1}. " +
+                "The slot keeps its original material.",
+            ["amuse.slotSeparation.MarkerClipCarriesSlotBinding:hint"] =
+                "Move the material swap out of the special motion layer.",
+            ["amuse.slotSeparation.RuntimeMaterialValueNotMapped"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:description"] =
+                "The runtime state of slot {0} of renderer '{2}' no longer " +
+                "matches the state AMUSE proved. Reason: {1}. The material " +
+                "the slot held was '{3}'. The proven mapping covered: {4}. " +
+                "The slot keeps its original material.",
+            ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:hint"] =
+                "Re-run the build so the proof and the renderer agree " +
+                "again.",
+            ["amuse.slotSeparation.SlotBindingAbsentFromEvidence"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.SlotBindingAbsentFromEvidence:description"] =
+                "A live animation binding on slot {0} of renderer '{2}' was not part of the " +
+                "captured evidence. Reason: {1}. The slot keeps its " +
+                "original material.",
+            ["amuse.slotSeparation.SlotBindingAbsentFromEvidence:hint"] =
+                "Re-run the build so the capture sees every live " +
+                "animation binding.",
+            ["amuse.slotSeparation.OpaqueCoverageBelowMinimum"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:description"] =
+                "The proven-opaque share of slot {0} of renderer '{2}' is below your " +
+                "minimum opaque coverage setting. Reason: {1}. The slot " +
+                "keeps its original material.",
+            ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:hint"] =
+                "Lower the minimum opaque coverage setting on the AMUSE " +
+                "component if you want this split.",
+            ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
+                "An animation on this renderer drives a conversion " +
+                "property AMUSE does not recognize, so slot {0} of " +
+                "renderer '{2}' cannot prepare. Reason: {1}. The slot " +
+                "keeps its original material.",
+            ["amuse.slotSeparation.ConversionBindingUnrecognized:hint"] =
+                "Limit the conversion-relevant animation curves to " +
+                "properties AMUSE knows.",
+            ["amuse.slotSeparation.ConversionStateUnderAdditiveLayer"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.ConversionStateUnderAdditiveLayer:description"] =
+                "An additive animation layer touches conversion-relevant " +
+                "state of slot {0}. Reason: {1}. The slot keeps its " +
+                "original material.",
+            ["amuse.slotSeparation.ConversionStateUnderAdditiveLayer:hint"] =
+                "Move the conversion-relevant curves out of the additive " +
+                "layer.",
+            ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree:description"] =
+                "An unnormalized direct blend tree touches " +
+                "conversion-relevant state of slot {0} of renderer '{2}'. Reason: {1}. The " +
+                "slot keeps its original material.",
+            ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree:hint"] =
+                "Normalize the blend tree weights, or move the curves " +
+                "out of the direct blend tree.",
+            ["amuse.slotSeparation.RendererChangedSincePreparation"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.RendererChangedSincePreparation:description"] =
+                "The renderer, its mesh, or its slot array changed after " +
+                "AMUSE prepared slot {0} of renderer '{2}', so the proof " +
+                "no longer applies. Reason: {1}. The slot keeps its " +
+                "original material.",
+            ["amuse.slotSeparation.RendererChangedSincePreparation:hint"] =
+                "Another build step replaced the mesh or the slots. Run " +
+                "AMUSE last, or accept the slot stays unchanged.",
         };
+
 
         /// <summary>True when the table holds a string for the key.</summary>
         internal static bool Has(string key)
@@ -362,6 +491,25 @@ namespace Alrauna.Amuse.Editor.Build
             TextureCaptureRefusalReason cause)
         {
             return Prefix + "texture." + cause;
+        }
+
+        /// <summary>
+        /// The report key for one slot whose runtime-state resolution
+        /// refused. The report names the slot index and the exact cause.
+        /// </summary>
+        internal static string SlotAnalysisKey(RendererAnalysisRefusal cause)
+        {
+            return Prefix + "slotAnalysis.Refusal";
+        }
+
+        /// <summary>
+        /// The report key for one slot whose prepared separation was
+        /// dropped. The report names the slot index and the exact cause.
+        /// </summary>
+        internal static string SlotSeparationKey(
+            AlphaSeparationSlotRefusal cause)
+        {
+            return Prefix + "slotSeparation." + cause;
         }
     }
 }

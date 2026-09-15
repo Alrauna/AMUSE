@@ -225,6 +225,71 @@ namespace Alrauna.Amuse.Editor.Host
                 ignoreOutOfRangeSlots);
         }
 
+        /// <summary>
+        /// The production capture for the barrier's single-scope lifecycle:
+        /// observations come from the committed-graph walk plus every clip
+        /// the AnimationIndex holds for this renderer's object path, so the
+        /// admitted swap set matches what the apply pass validates against.
+        /// The graph still decides the structural facts; the index only
+        /// adds clip observations for this renderer path.
+        /// </summary>
+        internal static CapturedAnimationEvidence CaptureWithAnimationIndex(
+            string rendererPath,
+            IReadOnlyList<Material> currentSlots,
+            CommittedControllerGraphResult graph,
+            IPlatformAnimatorBindings bindings,
+            AnimationIndex animationIndex,
+            AlphaPolicyBounds bounds,
+            out IReadOnlyList<Material> admittedLiveMaterials,
+            AlphaMaterialRequestSelector selectRequest = null,
+            ClosedAlphaMaterialCapturer capturer = null,
+            bool ignoreOutOfRangeSlots = false)
+        {
+            if (rendererPath == null)
+                throw new ArgumentNullException(nameof(rendererPath));
+            if (currentSlots == null)
+                throw new ArgumentNullException(nameof(currentSlots));
+            if (graph == null) throw new ArgumentNullException(nameof(graph));
+            if (bindings == null) throw new ArgumentNullException(nameof(bindings));
+            if (animationIndex == null)
+                throw new ArgumentNullException(nameof(animationIndex));
+            if (graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "Animation evidence capture requires a successful committed graph.");
+            }
+
+            var observations = new List<LiveClipObservation>();
+            foreach (var layer in graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    observations.Add(LiveAnimationObservation.ObserveClip(
+                        clip, bindings.IsSpecialMotion(clip)));
+                }
+            }
+
+            foreach (var virtualClipObj in animationIndex
+                         .GetClipsForObjectPath(rendererPath))
+            {
+                var virtualClip =
+                    (nadena.dev.ndmf.animator.VirtualClip)virtualClipObj;
+                observations.Add(LiveAnimationObservation.ObserveVirtualClip(
+                    virtualClip, virtualClip.IsMarkerClip));
+            }
+
+            return CaptureObserved(
+                rendererPath,
+                observations,
+                currentSlots,
+                graph,
+                bounds,
+                selectRequest ?? UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
+                capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                out admittedLiveMaterials,
+                ignoreOutOfRangeSlots);
+        }
+
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
