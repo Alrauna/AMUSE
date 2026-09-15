@@ -112,3 +112,32 @@ capture refusal now reports one exact line through the NDMF error
 report. A manual build names the slot index, the material, the texture
 property, and the refusal family, so the open questions above can be
 answered from the build itself.
+
+### Confirmed 2026-09-15: palette variants are never admitted
+
+A Lab build with the slot-level reports confirmed the admission gap. The
+report lines name the renderer, the slot, the material the slot held at
+apply time, and the full proven mapping:
+
+1. Polar_Hush slot 0 held UV1_Fabric_9 at apply time. The proven mapping
+   covered only UV1_knit_1.
+2. Top_Hush slot 0 held UV1_knit_9 at apply time. The proven mapping
+   covered only UV1_knit_1.
+3. 24 further slots across palette-swapped renderers dropped the same
+   way (Purple and _9 variants).
+
+The FX controller's Body Pallette layer (layer 17) holds the palette
+clips as plain state motions; the slot-0 binding to UV1_Fabric_9 parses
+as a valid material slot binding. The refusal itself is correct and
+fail-closed: the palette variants were never proven, so the slots keep
+their original materials. The coverage defect is upstream: the barrier's
+committed-graph capture does not admit the palette-variant swap values
+that the apply pass's live clip index does contain. Barrier evidence and
+apply-time clip discovery read different sources, and the barrier's is
+smaller.
+
+Fix direction: source swap-value admission from the same live clip index
+the apply pass validates against, so the barrier proves every value the
+apply can ever see. This is a capture-contract change and needs its own
+design pass. Until then, palette-swapped renderers correctly refuse at
+apply with an exact report line.
