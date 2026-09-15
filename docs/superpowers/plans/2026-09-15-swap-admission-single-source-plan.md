@@ -27,19 +27,19 @@ Spec: `docs/superpowers/specs/2026-09-15-swap-admission-single-source-design.md`
 - Modify: `Packages/com.alrauna.amuse/Editor/Host/LiveAnimationObservation.cs`
 - Test: `Packages/com.alrauna.amuse/Tests/Editor/Host/LiveAnimationObservationTests.cs`
 
-**Step 1 (RED):** test `ObserveVirtualClip_MatchesObserveClipSemantics`: build an AnimationClip with one exact float curve and one object curve on a slot binding; virtualize it through a temp `VirtualControllerContext` (NDMF test seam); observe both ways; assert equal property names, finite-exact flags, and object values.
+**Step 1 (RED):** test `ObserveVirtualClip_MatchesObserveClipSemantics`: build an AnimationClip with one exact float curve and one object curve on a slot binding. Virtualize it through a temp `VirtualControllerContext` (NDMF test seam). Observe both ways. Assert equal property names, finite-exact flags, and object values.
 **Step 2 (GREEN):** add `internal static LiveClipObservation ObserveVirtualClip(VirtualClip clip, bool isSpecialMotion)` mirroring `ObserveClip` through `GetFloatCurveBindings`/`GetFloatCurve`/`GetObjectReferenceCurveBindings`/`GetObjectCurve`.
 
 ### Task 2: Structural checks move to a pre-virtualization pass
 
 **Files:**
-- Modify: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` (Configure: new first pass; barrier drops its real-graph Enumerate)
-- Modify: `Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs` (keep Enumerate unchanged; it now serves the new pass)
+- Modify: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` (Configure: new first pass. The barrier drops its real-graph Enumerate)
+- Modify: `Packages/com.alrauna.amuse/Editor/Host/CommittedControllerGraph.cs` (keep Enumerate unchanged. It now serves the new pass)
 - Modify: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishState.cs` (store the enumerated graph result)
-- Test: existing structural refusal tests re-pointed at the new pass entry; counts recorded.
+- Test: existing structural refusal tests re-pointed at the new pass entry. Record counts.
 
 **Step 1 (RED):** a test that fires the animation-event refusal through the new first pass entry and asserts the avatar refusal.
-**Step 2 (GREEN):** new extension-free first pass runs `CommittedControllerGraph.Enumerate` and stores the result and refusal in `AmusePlatformFinishState`; the barrier stops calling Enumerate and reads the stored result.
+**Step 2 (GREEN):** new extension-free first pass runs `CommittedControllerGraph.Enumerate` and stores the result and refusal in `AmusePlatformFinishState`. The barrier stops calling Enumerate and reads the stored result.
 
 ### Task 3: Barrier admits from the AnimationIndex
 
@@ -53,6 +53,6 @@ Spec: `docs/superpowers/specs/2026-09-15-swap-admission-single-source-design.md`
 
 ### Task 4: Full verification
 
-- Full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` runs; record counts.
-- `git diff --check`; identifier sweep over the branch diff.
-- Census Lab characterization rerun: top garment renderers split; skirt still refuses on its feature gate; every refusal line names renderer, slot, and cause.
+- Full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` runs. Record counts.
+- `git diff --check`. Identifier sweep over the branch diff.
+- Census Lab characterization rerun: top garment renderers split. The skirt still refuses on its feature gate. Every refusal line names renderer, slot, and cause.
