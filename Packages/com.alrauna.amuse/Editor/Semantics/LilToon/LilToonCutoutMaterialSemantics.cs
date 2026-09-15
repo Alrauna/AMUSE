@@ -141,7 +141,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel,
+                        TextureEvidenceKinds.AlphaChannel |
+                        TextureEvidenceKinds.SampledAlphaIsOne,
                         // The cutout runtime clips by the shader cutoff, so
                         // the capture declares it: every route binarizes by
                         // the cutoff and keeps the alpha policy inert for
@@ -394,6 +395,37 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var identityMapping =
                 new UvMapping(0, assignment.Scale, assignment.Offset);
             var sharedSampling = assignment.Texture.Sampling;
+
+            // The importer theorem: a source without an alpha channel and an
+            // import that writes none samples alpha exactly one at every texel
+            // of every level. The main sample collapses to its constant, so no
+            // main field is read and no main source identity is needed. The
+            // mask still composes, and its coordinate still rides uvMain, so
+            // every gate above stays binding.
+            if (assignment.Texture.SampledAlphaIsProvenOne)
+            {
+                if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
+                {
+                    var theoremMaskSample = new TextureSample(
+                        maskTerm.Source,
+                        maskTerm.Mapping,
+                        sharedSampling);
+
+                    if (maskTerm.ReplacesMainAlpha)
+                    {
+                        return SemanticOutput<ScalarSemanticValue>.Complete(
+                            ScalarSemanticValue.Texture(
+                                theoremMaskSample, TextureChannel.Red));
+                    }
+
+                    return SemanticOutput<ScalarSemanticValue>.Complete(
+                        ScalarSemanticValue.TextureTimesConstant(
+                            theoremMaskSample, TextureChannel.Red, colorAlpha));
+                }
+
+                return SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.Constant(colorAlpha));
+            }
 
             if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
             {

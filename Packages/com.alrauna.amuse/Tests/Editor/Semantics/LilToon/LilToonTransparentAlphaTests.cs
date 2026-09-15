@@ -308,7 +308,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     TextureEvidenceKinds.ScaleOffset |
                     TextureEvidenceKinds.SourceIdentity |
                     TextureEvidenceKinds.Sampling |
-                    TextureEvidenceKinds.AlphaChannel));
+                    TextureEvidenceKinds.AlphaChannel |
+                    TextureEvidenceKinds.SampledAlphaIsOne));
 
             // Copy detector: a widened or copied cutout request would carry
             // _UseDither, which LIL_RENDER 2 compiles out.
@@ -317,6 +318,59 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // --- row 1: every mip is classified -------------------------------
+
+        /// <summary>
+        /// An importer whose source file has no alpha channel and whose alpha
+        /// source is none imports alpha exactly one at every texel. The
+        /// theorem replaces the texture sample, so the alpha is the tint
+        /// constant and needs no field at all. Falsifier: an implementation
+        /// that lets a missing or refused alpha field reach the resolution
+        /// would refuse content that is provably constant.
+        /// </summary>
+        [Test]
+        public void NoAlphaSourceImport_CollapsesTheTextureArmToTheTintConstant()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportTexture(
+                    "t_dxt1_noalpha",
+                    ForceDxt1Import(),
+                    sourceHasAlpha: false));
+            Assert.That(
+                ((Texture2D)material.GetTexture(MainTextureProperty)).format,
+                Is.EqualTo(UnityEngine.TextureFormat.DXT1),
+                "fixture precondition: the import must land on DXT1");
+
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+
+            Assert.That(
+                alpha.IsComplete,
+                Is.True,
+                "the no-alpha theorem must keep the alpha provable");
+            Assert.That(
+                alpha.GetCompleteValue().Kind,
+                Is.EqualTo(ScalarSemanticValueKind.Constant),
+                "the theorem replaces the texture sample with a constant");
+            Assert.That(
+                alpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(1f),
+                "the tint alpha of the default fixture is one");
+        }
+
+        private static Action<TextureImporter> ForceDxt1Import()
+        {
+            return importer =>
+            {
+                importer.alphaSource = TextureImporterAlphaSource.None;
+                var settings = importer.GetPlatformTextureSettings("Standalone");
+                settings.overridden = true;
+                settings.format = TextureImporterFormat.DXT1;
+                importer.SetPlatformTextureSettings(settings);
+            };
+        }
 
         [Test]
         public void TransparentTexelOnlyInALowerMip_ForcesMustRemainTransparent()
