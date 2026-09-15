@@ -94,6 +94,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void SlotSeparationRefusalReportsRendererAndMaterial()
+        {
+            var material = NewFixtureMaterial("AMUSE reported material");
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationRefusal(
+                    _renderer,
+                    0,
+                    AlphaSeparationSlotRefusal.RuntimeMaterialValueNotMapped,
+                    "AMUSE reported renderer",
+                    material));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("AMUSE reported renderer"),
+                "the report must name the renderer");
+            Assert.That(message, Does.Contain("AMUSE reported material"),
+                "the report must name the offending material");
+        }
+
+        private static Material NewFixtureMaterial(string name)
+        {
+            var material = new Material(Shader.Find("Unlit/Color"))
+            {
+                name = name,
+            };
+            return material;
+        }
+
+        [Test]
         public void EverySlotSeparationCauseHasPlainEnglishStrings()
         {
             foreach (AlphaSeparationSlotRefusal cause in Enum.GetValues(

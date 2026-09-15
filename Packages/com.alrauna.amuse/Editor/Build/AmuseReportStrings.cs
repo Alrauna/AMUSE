@@ -333,96 +333,99 @@ namespace Alrauna.Amuse.Editor.Build
             // not per cause: the renderer-level report already carries the
             // per-cause text, and the slot report names the exact cause.
             ["amuse.slotAnalysis.Refusal"] =
-                "AMUSE proved nothing for material slot {0}.",
+                "AMUSE proved nothing for material slot {0} of renderer " +
+                "'{2}'.",
             ["amuse.slotAnalysis.Refusal:description"] =
-                "Runtime state resolution refused material slot {0}. " +
-                "Reason: {1}. The slot keeps its original material.",
+                "Runtime state resolution refused material slot {0} of " +
+                "renderer '{2}'. Reason: {1}. The slot keeps its original " +
+                "material.",
             ["amuse.slotAnalysis.Refusal:hint"] =
                 "The reason names the exact rule that stopped the proof " +
                 "for this slot.",
 
             // --- Slot-scoped separation refusals ---
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily:description"] =
-                "Material slot {0} swaps to a shader AMUSE cannot convert " +
+                "Material slot {0} of renderer '{2}' swaps to a shader AMUSE cannot convert " +
                 "to an opaque material. Reason: {1}. The slot keeps its " +
                 "original material and its swap animation.",
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily:hint"] =
                 "The swapped materials must all come from families AMUSE " +
                 "can convert, or the slot stays unchanged.",
             ["amuse.slotSeparation.OpaqueConversionRefused"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.OpaqueConversionRefused:description"] =
-                "The opaque conversion refused one material on slot {0}. " +
+                "The opaque conversion refused one material on slot {0} of renderer '{2}'. " +
                 "Reason: {1}. The slot keeps its original material.",
             ["amuse.slotSeparation.OpaqueConversionRefused:hint"] =
                 "Check the conversion eligibility gates on the swapped " +
                 "materials of this slot.",
             ["amuse.slotSeparation.ConversionStateNotAdmitted"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionStateNotAdmitted:description"] =
-                "A conversion-relevant animated property on slot {0} is " +
+                "A conversion-relevant animated property on slot {0} of renderer '{2}' is " +
                 "not a provable single value. Reason: {1}. The slot keeps " +
                 "its original material.",
             ["amuse.slotSeparation.ConversionStateNotAdmitted:hint"] =
                 "The conversion recipes need their properties at one " +
                 "exact value while the slot animates.",
             ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime:description"] =
-                "An animation overwrites a recipe property on slot {0}. " +
+                "An animation overwrites a recipe property on slot {0} of renderer '{2}'. " +
                 "Reason: {1}. The slot keeps its original material.",
             ["amuse.slotSeparation.ConversionPropertyOverwrittenAtRuntime:hint"] =
                 "Remove the animation curve that drives the recipe " +
                 "property, or accept the slot stays unchanged.",
             ["amuse.slotSeparation.MarkerClipCarriesSlotBinding"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.MarkerClipCarriesSlotBinding:description"] =
-                "A special motion animates the material of slot {0}, and " +
+                "A special motion animates the material of slot {0} of renderer '{2}', and " +
                 "special motions cannot be edited safely. Reason: {1}. " +
                 "The slot keeps its original material.",
             ["amuse.slotSeparation.MarkerClipCarriesSlotBinding:hint"] =
                 "Move the material swap out of the special motion layer.",
             ["amuse.slotSeparation.RuntimeMaterialValueNotMapped"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:description"] =
-                "The runtime state of slot {0} no longer matches the " +
-                "state AMUSE proved. Reason: {1}. The slot keeps its " +
-                "original material.",
+                "The runtime state of slot {0} of renderer '{2}' no longer " +
+                "matches the state AMUSE proved. Reason: {1}. The material " +
+                "the slot held was '{3}'. The slot keeps its original " +
+                "material.",
             ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:hint"] =
                 "Re-run the build so the proof and the renderer agree " +
                 "again.",
             ["amuse.slotSeparation.SlotBindingAbsentFromEvidence"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.SlotBindingAbsentFromEvidence:description"] =
-                "A live animation binding on slot {0} was not part of the " +
+                "A live animation binding on slot {0} of renderer '{2}' was not part of the " +
                 "captured evidence. Reason: {1}. The slot keeps its " +
                 "original material.",
             ["amuse.slotSeparation.SlotBindingAbsentFromEvidence:hint"] =
                 "Re-run the build so the capture sees every live " +
                 "animation binding.",
             ["amuse.slotSeparation.OpaqueCoverageBelowMinimum"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:description"] =
-                "The proven-opaque share of slot {0} is below your " +
+                "The proven-opaque share of slot {0} of renderer '{2}' is below your " +
                 "minimum opaque coverage setting. Reason: {1}. The slot " +
                 "keeps its original material.",
             ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:hint"] =
                 "Lower the minimum opaque coverage setting on the AMUSE " +
                 "component if you want this split.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
                 "An animation on this renderer drives a conversion " +
-                "property AMUSE does not recognize, so slot {0} cannot " +
-                "prepare. Reason: {1}. The slot keeps its original " +
-                "material.",
+                "property AMUSE does not recognize, so slot {0} of " +
+                "renderer '{2}' cannot prepare. Reason: {1}. The slot " +
+                "keeps its original material.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:hint"] =
                 "Limit the conversion-relevant animation curves to " +
                 "properties AMUSE knows.",
             ["amuse.slotSeparation.ConversionStateUnderAdditiveLayer"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionStateUnderAdditiveLayer:description"] =
                 "An additive animation layer touches conversion-relevant " +
                 "state of slot {0}. Reason: {1}. The slot keeps its " +
@@ -431,20 +434,21 @@ namespace Alrauna.Amuse.Editor.Build
                 "Move the conversion-relevant curves out of the additive " +
                 "layer.",
             ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree:description"] =
                 "An unnormalized direct blend tree touches " +
-                "conversion-relevant state of slot {0}. Reason: {1}. The " +
+                "conversion-relevant state of slot {0} of renderer '{2}'. Reason: {1}. The " +
                 "slot keeps its original material.",
             ["amuse.slotSeparation.ConversionStateUnderUnnormalizedDirectBlendTree:hint"] =
                 "Normalize the blend tree weights, or move the curves " +
                 "out of the direct blend tree.",
             ["amuse.slotSeparation.RendererChangedSincePreparation"] =
-                "AMUSE left material slot {0} unchanged.",
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.RendererChangedSincePreparation:description"] =
                 "The renderer, its mesh, or its slot array changed after " +
-                "AMUSE prepared slot {0}, so the proof no longer applies. " +
-                "Reason: {1}. The slot keeps its original material.",
+                "AMUSE prepared slot {0} of renderer '{2}', so the proof " +
+                "no longer applies. Reason: {1}. The slot keeps its " +
+                "original material.",
             ["amuse.slotSeparation.RendererChangedSincePreparation:hint"] =
                 "Another build step replaced the mesh or the slots. Run " +
                 "AMUSE last, or accept the slot stays unchanged.",
