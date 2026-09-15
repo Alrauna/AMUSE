@@ -6004,6 +6004,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, PreparationTestPlatform.Instance);
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
                 GenericPlatformAnimatorBindings.Instance;
+            AmuseStructuralGraphCheck.Execute(context);
 
             AmusePlatformFinishPass.Execute(
                 context,
