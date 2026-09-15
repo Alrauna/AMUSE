@@ -182,3 +182,27 @@ half to even. [MEASURED, `lil_common_functions.hlsl:638`]
    load bearing. An admitted but wrongly computed mask factor can raise
    the composed alpha under subtraction. Every gate in the table above
    is therefore exact, not approximate.
+
+## 7. Implementation record, 2026-09-15
+
+Stage A landed on the layer alpha support branch on this date. The
+product suite ran green after the full implementation: 2,249 passed,
+0 failed, observed. The run includes every falsifier below.
+
+1. The capture admits no-alpha-channel formats, and the importer
+   theorem proves their sampled alpha exactly one without a texel.
+2. The layer term admits the second and third main texture layers at
+   UV0 with identity scroll, rotate, angle, and scale and offset, with
+   every decal flag and the MSDF flag exactly off, and with the audio
+   link, distance fade, cull, and dissolve gates exactly off.
+3. All four alpha mode writers compose exactly. A multiply mode that
+   would ride a saturating shape refuses with a named diagnostic,
+   because the exact-one predicate of a product does not survive that
+   association. Add modes compose through the disjunction combinator.
+4. The no-alpha report names the renderer, the slot, and the texture
+   property, and never changes a classification outcome.
+
+Pending for this branch: the product owner's Lab re-characterization at
+the branch tip, then the stage B design addendum for UV modes one to
+three and per-layer scroll. The zero-triangle diagnosis branch of this
+date closed the observation that used to gate the checkpoint.
