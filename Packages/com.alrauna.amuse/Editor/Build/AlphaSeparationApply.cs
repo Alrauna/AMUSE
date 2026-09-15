@@ -170,8 +170,10 @@ namespace Alrauna.Amuse.Editor.Build
                             renderer,
                             candidate.Plan.SourceMaterialBindingIndex,
                             AlphaSeparationSlotRefusal
-                                .RuntimeMaterialValueNotMapped);
-
+                                .RuntimeMaterialValueNotMapped,
+                            renderer.gameObject.name,
+                            null,
+                            candidate.OpaqueOfAdmitted);
                     }
 
                     rendererSurvivors.Add(
@@ -239,7 +241,8 @@ namespace Alrauna.Amuse.Editor.Build
                             candidate.Plan.SourceMaterialBindingIndex,
                             refusal,
                             renderer.gameObject.name,
-                            unmapped);
+                            unmapped,
+                            candidate.OpaqueOfAdmitted);
                         continue;
                     }
 

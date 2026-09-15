@@ -391,8 +391,8 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:description"] =
                 "The runtime state of slot {0} of renderer '{2}' no longer " +
                 "matches the state AMUSE proved. Reason: {1}. The material " +
-                "the slot held was '{3}'. The slot keeps its original " +
-                "material.",
+                "the slot held was '{3}'. The proven mapping covered: {4}. " +
+                "The slot keeps its original material.",
             ["amuse.slotSeparation.RuntimeMaterialValueNotMapped:hint"] =
                 "Re-run the build so the proof and the renderer agree " +
                 "again.",
