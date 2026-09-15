@@ -57,20 +57,33 @@ namespace Alrauna.Amuse.Editor.Build
         /// One Information entry per slot whose prepared separation was
         /// dropped, with the slot index, the exact separation refusal, the
         /// renderer name, and — when the refusal names one — the offending
-        /// material. A <see cref="AlphaSeparationSlotRefusal.None"/> is not
-        /// a refusal, so it throws.
+        /// material, plus the proven mapping's keys when provided, so a
+        /// report distinguishes an admission gap from an identity mismatch.
+        /// A <see cref="AlphaSeparationSlotRefusal.None"/> is not a
+        /// refusal, so it throws.
         /// </summary>
         internal static void SlotSeparationRefusal(
             Renderer renderer,
             int slotIndex,
             AlphaSeparationSlotRefusal cause,
             string rendererName = null,
-            Material offendingMaterial = null)
+            Material offendingMaterial = null,
+            System.Collections.Generic.IReadOnlyDictionary<Material, Material>
+                provenMapping = null)
         {
             if (cause == AlphaSeparationSlotRefusal.None)
             {
                 throw new InvalidOperationException(
                     "AlphaSeparationSlotRefusal.None is not a refusal.");
+            }
+
+            var names = new List<string>();
+            if (provenMapping != null)
+            {
+                foreach (var key in provenMapping.Keys)
+                {
+                    names.Add(key != null ? key.name : "<null>");
+                }
             }
 
             using (ErrorReport.WithContextObject(renderer))
@@ -82,7 +95,8 @@ namespace Alrauna.Amuse.Editor.Build
                     slotIndex,
                     cause.ToString(),
                     rendererName,
-                    offendingMaterial);
+                    offendingMaterial,
+                    names);
             }
         }
 
