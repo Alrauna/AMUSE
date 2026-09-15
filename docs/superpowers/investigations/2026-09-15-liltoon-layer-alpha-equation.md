@@ -223,3 +223,59 @@ own alpha proves nothing; those are content facts, not gate defects.
 
 Checkpoint discipline satisfied: suites green before the Lab run, the
 Lab run observed after, and the stage B gate is released.
+
+## 9. Stage B design addendum, 2026-09-15
+
+Stage B admits layer UV modes one to three and active per-layer scroll.
+The decisions below come from the stage 0 pins and the current proof
+architecture. Implementation is a fresh work chunk.
+
+### UV modes one to three
+
+`_Main{N}Tex_UVMode` one, two, and three map the layer coordinate to
+the mesh UV channels Unity names `mesh.uv2`, `mesh.uv3`, and `mesh.uv4`
+(HLSL uv1, uv2, uv3). Mode four is the view-dependent matcap
+coordinate and keeps refusing.
+
+The proof needs three changes:
+
+1. The mesh extraction reads the UV channels a layer can name and
+   records which were present and finite, with the same
+   unavailable-channel honesty the UV0 path already has.
+2. `TriangleAlphaInput` carries the per-channel coordinates, and the
+   classifier picks the channel the resolution's mapping names.
+3. The resolver admits mapping channels zero to three. The affine
+   transform path is unchanged: stage B layers keep exact identity
+   scale and offset, so the transform is the identity and the
+   classifier reads the named channel's texel reach directly.
+
+### Active scroll: the full-domain rule
+
+The pinned equation scrolls the coordinate by `frac(scroll.xy * time)`
+and rotates it by `angle + scroll.w * time`. Both terms are
+time-varying, so no fixed affine envelope exists. The exact rule:
+
+- With an active scroll or rotate term, the layer coordinate visits
+  the entire wrapped texture over time, for every triangle alike.
+- The factor therefore proves every triangle exactly when every mip
+  level of its chain is fully opaque, and refuses every triangle
+  otherwise. The decision needs no geometry and composes with the
+  absorbing outcome lattice like any uniform factor.
+
+A fixed angle rotation with the scroll terms exactly zero is affine
+but `UvMapping` carries no rotation. It stays refused in stage B until
+the mapping grows a rotation term with its own rounding lemma.
+
+### Composition
+
+A scroll-active factor is a uniform factor in the absorbing lattice:
+a product with it inherits it, a saturating sum with it follows the
+sum lemmas unchanged. No new combinator is needed.
+
+### Tests
+
+Per admitted UV mode: a fixture whose layer samples a UV1 to UV3
+channel and proves or refuses through the mesh channel, with an
+independent oracle. Per scroll-active fixture: an all-opaque chain
+proves every triangle and a chain with one sub-one texel refuses
+every triangle, at every mip level.
