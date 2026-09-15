@@ -536,7 +536,8 @@ namespace Alrauna.Amuse.Editor.Build
                     AmuseReports.SlotAnalysisRefusal(
                         renderer,
                         slotIndex,
-                        resolved.SlotResults[slotIndex].Refusal);
+                        resolved.SlotResults[slotIndex].Refusal,
+                        renderer.gameObject.name);
                 }
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)

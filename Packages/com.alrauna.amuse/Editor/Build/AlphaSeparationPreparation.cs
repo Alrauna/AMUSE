@@ -503,7 +503,10 @@ namespace Alrauna.Amuse.Editor.Build
                 AmuseReports.SlotSeparationRefusal(
                     target.Renderer,
                     submesh.SourceMaterialBindingIndex,
-                    reason);
+                    reason,
+                    target.Renderer != null
+                        ? target.Renderer.gameObject.name
+                        : null);
             }
 
             return null;

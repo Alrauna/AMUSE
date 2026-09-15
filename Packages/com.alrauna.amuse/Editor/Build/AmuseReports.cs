@@ -32,7 +32,8 @@ namespace Alrauna.Amuse.Editor.Build
         internal static void SlotAnalysisRefusal(
             Renderer renderer,
             int slotIndex,
-            RendererAnalysisRefusal cause)
+            RendererAnalysisRefusal cause,
+            string rendererName = null)
         {
             if (cause == RendererAnalysisRefusal.None)
             {
@@ -47,20 +48,24 @@ namespace Alrauna.Amuse.Editor.Build
                     ErrorSeverity.Information,
                     AmuseReportStrings.SlotAnalysisKey(cause),
                     slotIndex,
-                    cause.ToString());
+                    cause.ToString(),
+                    rendererName);
             }
         }
 
         /// <summary>
         /// One Information entry per slot whose prepared separation was
-        /// dropped, with the slot index and the exact separation refusal.
-        /// A <see cref="AlphaSeparationSlotRefusal.None"/> is not a
-        /// refusal, so it throws.
+        /// dropped, with the slot index, the exact separation refusal, the
+        /// renderer name, and — when the refusal names one — the offending
+        /// material. A <see cref="AlphaSeparationSlotRefusal.None"/> is not
+        /// a refusal, so it throws.
         /// </summary>
         internal static void SlotSeparationRefusal(
             Renderer renderer,
             int slotIndex,
-            AlphaSeparationSlotRefusal cause)
+            AlphaSeparationSlotRefusal cause,
+            string rendererName = null,
+            Material offendingMaterial = null)
         {
             if (cause == AlphaSeparationSlotRefusal.None)
             {
@@ -75,7 +80,9 @@ namespace Alrauna.Amuse.Editor.Build
                     ErrorSeverity.Information,
                     AmuseReportStrings.SlotSeparationKey(cause),
                     slotIndex,
-                    cause.ToString());
+                    cause.ToString(),
+                    rendererName,
+                    offendingMaterial);
             }
         }
 
@@ -101,7 +108,6 @@ namespace Alrauna.Amuse.Editor.Build
                     refusal.Channel.ToString());
             }
         }
-
         internal static void RendererRefusal(
             Renderer renderer, RendererAnalysisRefusal cause)
         {
