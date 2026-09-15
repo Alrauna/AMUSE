@@ -102,6 +102,20 @@ committed. Every borrowed fact carries a tag.
 
 Stage A implementation starts only after this record lands.
 
+### Stage 0 outcome, recorded 2026-09-15
+
+The stage 0 record exists as the layer alpha equation record of this
+date. The off-state reduction holds. The four alpha mode writers sit
+inside the toggle gate as assumed. The record also pins five more
+alpha relevant mechanisms per layer that the design listed as a risk:
+the blend mask, the layer dissolve with its round half to even mode
+gate, the audio link toggle, the distance fade strength, and the
+per-layer cull. Each becomes a named gate in stage A. The shipped
+shader family compiles every layer path, so runtime properties alone
+decide and no keyword capture is needed. The alpha mask runs after the
+layers, which fixes the proof composition order. The stage A admission
+table lives in that record.
+
 ## Stage A: layer alpha term and format theorem
 
 ### Layer alpha term
