@@ -417,6 +417,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetProductMultiplier(),
                         fieldProvider,
                         maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.ProductChainOfTextureSamples:
+                    return ResolveProductChain(
+                        value, fieldProvider, maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.SaturatingSum:
+                    return ResolveSaturatingSum(
+                        value, fieldProvider, maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.SaturatingDifference:
+                    return ResolveSaturatingDifference(
+                        value, fieldProvider, maxNoiseTexelPercent);
                 default:
                     // A semantic form added later must fail closed here rather
                     // than fall into a wrong proof path.
@@ -520,6 +529,154 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return AlphaResolution.Product(firstResolution, secondResolution);
+        }
+
+        /// <summary>
+        /// alpha = (k * f0) * f1 * ... * fn over any number of sampled terms
+        /// bounded in [0,1] by the field contract. The multiplier lemmas are
+        /// the two-factor ones generalized to any arity: a product of values
+        /// in [0,1] rounds to one only when every factor is one, so a leading
+        /// constant below one keeps the product below one everywhere, and a
+        /// constant of one makes the product's predicate the conjunction of
+        /// the per-factor predicates.
+        /// </summary>
+        private static AlphaResolution ResolveProductChain(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var multiplier = value.GetProductMultiplier();
+            if (multiplier > 1f)
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
+            if (multiplier < 1f)
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent);
+            }
+
+            AlphaResolution conjoined = null;
+            for (var index = 0; index < value.GetChainFactorCount(); index++)
+            {
+                var factor = ResolveSampled(
+                    value.GetChainSample(index),
+                    value.GetChainChannel(index),
+                    fieldProvider,
+                    maxNoiseTexelPercent);
+                if (!factor.IsResolved)
+                {
+                    return factor;
+                }
+
+                conjoined = conjoined == null
+                    ? factor
+                    : AlphaResolution.Product(conjoined, factor);
+            }
+
+            return conjoined;
+        }
+
+        /// <summary>
+        /// alpha = saturate(first + second). A side attested exactly one
+        /// decides the sum alone, because the other side's field contract
+        /// bounds it in [0,1] and the saturate clamps at one. Two constants
+        /// fold through the saturate. Anything else stays conservative: the
+        /// sum reaches one on some triangle exactly when either side is one
+        /// there, and cross-field correlation between two sampled terms is
+        /// unknowable from two independent [0,1] contracts, so no per-triangle
+        /// proof exists without an additive classifier.
+        /// </summary>
+        private static AlphaResolution ResolveSaturatingSum(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var first = value.GetSumFirst();
+            var second = value.GetSumSecond();
+            if (first.Kind == ScalarSemanticValueKind.Constant &&
+                second.Kind == ScalarSemanticValueKind.Constant)
+            {
+                var sum = first.GetConstantValue() + second.GetConstantValue();
+                return ResolveScalar(sum > 1f ? 1f : sum);
+            }
+
+            var firstResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(first),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!firstResolution.IsResolved)
+            {
+                return firstResolution;
+            }
+
+            var secondResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(second),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!secondResolution.IsResolved)
+            {
+                return secondResolution;
+            }
+
+            if (IsUniformlyProvenOpaque(firstResolution) ||
+                IsUniformlyProvenOpaque(secondResolution))
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.ProvenOpaque);
+            }
+
+            return AlphaResolution.Uniform(
+                TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        /// <summary>
+        /// alpha = saturate(minuend - subtrahend). A zero constant subtrahend
+        /// preserves the minuend exactly. Two constants fold through the
+        /// saturate. Everything else stays conservative: m - s reaches one
+        /// only at m = 1 and s = 0, the field contract attests "strictly
+        /// below one" and never "exactly zero", so a sampled subtrahend can
+        /// never be proven away.
+        /// </summary>
+        private static AlphaResolution ResolveSaturatingDifference(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var minuend = value.GetMinuend();
+            var subtrahend = value.GetSubtrahend();
+            if (minuend.Kind == ScalarSemanticValueKind.Constant &&
+                subtrahend.Kind == ScalarSemanticValueKind.Constant)
+            {
+                var difference =
+                    minuend.GetConstantValue() - subtrahend.GetConstantValue();
+                return ResolveScalar(difference < 0f ? 0f : difference);
+            }
+
+            if (subtrahend.Kind == ScalarSemanticValueKind.Constant &&
+                subtrahend.GetConstantValue() == 0f)
+            {
+                return AlphaSemanticsResolver.Resolve(
+                    SemanticOutput<ScalarSemanticValue>.Complete(minuend),
+                    fieldProvider, maxNoiseTexelPercent);
+            }
+
+            var subtrahendResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(subtrahend),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!subtrahendResolution.IsResolved)
+            {
+                return subtrahendResolution;
+            }
+
+            return AlphaResolution.Uniform(
+                TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        private static bool IsUniformlyProvenOpaque(AlphaResolution resolution)
+        {
+            return resolution.TryGetUniformOutcome(out var outcome) &&
+                outcome == TriangleAlphaOutcome.ProvenOpaque;
         }
 
         private static AlphaResolution ResolveSampled(

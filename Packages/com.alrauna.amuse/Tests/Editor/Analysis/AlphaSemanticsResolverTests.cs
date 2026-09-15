@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Analysis;
@@ -1412,6 +1413,309 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     Sample(), TextureChannel.Alpha,
                     MaskSample(), TextureChannel.Red,
                     multiplier));
+        }
+
+        // --- ProductChain: layered alpha products -----------------------------
+
+        private static TextureSample ThirdSample()
+        {
+            return new TextureSample(
+                new TextureSourceId("test:third"),
+                new UvMapping(
+                    0,
+                    new Vector2(1f, 1f),
+                    new Vector2(0f, 0f)),
+                new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp));
+        }
+
+        private static SemanticOutput<ScalarSemanticValue> ChainValue(
+            float multiplier,
+            int factorCount)
+        {
+            var samples = new List<TextureSample>();
+            var channels = new List<TextureChannel>();
+            var names = new[] { "test:field", "test:mask", "test:third" };
+            for (var index = 0; index < factorCount; index++)
+            {
+                samples.Add(new TextureSample(
+                    new TextureSourceId(names[index]),
+                    new UvMapping(
+                        0,
+                        new Vector2(1f, 1f),
+                        new Vector2(0f, 0f)),
+                    new TextureSampling(
+                        TextureFilterMode.Point, TextureWrapMode.Clamp)));
+                channels.Add(index == 1
+                    ? TextureChannel.Red
+                    : TextureChannel.Alpha);
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.ProductChain(
+                    samples, channels, multiplier));
+        }
+
+        private static AlphaFieldProvider ProvidingChainSources(
+            AlphaMipChain mainChain,
+            AlphaMipChain maskChain,
+            AlphaMipChain thirdChain)
+        {
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(new TextureSourceId("test:field")))
+                {
+                    result = mainChain;
+                    return true;
+                }
+                if (source.Equals(new TextureSourceId("test:mask")))
+                {
+                    result = maskChain;
+                    return true;
+                }
+                if (source.Equals(new TextureSourceId("test:third")))
+                {
+                    result = thirdChain;
+                    return true;
+                }
+                result = null;
+                return false;
+            };
+        }
+
+        [Test]
+        public void ProductChainWithMultiplierAboveOneRefuses()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ChainValue(1.5f, 3), ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.UnsupportedMultiplier));
+        }
+
+        [Test]
+        public void ProductChainWithSubUnitMultiplierIsUniformlyTransparent()
+        {
+            // ProvidingNothing proves the lemma consults no texel: every
+            // factor is bounded in [0,1] by the field contract, so a leading
+            // constant below one keeps the whole product below one.
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ChainValue(0.5f, 3), ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ProductChainOfAllOpaqueFieldsProvesTheTriangle()
+        {
+            // Three sampled factors: the falsifier is an implementation that
+            // consults only the first two and never sees the third.
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ChainValue(1f, 3),
+                ProvidingChainSources(
+                    AllOpaqueChain(), AllOpaqueChain(), AllOpaqueChain()),
+                0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(SpanningTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ProductChainWithOneTransparentFactorIsAbsorbed()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ChainValue(1f, 3),
+                ProvidingChainSources(
+                    AllOpaqueChain(),
+                    OpaqueThenTransparentChain(),
+                    AllOpaqueChain()),
+                0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ProductChainWithMissingFactorEvidenceFailsClosed()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                ChainValue(1f, 3), ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
+        }
+
+        // --- SaturatingSum: layer alpha mode 3 --------------------------------
+
+        [Test]
+        public void SaturatingSumOfConstantsThatReachOneIsUniformlyOpaque()
+        {
+            // 0.6 + 0.6 saturates to exactly one: the fold must run through
+            // the saturate, not through a plain transparent fallthrough.
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.SaturatingSum(
+                        ScalarSemanticValue.Constant(0.6f),
+                        ScalarSemanticValue.Constant(0.6f))),
+                ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void SaturatingSumWithOneConstantSide_PreservesTheOtherSide()
+        {
+            // saturate(1 + s) is exactly one for any s the field contract
+            // attests in [0,1]: the constant-one side decides alone.
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Constant(1f),
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                Providing(MixedField()), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void SaturatingSumOfTwoSampledTermsIsUniformlyTransparent()
+        {
+            // Cross-field correlation is unknowable from the [0,1] contracts
+            // alone: a + b can reach one on some triangle but is not provable.
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(
+                    MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(Chain(MixedField()), Chain(MixedField())), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void SaturatingSumOfConstantsBelowOneIsUniformlyTransparent()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.SaturatingSum(
+                        ScalarSemanticValue.Constant(0.25f),
+                        ScalarSemanticValue.Constant(0.5f))),
+                ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void SaturatingSumWithMissingEvidenceFailsClosed()
+        {
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Constant(1f),
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingNothing(), 0);
+
+            // The constant-one side alone cannot prove the saturate without
+            // the other side's range attestation, so a missing field must
+            // refuse rather than answer opaque.
+            Assert.That(resolution.IsResolved, Is.False);
+        }
+
+        // --- SaturatingDifference: layer alpha mode 4 -------------------------
+
+        [Test]
+        public void SaturatingDifferenceWithZeroConstantSubtrahend_PreservesTheMinuend()
+        {
+            var value = ScalarSemanticValue.SaturatingDifference(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Constant(0f));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                Providing(AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void SaturatingDifferenceOfSampledTermsIsUniformlyTransparent()
+        {
+            // The field contract attests "strictly below one", never "exactly
+            // zero", so m - s >= 1 is unprovable when the subtrahend samples.
+            var value = ScalarSemanticValue.SaturatingDifference(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(
+                    MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void SaturatingDifferenceOfConstantsFoldsSaturating()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.SaturatingDifference(
+                        ScalarSemanticValue.Constant(0.6f),
+                        ScalarSemanticValue.Constant(0.6f))),
+                ProvidingNothing(), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
         [Test]
