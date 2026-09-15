@@ -172,6 +172,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var sequence = InPhase(BuildPhase.PlatformFinish);
 
+                sequence.Run(
+                    "AMUSE test structural graph check",
+                    AmuseStructuralGraphCheck.Execute);
                 sequence.WithRequiredExtension(
                     typeof(AnimatorServicesContext),
                     inner => inner.Run(
