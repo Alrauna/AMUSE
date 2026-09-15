@@ -128,6 +128,12 @@ namespace Alrauna.Amuse.Editor.Build
                         state.RecordSlotRefusal(
                             AlphaSeparationSlotRefusal
                                 .RendererChangedSincePreparation);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            AlphaSeparationSlotRefusal
+                                .RendererChangedSincePreparation);
+
                     }
 
                     rendererSurvivors.Add(survivors);
@@ -160,6 +166,14 @@ namespace Alrauna.Amuse.Editor.Build
                         state.RecordSlotRefusal(
                             AlphaSeparationSlotRefusal
                                 .RuntimeMaterialValueNotMapped);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            AlphaSeparationSlotRefusal
+                                .RuntimeMaterialValueNotMapped,
+                            renderer.gameObject.name,
+                            null,
+                            candidate.OpaqueOfAdmitted);
                     }
 
                     rendererSurvivors.Add(
@@ -218,10 +232,17 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     var refusal = ValidateCandidateSlot(
                         prepared, candidate, live, capturedBindings,
-                        targetBindings, splitCount);
+                        targetBindings, splitCount, out var unmapped);
                     if (refusal != AlphaSeparationSlotRefusal.None)
                     {
                         state.RecordSlotRefusal(refusal);
+                        AmuseReports.SlotSeparationRefusal(
+                            renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            refusal,
+                            renderer.gameObject.name,
+                            unmapped,
+                            candidate.OpaqueOfAdmitted);
                         continue;
                     }
 
@@ -538,8 +559,10 @@ namespace Alrauna.Amuse.Editor.Build
                   EditorCurveBinding Binding,
                   ObjectReferenceKeyframe[] Curve,
                   int SlotIndex)> targetBindings,
-            int currentSplitCount)
+            int currentSplitCount,
+            out Material unmapped)
         {
+            unmapped = null;
             if (candidate.Plan.Disposition ==
                 SubmeshSeparationDisposition.Split)
             {
@@ -586,6 +609,7 @@ namespace Alrauna.Amuse.Editor.Build
                     if (!(keyframe.value is Material source) ||
                         !candidate.OpaqueOfAdmitted.ContainsKey(source))
                     {
+                        unmapped = keyframe.value as Material;
                         return AlphaSeparationSlotRefusal
                             .RuntimeMaterialValueNotMapped;
                     }
@@ -599,6 +623,7 @@ namespace Alrauna.Amuse.Editor.Build
             if (!(live[slotIndex] is Material current) ||
                 !candidate.OpaqueOfAdmitted.ContainsKey(current))
             {
+                unmapped = live[slotIndex];
                 return AlphaSeparationSlotRefusal.RuntimeMaterialValueNotMapped;
             }
 

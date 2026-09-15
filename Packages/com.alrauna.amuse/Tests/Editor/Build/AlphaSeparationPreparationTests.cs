@@ -538,6 +538,91 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (controller != null) DestroyControllerGraph(controller);
             }
         }
+        [Test]
+        public void SwappedMaterialWithUnconvertedSiblingMapsToIdentityAndPrepares()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE swap with unconverted sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material poiyomi = null;
+            Material unsupported = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+
+            try
+            {
+                poiyomi = VerifiedOpaqueMaterial();
+                unsupported = new Material(Shader.Find("Unlit/Color"));
+                AddSingleTriangleRenderer(root, poiyomi, out mesh);
+
+                clip = NewSwapClip(
+                    "AMUSE unconverted swap", string.Empty, 0, (0f, unsupported));
+                controller = NewController(root, "AMUSE unconverted graph", clip);
+
+                var amuse = RunBarrier(
+                    root,
+                    selectRequest: (Material mat,
+                                    out CapturedAlphaMaterialFamily fam,
+                                    out MaterialEvidenceRequest alphaReq,
+                                    out MaterialEvidenceRequest schemaReq) =>
+                    {
+                        if (mat != null && mat == unsupported)
+                        {
+                            fam = CapturedAlphaMaterialFamily.Unsupported;
+                            alphaReq = LilToonMaterialSemantics.AlphaEvidenceRequest;
+                            schemaReq = LilToonMaterialSemantics.AlphaEvidenceRequest;
+                            return true;
+                        }
+
+                        return VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest(
+                            mat, out fam, out alphaReq, out schemaReq);
+                    },
+                    resolveSemantics: (CapturedAlphaMaterial captured) =>
+                    {
+                        if (captured.Family == CapturedAlphaMaterialFamily.Unsupported)
+                        {
+                            return new MaterialSemantics(
+                                SemanticOutput<ColorSemanticValue>.Unknown(),
+                                SemanticOutput<ScalarSemanticValue>.Complete(
+                                    ScalarSemanticValue.Constant(1f)),
+                                SemanticOutput<ColorSemanticValue>.Unknown(),
+                                SemanticOutput<NormalSemanticValue>.Unknown());
+                        }
+
+                        return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
+                    });
+
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1));
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "the swap slot must prepare with identity fallback for unconverted sibling");
+                Assert.That(amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                var candidates = amuse.Separation.Renderers[0].CandidateSlots;
+                Assert.That(candidates, Has.Count.EqualTo(1));
+                var mapping = candidates[0].OpaqueOfAdmitted;
+                Assert.That(mapping, Has.Count.EqualTo(2));
+                Assert.That(mapping[poiyomi], Is.Not.SameAs(poiyomi),
+                    "the Poiyomi material converts to a canonical opaque clone");
+                Assert.That(mapping[unsupported], Is.SameAs(unsupported),
+                    "the unconverted sibling material maps to itself on the appended slot");
+                Assert.That(amuse.Separation.CreatedClones, Has.Count.EqualTo(1),
+                    "only the convertible Poiyomi material creates a clone");
+            }
+            finally
+            {
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
+                if (unsupported != null) UnityEngine.Object.DestroyImmediate(unsupported);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+            }
+        }
+
 
         // --- Falsifier 10: Poiyomi slot survives beside an opaque lilToon ---
 
@@ -5919,6 +6004,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, PreparationTestPlatform.Instance);
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
                 GenericPlatformAnimatorBindings.Instance;
+            AmuseStructuralGraphCheck.Execute(context);
 
             AmusePlatformFinishPass.Execute(
                 context,

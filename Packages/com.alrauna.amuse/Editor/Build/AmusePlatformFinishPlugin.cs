@@ -144,6 +144,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// the captured-evidence graph's no-live-Unity-object guarantee.
         /// </summary>
         internal PreparedAlphaSeparation Separation { get; set; }
+
+        /// <summary>
+        /// The enumerated committed graph from the structural check pass,
+        /// stored before any animator scope virtualizes the graph: the
+        /// checks that need real authored clips keep their
+        /// pre-virtualization view, and the barrier reads this stored
+        /// result instead of enumerating again.
+        /// </summary>
+        internal CommittedControllerGraphResult StructuralGraph { get; set; }
     }
 
     [RunsOnPlatforms(WellKnownPlatforms.VRChatAvatar30)]
@@ -152,6 +161,8 @@ namespace Alrauna.Amuse.Editor.Build
         internal const string PluginQualifiedName = "com.alrauna.amuse";
         internal const string BindingsCapturePassName =
             "AMUSE animator bindings capture";
+        internal const string StructuralGraphCheckPassName =
+            "AMUSE structural graph check";
         internal const string BarrierPassName = "AMUSE semantic barrier";
 
         public override string QualifiedName => PluginQualifiedName;
@@ -161,26 +172,32 @@ namespace Alrauna.Amuse.Editor.Build
         {
             var sequence = InPhase(BuildPhase.PlatformFinish);
 
-            // Acquire the host bindings while the animator extension is active...
+            // The structural refusals read real authored clips, and
+            // animation events survive only before virtualization: this
+            // pass runs extension-free and first, stores the enumerated
+            // graph and its refusal, and reports the refusal when it
+            // fires. The passes after it read the same graph from state.
+            sequence.Run(
+                StructuralGraphCheckPassName,
+                AmuseStructuralGraphCheck.Execute);
+
+            // One animator scope for everything else: the bindings
+            // capture, the barrier's swap admission, and the apply's
+            // validation all read the same AnimationIndex, so the barrier
+            // proves exactly the values the apply can ever see.
             sequence.WithRequiredExtension(
                 typeof(AnimatorServicesContext),
-                inner => inner.Run(
-                    BindingsCapturePassName, AmuseAnimatorBindingsCapture.Execute));
-
-            // ...then analyze with no extension declared, so NDMF has deactivated
-            // and committed the animator graph before the barrier observes it.
-            sequence.Run(BarrierPassName, AmusePlatformFinishPass.Execute);
-
-            // Finally, validate every prepared candidate slot, finalize against
-            // the surviving set, sweep unreferenced transients and apply the
-            // single build-avatar mutation. Reactivating the extension here is
-            // what makes the committed graph's clips reachable again; NDMF
-            // deactivates and commits it again before this pass runs.
-            sequence.WithRequiredExtension(
-                typeof(AnimatorServicesContext),
-                inner => inner.Run(
-                    AlphaSeparationApply.PassName,
-                    ctx => AlphaSeparationApply.Execute(ctx)));
+                inner =>
+                {
+                    inner.Run(
+                        BindingsCapturePassName,
+                        AmuseAnimatorBindingsCapture.Execute);
+                    inner.Run(
+                        BarrierPassName, AmusePlatformFinishPass.Execute);
+                    inner.Run(
+                        AlphaSeparationApply.PassName,
+                        ctx => AlphaSeparationApply.Execute(ctx));
+                });
         }
     }
 
@@ -273,44 +290,28 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// NDMF commits the virtualized controllers when
-        /// <see cref="AnimatorServicesContext"/> deactivates, so a barrier running
-        /// while that extension is still active would read pre-commit controller
-        /// state. The barrier declares no extension precisely so that it does not;
-        /// this asserts that its declaration was not lost, because the mistake is
-        /// otherwise silent — it changes only which controllers are observed, never
-        /// whether the pass appears to succeed.
-        ///
-        /// This is an implementation defect, not a domain refusal, and it reads
-        /// build-context extension state only: it does not inspect the avatar, call
-        /// <c>GetInnateControllers</c>, or mutate anything. That is why it may run
-        /// before <see cref="HostLifecycleCapability"/> without weakening the
-        /// unsupported-host stand-down boundary.
+        /// When the animator extension is active, returns its AnimationIndex:
+        /// the same index the apply pass validates against. When it is
+        /// inactive, returns false — the caller then admits swaps from the
+        /// committed-graph walk alone, which is the legacy capture shape.
         /// </summary>
-        private static void RequireAnimatorServicesContextInactive(
-            BuildContext context)
+        private static bool TryGetAnimationIndex(
+            BuildContext context, out AnimationIndex animationIndex)
         {
             try
             {
-                context.Extension<AnimatorServicesContext>();
+                animationIndex = context
+                    .Extension<AnimatorServicesContext>().AnimationIndex;
+                return true;
             }
-            catch (Exception exception) when (IsInactiveExtensionSignal(exception))
+            catch (Exception exception) when (
+                IsInactiveExtensionSignal(exception))
             {
-                return;
+                animationIndex = null;
+                return false;
             }
-
-            throw new InvalidOperationException(
-                "AMUSE PlatformFinish barrier ran before AnimatorServicesContext " +
-                "deactivation, so the committed controller graph is not yet " +
-                "available. If barrier placement is in fact correct, NDMF has " +
-                "changed its inactive-extension signal and " +
-                nameof(IsInactiveExtensionSignal) + " needs updating.");
         }
 
-        // BuildContext.Extension<T> signals an inactive extension with a plain
-        // System.Exception carrying this exact message. Matching both pins the
-        // signal narrowly, so any other failure raised while probing the lifecycle
-        // propagates instead of being read as "inactive".
         private static bool IsInactiveExtensionSignal(Exception exception)
         {
             return exception.GetType() == typeof(Exception) &&
@@ -327,8 +328,6 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 throw new ArgumentNullException(nameof(context));
             }
-
-            RequireAnimatorServicesContextInactive(context);
 
             var state = context.GetState<AmusePlatformFinishState>();
             if (state.HasExecuted)
@@ -412,8 +411,19 @@ namespace Alrauna.Amuse.Editor.Build
                     "permission with no retained animator bindings.");
             }
 
-            var graph = CommittedControllerGraph.Enumerate(
-                context.AvatarRootObject, state.AnimatorBindings);
+            // The structural pass enumerated the real graph before
+            // virtualization and stored it; this pass reads that stored
+            // result so the checks that need real clips keep their
+            // pre-virtualization view. Direct callers that bypass the pass
+            // list get the enumeration inline: at that point the graph is
+            // still real, so the view is equally pre-virtualization.
+            if (state.StructuralGraph == null)
+            {
+                AmuseStructuralGraphCheck.Execute(context);
+            }
+
+            var graph = state.StructuralGraph;
+
             if (graph.Refusal != AvatarAnimationRefusal.None)
             {
                 // Avatar scope: the exact named cause is preserved and the whole
@@ -488,8 +498,28 @@ namespace Alrauna.Amuse.Editor.Build
                                 out transferred);
                 }
 
-                var evidence = selectRequest == null
-                    ? UnityAnimationEvidenceCapture.Capture(
+                var hasIndex = TryGetAnimationIndex(
+                    context, out var animationIndex);
+                CapturedAnimationEvidence evidence;
+                if (hasIndex)
+                {
+                    evidence = UnityAnimationEvidenceCapture
+                        .CaptureWithAnimationIndex(
+                            rendererPath,
+                            renderer.sharedMaterials,
+                            graph,
+                            state.AnimatorBindings,
+                            animationIndex,
+                            alphaPolicyBounds,
+                            out admittedLiveMaterials,
+                            selectRequest,
+                            CaptureThroughEffectiveMaterials(
+                                renderer, capturer ?? effectiveCapturer),
+                            ignoreOutOfRangeSlots);
+                }
+                else if (selectRequest == null)
+                {
+                    evidence = UnityAnimationEvidenceCapture.Capture(
                         rendererPath,
                         renderer.sharedMaterials,
                         graph,
@@ -498,17 +528,23 @@ namespace Alrauna.Amuse.Editor.Build
                         out admittedLiveMaterials,
                         CaptureThroughEffectiveMaterials(
                             renderer, effectiveCapturer),
-                        ignoreOutOfRangeSlots)
-                    : UnityAnimationEvidenceCapture.CaptureGraphForTests(
-                        rendererPath,
-                        renderer.sharedMaterials,
-                        graph,
-                        state.AnimatorBindings,
-                        alphaPolicyBounds,
-                        selectRequest,
-                        CaptureThroughEffectiveMaterials(renderer, capturer),
-                        out admittedLiveMaterials,
                         ignoreOutOfRangeSlots);
+                }
+                else
+                {
+                    evidence = UnityAnimationEvidenceCapture
+                        .CaptureGraphForTests(
+                            rendererPath,
+                            renderer.sharedMaterials,
+                            graph,
+                            state.AnimatorBindings,
+                            alphaPolicyBounds,
+                            selectRequest,
+                            CaptureThroughEffectiveMaterials(
+                                renderer, capturer),
+                            out admittedLiveMaterials,
+                            ignoreOutOfRangeSlots);
+                }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
                         ? (CapturedAlphaMaterialSemanticsResolver)
@@ -520,6 +556,25 @@ namespace Alrauna.Amuse.Editor.Build
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState);
                 refusal = resolved.Refusal;
+                // Every refused slot reports its own exact reason, even
+                // when the renderer as a whole continues or the first
+                // refusal names the renderer: one line per slot, no
+                // aggregation, so a manual test can read the full list.
+                for (var slotIndex = 0;
+                     slotIndex < resolved.SlotResults.Length;
+                     slotIndex++)
+                {
+                    if (resolved.SlotResults[slotIndex].IsResolved)
+                    {
+                        continue;
+                    }
+
+                    AmuseReports.SlotAnalysisRefusal(
+                        renderer,
+                        slotIndex,
+                        resolved.SlotResults[slotIndex].Refusal,
+                        renderer.gameObject.name);
+                }
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
                 {
@@ -532,6 +587,21 @@ namespace Alrauna.Amuse.Editor.Build
                             extraction.Snapshot,
                             resolved.SlotResults);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                        var slots = MaterialSlotsFor(evidence, rendererPath);
+                        for (var slotIndex = 0;
+                             slotIndex < slots.Count;
+                             slotIndex++)
+                        {
+                            foreach (var textureRefusal in
+                                     slots[slotIndex].CaptureRefusals)
+                            {
+                                AmuseReports.TextureCaptureRefusal(
+                                    renderer,
+                                    slotIndex,
+                                    textureRefusal);
+                            }
+                        }
+
                         RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
@@ -562,6 +632,7 @@ namespace Alrauna.Amuse.Editor.Build
                     opaqueCandidateTriangleCount;
             }
         }
+
         /// <summary>
         /// Wraps a closed material capturer so the attested batch is captured
         /// through each material's per-slot effective materialization: the

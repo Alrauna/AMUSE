@@ -161,6 +161,7 @@ namespace Alrauna.Amuse.Editor.Build
                                 .UnrecognizedMaterialBinding)
                         {
                             return RefuseEveryCandidateSlot(
+                                target,
                                 state,
                                 plan,
                                 AlphaSeparationSlotRefusal
@@ -184,6 +185,7 @@ namespace Alrauna.Amuse.Editor.Build
                 if (conversionBindings.Count > 0 && evidence.HasAdditiveLayer)
                 {
                     return RefuseEveryCandidateSlot(
+                        target,
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
@@ -194,6 +196,7 @@ namespace Alrauna.Amuse.Editor.Build
                     evidence.HasUnnormalizedDirectBlendTree)
                 {
                     return RefuseEveryCandidateSlot(
+                        target,
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
@@ -245,6 +248,11 @@ namespace Alrauna.Amuse.Editor.Build
                         minimumOpaqueCoveragePercent, submesh))
                 {
                     state.RecordSlotRefusal(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueCoverageBelowMinimum);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        submesh.SourceMaterialBindingIndex,
                         AlphaSeparationSlotRefusal
                             .OpaqueCoverageBelowMinimum);
                     continue;
@@ -299,12 +307,20 @@ namespace Alrauna.Amuse.Editor.Build
                     state.RecordSlotRefusal(
                         AlphaSeparationSlotRefusal
                             .MarkerClipCarriesSlotBinding);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        slotIndex,
+                        AlphaSeparationSlotRefusal
+                            .MarkerClipCarriesSlotBinding);
                     continue;
                 }
 
                 var mapping = new Dictionary<Material, Material>();
                 var pendingClones = new List<Material>();
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
+                var unconvertedCount = 0;
+                var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
+                var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
                 foreach (var admittedIndex in
                              slots[slotIndex].AdmittedMaterialIndices)
                 {
@@ -342,7 +358,7 @@ namespace Alrauna.Amuse.Editor.Build
                         captured.Family, out var familyBindings);
                     conversionPropertyNamesByFamily.TryGetValue(
                         captured.Family, out var familyPropertyNames);
-                    slotRefusal = ConvertAdmittedMaterial(
+                    var conversionRefusal = ConvertAdmittedMaterial(
                         captured,
                         live,
                         familyBindings,
@@ -351,11 +367,22 @@ namespace Alrauna.Amuse.Editor.Build
                         poiyomiConversion,
                         lilToonConversion,
                         out var opaque);
-                    if (slotRefusal != AlphaSeparationSlotRefusal.None)
+                    if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
-                        break;
+                        lastConversionRefusal = conversionRefusal;
+                        if (isMultiMaterialSlot)
+                        {
+                            // In a multi-material swap, an unconverted material falls back
+                            // to identity on the appended submesh, preserving its appearance.
+                            opaque = live;
+                            unconvertedCount++;
+                        }
+                        else
+                        {
+                            slotRefusal = conversionRefusal;
+                            break;
+                        }
                     }
-
                     mapping.Add(live, opaque);
                     if (!ReferenceEquals(opaque, live) &&
                         !ReferenceEquals(opaque, preparedOpaque))
@@ -363,10 +390,22 @@ namespace Alrauna.Amuse.Editor.Build
                         pendingClones.Add(opaque);
                     }
                 }
+                if (isMultiMaterialSlot &&
+                    unconvertedCount >= slots[slotIndex].AdmittedMaterialIndices.Count &&
+                    slotRefusal == AlphaSeparationSlotRefusal.None)
+                {
+                    // Every admitted material in this swap failed conversion: refuse the slot
+                    // with the last conversion failure rather than creating an un-optimized clone.
+                    slotRefusal = lastConversionRefusal;
+                }
 
                 if (slotRefusal != AlphaSeparationSlotRefusal.None)
                 {
                     state.RecordSlotRefusal(slotRefusal);
+                    AmuseReports.SlotSeparationRefusal(
+                        target.Renderer,
+                        slotIndex,
+                        slotRefusal);
                     // The slot is dropped with nothing registered: clones
                     // created for its earlier admitted materials would be
                     // unreachable and unknown to the apply pass's sweep. They
@@ -447,17 +486,27 @@ namespace Alrauna.Amuse.Editor.Build
         /// nothing for the renderer.
         /// </summary>
         private static PreparedRendererSeparation RefuseEveryCandidateSlot(
+            UnityRendererMutationTarget target,
             AmusePlatformFinishState state,
             MeshSeparationPlan plan,
             AlphaSeparationSlotRefusal reason)
         {
             foreach (var submesh in plan.Submeshes)
             {
-                if (submesh.Disposition !=
+                if (submesh.Disposition ==
                     SubmeshSeparationDisposition.Unchanged)
                 {
-                    state.RecordSlotRefusal(reason);
+                    continue;
                 }
+
+                state.RecordSlotRefusal(reason);
+                AmuseReports.SlotSeparationRefusal(
+                    target.Renderer,
+                    submesh.SourceMaterialBindingIndex,
+                    reason,
+                    target.Renderer != null
+                        ? target.Renderer.gameObject.name
+                        : null);
             }
 
             return null;

@@ -862,7 +862,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void BarrierRefusesToRunWhileAnimatorServicesContextIsStillActive()
+        public void BarrierRunsInsideTheAnimatorServicesScope()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE active-extension barrier fixture");
@@ -872,41 +872,33 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                // The probe plugin invokes the real barrier from inside its own
-                // WithRequiredExtension scope. That is precisely the shape of the
-                // mutation that moves AMUSE's barrier inside the extension: the
-                // controllers NDMF commits on deactivation have not been written
-                // back yet, so anything the barrier concluded about them would be
-                // drawn from pre-commit state.
+                // Re-pinned 2026-09-15 by the single-source design: the
+                // barrier now runs inside the animator scope on purpose. It
+                // admits swap values through the same AnimationIndex the
+                // apply pass validates against, so the index must be active
+                // here, not absent. The probe plugin invokes the real
+                // barrier from inside its own WithRequiredExtension scope,
+                // which is exactly the production shape.
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestActiveExtensionPlatform.Instance);
                 var probe = context.GetState<ActiveExtensionBarrierProbe>();
 
                 Assert.That(probe.Ran, Is.True, "the probe pass did not run");
-                Assert.That(probe.Failure, Is.Not.Null,
-                    "the barrier ran to completion while AnimatorServicesContext " +
-                    "was still active, so nothing prevents it from reasoning " +
-                    "about uncommitted controllers");
-                Assert.That(probe.Failure,
-                    Is.TypeOf<System.InvalidOperationException>(),
-                    "an active animator extension at the barrier is an " +
-                    "implementation defect and must not be reported as any other " +
-                    "failure type");
-                Assert.That(probe.Failure.Message,
-                    Does.Contain("AnimatorServicesContext"),
-                    "the defect diagnostic does not name the lifecycle it pins");
+                Assert.That(probe.Failure, Is.Null,
+                    "the barrier must run to completion inside the animator " +
+                    "scope: admission and validation share one index there");
 
-                // The defect must abort the barrier outright rather than being
-                // absorbed into the domain vocabulary or a half-run pass.
+                // The barrier must still have marked itself executed and
+                // must not have converted the shared scope into an avatar
+                // refusal.
                 var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.HasExecuted, Is.False,
-                    "the barrier marked itself executed before asserting its own " +
-                    "lifecycle precondition");
+                Assert.That(amuse.HasExecuted, Is.True,
+                    "the barrier did not mark itself executed inside the " +
+                    "shared scope");
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None),
-                    "an implementation defect was converted into an avatar refusal");
-                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
-                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                    "the shared animator scope must not be recorded as an " +
+                    "avatar animation refusal");
             }
             finally
             {
@@ -2344,7 +2336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
                 Assert.That(result.Refusal, Is.EqualTo(
                     RendererAnalysisRefusal
-                        .AnimatedPropertyAbsentFromAdmittedMaterial));
+                        .AdmittedMaterialSemanticsUnknown));
             }
             finally
             {

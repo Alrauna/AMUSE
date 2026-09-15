@@ -700,6 +700,39 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         /// <summary>
+        /// A slot swaps between two materials. Material A declares a property
+        /// and material B does not. An animation curve animates that property.
+        /// The curve cannot affect material B, so material B treats it as
+        /// absent and inert rather than failing with
+        /// AnimatedPropertyAbsentFromAdmittedMaterial.
+        /// </summary>
+        [Test]
+        public void SwappedMaterialMissingPropertyDoesNotRefuseSlot()
+        {
+            var withProperty = Admitted(MaterialWithForcedOpaque(true))[0];
+            var withoutProperty = Admitted(MaterialWithoutRequestedProperties())[0];
+            var slot = new CapturedMaterialSlotEvidence(0, new[] { 0, 1 });
+
+            var result = AdmittedMaterialStates.ResolveSlot(
+                slot,
+                new[] { withProperty, withoutProperty },
+                new[] { Animated("_AlphaForceOpaque", 1f) },
+                Relevance,
+                NoAlphaFields,
+                0,
+                material => ReferenceEquals(material.Evidence, withProperty.Evidence)
+                    ? VerifiedAlphaOnly(material)
+                    : new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<ScalarSemanticValue>.Complete(ScalarSemanticValue.Constant(1f)),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown()));
+
+            Assert.That(result.IsResolved, Is.True);
+            Assert.That(result.Resolutions, Has.Count.EqualTo(2));
+        }
+
+        /// <summary>
         /// The first admitted material resolves cleanly and the second refuses.
         /// A refusal is a statement about the whole slot, so the earlier
         /// resolution must not survive as a partial prefix.
