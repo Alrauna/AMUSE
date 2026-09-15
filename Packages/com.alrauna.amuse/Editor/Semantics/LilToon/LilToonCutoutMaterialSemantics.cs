@@ -76,8 +76,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             UdimDiscardModeProperty,
             ShiftBackfaceUvProperty,
             UseParallaxProperty,
-            UseMain2ndTexProperty,
-            UseMain3rdTexProperty,
             UseDitherProperty,
             IdMask1Property,
             IdMask2Property,
@@ -127,15 +125,67 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     IdMask8Property,
                     IdMaskControlsDissolveProperty,
                     CutoffProperty,
+                    "_Main2ndTex_UVMode",
+                    "_Main3rdTex_UVMode",
+                    "_Main2ndTexAngle",
+                    "_Main3rdTexAngle",
+                    "_Main2ndTex_Cull",
+                    "_Main3rdTex_Cull",
+                    "_Main2ndTexAlphaMode",
+                    "_Main3rdTexAlphaMode",
+                    "_Main2ndTexIsDecal",
+                    "_Main3rdTexIsDecal",
+                    "_Main2ndTexIsLeftOnly",
+                    "_Main3rdTexIsLeftOnly",
+                    "_Main2ndTexIsRightOnly",
+                    "_Main3rdTexIsRightOnly",
+                    "_Main2ndTexShouldCopy",
+                    "_Main3rdTexShouldCopy",
+                    "_Main2ndTexShouldFlipMirror",
+                    "_Main3rdTexShouldFlipMirror",
+                    "_Main2ndTexShouldFlipCopy",
+                    "_Main3rdTexShouldFlipCopy",
+                    "_Main2ndTexIsMSDF",
+                    "_Main3rdTexIsMSDF",
+                    "_AudioLink2Main2nd",
+                    "_AudioLink2Main3rd",
                 },
-                colorProperties: new[] { ColorProperty },
+                colorProperties: new[] { ColorProperty, "_Color2nd", "_Color3rd" },
                 vectorProperties: new[]
                 {
                     DissolveParamsProperty,
                     MainTexScrollRotateProperty,
+                    "_Main2ndTex_ScrollRotate",
+                    "_Main3rdTex_ScrollRotate",
+                    "_Main2ndDistanceFade",
+                    "_Main3rdDistanceFade",
+                    "_Main2ndDissolveParams",
+                    "_Main3rdDissolveParams",
                 },
                 textureProperties: new[]
                 {
+                    new TexturePropertyEvidenceRequest(
+                        "_Main2ndTex",
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.Sampling |
+                        TextureEvidenceKinds.AlphaChannel |
+                        TextureEvidenceKinds.SampledAlphaIsOne),
+                    new TexturePropertyEvidenceRequest(
+                        "_Main3rdTex",
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.Sampling |
+                        TextureEvidenceKinds.AlphaChannel |
+                        TextureEvidenceKinds.SampledAlphaIsOne),
+                    new TexturePropertyEvidenceRequest(
+                        "_Main2ndBlendMask",
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.RedChannel),
+                    new TexturePropertyEvidenceRequest(
+                        "_Main3rdBlendMask",
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.RedChannel),
                     new TexturePropertyEvidenceRequest(
                         MainTextureProperty,
                         TextureEvidenceKinds.ScaleOffset |
@@ -396,54 +446,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 new UvMapping(0, assignment.Scale, assignment.Offset);
             var sharedSampling = assignment.Texture.Sampling;
 
-            // The importer theorem: a source without an alpha channel and an
-            // import that writes none samples alpha exactly one at every texel
-            // of every level. The main sample collapses to its constant, so no
-            // main field is read and no main source identity is needed. The
-            // mask still composes, and its coordinate still rides uvMain, so
-            // every gate above stays binding.
+            // The shader composes, in order: main alpha, second layer, third
+            // layer, alpha mask, dissolve, clip. The base below is the main
+            // alpha; the layers compose onto it; the mask term composes last.
+            // The cutout clip by _Cutoff applies after everything and is the
+            // classifier's declared cutoff, so it composes nowhere here.
+            ScalarSemanticValue alphaChain;
             if (assignment.Texture.SampledAlphaIsProvenOne)
             {
-                if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
-                {
-                    var theoremMaskSample = new TextureSample(
-                        maskTerm.Source,
-                        maskTerm.Mapping,
-                        sharedSampling);
-
-                    if (maskTerm.ReplacesMainAlpha)
-                    {
-                        return SemanticOutput<ScalarSemanticValue>.Complete(
-                            ScalarSemanticValue.Texture(
-                                theoremMaskSample, TextureChannel.Red));
-                    }
-
-                    return SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.TextureTimesConstant(
-                            theoremMaskSample, TextureChannel.Red, colorAlpha));
-                }
-
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(colorAlpha));
+                // The importer theorem: a source without an alpha channel and
+                // an import that writes none samples alpha exactly one at
+                // every texel of every level, so the main sample collapses to
+                // its constant and no main field is read.
+                alphaChain = ScalarSemanticValue.Constant(colorAlpha);
             }
-
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
+            else
             {
-                var maskSample = new TextureSample(
-                    maskTerm.Source,
-                    maskTerm.Mapping,
-                    sharedSampling);
-
-                if (maskTerm.ReplacesMainAlpha)
-                {
-                    // Replace mode: the mask term IS the alpha. Neither
-                    // _MainTex's texels nor _Color.a reach the value, so
-                    // no main source identity is needed.
-                    return SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.Texture(
-                            maskSample, TextureChannel.Red));
-                }
-
                 if (!assignment.Texture.HasSourceIdentity)
                 {
                     return RecordUnknown<ScalarSemanticValue>(
@@ -458,34 +476,213 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     assignment.Texture.SourceIdentity,
                     identityMapping,
                     sharedSampling);
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.ProductOfTextureSamples(
-                        mainSample,
-                        TextureChannel.Alpha,
-                        maskSample,
-                        TextureChannel.Red,
-                        colorAlpha));
+                alphaChain = colorAlpha == 1f
+                    ? ScalarSemanticValue.Texture(
+                        mainSample, TextureChannel.Alpha)
+                    : ScalarSemanticValue.TextureTimesConstant(
+                        mainSample, TextureChannel.Alpha, colorAlpha);
             }
 
-            // Off, or a mask term provably one: the plain main value.
-            if (!assignment.Texture.HasSourceIdentity)
+            TextureSample maskSample = null;
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
             {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
-                    MainTextureProperty);
+                maskSample = new TextureSample(
+                    maskTerm.Source,
+                    maskTerm.Mapping,
+                    sharedSampling);
+
+                // A replace mask runs after the layers, so the mask term is
+                // the whole alpha: neither _MainTex's texels nor _Color.a nor
+                // any layer reaches the value.
+                if (maskTerm.ReplacesMainAlpha)
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Complete(
+                        ScalarSemanticValue.Texture(
+                            maskSample, TextureChannel.Red));
+                }
             }
 
-            var sample = new TextureSample(
-                assignment.Texture.SourceIdentity,
-                identityMapping,
-                sharedSampling);
-            var value = colorAlpha == 1f
-                ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
-                : ScalarSemanticValue.TextureTimesConstant(
-                    sample, TextureChannel.Alpha, colorAlpha);
-            return SemanticOutput<ScalarSemanticValue>.Complete(value);
+            // The layers, in shader order. Their writers sit before the mask.
+            alphaChain = ComposeLayer(
+                alphaChain, evidence, third: false, diagnostics);
+            if (alphaChain == null)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            alphaChain = ComposeLayer(
+                alphaChain, evidence, third: true, diagnostics);
+            if (alphaChain == null)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            if (maskSample != null)
+            {
+                // Multiply mode: the term composes over the layered value.
+                // The multiply cannot fold into a saturating sum or
+                // difference below it, so those shapes refuse.
+                var multiplied = Multiply(
+                    alphaChain,
+                    ScalarSemanticValue.TextureTimesConstant(
+                        maskSample, TextureChannel.Red, 1f),
+                    AlphaMaskModeProperty,
+                    diagnostics);
+                if (multiplied == null)
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+
+                alphaChain = multiplied;
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(alphaChain);
+        }
+
+        /// <summary>
+        /// Composes one layer onto the running alpha by its writer mode.
+        /// Returns null after recording the layer's refusal or the
+        /// composition refusal. The multiply-over-saturating-shape refusal
+        /// is exact, not laziness: a product with a sum changes the
+        /// evaluated rounding chain, and the exact-one predicate of a
+        /// product is association-invariant only over pure factors.
+        /// </summary>
+        private static ScalarSemanticValue ComposeLayer(
+            ScalarSemanticValue baseValue,
+            CapturedMaterialEvidence evidence,
+            bool third,
+            List<LilToonSemanticDiagnostic> diagnostics)
+        {
+            var term = LilToonLayerAlphaTerm.Interpret(
+                evidence, third, diagnostics);
+            if (term.Kind == LilToonLayerAlphaTermKind.Refused)
+            {
+                return null;
+            }
+
+            if (term.Kind == LilToonLayerAlphaTermKind.Inert)
+            {
+                return baseValue;
+            }
+
+            ScalarSemanticValue layerValue =
+                term.Kind == LilToonLayerAlphaTermKind.Constant
+                    ? ScalarSemanticValue.Constant(term.Constant)
+                    : term.Value;
+            var modeProperty =
+                (third ? "_Main3rdTexAlphaMode" : "_Main2ndTexAlphaMode");
+
+            switch (term.AlphaMode)
+            {
+                case 1f:
+                    return layerValue;
+                case 2f:
+                    return Multiply(
+                        baseValue, layerValue, modeProperty, diagnostics);
+                case 3f:
+                    return ScalarSemanticValue.SaturatingSum(
+                        baseValue, layerValue);
+                case 4f:
+                    return ScalarSemanticValue.SaturatingDifference(
+                        baseValue, layerValue);
+                default:
+                    throw new InvalidOperationException(
+                        "A layer term carried a writer mode outside one to " +
+                        "four, which the term contract excludes.");
+            }
+        }
+
+        /// <summary>
+        /// The product of two closed forms, folded through their constants.
+        /// The exact-one predicate of a product of values bounded in [0,1] is
+        /// association-invariant: every rounded chain of sub-one factors
+        /// stays strictly below one, and all-one factors answer exactly one
+        /// in every association, so the fold changes nothing provable.
+        /// Returns null after recording a refusal when either shape is a
+        /// saturating sum or difference, whose exact-one predicate is not
+        /// multiplication-invariant.
+        /// </summary>
+        private static ScalarSemanticValue Multiply(
+            ScalarSemanticValue baseValue,
+            ScalarSemanticValue factor,
+            string refusalProperty,
+            List<LilToonSemanticDiagnostic> diagnostics)
+        {
+            if (baseValue.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                baseValue.Kind ==
+                    ScalarSemanticValueKind.SaturatingDifference ||
+                factor.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                factor.Kind == ScalarSemanticValueKind.SaturatingDifference)
+            {
+                diagnostics.Add(
+                    new LilToonSemanticDiagnostic(
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        refusalProperty));
+                return null;
+            }
+
+            var samples = new List<TextureSample>();
+            var channels = new List<TextureChannel>();
+            var multiplier = 1f;
+            multiplier = CollectFactors(baseValue, samples, channels, multiplier);
+            multiplier = CollectFactors(factor, samples, channels, multiplier);
+
+            if (samples.Count == 0)
+            {
+                return ScalarSemanticValue.Constant(multiplier);
+            }
+
+            if (samples.Count == 1)
+            {
+                return ScalarSemanticValue.TextureTimesConstant(
+                    samples[0], channels[0], multiplier);
+            }
+
+            return ScalarSemanticValue.ProductChain(
+                samples, channels, multiplier);
+        }
+
+        private static float CollectFactors(
+            ScalarSemanticValue value,
+            List<TextureSample> samples,
+            List<TextureChannel> channels,
+            float multiplier)
+        {
+            switch (value.Kind)
+            {
+                case ScalarSemanticValueKind.Constant:
+                    return multiplier * value.GetConstantValue();
+                case ScalarSemanticValueKind.TextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier;
+                case ScalarSemanticValueKind.TextureSampleTimesConstant:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind.ProductOfTextureSamples:
+                    samples.Add(value.GetFirstTextureSample());
+                    channels.Add(value.GetFirstChannel());
+                    samples.Add(value.GetSecondTextureSample());
+                    channels.Add(value.GetSecondChannel());
+                    return multiplier * value.GetProductMultiplier();
+                case ScalarSemanticValueKind
+                    .ProductChainOfTextureSamples:
+                    for (var index = 0;
+                         index < value.GetChainFactorCount();
+                         index++)
+                    {
+                        samples.Add(value.GetChainSample(index));
+                        channels.Add(value.GetChainChannel(index));
+                    }
+
+                    return multiplier * value.GetProductMultiplier();
+                default:
+                    throw new InvalidOperationException(
+                        "A saturating shape reached factor collection, " +
+                        "which the caller must refuse first.");
+            }
         }
 
         /// <summary>

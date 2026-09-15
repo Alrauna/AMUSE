@@ -1603,10 +1603,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
-        public void SaturatingSumOfTwoSampledTermsIsUniformlyTransparent()
+        public void SaturatingSumOfTwoSampledTerms_ClassifiesByDisjunction()
         {
-            // Cross-field correlation is unknowable from the [0,1] contracts
-            // alone: a + b can reach one on some triangle but is not provable.
+            // Each side alone proves its own opaque region and refutes its
+            // own transparent region; the disjunction composes exactly that.
             var value = ScalarSemanticValue.SaturatingSum(
                 ScalarSemanticValue.Texture(
                     Sample(), TextureChannel.Alpha),
@@ -1618,9 +1618,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
-                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+                resolution.TryGetUniformOutcome(out _), Is.False,
+                "a disjunction of classified factors is never uniform");
             Assert.That(
-                outcome,
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(TransparentCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -1639,6 +1643,53 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 resolution.TryGetUniformOutcome(out var outcome), Is.True);
             Assert.That(
                 outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void SaturatingSumOfMixedAndOpaqueClassifiesByDisjunction()
+        {
+            // Main: mip 0 opaque, mip 1 transparent (refutes every triangle
+            // alone). Layer: all opaque (proves every triangle alone). The
+            // disjunction lets the layer's proof carry the triangle that the
+            // main refutes, which is exactly what saturate(1 + s) computes.
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(
+                    MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(
+                    OpaqueThenTransparentChain(), AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out _), Is.False,
+                "a disjunction of classified factors is never uniform");
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void SaturatingSumOfTwoMixedFieldsIsUnknownWhereNeitherProves()
+        {
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(
+                    MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(
+                    OpaqueThenTransparentChain(),
+                    OpaqueThenTransparentChain()), 0);
+
+            // Both factors refute every triangle through their second mip,
+            // so the disjunction answers the absorbing outcome.
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
