@@ -279,3 +279,32 @@ channel and proves or refuses through the mesh channel, with an
 independent oracle. Per scroll-active fixture: an all-opaque chain
 proves every triangle and a chain with one sub-one texel refuses
 every triangle, at every mip level.
+
+## 10. Stage B open item, recorded 2026-09-15
+
+The stage B uv modes one to three are implemented and the resolver
+channel tests pass. The end-to-end uv1 falsifier still reports zero
+proven triangles while the slot resolves without refusal, and the
+diagnostic state at the point of stopping is:
+
+1. The resolver-level channel selection passes: a classified
+   resolution with mapping channel one selects the uv1 set from a
+   multi-channel triangle input and proves the opaque region.
+2. The production classify receives `extraUvSets = null` at least in
+   some runs (temporary `AMUSE-DBG` console diagnostics), although the
+   only production caller passes the snapshot's `ExtraUvSets`, whose
+   constructor guarantees a non-null three-entry list. The null's
+   origin is unresolved: either a second call path, a stale assembly
+   during earlier runs, or a state where the falsifier's renderer
+   snapshot was built before the uv2 assignment.
+3. The dev editor was restarted mid-diagnosis because its compile
+   pipeline was wedged (assemblies not rebuilding across forced
+   refreshes); compilation now works. Temporary `AMUSE-DBG` diagnostics
+   are still present in the working tree and must be removed before
+   commit.
+
+Next session: rerun the suite on the fresh editor, read the
+`AMUSE-DBG` classify entries from the console, and trace the null to
+its caller by renaming the classify parameter (the compiler then
+names every call site). Then finish the scroll full-domain slice,
+remove the diagnostics, and validate.
