@@ -332,3 +332,22 @@ an editor restart is needed. Then: run the suite, expect the uv1
 falsifier and the report falsifier green, remove the `AMUSE-DBG`
 temporary diagnostics, commit, validate stage B in the Lab, and open
 the pull request.
+
+## 12. Stage B end-to-end status, 2026-09-15 (final for this session)
+
+With the compile wedge resolved and the GetUVs fix in, the end-to-end
+uv1 falsifier still reports zero proven triangles, and the no-alpha
+report falsifier still sees an empty report list. The caller-side
+diagnostic proves the classify receives the non-null extra sets
+(`IRO extra=3`), and one resolution reaches the classify. The unit
+level channel selection passes. The remaining defect sits between the
+capture/seam layer and the classify input in the VerifiedLilToonTestSeams
+end-to-end harness, and needs one more focused pass: dump the resolved
+resolution's mapping channel and the per-triangle outcome at the
+seam, then trace backwards.
+
+The working tree is committed as work in progress with the failing
+falsifiers marked: the uv1 end-to-end falsifier and the report
+falsifier stay red on purpose. The temporary AMUSE-DBG diagnostics
+remain in the production files and are listed for removal before any
+pull request.
