@@ -104,7 +104,8 @@ namespace Alrauna.Amuse.Editor.Host
         internal CapturedMaterialSlotEvidence(
             int slotIndex,
             IReadOnlyList<int> admittedMaterialIndices,
-            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null)
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null,
+            IReadOnlyList<string> noAlphaChannelProperties = null)
         {
             if (slotIndex < 0)
             {
@@ -124,6 +125,10 @@ namespace Alrauna.Amuse.Editor.Host
                     new List<TextureCaptureRefusal>())
                 : new ReadOnlyCollection<TextureCaptureRefusal>(
                     new List<TextureCaptureRefusal>(captureRefusals));
+            NoAlphaChannelProperties = noAlphaChannelProperties == null
+                ? new ReadOnlyCollection<string>(new List<string>())
+                : new ReadOnlyCollection<string>(
+                    new List<string>(noAlphaChannelProperties));
         }
 
         internal int SlotIndex { get; }
@@ -135,6 +140,16 @@ namespace Alrauna.Amuse.Editor.Host
         /// every requested field of every admitted material captured.
         /// </summary>
         internal IReadOnlyList<TextureCaptureRefusal> CaptureRefusals { get; }
+
+        /// <summary>
+        /// This slot's texture properties whose admitted materials' captured
+        /// evidence proves sampled alpha exactly one through the importer
+        /// theorem: the source has no alpha channel, so the runtime samples
+        /// one at every texel. The classification treats these textures as
+        /// constant one; the report names them so the author can spot a
+        /// likely material misconfiguration.
+        /// </summary>
+        internal IReadOnlyList<string> NoAlphaChannelProperties { get; }
     }
 
     internal sealed class CapturedAnimationEvidence

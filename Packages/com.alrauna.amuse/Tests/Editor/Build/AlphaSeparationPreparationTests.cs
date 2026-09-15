@@ -2258,6 +2258,86 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// --- Falsifier: the no-alpha-channel report must fire exactly when
+        /// a texture without an alpha channel rides an admitted transparent
+        /// material, and the classification must still prove those triangles
+        /// from the format theorem. An implementation that refuses the
+        /// material, or that stays silent, fails one of the two assertions.
+        /// </summary>
+        [Test]
+        public void NoAlphaSourceTexture_ReportsTheMistakeAndStillSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE no alpha report candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            var reported = new List<string>();
+            void Capture(string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportNoAlphaSourceTexture("report_main"));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                Application.logMessageReceived += Capture;
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the theorem proves the alpha; the report refuses " +
+                    "nothing");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the no-alpha theorem must prove the triangle");
+                Assert.That(
+                    reported,
+                    Has.Some.Contains("_MainTex"),
+                    "the report must name the texture property");
+                Assert.That(
+                    reported,
+                    Has.Some.Contains("no alpha channel"),
+                    "the report must name the missing alpha channel");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Capture;
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void StreamingMipmapProvesThroughTheReadableClone()
         {
@@ -5546,6 +5626,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 return ImportMipmapTexture(
                     name, 4, 4, FullyOpaquePixels());
+            }
+
+            /// <summary>
+            /// An import whose source file has no alpha channel and whose
+            /// alpha source is none: the runtime samples alpha exactly one
+            /// at every texel, which the importer theorem proves without a
+            /// texel.
+            /// </summary>
+            internal Texture2D ImportNoAlphaSourceTexture(string name)
+            {
+                return ImportTexture(
+                    name,
+                    importer =>
+                    {
+                        importer.alphaSource =
+                            TextureImporterAlphaSource.None;
+                        importer.mipmapEnabled = false;
+                    },
+                    sourceHasAlpha: false);
             }
 
             /// <summary>

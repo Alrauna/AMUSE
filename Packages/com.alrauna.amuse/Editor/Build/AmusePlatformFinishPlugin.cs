@@ -600,6 +600,15 @@ namespace Alrauna.Amuse.Editor.Build
                                     slotIndex,
                                     textureRefusal);
                             }
+
+                            foreach (var propertyName in
+                                     slots[slotIndex].NoAlphaChannelProperties)
+                            {
+                                AmuseReports.TextureAlphaMissing(
+                                    renderer,
+                                    slotIndex,
+                                    propertyName);
+                            }
                         }
 
                         RetainPreparedSeparation(
@@ -1272,10 +1281,51 @@ namespace Alrauna.Amuse.Editor.Build
                 slots[slot] = new CapturedMaterialSlotEvidence(
                     slot,
                     admittedBySlot[slot],
-                    CaptureRefusalsFor(evidence, admittedBySlot[slot]));
+                    CaptureRefusalsFor(evidence, admittedBySlot[slot]),
+                    NoAlphaChannelPropertiesFor(evidence, admittedBySlot[slot]));
             }
 
             return slots;
+        }
+
+        /// <summary>
+        /// Collects the texture properties on a slot's admitted materials
+        /// whose captured evidence proves sampled alpha exactly one through
+        /// the importer theorem: the source file has no alpha channel and the
+        /// import writes none, so the runtime samples exactly one at every
+        /// texel. The report names these so the author can spot a likely
+        /// material misconfiguration; the proof itself is exact and changes
+        /// no classification outcome.
+        /// </summary>
+        private static IReadOnlyList<string> NoAlphaChannelPropertiesFor(
+            CapturedAnimationEvidence evidence,
+            IReadOnlyList<int> admittedIndices)
+        {
+            var properties = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var index in admittedIndices)
+            {
+                foreach (var entry in evidence
+                             .AdmittedMaterials[index]
+                             .Evidence
+                             .TextureAssignments)
+                {
+                    if (!entry.HasValue ||
+                        entry.Value.Texture == null ||
+                        (entry.Value.RequestedEvidence &
+                            TextureEvidenceKinds.AlphaChannel) == 0 ||
+                        !entry.Value.Texture.SampledAlphaIsProvenOne ||
+                        seen.Contains(entry.Name))
+                    {
+                        continue;
+                    }
+
+                    seen.Add(entry.Name);
+                    properties.Add(entry.Name);
+                }
+            }
+
+            return properties;
         }
 
         /// <summary>
