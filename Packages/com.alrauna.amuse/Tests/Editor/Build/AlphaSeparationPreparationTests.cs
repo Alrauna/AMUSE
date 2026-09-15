@@ -2199,11 +2199,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// stays refused in stage A, with the named diagnostic. The refusal
         /// is slot scoped: the renderer records it and writes nothing.
         /// </summary>
+        /// <summary>
+        /// --- Falsifier: a layer at UV mode one samples uv1, not uv0. The
+        /// layer texture is transparent at the uv0 coordinate and opaque at
+        /// the uv1 coordinate, so only an implementation that reads the
+        /// named channel proves the triangle.
+        /// </summary>
         [Test]
-        public void SecondLayerAtUvModeOne_RefusesConservatively()
+        public void SecondLayerAtUvModeOne_ProvesThroughUv1()
         {
+            const string path = "Assets/AmuseTests_LayerUv1.png";
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE layer uv1 candidate");
+            var root = new GameObject("AMUSE layer uv1 proof candidate");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -2212,19 +2219,55 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState amuse = null;
             var fixtures = new LilToonCutoutConversionFixtures();
 
+            var reported = new List<string>();
+            void CaptureUv1(string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
             try
             {
                 fixtures.BaseSetUp();
                 material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 material.SetTexture(
                     "_MainTex",
-                    fixtures.ImportFullyOpaqueMipmap("uv1_main"));
-                material.SetTexture(
-                    "_Main2ndTex",
-                    fixtures.ImportFullyOpaqueMipmap("uv1_second"));
+                    fixtures.ImportFullyOpaqueMipmap("uv1_proof_main"));
+
+                // The layer texture: transparent texel (0,0), opaque
+                // elsewhere. The uv0 coordinate lands on the transparent
+                // texel; the uv1 coordinate lands on the opaque one.
+                var size = 4;
+                var staging = new UnityEngine.Texture2D(
+                    size, size, UnityEngine.TextureFormat.RGBA32, false);
+                var pixels = new UnityEngine.Color32[size * size];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new UnityEngine.Color32(255, 255, 255, 255);
+                }
+
+                pixels[0] = new UnityEngine.Color32(255, 255, 255, 0);
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                System.IO.File.WriteAllBytes(
+                    path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+                UnityEditor.AssetDatabase.ImportAsset(
+                    path,
+                    UnityEditor.ImportAssetOptions
+                        .ForceSynchronousImport);
+                var unityImporter = (UnityEditor.TextureImporter)
+                    UnityEditor.AssetImporter.GetAtPath(path);
+                unityImporter.mipmapEnabled = false;
+                unityImporter.SaveAndReimport();
+                var layerTexture = UnityEditor.AssetDatabase
+                    .LoadAssetAtPath<UnityEngine.Texture2D>(path);
+                material.SetTexture("_Main2ndTex", layerTexture);
+
                 material.SetFloat("_UseMain2ndTex", 1f);
                 material.SetFloat("_Main2ndTexAlphaMode", 2f);
-                material.SetFloat("_Main2ndTex_UVMode", 1f);
                 AddSingleTriangleRenderer(root, material, out mesh);
                 mesh.uv = new[]
                 {
@@ -2232,7 +2275,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.75f, 0.25f),
                     new Vector2(0.25f, 0.75f),
                 };
+                // Fully inside texel (1,1) of the 4-wide layer texture, and
+                // inside the region where bilinear filtering reaches only
+                // that texel: every sampled value is exactly 255.
+                var uv1Coordinates = new List<Vector2>
+                {
+                    new Vector2(0.4f, 0.4f),
+                    new Vector2(0.48f, 0.4f),
+                    new Vector2(0.4f, 0.48f),
+                };
+                mesh.SetUVs(1, uv1Coordinates);
+                Assert.That(
+                    mesh.HasVertexAttribute(
+                        UnityEngine.Rendering.VertexAttribute.TexCoord1),
+                    Is.True,
+                    "fixture precondition: the uv1 channel must be " +
+                    "allocated on the mesh");
 
+                Application.logMessageReceived += CaptureUv1;
                 amuse = RunBarrier(
                     root,
                     selectRequest: VerifiedLilToonTestSeams
@@ -2243,16 +2303,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .VerifiedAlphaOnly);
 
                 Assert.That(
-                    amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1),
-                    "the UV1 layer refuses in stage A");
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the uv1 layer must admit in stage B; reported: " +
+                    string.Join(" | ", reported));
                 Assert.That(
-                    amuse.OpaqueCandidateTriangleCount, Is.Zero,
-                    "a refused slot proves nothing");
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the layer proof must read uv1: uv0 names the " +
+                    "transparent texel and would refuse; reported: " +
+                    string.Join(" | ", reported));
             }
             finally
             {
+                Application.logMessageReceived -= CaptureUv1;
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                if (UnityEditor.AssetDatabase.LoadAssetAtPath<
+                        UnityEngine.Object>(path) != null)
+                {
+                    UnityEditor.AssetDatabase.DeleteAsset(path);
+                }
+
                 fixtures.BaseTearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2302,7 +2372,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.75f),
                 };
 
-                Application.logMessageReceived += Capture;
                 amuse = RunBarrier(
                     root,
                     selectRequest: VerifiedLilToonTestSeams

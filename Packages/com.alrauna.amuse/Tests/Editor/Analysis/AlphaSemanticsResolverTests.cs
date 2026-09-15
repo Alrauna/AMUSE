@@ -703,7 +703,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void UnsupportedUvMappingRefuses()
         {
             var unsupported = ResolveSample(
-                Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
+                Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 4),
                 TextureChannel.Alpha,
                 Providing(MixedField()));
 
@@ -731,7 +731,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void UnsupportedUvMappingIsCheckedBeforeTextureEvidence()
         {
             var resolution = ResolveSample(
-                Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
+                Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 4),
                 TextureChannel.Alpha,
                 ProvidingNothing());
 
@@ -974,7 +974,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ResolveSample(Sample(), TextureChannel.Alpha, ProvidingNothing()),
                 ResolveMultiplied(2f, Providing(MixedField())),
                 ResolveSample(
-                    Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
+                    Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 4),
                     TextureChannel.Alpha,
                     Providing(MixedField())),
             };
@@ -1057,13 +1057,15 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         /// rejected outright.
         /// </summary>
         [Test]
-        public void ClassifiedRejectsANonZeroUvChannel()
+        public void ClassifiedRejectsAnOutOfRangeUvChannel()
         {
+            // Channels zero to three are the mesh channels the proof
+            // carries; anything else refuses at the resolution boundary.
             Assert.Throws<ArgumentException>(() => AlphaResolution.Classified(
                 Chain(Field(2, 2, 255)),
                 new AlphaSamplingSettings(
                     AlphaFilterMode.Point, AlphaWrapMode.Clamp),
-                new UvMapping(1, Vector2.one, Vector2.zero), 0));
+                new UvMapping(4, Vector2.one, Vector2.zero), 0));
         }
 
         // --- Mip chain aggregation --------------------------------------------
@@ -1691,6 +1693,110 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        // --- layer UV channels: stage B ---------------------------------------
+
+        /// <summary>
+        /// Builds the corner triangle carrying two UV sets: uv0 in the
+        /// transparent half of uv space and uv1 in the opaque half. A
+        /// resolution naming channel one must select the uv1 set; an
+        /// implementation that reads uv0 anyway answers transparent and
+        /// fails.
+        /// </summary>
+        private static TriangleAlphaInput TwoChannelTriangle()
+        {
+            var uv0Set = new Vector2[][]
+            {
+                new[]
+                {
+                    new Vector2(0.55f, 0.55f),
+                    new Vector2(0.95f, 0.55f),
+                    new Vector2(0.55f, 0.95f),
+                },
+            };
+            var uv1Set = new Vector2[]
+            {
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+            };
+            var input = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                uv0Set[0][0], uv0Set[0][1], uv0Set[0][2]);
+            return input.WithChannels(
+                new IReadOnlyList<Vector2>[] { uv1Set }, 0, 1, 2);
+        }
+
+        private static AlphaFieldProvider ProvidingLayerField(
+            AlphaMipChain chain)
+        {
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(new TextureSourceId("test:layer")))
+                {
+                    result = chain;
+                    return true;
+                }
+
+                result = null;
+                return false;
+            };
+        }
+
+        [Test]
+        public void LayerChannelMapping_SelectsTheNamedChannel()
+        {
+            var value = ScalarSemanticValue.Texture(
+                new TextureSample(
+                    new TextureSourceId("test:layer"),
+                    new UvMapping(
+                        1,
+                        new Vector2(1f, 1f),
+                        new Vector2(0f, 0f)),
+                    new TextureSampling(
+                        TextureFilterMode.Point, TextureWrapMode.Clamp)),
+                TextureChannel.Alpha);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingLayerField(AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(TwoChannelTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "the uv1 coordinates name the opaque region; reading " +
+                "uv0 instead would answer transparent");
+        }
+
+        [Test]
+        public void LayerChannelMapping_MissingMeshChannel_IsUnknown()
+        {
+            var value = ScalarSemanticValue.Texture(
+                new TextureSample(
+                    new TextureSourceId("test:layer"),
+                    new UvMapping(
+                        1,
+                        new Vector2(1f, 1f),
+                        new Vector2(0f, 0f)),
+                    new TextureSampling(
+                        TextureFilterMode.Point, TextureWrapMode.Clamp)),
+                TextureChannel.Alpha);
+            var input = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingLayerField(AllOpaqueChain()), 0);
+
+            // The mesh carries no uv1 set, so the sampled coordinate is
+            // unknowable and the triangle stays unproven.
+            Assert.That(
+                resolution.Classify(input),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         [Test]

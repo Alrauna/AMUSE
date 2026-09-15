@@ -1192,13 +1192,19 @@ namespace Alrauna.Amuse.Editor.Build
         {
             var perResolution = new List<TriangleAlphaOutcome[]>(
                 slot.Resolutions.Count);
+            UnityEngine.Debug.Log("[AMUSE-DBG] IRO extra=" +
+                (snapshot.ExtraUvSets == null
+                    ? "null"
+                    : snapshot.ExtraUvSets.Count.ToString()) +
+                " resolutions=" + slot.Resolutions.Count);
             foreach (var resolution in slot.Resolutions)
             {
                 var outcomes = UnityRendererAlphaAnalysis.Classify(
                     submesh.Indices,
                     snapshot.Positions,
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
-                    resolution);
+                    resolution,
+                    snapshot.ExtraUvSets);
                 perResolution.Add(outcomes);
             }
 
@@ -1305,11 +1311,25 @@ namespace Alrauna.Amuse.Editor.Build
             var seen = new HashSet<string>();
             foreach (var index in admittedIndices)
             {
+                UnityEngine.Debug.Log("[AMUSE-DBG] theorem agg material " +
+                    index + " assignments " +
+                    evidence.AdmittedMaterials[index].Evidence
+                        .TextureAssignments.Count);
                 foreach (var entry in evidence
                              .AdmittedMaterials[index]
                              .Evidence
                              .TextureAssignments)
                 {
+                    var theoremFact = entry.HasValue &&
+                        entry.Value.Texture != null
+                        ? entry.Value.Texture.SampledAlphaIsProvenOne.ToString()
+                        : "unassigned";
+                    UnityEngine.Debug.Log("[AMUSE-DBG] entry " + entry.Name +
+                        " hasValue=" + entry.HasValue +
+                        " req=" + (entry.HasValue
+                            ? entry.Value.RequestedEvidence.ToString()
+                            : "none") +
+                        " theorem=" + theoremFact);
                     if (!entry.HasValue ||
                         entry.Value.Texture == null ||
                         (entry.Value.RequestedEvidence &
