@@ -2124,6 +2124,140 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// route; the GPU blit route itself stays refused for streaming
         /// textures, whose editor read is measured untrustworthy.
         /// </summary>
+        /// <summary>
+        /// --- Falsifier: an enabled second main texture layer with a fully
+        /// opaque layer texture composes by multiply and the renderer still
+        /// prepares. The pre-change implementation refused the material on
+        /// the bare toggle, so this fails any implementation that restores
+        /// the all-or-nothing layer gate.
+        /// </summary>
+        [Test]
+        public void EnabledSecondLayer_MaterialPreparesAndSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE second layer candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap("layer_main"));
+                material.SetTexture(
+                    "_Main2ndTex",
+                    fixtures.ImportFullyOpaqueMipmap("layer_second"));
+                material.SetFloat("_UseMain2ndTex", 1f);
+                material.SetFloat("_Main2ndTexAlphaMode", 2f);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the enabled layer must not refuse the material");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the opaque main times the opaque layer proves the " +
+                    "triangle");
+                Assert.That(
+                    amuse.Separation,
+                    Is.Not.Null,
+                    "the layered slot must prepare a conversion");
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a layer whose UV mode moves the coordinate to UV1
+        /// stays refused in stage A, with the named diagnostic. The refusal
+        /// is slot scoped: the renderer records it and writes nothing.
+        /// </summary>
+        [Test]
+        public void SecondLayerAtUvModeOne_RefusesConservatively()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE layer uv1 candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap("uv1_main"));
+                material.SetTexture(
+                    "_Main2ndTex",
+                    fixtures.ImportFullyOpaqueMipmap("uv1_second"));
+                material.SetFloat("_UseMain2ndTex", 1f);
+                material.SetFloat("_Main2ndTexAlphaMode", 2f);
+                material.SetFloat("_Main2ndTex_UVMode", 1f);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1),
+                    "the UV1 layer refuses in stage A");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.Zero,
+                    "a refused slot proves nothing");
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void StreamingMipmapProvesThroughTheReadableClone()
         {

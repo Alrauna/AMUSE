@@ -64,6 +64,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly AlphaResolution _firstFactor;
         private readonly AlphaResolution _secondFactor;
         private readonly bool _isProduct;
+        private readonly bool _isDisjunction;
 
         private AlphaResolution(
             bool isResolved,
@@ -76,7 +77,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             UvMapping mapping,
             AlphaResolution firstFactor,
             AlphaResolution secondFactor,
-            bool isProduct)
+            bool isProduct,
+            bool isDisjunction = false)
         {
             // Invariants: a resolved value carries no failure, a refusal
             // carries one, and a classified value always has its field.
@@ -102,6 +104,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             _firstFactor = firstFactor;
             _secondFactor = secondFactor;
             _isProduct = isProduct;
+            _isDisjunction = isDisjunction;
         }
 
         internal bool IsResolved { get; }
@@ -223,6 +226,50 @@ namespace Alrauna.Amuse.Editor.Analysis
 
 
         /// <summary>
+        /// The disjunction of two independently classified factors, the dual
+        /// of <see cref="Product"/>: the sum saturate(a + b) reaches exactly
+        /// one on a triangle exactly when either factor is one there, because
+        /// each factor is bounded in [0,1] by the field contract. The fold
+        /// mirrors the product's absorbing lattice: ProvenOpaque wins over
+        /// Unknown, Unknown wins over MustRemainTransparent, and
+        /// MustRemainTransparent needs both factors non-opaque.
+        /// <para>
+        /// Both factors must be classified, never uniform: the resolver
+        /// resolves uniform factors before it constructs a disjunction.
+        /// </para>
+        /// </summary>
+        internal static AlphaResolution Or(
+            AlphaResolution first,
+            AlphaResolution second)
+        {
+            if (first == null)
+                throw new ArgumentNullException(nameof(first));
+            if (second == null)
+                throw new ArgumentNullException(nameof(second));
+            if (!first.IsResolved || !second.IsResolved ||
+                first.TryGetUniformOutcome(out _) ||
+                second.TryGetUniformOutcome(out _))
+            {
+                throw new ArgumentException(
+                    "A disjunction composes two classified resolutions.");
+            }
+
+            return new AlphaResolution(
+                true,
+                AlphaResolutionFailure.None,
+                false,
+                default,
+                null,
+                default,
+                0,
+                default,
+                first,
+                second,
+                true,
+                true);
+        }
+
+        /// <summary>
         /// Reports the stored uniform outcome, if this resolution has one.
         /// <para>
         /// This exposes an existing immutable fact so a consumer can recognize
@@ -279,7 +326,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return _uniformOutcome;
             }
 
-            if (_isProduct)
+            if (_isProduct && !_isDisjunction)
             {
                 var first = _firstFactor.Classify(triangle);
                 if (first == TriangleAlphaOutcome.MustRemainTransparent)
@@ -296,6 +343,28 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return first == TriangleAlphaOutcome.ProvenOpaque &&
                        second == TriangleAlphaOutcome.ProvenOpaque
                     ? TriangleAlphaOutcome.ProvenOpaque
+                    : TriangleAlphaOutcome.Unknown;
+            }
+
+            if (_isDisjunction)
+            {
+                var first = _firstFactor.Classify(triangle);
+                if (first == TriangleAlphaOutcome.ProvenOpaque)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+
+                var second = _secondFactor.Classify(triangle);
+                if (second == TriangleAlphaOutcome.ProvenOpaque)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+
+                return first == TriangleAlphaOutcome
+                           .MustRemainTransparent &&
+                       second == TriangleAlphaOutcome
+                           .MustRemainTransparent
+                    ? TriangleAlphaOutcome.MustRemainTransparent
                     : TriangleAlphaOutcome.Unknown;
             }
 
@@ -619,15 +688,35 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return secondResolution;
             }
 
-            if (IsUniformlyProvenOpaque(firstResolution) ||
-                IsUniformlyProvenOpaque(secondResolution))
+            if (IsUniformlyProvenOpaque(firstResolution))
             {
                 return AlphaResolution.Uniform(
                     TriangleAlphaOutcome.ProvenOpaque);
             }
 
-            return AlphaResolution.Uniform(
-                TriangleAlphaOutcome.MustRemainTransparent);
+            if (IsUniformlyProvenOpaque(secondResolution))
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.ProvenOpaque);
+            }
+
+            var firstTransparent = firstResolution.TryGetUniformOutcome(
+                out var firstOutcome) &&
+                firstOutcome == TriangleAlphaOutcome.MustRemainTransparent;
+            var secondTransparent = secondResolution.TryGetUniformOutcome(
+                out var secondOutcome) &&
+                secondOutcome == TriangleAlphaOutcome.MustRemainTransparent;
+            if (firstTransparent)
+            {
+                return secondResolution;
+            }
+
+            if (secondTransparent)
+            {
+                return firstResolution;
+            }
+
+            return AlphaResolution.Or(firstResolution, secondResolution);
         }
 
         /// <summary>
@@ -653,9 +742,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return ResolveScalar(difference < 0f ? 0f : difference);
             }
 
-            if (subtrahend.Kind == ScalarSemanticValueKind.Constant &&
-                subtrahend.GetConstantValue() == 0f)
+            if (IsProvenExactlyZero(subtrahend))
             {
+                // saturate(m - 0) is m: a zero constant, or a sampled term
+                // scaled by exactly zero, is exactly zero at every reachable
+                // sample because the field contract bounds the sample finite
+                // in [0,1] and fl(0 * s) is zero for every finite s.
                 return AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Complete(minuend),
                     fieldProvider, maxNoiseTexelPercent);
@@ -677,6 +769,25 @@ namespace Alrauna.Amuse.Editor.Analysis
         {
             return resolution.TryGetUniformOutcome(out var outcome) &&
                 outcome == TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// A closed form whose value is exactly zero at every reachable
+        /// sample: the zero constant, or a sampled term scaled by exactly
+        /// zero. The field contract bounds the sampled factor finite in
+        /// [0,1], and a binary32 multiply of zero by any finite value is
+        /// exactly zero, so the lemma needs no texel.
+        /// </summary>
+        private static bool IsProvenExactlyZero(ScalarSemanticValue value)
+        {
+            if (value.Kind == ScalarSemanticValueKind.Constant)
+            {
+                return value.GetConstantValue() == 0f;
+            }
+
+            return value.Kind == ScalarSemanticValueKind
+                .TextureSampleTimesConstant &&
+                value.GetMultiplier() == 0f;
         }
 
         private static AlphaResolution ResolveSampled(
