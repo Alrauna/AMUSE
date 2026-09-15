@@ -206,3 +206,20 @@ Pending for this branch: the product owner's Lab re-characterization at
 the branch tip, then the stage B design addendum for UV modes one to
 three and per-layer scroll. The zero-triangle diagnosis branch of this
 date closed the observation that used to gate the checkpoint.
+
+## 8. Stage A checkpoint observed, 2026-09-15
+
+The product owner rebuilt the private swap avatar in the Census Lab
+editor against the stage A branch tip and observed the split. The
+authoritative NDMF console lines name the outcome in counts: 37
+renderers analyzed, 60155 triangles moved to opaque materials, 96
+renderers kept everything original.
+
+The second main texture layer of the skirt renderer is admitted: the
+build records no refusal naming that layer toggle, and no
+admitted-material semantics refusal anywhere in the final build. Other
+transparent renderers of the same avatar keep their refusals where their
+own alpha proves nothing; those are content facts, not gate defects.
+
+Checkpoint discipline satisfied: suites green before the Lab run, the
+Lab run observed after, and the stage B gate is released.
