@@ -84,6 +84,11 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal Vector2 Uv1 { get; }
         internal Vector2 Uv2 { get; }
 
+        private readonly IReadOnlyList<IReadOnlyList<Vector2>> _extraUvSets;
+        private readonly int _indexA;
+        private readonly int _indexB;
+        private readonly int _indexC;
+
         private TriangleAlphaInput(
             Vector3 position0,
             Vector3 position1,
@@ -91,7 +96,11 @@ namespace Alrauna.Amuse.Editor.Analysis
             bool hasUv0,
             Vector2 uv0,
             Vector2 uv1,
-            Vector2 uv2)
+            Vector2 uv2,
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets,
+            int indexA,
+            int indexB,
+            int indexC)
         {
             Position0 = position0;
             Position1 = position1;
@@ -100,6 +109,89 @@ namespace Alrauna.Amuse.Editor.Analysis
             Uv0 = uv0;
             Uv1 = uv1;
             Uv2 = uv2;
+            _extraUvSets = extraUvSets;
+            _indexA = indexA;
+            _indexB = indexB;
+            _indexC = indexC;
+        }
+
+        /// <summary>
+        /// Selects one UV channel's three vertex coordinates. Channel zero is
+        /// the copied uv0 triplet; channels one to three read the extra sets
+        /// at this triangle's vertex indices. A channel the mesh does not
+        /// carry answers false, which the resolution classifies as Unknown.
+        /// </summary>
+        internal bool TryGetUvSet(
+            int channel,
+            out Vector2 a,
+            out Vector2 b,
+            out Vector2 c)
+        {
+            if (channel == 0)
+            {
+                if (!HasUv0)
+                {
+                    a = default;
+                    b = default;
+                    c = default;
+                    return false;
+                }
+
+                a = Uv0;
+                b = Uv1;
+                c = Uv2;
+                return true;
+            }
+
+            var index = channel - 1;
+            if (_extraUvSets == null ||
+                index < 0 ||
+                index >= _extraUvSets.Count ||
+                _extraUvSets[index] == null)
+            {
+                a = default;
+                b = default;
+                c = default;
+                return false;
+            }
+
+            a = _extraUvSets[index][_indexA];
+            b = _extraUvSets[index][_indexB];
+            c = _extraUvSets[index][_indexC];
+            return true;
+        }
+
+        /// <summary>
+        /// Attaches the mesh's extra UV channel arrays and this triangle's
+        /// vertex indices, so a layer mapping naming uv1 to uv3 selects its
+        /// channel without copying. The arrays are the snapshot's own; the
+        /// input never mutates them.
+        /// </summary>
+        internal TriangleAlphaInput WithChannels(
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets,
+            int indexA,
+            int indexB,
+            int indexC)
+        {
+            return new TriangleAlphaInput(
+                Position0, Position1, Position2,
+                HasUv0, Uv0, Uv1, Uv2,
+                extraUvSets, indexA, indexB, indexC);
+        }
+
+        private TriangleAlphaInput(
+            Vector3 position0,
+            Vector3 position1,
+            Vector3 position2,
+            bool hasUv0,
+            Vector2 uv0,
+            Vector2 uv1,
+            Vector2 uv2)
+            : this(
+                position0, position1, position2,
+                hasUv0, uv0, uv1, uv2,
+                null, 0, 0, 0)
+        {
         }
 
         internal static TriangleAlphaInput WithUv0(

@@ -148,11 +148,11 @@ namespace Alrauna.Amuse.Editor.Analysis
             // through to the affine transform, which only ever reads
             // `TriangleAlphaInput.Uv0` — silently applying another UV set's
             // ST to UV0 instead of being rejected.
-            if (mapping.Channel != 0)
+            if (mapping.Channel < 0 || mapping.Channel > 3)
             {
                 throw new ArgumentException(
-                    "A classified resolution's mapping must be for UV " +
-                    "channel 0.",
+                    "A classified resolution's mapping must name a mesh " +
+                    "UV channel the proof carries (0 to 3).",
                     nameof(mapping));
             }
 
@@ -402,6 +402,25 @@ namespace Alrauna.Amuse.Editor.Analysis
                 {
                     return TriangleAlphaOutcome.Unknown;
                 }
+            }
+
+            if (_mapping.Channel != 0)
+            {
+                // A layer channel mapping is exact identity in scale and
+                // offset by the frontend boundary, so the channel selection
+                // substitutes the named channel's vertex coordinates and the
+                // classifier reads them as plain uv0. A channel the mesh
+                // does not carry invalidates only this triangle's proof.
+                if (!triangle.TryGetUvSet(_mapping.Channel,
+                        out var channelA, out var channelB,
+                        out var channelC))
+                {
+                    return TriangleAlphaOutcome.Unknown;
+                }
+
+                transformed = TriangleAlphaInput.WithUv0(
+                    triangle.Position0, triangle.Position1,
+                    triangle.Position2, channelA, channelB, channelC);
             }
 
             var sawUnknown = false;
@@ -827,7 +846,11 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </summary>
         private static bool IsSupportedMapping(UvMapping mapping)
         {
-            return mapping.Channel == 0;
+            // Channels one to three are the stage B layer channels: the mesh
+            // extraction carries them and the classifier selects the
+            // mapping's channel directly. Channel four is the view-dependent
+            // matcap coordinate and stays refused.
+            return mapping.Channel >= 0 && mapping.Channel <= 3;
         }
 
         /// <summary>

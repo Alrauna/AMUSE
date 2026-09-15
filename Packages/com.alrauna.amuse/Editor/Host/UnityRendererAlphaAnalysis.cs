@@ -359,6 +359,31 @@ namespace Alrauna.Amuse.Editor.Host
                     RendererAnalysisRefusal.MalformedMeshData);
             }
 
+            // Layer UV channels: HLSL uv1 to uv3 live in Unity mesh channels
+            // one to three. Read through GetUVs, which sees channels written
+            // by both the legacy uv2-to-uv4 properties and SetUVs. Each
+            // channel is either absent or complete, like uv0; a present
+            // channel rides the snapshot for the layer proof.
+            var extraUvSets = new IReadOnlyList<Vector2>[3];
+            for (var channel = 1; channel <= 3; channel++)
+            {
+                var set = new List<Vector2>();
+                mesh.GetUVs(channel, set);
+                if (set.Count == 0)
+                {
+                    extraUvSets[channel - 1] = null;
+                    continue;
+                }
+
+                if (set.Count != mesh.vertexCount)
+                {
+                    return UnityRendererAlphaExtraction.Refused(
+                        RendererAnalysisRefusal.MalformedMeshData);
+                }
+
+                extraUvSets[channel - 1] = set;
+            }
+
             var submeshes = new UnitySubmeshAlphaSnapshot[mesh.subMeshCount];
             for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
             {
@@ -473,7 +498,13 @@ namespace Alrauna.Amuse.Editor.Host
                 hasUv0 ? uv : Array.Empty<Vector2>(),
                 hasUv0,
                 submeshes,
-                capturedSlots);
+                capturedSlots,
+                extraUvSets);
+            UnityEngine.Debug.Log("[AMUSE-DBG] extraction uv2 set=" +
+                (extraUvSets[0] == null
+                    ? "absent"
+                    : extraUvSets[0].Count.ToString()) +
+                " verts=" + mesh.vertexCount);
             var target = new UnityRendererMutationTarget(
                 renderer, mesh, materialSlotCount);
             return UnityRendererAlphaExtraction.Accepted(snapshot, target);
@@ -764,8 +795,16 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<int> indices,
             IReadOnlyList<Vector3> positions,
             IReadOnlyList<Vector2> uv,
-            AlphaResolution resolution)
+            AlphaResolution resolution,
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets = null)
         {
+            UnityEngine.Debug.Log("[AMUSE-DBG] static classify sets=" +
+                (extraUvSets == null
+                    ? "null"
+                    : string.Join("/", System.Linq.Enumerable.Select(
+                        extraUvSets, s => s == null
+                            ? "absent"
+                            : s.Count.ToString()))));
             var outcomes = new TriangleAlphaOutcome[indices.Count / 3];
             if (!resolution.IsResolved)
             {
@@ -796,13 +835,22 @@ namespace Alrauna.Amuse.Editor.Host
                                   IsFinite(uv[b]) &&
                                   IsFinite(uv[c]);
 
-                outcomes[triangle] = resolution.Classify(
-                    uvAvailable
-                        ? TriangleAlphaInput.WithUv0(
-                            positions[a], positions[b], positions[c],
-                            uv[a], uv[b], uv[c])
-                        : TriangleAlphaInput.MissingUv0(
-                            positions[a], positions[b], positions[c]));
+                var input = uvAvailable
+                    ? TriangleAlphaInput.WithUv0(
+                        positions[a], positions[b], positions[c],
+                        uv[a], uv[b], uv[c])
+                    : TriangleAlphaInput.MissingUv0(
+                        positions[a], positions[b], positions[c]);
+                input = input.WithChannels(extraUvSets, a, b, c);
+                UnityEngine.Debug.Log("[AMUSE-DBG] classify extra sets " +
+                    (extraUvSets == null
+                        ? "null"
+                        : string.Join("/", System.Linq.Enumerable.Select(
+                            extraUvSets, s => s == null
+                                ? "absent"
+                                : s.Count.ToString()))));
+
+                outcomes[triangle] = resolution.Classify(input);
             }
 
             return outcomes;

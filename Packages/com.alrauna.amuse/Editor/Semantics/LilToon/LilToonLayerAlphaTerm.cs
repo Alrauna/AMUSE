@@ -155,18 +155,27 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return Refuse(diagnostics, alphaModeProperty);
             }
 
+            UnityEngine.Debug.Log("[AMUSE-DBG] layer term toggle=" + toggle +
+                " alphaMode=" + alphaMode + " uvMode=" +
+                (evidence.TryGetScalar(uvModeProperty, out var uvdbg)
+                    ? uvdbg.ToString()
+                    : "unread"));
+
             if (toggle == 0f || alphaMode == 0f || alphaMode > 4f)
             {
                 return Inert(alphaMode);
             }
 
-            // Stage A coordinate boundary: UV0 with exact identity scroll,
-            // rotate, angle, and scale and offset. UV modes one to three are
-            // the deferred stage B; mode four is the view-dependent matcap
-            // coordinate.
+            // Coordinate boundary: modes zero to three are mesh channels
+            // the proof selects exactly. Mode four is the view-dependent
+            // matcap coordinate and refuses. Stage B keeps exact identity
+            // scale and offset; the scroll and rotate terms stay refused
+            // with their own named gates below.
             if (!evidence.TryGetScalar(uvModeProperty, out var uvMode) ||
                 !IsFinite(uvMode) ||
-                uvMode != 0f)
+                uvMode < 0f ||
+                uvMode > 3f ||
+                uvMode != Mathf.Floor(uvMode))
             {
                 return Refuse(diagnostics, uvModeProperty);
             }
@@ -288,7 +297,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // the main sampler, so it needs no facts of its own beyond its
             // red field and identity.
             var layerMapping = new UvMapping(
-                0, assignment.Scale, assignment.Offset);
+                (int)uvMode, assignment.Scale, assignment.Offset);
             var layerSampling = assignment.Texture.Sampling;
 
             // Alpha factor assembly. The unassigned texture is its declared

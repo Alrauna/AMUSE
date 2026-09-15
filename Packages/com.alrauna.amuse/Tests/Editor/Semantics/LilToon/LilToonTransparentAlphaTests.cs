@@ -582,39 +582,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The stage B boundary: a layer UV mode of one moves the coordinate
-        /// to UV1, which stage A does not prove, and the refusal names the
-        /// UV mode property.
-        /// </summary>
-        [Test]
-        public void LayerUvModeOne_RefusesWithTheNamedProperty()
-        {
-            var material = NewLayerMaterial(
-                "falsifier_uvmode", 255, 1f, 1f);
-            material.SetFloat("_Main2ndTex_UVMode", 1f);
-            material.SetFloat(SecondToggleProperty, 1f);
-
-            var result = InterpretTransparent(material);
-            var dump = string.Join(
-                " | ",
-                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
-                    .Select(d => d.Code + ":" + d.Detail));
-            Assert.That(
-                result.Semantics.Alpha.IsComplete, Is.False,
-                "_Main2ndTex_UVMode one must stay Unknown in stage A; " +
-                "diagnostics: " + dump);
-            Assert.That(
-                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
-                    .Any(d =>
-                        d.Code == LilToonSemanticDiagnosticCode
-                            .UnsupportedFeature &&
-                        d.Detail.Contains("_Main2ndTex_UVMode")),
-                Is.True,
-                "the refusal names the UV mode property; diagnostics: " +
-                dump);
-        }
-
-        /// <summary>
         /// Family parity: the cutout frontend composes the same replace-mode
         /// layer to the same proven outcome, so the shared term carries no
         /// family-specific alpha behavior.
