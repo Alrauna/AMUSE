@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -339,19 +340,22 @@ namespace Alrauna.Amuse.Editor.Analysis
                         case ShaderPropertyType.Float:
                         case ShaderPropertyType.Range:
                         case ShaderPropertyType.Int:
-                            if (ContainsName(relevance.ScalarProperties, entry.Name))
+                            if (relevance.ScalarProperties.Contains(
+                                    entry.Name, StringComparer.Ordinal))
                             {
                                 derived = derived.WithScalar(entry.Name, entry.FloatValue);
                             }
                             break;
                         case ShaderPropertyType.Color:
-                            if (ContainsName(relevance.ColorProperties, entry.Name))
+                            if (relevance.ColorProperties.Contains(
+                                    entry.Name, StringComparer.Ordinal))
                             {
                                 derived = derived.WithColor(entry.Name, entry.ColorValue);
                             }
                             break;
                         case ShaderPropertyType.Vector:
-                            if (ContainsName(relevance.VectorProperties, entry.Name))
+                            if (relevance.VectorProperties.Contains(
+                                    entry.Name, StringComparer.Ordinal))
                             {
                                 derived = derived.WithVector(entry.Name, entry.VectorValue);
                             }
@@ -480,8 +484,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                             .AnimatedPropertyAbsentFromAdmittedMaterial;
                     }
 
-                    if (TryGetBlockFloat(slotBlockEntries, group.PropertyName, out var blockFloat))
+                    BlockStateEntry blockEntry;
+                    if (TryGetBlockEntry(
+                            slotBlockEntries, group.PropertyName,
+                            ShaderPropertyType.Float, out blockEntry) ||
+                        TryGetBlockEntry(
+                            slotBlockEntries, group.PropertyName,
+                            ShaderPropertyType.Range, out blockEntry) ||
+                        TryGetBlockEntry(
+                            slotBlockEntries, group.PropertyName,
+                            ShaderPropertyType.Int, out blockEntry))
                     {
+                        var blockFloat = blockEntry.FloatValue;
                         if (!(blockFloat == serialized))
                         {
                             return RendererAnalysisRefusal
@@ -515,8 +529,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     }
 
                     var componentBindings = group.ComponentBindings();
-                    if (TryGetBlockColor(slotBlockEntries, group.PropertyName, out var blockColor))
+                    if (TryGetBlockEntry(
+                            slotBlockEntries, group.PropertyName,
+                            ShaderPropertyType.Color, out var blockEntry))
                     {
+                        var blockColor = blockEntry.ColorValue;
                         var blockVec = new Vector4(blockColor.r, blockColor.g, blockColor.b, blockColor.a);
                         var serVec = new Vector4(serialized.r, serialized.g, serialized.b, serialized.a);
                         foreach (var component in componentBindings.Keys)
@@ -555,8 +572,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                     }
 
                     var componentBindings = group.ComponentBindings();
-                    if (TryGetBlockVector(slotBlockEntries, group.PropertyName, out var blockVector))
+                    if (TryGetBlockEntry(
+                            slotBlockEntries, group.PropertyName,
+                            ShaderPropertyType.Vector, out var blockEntry))
                     {
+                        var blockVector = blockEntry.VectorValue;
                         foreach (var component in componentBindings.Keys)
                         {
                             if (!(blockVector[component] == serialized[component]))
@@ -873,95 +893,31 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return outcome;
         }
-        private static bool TryGetBlockFloat(
+        private static bool TryGetBlockEntry(
             IReadOnlyList<BlockStateEntry> slotBlockEntries,
             string propertyName,
-            out float value)
+            ShaderPropertyType type,
+            out BlockStateEntry entry)
         {
             if (slotBlockEntries != null)
             {
                 for (var i = 0; i < slotBlockEntries.Count; i++)
                 {
-                    var entry = slotBlockEntries[i];
-                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
-                        (entry.Type == ShaderPropertyType.Float ||
-                         entry.Type == ShaderPropertyType.Range ||
-                         entry.Type == ShaderPropertyType.Int))
+                    var candidate = slotBlockEntries[i];
+                    if (string.Equals(
+                            candidate.Name, propertyName, StringComparison.Ordinal) &&
+                        candidate.Type == type)
                     {
-                        value = entry.FloatValue;
+                        entry = candidate;
                         return true;
                     }
                 }
             }
 
-            value = 0f;
+            entry = default;
             return false;
         }
 
-        private static bool TryGetBlockColor(
-            IReadOnlyList<BlockStateEntry> slotBlockEntries,
-            string propertyName,
-            out Color value)
-        {
-            if (slotBlockEntries != null)
-            {
-                for (var i = 0; i < slotBlockEntries.Count; i++)
-                {
-                    var entry = slotBlockEntries[i];
-                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
-                        entry.Type == ShaderPropertyType.Color)
-                    {
-                        value = entry.ColorValue;
-                        return true;
-                    }
-                }
-            }
-
-            value = default;
-            return false;
-        }
-
-        private static bool TryGetBlockVector(
-            IReadOnlyList<BlockStateEntry> slotBlockEntries,
-            string propertyName,
-            out Vector4 value)
-        {
-            if (slotBlockEntries != null)
-            {
-                for (var i = 0; i < slotBlockEntries.Count; i++)
-                {
-                    var entry = slotBlockEntries[i];
-                    if (string.Equals(entry.Name, propertyName, StringComparison.Ordinal) &&
-                        entry.Type == ShaderPropertyType.Vector)
-                    {
-                        value = entry.VectorValue;
-                        return true;
-                    }
-                }
-            }
-
-            value = default;
-            return false;
-        }
-        private static bool ContainsName(
-            IEnumerable<string> names,
-            string targetName)
-        {
-            if (names == null || targetName == null)
-            {
-                return false;
-            }
-
-            foreach (var name in names)
-            {
-                if (string.Equals(name, targetName, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
     }
 }
