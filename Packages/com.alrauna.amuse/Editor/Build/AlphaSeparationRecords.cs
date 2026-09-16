@@ -211,7 +211,8 @@ namespace Alrauna.Amuse.Editor.Build
             MeshSeparationPlan plan,
             CapturedAnimationEvidence evidence,
             IReadOnlyList<PreparedSlotSeparation> candidateSlots,
-            IReadOnlyList<BlockStateEntry> blockStateAtPreparation)
+            IReadOnlyList<BlockStateEntry> blockStateAtPreparation,
+            string rendererTypeName = null)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
             // Empty is the avatar root's animation path and is valid; only an
@@ -233,13 +234,15 @@ namespace Alrauna.Amuse.Editor.Build
 
             CandidateSlots = Array.AsReadOnly(copy);
             BlockStateAtPreparation = blockStateAtPreparation;
+            RendererTypeName = rendererTypeName
+                ?? target.Renderer?.GetType().FullName;
         }
 
         internal UnityRendererMutationTarget Target { get; }
         internal string RendererPath { get; }
+        internal string RendererTypeName { get; }
         internal MeshSeparationPlan Plan { get; }
         internal CapturedAnimationEvidence Evidence { get; }
-
         /// <summary>
         /// The unassigned native clone this renderer's geometry mutation will be
         /// finalized on, or null when no surviving slot requires one.

@@ -217,7 +217,10 @@ namespace Alrauna.Amuse.Editor.Build
                             !string.Equals(
                                 binding.path,
                                 prepared.RendererPath,
-                                StringComparison.Ordinal))
+                                StringComparison.Ordinal) ||
+                            !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                                binding.type.FullName,
+                                prepared.RendererTypeName))
                         {
                             continue;
                         }
