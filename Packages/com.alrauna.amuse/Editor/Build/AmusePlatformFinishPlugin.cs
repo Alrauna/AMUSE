@@ -456,7 +456,8 @@ namespace Alrauna.Amuse.Editor.Build
             // default. The density alone never marks a build.
             state.AlphaPolicyActive =
                 opaqueAlphaPercent < 100 || polygonClampPercent > 0;
-            var ignoreOutOfRangeSlots = true;
+            var ignoreOutOfRangeSlots =
+                optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
 
 
             foreach (var renderer in context.AvatarRootObject

@@ -94,8 +94,7 @@ namespace Alrauna.Amuse.Runtime
         private int _polygonMinimumOpaqueCoveragePercent = 100;
 
         [SerializeField]
-        private bool _ignoreOutOfRangeMaterialSlots;
-
+        private bool _ignoreOutOfRangeMaterialSlots = true;
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
         /// treats a disabled component exactly like an absent one: nothing
@@ -148,9 +147,9 @@ namespace Alrauna.Amuse.Runtime
             _polygonMinimumOpaqueCoveragePercent;
 
         /// <summary>
-        /// When true, AMUSE ignores animation bindings that target material
-        /// slot indices outside the mesh material count. When false, an
-        /// out-of-range slot animation causes the renderer to refuse
+        /// When true (default), AMUSE ignores animation bindings that target
+        /// material slot indices outside the mesh material count. When false,
+        /// an out-of-range slot animation causes the renderer to refuse
         /// optimization.
         /// </summary>
         public bool IgnoreOutOfRangeMaterialSlots =>
