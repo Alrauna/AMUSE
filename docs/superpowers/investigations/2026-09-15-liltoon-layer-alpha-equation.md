@@ -209,20 +209,23 @@ date closed the observation that used to gate the checkpoint.
 
 ## 8. Stage A checkpoint observed, 2026-09-15
 
+Privacy note: This section removes private asset names and exact
+per-renderer details.
+
 The product owner rebuilt the private swap avatar in the Census Lab
-editor against the stage A branch tip and observed the split. The
-authoritative NDMF console lines name the outcome in counts: 37
-renderers analyzed, 60155 triangles moved to opaque materials, 96
-renderers kept everything original.
+editor against the stage A branch tip. The build split the skirt.
+The build log reported several dozen analyzed renderers. It moved tens
+of thousands of triangles to opaque materials. It kept many renderers
+on their original materials.
 
-The second main texture layer of the skirt renderer is admitted: the
-build records no refusal naming that layer toggle, and no
-admitted-material semantics refusal anywhere in the final build. Other
-transparent renderers of the same avatar keep their refusals where their
-own alpha proves nothing; those are content facts, not gate defects.
+AMUSE admitted the second main texture layer of the skirt renderer.
+The build recorded no refusal for that layer toggle. It also recorded
+no semantics refusal for admitted materials. Other transparent
+renderers kept their content-specific refusals when AMUSE could not
+prove their alpha opaque.
 
-Checkpoint discipline satisfied: suites green before the Lab run, the
-Lab run observed after, and the stage B gate is released.
+The suites passed before the Lab run. The Lab run then released the
+stage B gate.
 
 ## 9. Stage B design addendum, 2026-09-15
 
@@ -255,12 +258,12 @@ The pinned equation scrolls the coordinate by `frac(scroll.xy * time)`
 and rotates it by `angle + scroll.w * time`. Both terms are
 time-varying, so no fixed affine envelope exists. The exact rule:
 
-- With an active scroll or rotate term, the layer coordinate visits
-  the entire wrapped texture over time, for every triangle alike.
-- The factor therefore proves every triangle exactly when every mip
-  level of its chain is fully opaque, and refuses every triangle
-  otherwise. The decision needs no geometry and composes with the
-  absorbing outcome lattice like any uniform factor.
+- An active scroll or rotation term makes the fixed triangle domain
+  insufficient for the full time range.
+- A chain with usable evidence for every mip and exact opaque values
+  for every texel is a sufficient proof for every sampled coordinate.
+- Stage B proves every triangle from that whole domain fact and refuses
+  otherwise. This rule does not claim that motion visits every texel.
 
 A fixed angle rotation with the scroll terms exactly zero is affine
 but `UvMapping` carries no rotation. It stays refused in stage B until
@@ -351,3 +354,28 @@ falsifiers marked: the uv1 end-to-end falsifier and the report
 falsifier stay red on purpose. The temporary AMUSE-DBG diagnostics
 remain in the production files and are listed for removal before any
 pull request.
+
+## 13. Stage B final validation, 2026-09-15
+
+Privacy note: This section removes private asset names and exact
+per-renderer details.
+
+The product EditMode assembly passed 2,113 tests. Two destructive
+integration tests stayed Inconclusive because the disposable
+integration environment was not enabled. The research EditMode
+assembly passed 138 tests.
+
+The focused Stage B run passed six cases. It covered mesh UV modes one
+to three, active scroll, active rotation, and policy opacity. The
+policy-opacity falsifier failed before the exact-bound fix and passed
+after it.
+
+Both private garments remained wholly opaque candidates in a fresh
+read-only Census Lab characterization. The authorized transient clone
+kept a wholly opaque candidate after its second layer moved to mesh
+UV1.
+
+The final motion rule accepts a whole texture domain only when the
+importer proves alpha one, or when capture uses the exact-255 bound and
+every mip is fully opaque. It refuses policy-level opacity and every
+incomplete mip chain.

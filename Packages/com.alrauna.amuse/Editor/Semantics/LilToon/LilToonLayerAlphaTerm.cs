@@ -155,22 +155,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return Refuse(diagnostics, alphaModeProperty);
             }
 
-            UnityEngine.Debug.Log("[AMUSE-DBG] layer term toggle=" + toggle +
-                " alphaMode=" + alphaMode + " uvMode=" +
-                (evidence.TryGetScalar(uvModeProperty, out var uvdbg)
-                    ? uvdbg.ToString()
-                    : "unread"));
-
             if (toggle == 0f || alphaMode == 0f || alphaMode > 4f)
             {
                 return Inert(alphaMode);
             }
 
             // Coordinate boundary: modes zero to three are mesh channels
-            // the proof selects exactly. Mode four is the view-dependent
+            // the proof selects exactly. Mode four is the view dependent
             // matcap coordinate and refuses. Stage B keeps exact identity
-            // scale and offset; the scroll and rotate terms stay refused
-            // with their own named gates below.
+            // scale and offset. A time varying scroll or rotation can prove
+            // only through the whole texture domain rule below.
             if (!evidence.TryGetScalar(uvModeProperty, out var uvMode) ||
                 !IsFinite(uvMode) ||
                 uvMode < 0f ||
@@ -181,8 +175,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             if (!evidence.TryGetScalar(angleProperty, out var angle) ||
-                !IsFinite(angle) ||
-                angle != 0f)
+                !IsFinite(angle))
             {
                 return Refuse(diagnostics, angleProperty);
             }
@@ -190,12 +183,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             if (!evidence.TryGetVector(
                     scrollRotateProperty, out var scrollRotate) ||
                 !IsFinite(scrollRotate) ||
-                scrollRotate.x != 0f ||
-                scrollRotate.y != 0f ||
-                scrollRotate.z != 0f ||
-                scrollRotate.w != 0f)
+                scrollRotate.z != 0f)
             {
                 return Refuse(diagnostics, scrollRotateProperty);
+            }
+
+            var hasTimeVaryingCoordinates =
+                scrollRotate.x != 0f ||
+                scrollRotate.y != 0f ||
+                scrollRotate.w != 0f;
+            if (!hasTimeVaryingCoordinates && angle != 0f)
+            {
+                return Refuse(diagnostics, angleProperty);
             }
 
             if (!evidence.TryGetVector(
@@ -292,6 +291,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return Refuse(diagnostics, textureProperty);
             }
 
+            var layerTextureIsProvenOne =
+                assignment.Texture.SampledAlphaIsProvenOne;
+            if (hasTimeVaryingCoordinates)
+            {
+                // Motion removes the fixed triangle domain. A complete chain
+                // of exact one texels makes every coordinate equivalent.
+                // Any other chain keeps the named layer scope unproven.
+                if (!layerTextureIsProvenOne &&
+                    !assignment.Texture.AlphaChannelIsProvenFullyOpaque)
+                {
+                    return Refuse(diagnostics, scrollRotateProperty);
+                }
+
+                layerTextureIsProvenOne = true;
+            }
+
             // The layer samples through its own sampler, so its sampling
             // facts ride its own assignment. The blend mask rides uvMain and
             // the main sampler, so it needs no facts of its own beyond its
@@ -300,14 +315,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 (int)uvMode, assignment.Scale, assignment.Offset);
             var layerSampling = assignment.Texture.Sampling;
 
-            // Alpha factor assembly. The unassigned texture is its declared
-            // "white" default and samples exactly one, so it contributes no
-            // factor; likewise the unassigned blend mask.
+            // Alpha factor assembly. The importer theorem or the moving
+            // whole domain proof can establish that the layer texture
+            // samples exactly one. Such a sample contributes no factor.
+            // An unassigned blend mask also contributes no factor.
             var factors = new List<(TextureSample Sample, TextureChannel Channel)>();
-            if (assignment.Texture.SampledAlphaIsProvenOne)
+            if (layerTextureIsProvenOne)
             {
-                // The importer theorem: the sampled alpha is exactly one and
-                // no field is read.
+                // No field is needed.
             }
             else
             {

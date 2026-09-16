@@ -139,15 +139,10 @@ namespace Alrauna.Amuse.Editor.Analysis
             UvMapping mapping,
             int maxNoiseTexelPercent)
         {
-            // Only `AlphaSemanticsResolver.IsSupportedMapping` decides which
-            // mappings ever reach this factory, and it admits channel 0
-            // only. Enforcing that here (rather than trusting the caller)
-            // means `Classify`'s identity test below can check scale/offset
-            // alone, per design §6.1 step 2: folding a channel test into
-            // that OR would otherwise let a channel-non-zero mapping fall
-            // through to the affine transform, which only ever reads
-            // `TriangleAlphaInput.Uv0` — silently applying another UV set's
-            // ST to UV0 instead of being rejected.
+            // The resolver accepts the mesh UV channels carried by
+            // `TriangleAlphaInput`. Enforce that boundary here so a direct
+            // caller cannot make classification read a coordinate set that
+            // the proof input does not represent.
             if (mapping.Channel < 0 || mapping.Channel > 3)
             {
                 throw new ArgumentException(
@@ -378,18 +373,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             // evidence - a non-resident consulted mip - refutes the proof for every
             // triangle exactly as an Unknown verdict would, whatever its placeholder
             // grid contains, so its provenance is consulted before the grid.
-            // Identity remains structurally on the historical classifier path;
-            // non-identity UV0 uses the affine helper's Lemma P exact result or
-            // conservative envelope before every mip is considered. The
-            // identity test below checks scale and offset only (design §6.1
-            // step 2): the channel is not part of it, because `Classified`'s
-            // constructor invariant already guarantees `_mapping.Channel == 0`
-            // for every resolution that reaches here — `IsSupportedMapping` is
-            // the only place that decides which channel is admitted. Folding a
-            // channel test into this predicate would be redundant at best and,
-            // for any future caller that relaxed the constructor invariant,
-            // would silently apply a channel-non-zero mapping's scale/offset to
-            // `TriangleAlphaInput.Uv0` instead of rejecting it.
+            // Identity remains on the historical classifier path. A
+            // nonidentity UV0 mapping uses the affine helper before every mip
+            // is considered. The identity test checks scale and offset only.
+            // A nonzero channel reaches the selection below with identity
+            // scale and offset because the layer frontend enforces that
+            // boundary.
             var transformed = triangle;
             var envelope = AlphaUvEnvelope.Zero;
             if (_mapping.Scale.x != 1f ||
@@ -839,10 +828,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
-        /// The resolver admits UV0 only. For a non-identity mapping, the
-        /// implemented Lemma P predicate in the affine MainTex ST design proves
-        /// the exact transformed domain or supplies the conservative envelope;
-        /// channel selection remains a frontend-owned coordinate-set boundary.
+        /// The resolver admits the four mesh UV channels carried by the
+        /// triangle input. The frontend must prove the mapping form before it
+        /// reaches this boundary.
         /// </summary>
         private static bool IsSupportedMapping(UvMapping mapping)
         {
