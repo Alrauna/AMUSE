@@ -137,7 +137,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaPolicyBounds bounds,
             out IReadOnlyList<Material> admittedLiveMaterials,
             ClosedAlphaMaterialCapturer capturer = null,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -148,9 +149,9 @@ namespace Alrauna.Amuse.Editor.Host
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
-
         // Public-project vendor fixtures exercise verified frontend equations but
         // intentionally do not publish vendor source assets. This seam exists only
         // for the package's friend test assembly to test closure mechanics; product
@@ -163,7 +164,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             // The closure-mechanics seam stays policy-free: it captures
             // under the inert bounds, which reproduce the base exact-255
@@ -177,7 +179,8 @@ namespace Alrauna.Amuse.Editor.Host
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
 
         internal static CapturedAnimationEvidence CaptureObservedForTests(
@@ -185,7 +188,8 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<LiveClipObservation> observations,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             // The closure-mechanics seam stays policy-free: it captures
             // under the inert bounds, which reproduce the base exact-255
@@ -199,7 +203,8 @@ namespace Alrauna.Amuse.Editor.Host
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out _,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
 
         internal static CapturedAnimationEvidence CaptureGraphForTests(
@@ -211,7 +216,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -222,7 +228,8 @@ namespace Alrauna.Amuse.Editor.Host
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
 
         /// <summary>
@@ -243,7 +250,8 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             AlphaMaterialRequestSelector selectRequest = null,
             ClosedAlphaMaterialCapturer capturer = null,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -287,9 +295,9 @@ namespace Alrauna.Amuse.Editor.Host
                 selectRequest ?? UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
-
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
@@ -299,7 +307,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -332,9 +341,9 @@ namespace Alrauna.Amuse.Editor.Host
                 selectRequest,
                 capturer,
                 out admittedLiveMaterials,
-                ignoreOutOfRangeSlots);
+                ignoreOutOfRangeSlots,
+                rendererTypeName);
         }
-
         private static CapturedAnimationEvidence CaptureObserved(
             string rendererPath,
             IReadOnlyList<LiveClipObservation> observations,
@@ -344,7 +353,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaMaterialRequestSelector selectRequest,
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
-            bool ignoreOutOfRangeSlots = false)
+            bool ignoreOutOfRangeSlots = false,
+            string rendererTypeName = null)
         {
             // Assigned once here so that EVERY closure-failure return below hands
             // back an empty list rather than a partial one. The real pairing is
@@ -423,7 +433,8 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (!LiveAnimationObservation.TryParseMaterialSlotBinding(
                             binding.PropertyName, out var slot) ||
-                        !AddressesAnalyzedRenderer(binding.Path, rendererPath))
+                        !AddressesAnalyzedRenderer(
+                            binding.Path, binding.TypeName, rendererPath, rendererTypeName))
                     {
                         continue;
                     }
@@ -575,7 +586,7 @@ namespace Alrauna.Amuse.Editor.Host
                         // empty index list, which would read as "this renderer
                         // has a swap that admits nothing".
                         if (!AddressesAnalyzedRenderer(
-                                binding.Path, rendererPath) ||
+                                binding.Path, binding.TypeName, rendererPath, rendererTypeName) ||
                             (slot >= currentSlots.Count && ignoreOutOfRangeSlots))
                         {
                             continue;
@@ -641,12 +652,55 @@ namespace Alrauna.Amuse.Editor.Host
         /// any other.
         /// </para>
         /// </summary>
+        internal static bool IsCompatibleRendererType(
+            string bindingTypeName,
+            string rendererTypeName)
+        {
+            if (string.IsNullOrEmpty(rendererTypeName) ||
+                string.IsNullOrEmpty(bindingTypeName))
+            {
+                return true;
+            }
+
+            if (string.Equals(
+                    bindingTypeName, rendererTypeName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (string.Equals(
+                    bindingTypeName, typeof(Renderer).FullName, StringComparison.Ordinal) ||
+                string.Equals(
+                    bindingTypeName, nameof(Renderer), StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var bindingShort = ShortName(bindingTypeName);
+            var rendererShort = ShortName(rendererTypeName);
+            return string.Equals(
+                       bindingShort, rendererShort, StringComparison.Ordinal) ||
+                   string.Equals(
+                       bindingShort, nameof(Renderer), StringComparison.Ordinal);
+        }
+
+        private static string ShortName(string typeName)
+        {
+            var lastDot = typeName.LastIndexOf('.');
+            return lastDot >= 0 && lastDot + 1 < typeName.Length
+                ? typeName.Substring(lastDot + 1)
+                : typeName;
+        }
+
         private static bool AddressesAnalyzedRenderer(
             string bindingPath,
-            string rendererPath)
+            string bindingTypeName,
+            string rendererPath,
+            string rendererTypeName)
         {
             return string.Equals(
-                bindingPath, rendererPath, StringComparison.Ordinal);
+                       bindingPath, rendererPath, StringComparison.Ordinal) &&
+                   IsCompatibleRendererType(bindingTypeName, rendererTypeName);
         }
 
         internal static IReadOnlyCollection<string>
@@ -672,19 +726,19 @@ namespace Alrauna.Amuse.Editor.Host
             CapturedFloatBinding binding,
             string rendererPath,
             MaterialEvidenceRequest relevance,
-            out AnimatedPropertyRef reference)
+            out AnimatedPropertyRef reference,
+            string rendererTypeName = null)
         {
             if (binding == null) throw new ArgumentNullException(nameof(binding));
             if (relevance == null)
                 throw new ArgumentNullException(nameof(relevance));
 
             reference = default;
-            if (!string.Equals(
-                    binding.Path, rendererPath, StringComparison.Ordinal))
+            if (!AddressesAnalyzedRenderer(
+                    binding.Path, binding.TypeName, rendererPath, rendererTypeName))
             {
                 return ProofRelevantBindingResolution.Irrelevant;
             }
-
             var scaleOffsetProperties =
                 DeriveTextureScaleOffsetProperties(relevance);
             if (TryStripPrefix(
@@ -739,14 +793,15 @@ namespace Alrauna.Amuse.Editor.Host
         internal static bool IsUnrecognizedObjectMaterialBinding(
             CapturedObjectBinding binding,
             string rendererPath,
-            MaterialEvidenceRequest relevance)
+            MaterialEvidenceRequest relevance,
+            string rendererTypeName = null)
         {
             if (binding == null) throw new ArgumentNullException(nameof(binding));
             if (relevance == null)
                 throw new ArgumentNullException(nameof(relevance));
 
-            if (!string.Equals(
-                    binding.Path, rendererPath, StringComparison.Ordinal))
+            if (!AddressesAnalyzedRenderer(
+                    binding.Path, binding.TypeName, rendererPath, rendererTypeName))
             {
                 return false;
             }

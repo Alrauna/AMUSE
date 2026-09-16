@@ -1996,6 +1996,122 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ApplyPassDoesNotRewriteIncompatibleComponentBindings()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE incompatible binding ignore");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "incompatible_ignore"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var other = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    var validClip = Track(new AnimationClip
+                    {
+                        name = "AMUSE valid clip",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        validClip,
+                        EditorCurveBinding.PPtrCurve(
+                            "split", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[0]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = split,
+                            },
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 1f, value = other,
+                            },
+                        });
+
+                    var inertClip = Track(new AnimationClip
+                    {
+                        name = "AMUSE inert clip",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        inertClip,
+                        EditorCurveBinding.PPtrCurve(
+                            "split", typeof(MeshRenderer),
+                            "m_Materials.Array.data[0]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = split,
+                            },
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 1f, value = other,
+                            },
+                        });
+                    controller = NewController(
+                        root, "AMUSE cross-avatar graph", validClip, inertClip);
+                    using (new ConversionOverrideScope(
+                        (Material live, CapturedMaterialEvidence derived,
+                         Material preparedOpaque,
+                         out Material opaque,
+                         out PoiyomiOpaqueConversionRefusal refusal) =>
+                        {
+                            opaque = live;
+                            refusal = PoiyomiOpaqueConversionRefusal.None;
+                            return true;
+                        }))
+                    {
+                        var context = AvatarProcessor.ProcessAvatar(
+                            root, SeamTestPlatform.Instance);
+                        probe = context.GetState<AlphaSeparationSeamProbe>();
+                    }
+                    Assert.That(probe.Decision.IsPrepared, Is.True);
+                    Assert.That(probe.Decision.HasMutation, Is.True,
+                        "the split slot must apply successfully");
+                    var allCurveEdits = probe.Finalization.Writes
+                        .SelectMany(w => w.CurveEdits)
+                        .ToList();
+                    Assert.That(
+                        allCurveEdits.Any(
+                            edit => edit.Binding.type == typeof(MeshRenderer)),
+                        Is.False,
+                        "Apply must not write curves for incompatible component types");
+                    Assert.That(
+                        allCurveEdits.Any(
+                            edit => edit.Binding.type == typeof(SkinnedMeshRenderer)),
+                        Is.True,
+                        "Apply must write curves for compatible component types");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void CoverageBelowMinimumRefusesTheSplitCandidate()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);

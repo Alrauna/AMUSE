@@ -246,6 +246,130 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void CompatibleRendererTypesAreAdmitted()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(SkinnedMeshRenderer).FullName,
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.True);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(MeshRenderer).FullName,
+                    typeof(MeshRenderer).FullName),
+                Is.True);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(Renderer).FullName,
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.True);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    nameof(SkinnedMeshRenderer),
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.True);
+        }
+
+        [Test]
+        public void IncompatibleRendererTypesAreRejected()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(MeshRenderer).FullName,
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.False);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(SkinnedMeshRenderer).FullName,
+                    typeof(MeshRenderer).FullName),
+                Is.False);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(Transform).FullName,
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.False);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    "UnityEngine.Cloth",
+                    typeof(SkinnedMeshRenderer).FullName),
+                Is.False);
+        }
+
+        [Test]
+        public void NullOrEmptyRendererTypeAdmitsAllBindings()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    typeof(MeshRenderer).FullName, null),
+                Is.True);
+            Assert.That(
+                UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                    null, typeof(SkinnedMeshRenderer).FullName),
+                Is.True);
+        }
+
+        [Test]
+        public void MaterialSwapOnIncompatibleComponentTypeIsIgnored()
+        {
+            var current = NewLilToonMaterial();
+            var swapObservation = new LiveClipObservation(
+                "cross_avatar_swap",
+                false,
+                Array.Empty<LiveFloatObservation>(),
+                new[]
+                {
+                    new LiveObjectObservation(
+                        AnalyzedRendererPath,
+                        typeof(MeshRenderer).FullName,
+                        "m_Materials.Array.data[0]",
+                        new UnityEngine.Object[] { null }),
+                });
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                new[] { swapObservation },
+                new[] { current },
+                EmptyGraph(),
+                rendererTypeName: typeof(SkinnedMeshRenderer).FullName);
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(
+                evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void FloatBindingOnIncompatibleComponentTypeIsIrrelevant()
+        {
+            var binding = new CapturedFloatBinding(
+                AnalyzedRendererPath,
+                typeof(MeshRenderer).FullName,
+                "material._Cutoff",
+                true,
+                new[] { 0.5f });
+
+            var relevance = new MaterialEvidenceRequest(
+                false, false,
+                Array.Empty<string>(),
+                new[] { "_Cutoff" },
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<TexturePropertyEvidenceRequest>());
+
+            var resolution = UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                binding,
+                AnalyzedRendererPath,
+                relevance,
+                out _,
+                rendererTypeName: typeof(SkinnedMeshRenderer).FullName);
+
+            Assert.That(
+                resolution,
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        [Test]
         public void SpecialMotionIsDiagnosticOnlyAndDoesNotAlterBindings()
         {
             var clip = new AnimationClip { name = "special" };

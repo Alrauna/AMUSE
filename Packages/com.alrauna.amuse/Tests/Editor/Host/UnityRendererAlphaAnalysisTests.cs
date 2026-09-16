@@ -597,6 +597,24 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(RendererAnalysisRefusal.AnimatedMeshReplacement));
         }
 
+        [Test]
+        public void MeshReplacementOnIncompatibleComponentTypeDoesNotRefuseRenderer()
+        {
+            var meshFilterObject = new CapturedObjectBinding(
+                "Body",
+                typeof(MeshFilter).FullName,
+                "m_Mesh",
+                System.Array.Empty<int>());
+
+            var refusal = UnityRendererAlphaAnalysis.StructuralRefusalFor(
+                System.Array.Empty<CapturedFloatBinding>(),
+                new[] { meshFilterObject },
+                "Body",
+                rendererTypeName: typeof(SkinnedMeshRenderer).FullName);
+
+            Assert.That(refusal, Is.EqualTo(RendererAnalysisRefusal.None));
+        }
+
         /// <summary>
         /// Defensive coverage, not a characterization claim. Task 3 observed
         /// that Unity does not generate m_Materials.Array.size at all, and that

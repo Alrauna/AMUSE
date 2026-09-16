@@ -317,10 +317,8 @@ namespace Alrauna.Amuse.Editor
                 new GUIContent(
                     "Ignore Out-of-Range Material Slots",
                     "Some animation files animate material slots that do not exist on this mesh. " +
-                    "By default, AMUSE refuses to optimize this mesh to prevent visual errors. " +
-                    "Turn this setting on to ignore these extra slot animations and optimize the valid slots.\n\n" +
-                    "Risk: If an animation later changes this mesh to have more material slots, " +
-                    "or if another tool relies on the untouched slot count, visual errors can occur."));
+                    "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
+                    "Turn this setting off to refuse meshes with extra slot animations."));
             serializedObject.ApplyModifiedProperties();
         }
 
