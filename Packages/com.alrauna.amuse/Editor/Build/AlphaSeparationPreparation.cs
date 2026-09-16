@@ -88,7 +88,8 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<Material> admittedLiveMaterials,
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
-            int minimumOpaqueCoveragePercent)
+            int minimumOpaqueCoveragePercent,
+            string rendererTypeName = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -155,7 +156,8 @@ namespace Alrauna.Amuse.Editor.Build
                                     binding,
                                     rendererPath,
                                     unionRequest,
-                                    out var reference);
+                                    out var reference,
+                                    rendererTypeName);
                         if (resolution ==
                             ProofRelevantBindingResolution
                                 .UnrecognizedMaterialBinding)
@@ -216,7 +218,8 @@ namespace Alrauna.Amuse.Editor.Build
                                     binding,
                                     rendererPath,
                                     ConversionRequestForFamily(family),
-                                    out var familyReference) ==
+                                    out var familyReference,
+                                    rendererTypeName) ==
                             ProofRelevantBindingResolution.RendererWide)
                         {
                             bucket.Add((binding, familyReference));
@@ -230,7 +233,7 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var slots = AmusePlatformFinishPass.MaterialSlotsFor(
-                evidence, rendererPath);
+                evidence, rendererPath, rendererTypeName);
             var candidateSlots = new List<PreparedSlotSeparation>(
                 plan.Submeshes.Count);
 
@@ -280,7 +283,10 @@ namespace Alrauna.Amuse.Editor.Build
                         if (!string.Equals(
                                 objectBinding.Path,
                                 rendererPath,
-                                StringComparison.Ordinal))
+                                StringComparison.Ordinal) ||
+                            !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                                objectBinding.TypeName,
+                                rendererTypeName))
                         {
                             continue;
                         }
@@ -444,7 +450,8 @@ namespace Alrauna.Amuse.Editor.Build
                 evidence,
                 candidateSlots,
                 EffectiveMaterialMaterialization.CaptureBlockState(
-                    target.Renderer));
+                    target.Renderer),
+                rendererTypeName);
 
             // A mesh clone is created only when the plan requires a split and
             // at least one Split slot survived preparation; clones abandoned

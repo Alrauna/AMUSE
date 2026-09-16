@@ -997,10 +997,11 @@ namespace Alrauna.Amuse.Editor.Host
         internal static RendererAnalysisRefusal StructuralRefusalFor(
             IReadOnlyList<CapturedFloatBinding> floats,
             IReadOnlyList<CapturedObjectBinding> objects,
-            string rendererPath)
+            string rendererPath,
+            string rendererTypeName = null)
         {
             if (NamesStructuralProperty(
-                    floats, objects, rendererPath, AnimatedMeshProperty))
+                    floats, objects, rendererPath, rendererTypeName, AnimatedMeshProperty))
             {
                 return RendererAnalysisRefusal.AnimatedMeshReplacement;
             }
@@ -1009,6 +1010,7 @@ namespace Alrauna.Amuse.Editor.Host
                     floats,
                     objects,
                     rendererPath,
+                    rendererTypeName,
                     AnimatedMaterialSlotCountProperty))
             {
                 return RendererAnalysisRefusal.AnimatedMaterialSlotCount;
@@ -1024,11 +1026,12 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<CapturedFloatBinding> floats,
             IReadOnlyList<CapturedObjectBinding> objects,
             string rendererPath,
+            string rendererTypeName,
             string structural)
         {
             foreach (var binding in objects)
             {
-                if (IsOnRenderer(binding.Path, rendererPath) &&
+                if (IsOnRenderer(binding.Path, binding.TypeName, rendererPath, rendererTypeName) &&
                     IsProperty(binding.PropertyName, structural))
                 {
                     return true;
@@ -1037,7 +1040,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             foreach (var binding in floats)
             {
-                if (IsOnRenderer(binding.Path, rendererPath) &&
+                if (IsOnRenderer(binding.Path, binding.TypeName, rendererPath, rendererTypeName) &&
                     IsProperty(binding.PropertyName, structural))
                 {
                     return true;
@@ -1049,10 +1052,16 @@ namespace Alrauna.Amuse.Editor.Host
 
         // Ordinal path identity, matching the rest of this feature: a binding
         // on another path says nothing about this renderer.
-        private static bool IsOnRenderer(string bindingPath, string rendererPath)
+        private static bool IsOnRenderer(
+            string bindingPath,
+            string bindingTypeName,
+            string rendererPath,
+            string rendererTypeName)
         {
             return string.Equals(
-                bindingPath, rendererPath, StringComparison.Ordinal);
+                       bindingPath, rendererPath, StringComparison.Ordinal) &&
+                   UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                       bindingTypeName, rendererTypeName);
         }
 
         private static bool IsProperty(string propertyName, string structural)

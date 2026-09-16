@@ -30,13 +30,13 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void DefaultIgnoreOutOfRangeMaterialSlotsIsFalse()
+        public void DefaultIgnoreOutOfRangeMaterialSlotsIsTrue()
         {
             var go = new GameObject("Root");
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
-                Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.False);
+                Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.True);
             }
             finally
             {
@@ -51,13 +51,15 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.True);
+
                 var serializedObject = new SerializedObject(optimizer);
                 var property = serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots");
                 Assert.That(property, Is.Not.Null);
-                property.boolValue = true;
+                property.boolValue = false;
                 serializedObject.ApplyModifiedProperties();
 
-                Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.True);
+                Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.False);
             }
             finally
             {

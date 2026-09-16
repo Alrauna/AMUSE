@@ -457,7 +457,7 @@ namespace Alrauna.Amuse.Editor.Build
             state.AlphaPolicyActive =
                 opaqueAlphaPercent < 100 || polygonClampPercent > 0;
             var ignoreOutOfRangeSlots =
-                optimizer != null && optimizer.IgnoreOutOfRangeMaterialSlots;
+                optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
 
 
             foreach (var renderer in context.AvatarRootObject
@@ -474,6 +474,7 @@ namespace Alrauna.Amuse.Editor.Build
 
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform, context.AvatarRootObject.transform);
+                var rendererTypeName = renderer.GetType().FullName;
                 // The live build-copy materials behind the captured admitted
                 // set, index-aligned with evidence.AdmittedMaterials. Held as a
                 // local transient host capability, never inside the evidence.
@@ -515,7 +516,8 @@ namespace Alrauna.Amuse.Editor.Build
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
                                 renderer, capturer ?? effectiveCapturer),
-                            ignoreOutOfRangeSlots);
+                            ignoreOutOfRangeSlots,
+                            rendererTypeName);
                 }
                 else if (selectRequest == null)
                 {
@@ -528,7 +530,8 @@ namespace Alrauna.Amuse.Editor.Build
                         out admittedLiveMaterials,
                         CaptureThroughEffectiveMaterials(
                             renderer, effectiveCapturer),
-                        ignoreOutOfRangeSlots);
+                        ignoreOutOfRangeSlots,
+                        rendererTypeName);
                 }
                 else
                 {
@@ -543,7 +546,8 @@ namespace Alrauna.Amuse.Editor.Build
                             CaptureThroughEffectiveMaterials(
                                 renderer, capturer),
                             out admittedLiveMaterials,
-                            ignoreOutOfRangeSlots);
+                            ignoreOutOfRangeSlots,
+                            rendererTypeName);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
@@ -554,7 +558,8 @@ namespace Alrauna.Amuse.Editor.Build
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
                 var resolved = ResolveRuntimeStates(
                     rendererPath, evidence, effectiveResolver, maxMipLevel,
-                    minTextureSize, densityCapPercent, blockState);
+                    minTextureSize, densityCapPercent, blockState,
+                    rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
@@ -587,7 +592,8 @@ namespace Alrauna.Amuse.Editor.Build
                             extraction.Snapshot,
                             resolved.SlotResults);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
-                        var slots = MaterialSlotsFor(evidence, rendererPath);
+                        var slots = MaterialSlotsFor(
+                            evidence, rendererPath, rendererTypeName);
                         for (var slotIndex = 0;
                              slotIndex < slots.Count;
                              slotIndex++)
@@ -620,7 +626,8 @@ namespace Alrauna.Amuse.Editor.Build
                             admittedLiveMaterials,
                             poiyomiConversion,
                             lilToonConversion,
-                            minimumOpaqueCoveragePercent);
+                            minimumOpaqueCoveragePercent,
+                            rendererTypeName);
                     }
                 }
 
@@ -940,7 +947,8 @@ namespace Alrauna.Amuse.Editor.Build
                 int maxMipLevel = int.MaxValue,
                 int minTextureSize = 1,
                 int densityCapPercent = 0,
-                IReadOnlyList<BlockStateEntry> blockState = null)
+                IReadOnlyList<BlockStateEntry> blockState = null,
+                string rendererTypeName = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -961,7 +969,7 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var structural = UnityRendererAlphaAnalysis.StructuralRefusalFor(
-                floats, objects, rendererPath);
+                floats, objects, rendererPath, rendererTypeName);
             if (structural != RendererAnalysisRefusal.None)
                 return Refused(structural);
 
@@ -975,7 +983,8 @@ namespace Alrauna.Amuse.Editor.Build
                         binding,
                         rendererPath,
                         evidence.AlphaRelevanceRequest,
-                        out var reference);
+                        out var reference,
+                        rendererTypeName);
                 if (resolution ==
                     ProofRelevantBindingResolution.UnrecognizedMaterialBinding)
                 {
@@ -997,7 +1006,7 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 if (UnityAnimationEvidenceCapture
                         .IsUnrecognizedObjectMaterialBinding(
-                            binding, rendererPath, evidence.AlphaRelevanceRequest))
+                            binding, rendererPath, evidence.AlphaRelevanceRequest, rendererTypeName))
                 {
                     return Refused(
                         RendererAnalysisRefusal
@@ -1020,7 +1029,7 @@ namespace Alrauna.Amuse.Editor.Build
                         .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty);
             }
 
-            var slots = MaterialSlotsFor(evidence, rendererPath);
+            var slots = MaterialSlotsFor(evidence, rendererPath, rendererTypeName);
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
                 evidence.AdmittedMaterials,
                 maxMipLevel,
@@ -1164,7 +1173,8 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<Material> admittedLiveMaterials,
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
-            int minimumOpaqueCoveragePercent)
+            int minimumOpaqueCoveragePercent,
+            string rendererTypeName = null)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -1175,7 +1185,8 @@ namespace Alrauna.Amuse.Editor.Build
                 admittedLiveMaterials,
                 poiyomiConversion,
                 lilToonConversion,
-                minimumOpaqueCoveragePercent);
+                minimumOpaqueCoveragePercent,
+                rendererTypeName);
             if (prepared == null)
             {
                 return;
@@ -1245,7 +1256,8 @@ namespace Alrauna.Amuse.Editor.Build
         internal static IReadOnlyList<CapturedMaterialSlotEvidence>
             MaterialSlotsFor(
                 CapturedAnimationEvidence evidence,
-                string rendererPath)
+                string rendererPath,
+                string rendererTypeName = null)
         {
             var admittedBySlot = new List<int>[evidence.CurrentMaterialIndices.Count];
             for (var slot = 0; slot < admittedBySlot.Length; slot++)
@@ -1262,11 +1274,11 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     if (!string.Equals(
                             binding.Path, rendererPath, StringComparison.Ordinal) ||
+                        !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
+                            binding.TypeName, rendererTypeName) ||
                         !LiveAnimationObservation.TryParseMaterialSlotBinding(
                             binding.PropertyName, out var slot))
-                    {
                         continue;
-                    }
 
                     foreach (var material in binding.AdmittedMaterialIndices)
                     {

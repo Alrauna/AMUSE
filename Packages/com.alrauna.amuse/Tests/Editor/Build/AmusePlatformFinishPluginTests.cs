@@ -3552,6 +3552,94 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Multi-avatar animation clip tolerance:
+        /// 1. An inert curve targeting MeshRenderer on a SkinnedMeshRenderer with null value.
+        /// 2. An out-of-range slot curve targeting slot 3 on a 2-slot renderer.
+        /// Both curves must be safely ignored: the MeshRenderer curve because its
+        /// component type does not match the renderer, and slot 3 because out-of-range
+        /// slots are tolerated by default.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_MismatchedComponentAndOutOfRangeCurvesAreIgnored()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE cross-avatar tolerance");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Material refusing = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                refusing = VerifiedForceOpaqueMaterial(0f);
+                var renderer = AddTwoSlotRenderer(
+                    root, resolving, refusing, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+
+                clip = new AnimationClip { name = "cross_avatar_clip" };
+                // 1. Inert curve targeting MeshRenderer with null value
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        "", typeof(MeshRenderer),
+                        "m_Materials.Array.data[0]"),
+                    new[] { new ObjectReferenceKeyframe { time = 0f, value = null } });
+                // 2. Out-of-range slot curve targeting slot 3 on a 2-slot SkinnedMeshRenderer
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        "", typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[3]"),
+                    new[] { new ObjectReferenceKeyframe { time = 0f, value = resolving } });
+
+                controller = new AnimatorController
+                {
+                    name = "cross_avatar_controller",
+                };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "incompatible and out-of-range curves must not refuse the renderer");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero);
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (refusing != null) Object.DestroyImmediate(refusing);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
 
         /// <summary>
         /// Delegates to the shared verified seam but refuses family
