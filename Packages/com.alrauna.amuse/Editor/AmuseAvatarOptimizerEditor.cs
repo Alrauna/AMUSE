@@ -21,7 +21,7 @@ namespace Alrauna.Amuse.Editor
             DrawHeader();
 
             var component = (AmuseAvatarOptimizer)target;
-            if (AmuseComponentPlacement.IsOnHierarchyRoot(component))
+            if (component.transform.parent == null)
             {
                 EditorGUILayout.HelpBox(
                     "AMUSE will run when you upload this avatar and when " +
