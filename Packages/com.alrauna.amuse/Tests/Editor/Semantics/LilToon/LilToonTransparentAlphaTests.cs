@@ -63,15 +63,50 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_SubpassCutoff",
             "_AlphaMaskScale",
             "_AlphaMaskValue",
+            "_Main2ndTex_UVMode",
+            "_Main3rdTex_UVMode",
+            "_Main2ndTexAngle",
+            "_Main3rdTexAngle",
+            "_Main2ndTex_Cull",
+            "_Main3rdTex_Cull",
+            "_Main2ndTexAlphaMode",
+            "_Main3rdTexAlphaMode",
+            "_Main2ndTexIsDecal",
+            "_Main3rdTexIsDecal",
+            "_Main2ndTexIsLeftOnly",
+            "_Main3rdTexIsLeftOnly",
+            "_Main2ndTexIsRightOnly",
+            "_Main3rdTexIsRightOnly",
+            "_Main2ndTexShouldCopy",
+            "_Main3rdTexShouldCopy",
+            "_Main2ndTexShouldFlipMirror",
+            "_Main3rdTexShouldFlipMirror",
+            "_Main2ndTexShouldFlipCopy",
+            "_Main3rdTexShouldFlipCopy",
+            "_Main2ndTexIsMSDF",
+            "_Main3rdTexIsMSDF",
+            "_AudioLink2Main2nd",
+            "_AudioLink2Main3rd",
         };
 
-        private static readonly string[] ExpectedAlphaColors = { "_Color" };
+        private static readonly string[] ExpectedAlphaColors =
+        {
+            "_Color",
+            "_Color2nd",
+            "_Color3rd",
+        };
 
         private static readonly string[] ExpectedAlphaVectors =
         {
             "_DissolveParams",
             "_MainTex_ScrollRotate",
             "_DistanceFade",
+            "_Main2ndTex_ScrollRotate",
+            "_Main3rdTex_ScrollRotate",
+            "_Main2ndDistanceFade",
+            "_Main3rdDistanceFade",
+            "_Main2ndDissolveParams",
+            "_Main3rdDissolveParams",
         };
 
         private static Color32[] SolidGrid(int width, int height, byte alpha)
@@ -286,8 +321,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ExpectedAlphaColors, request.ColorProperties);
             CollectionAssert.AreEquivalent(
                 ExpectedAlphaVectors, request.VectorProperties);
-            // CopyTextures sorts by property name, so _AlphaMask is first.
-            Assert.That(request.TextureProperties.Count, Is.EqualTo(2));
+            // CopyTextures sorts by property name: _AlphaMask, then the
+            // layer properties in ordinal order, then _MainTex last.
+            Assert.That(request.TextureProperties.Count, Is.EqualTo(6));
             Assert.That(
                 request.TextureProperties[0].PropertyName,
                 Is.EqualTo("_AlphaMask"));
@@ -301,14 +337,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "sampling facts of its own");
             Assert.That(
                 request.TextureProperties[1].PropertyName,
+                Is.EqualTo("_Main2ndBlendMask"));
+            Assert.That(
+                request.TextureProperties[2].PropertyName,
+                Is.EqualTo("_Main2ndTex"));
+            Assert.That(
+                request.TextureProperties[3].PropertyName,
+                Is.EqualTo("_Main3rdBlendMask"));
+            Assert.That(
+                request.TextureProperties[4].PropertyName,
+                Is.EqualTo("_Main3rdTex"));
+            Assert.That(
+                request.TextureProperties[5].PropertyName,
                 Is.EqualTo("_MainTex"));
+            var blendMaskEvidence =
+                TextureEvidenceKinds.SourceIdentity |
+                TextureEvidenceKinds.RedChannel;
             Assert.That(
                 request.TextureProperties[1].Evidence,
-                Is.EqualTo(
-                    TextureEvidenceKinds.ScaleOffset |
-                    TextureEvidenceKinds.SourceIdentity |
-                    TextureEvidenceKinds.Sampling |
-                    TextureEvidenceKinds.AlphaChannel));
+                Is.EqualTo(blendMaskEvidence),
+                "the layer blend masks ride uvMain and the main sampler");
+            Assert.That(
+                request.TextureProperties[3].Evidence,
+                Is.EqualTo(blendMaskEvidence));
+            var textureEvidence =
+                TextureEvidenceKinds.ScaleOffset |
+                TextureEvidenceKinds.SourceIdentity |
+                TextureEvidenceKinds.Sampling |
+                TextureEvidenceKinds.AlphaChannel |
+                TextureEvidenceKinds.SampledAlphaIsOne;
+            Assert.That(
+                request.TextureProperties[2].Evidence,
+                Is.EqualTo(textureEvidence));
+            Assert.That(
+                request.TextureProperties[4].Evidence,
+                Is.EqualTo(textureEvidence));
+            Assert.That(
+                request.TextureProperties[5].Evidence,
+                Is.EqualTo(textureEvidence));
 
             // Copy detector: a widened or copied cutout request would carry
             // _UseDither, which LIL_RENDER 2 compiles out.
@@ -317,6 +383,470 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // --- row 1: every mip is classified -------------------------------
+
+        /// <summary>
+        /// An importer whose source file has no alpha channel and whose alpha
+        /// source is none imports alpha exactly one at every texel. The
+        /// theorem replaces the texture sample, so the alpha is the tint
+        /// constant and needs no field at all. Falsifier: an implementation
+        /// that lets a missing or refused alpha field reach the resolution
+        /// would refuse content that is provably constant.
+        /// </summary>
+        // --- layer alpha falsifiers -------------------------------------------
+
+        private static readonly string SecondTextureProperty = "_Main2ndTex";
+        private static readonly string SecondToggleProperty = "_UseMain2ndTex";
+        private static readonly string SecondColorProperty = "_Color2nd";
+        private static readonly string SecondAlphaModeProperty =
+            "_Main2ndTexAlphaMode";
+
+        private Material NewLayerMaterial(
+            string name,
+            byte layerAlpha,
+            float layerColorAlpha,
+            float alphaMode)
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    name + "_main", 4, 4, SolidGrid(4, 4, 255)));
+            material.SetTexture(
+                SecondTextureProperty,
+                ImportMipmapTexture(name, 4, 4, SolidGrid(4, 4, layerAlpha)));
+            material.SetColor(
+                SecondColorProperty,
+                new Color(1f, 1f, 1f, layerColorAlpha));
+            material.SetFloat(SecondAlphaModeProperty, alphaMode);
+            material.SetFloat(SecondToggleProperty, 1f);
+            return material;
+        }
+
+        /// <summary>
+        /// Serves the main and the second layer's chains under each
+        /// assignment's own source identity, so a resolution that consults a
+        /// field the fixture did not provide fails closed.
+        /// </summary>
+        private static AlphaFieldProvider ProvidingLayeredFor(
+            CapturedMaterialEvidence evidence,
+            AlphaMipChain mainChain,
+            AlphaMipChain secondChain)
+        {
+            Assert.That(
+                evidence.TryGetTexture(MainTextureProperty, out var main),
+                Is.True);
+            Assert.That(
+                evidence.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            var mainIdentity = main.Texture.SourceIdentity;
+            var secondIdentity = second.Texture.SourceIdentity;
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(mainIdentity))
+                {
+                    result = mainChain;
+                    return true;
+                }
+
+                if (source.Equals(secondIdentity))
+                {
+                    result = secondChain;
+                    return true;
+                }
+
+                result = null;
+                return false;
+            };
+        }
+
+        /// <summary>
+        /// --- Falsifier: a replace-mode layer is the whole alpha. The main
+        /// chain refutes every triangle through its second mip, and the
+        /// opaque layer overwrites it, so only an implementation that lets
+        /// the replace writer discard the main chain answers proven. The
+        /// pre-change implementation refused the material outright.
+        /// </summary>
+        [Test]
+        public void ReplaceModeLayer_DiscardsTheMainChain()
+        {
+            var material = NewLayerMaterial(
+                "falsifier_replace", 255, 1f, 1f);
+
+            try
+            {
+                var captured = CaptureTransparentEvidence(material);
+                var alpha = LilToonTransparentMaterialSemantics
+                    .InterpretVerifiedTransparentAlpha(captured);
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    alpha,
+                    ProvidingLayeredFor(
+                        captured,
+                        OpaqueThenTransparentChain(),
+                        AllOpaqueChain()),
+                    0);
+
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(CornerTriangle()),
+                    Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            }
+            catch (Exception e)
+            {
+                Assert.Fail(e.ToString());
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a multiply layer with a sub-unit tint keeps the
+        /// whole surface below one. An implementation that ignores the layer
+        /// would prove the all-opaque main; the range lemma refuses it
+        /// without a texel.
+        /// </summary>
+        [Test]
+        public void MultiplyModeLayer_WithSubUnitTint_IsUniformlyTransparent()
+        {
+            var material = NewLayerMaterial(
+                "falsifier_multiply", 255, 0.5f, 2f);
+
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                ProvidingLayeredFor(
+                    captured, AllOpaqueChain(), AllOpaqueChain()),
+                0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// --- Falsifier: an add layer with an opaque chain proves every
+        /// triangle the layer proves, through the saturating disjunction,
+        /// even where the main chain refutes.
+        /// </summary>
+        [Test]
+        public void AddModeLayer_WithOpaqueChain_ProvesThroughTheDisjunction()
+        {
+            var material = NewLayerMaterial(
+                "falsifier_add", 255, 1f, 3f);
+
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                ProvidingLayeredFor(
+                    captured,
+                    OpaqueThenTransparentChain(),
+                    AllOpaqueChain()),
+                0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// --- Falsifier: a subtract layer with a zero tint preserves the
+        /// main chain exactly. An implementation that answers uniformly
+        /// transparent for every subtract mode, or that discards the main
+        /// chain, fails one of the two triangles.
+        /// </summary>
+        [Test]
+        public void SubtractModeLayer_WithZeroTint_PreservesTheMainChain()
+        {
+            var material = NewLayerMaterial(
+                "falsifier_subtract", 255, 0f, 4f);
+
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                ProvidingLayeredFor(
+                    captured, AllOpaqueChain(), AllOpaqueChain()),
+                0);
+
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// Family parity: the cutout frontend composes the same replace-mode
+        /// layer to the same proven outcome, so the shared term carries no
+        /// family-specific alpha behavior.
+        /// </summary>
+        [Test]
+        public void CutoutFamily_ComposesTheReplaceLayerIdentically()
+        {
+            var material = Track(CreateCutoutConversionMaterial());
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    "parity_main", 4, 4, SolidGrid(4, 4, 255)));
+            material.SetTexture(
+                SecondTextureProperty,
+                ImportMipmapTexture(
+                    "parity_second", 4, 4, SolidGrid(4, 4, 255)));
+            material.SetFloat(SecondToggleProperty, 1f);
+            material.SetColor(
+                SecondColorProperty, new Color(1f, 1f, 1f, 1f));
+            material.SetFloat(SecondAlphaModeProperty, 1f);
+            material.SetFloat("_Cutoff", 0.5f);
+
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+            });
+            var alpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(captured[0]);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                ProvidingLayeredFor(
+                    captured[0],
+                    OpaqueThenTransparentChain(),
+                    AllOpaqueChain()),
+                0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// An active layer scroll or rotation can reach wrapped texels. An all
+        /// opaque mip chain therefore reduces the layer sample to one. The
+        /// replace writer proves opacity without triangle UV data. A blanket
+        /// motion refusal fails these cases.
+        /// </summary>
+        [TestCase(0.25f, 0f)]
+        [TestCase(0f, 0.25f)]
+        public void ActiveLayerScroll_AllOpaqueMipChainProvesWithoutGeometry(
+            float scrollX,
+            float rotationSpeed)
+        {
+            var material = NewLayerMaterial(
+                "scroll_all_opaque", 255, 1f, 1f);
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(scrollX, 0f, 0f, rotationSpeed));
+            material.SetFloat("_Main2ndTexAngle", 0.5f);
+
+            var captured = CaptureTransparentEvidence(material);
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(second.Texture.HasAlphaChannel, Is.True);
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel.IsLevelWithoutEvidence(mip),
+                    Is.False,
+                    "fixture precondition: every mip must carry evidence");
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.True,
+                    "fixture precondition: every mip must be fully opaque");
+            }
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                (TextureSourceId source, TextureChannel channel,
+                    out AlphaMipChain chain) =>
+                {
+                    chain = null;
+                    return false;
+                },
+                0);
+
+            Assert.That(alpha.IsComplete, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome),
+                Is.True,
+                "the full domain proof must not need geometry");
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(TriangleAlphaInput.MissingUv0(
+                    Vector3.zero, Vector3.right, Vector3.up)),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// One sub one texel in the source affects every generated mip. An
+        /// active scroll must refuse this chain instead of checking mip zero
+        /// geometry or assuming that motion makes the sample opaque.
+        /// </summary>
+        [Test]
+        public void ActiveLayerScroll_SubOneTexelInEveryMipRefuses()
+        {
+            var pixels = SolidGrid(4, 4, 255);
+            pixels[0] = new Color32(255, 255, 255, 0);
+            var material = NewLayerMaterial(
+                "scroll_not_opaque", 255, 1f, 1f);
+            material.SetTexture(
+                SecondTextureProperty,
+                ImportMipmapTexture(
+                    "scroll_not_opaque_layer", 4, 4, pixels));
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(0f, 0.25f, 0f, 0f));
+
+            var captured = CaptureTransparentEvidence(material);
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(second.Texture.HasAlphaChannel, Is.True);
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel.IsLevelWithoutEvidence(mip),
+                    Is.False,
+                    "fixture precondition: every mip must carry evidence");
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.False,
+                    "fixture precondition: each mip must keep a sub one texel");
+            }
+
+            AssertAlphaGateUnknown(
+                InterpretTransparent(material),
+                "_Main2ndTex_ScrollRotate");
+        }
+
+        /// <summary>
+        /// The alpha policy can mark sub-one texels as opaque. Those verdicts
+        /// are valid for fixed geometry, but they do not prove that every
+        /// moving sample is exactly one.
+        /// </summary>
+        [Test]
+        public void ActiveLayerScroll_PolicyOpaqueChainDoesNotProveExactOne()
+        {
+            var material = NewLayerMaterial(
+                "scroll_policy_opaque", 254, 1f, 1f);
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(0.25f, 0f, 0f, 0f));
+
+            var captured = UnityMaterialEvidenceCapture.Capture(
+                new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material,
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest),
+                },
+                AlphaPolicyBounds.From(99, 0))[0];
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(
+                second.Texture.CaptureBounds.OpaqueBound,
+                Is.LessThan(byte.MaxValue),
+                "fixture precondition: the capture must use policy opacity");
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.True,
+                    "fixture precondition: policy opacity must mark every " +
+                    "texel opaque");
+            }
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            Assert.That(
+                alpha.IsComplete,
+                Is.False,
+                "policy opacity cannot replace the exact-one moving-domain " +
+                "proof");
+        }
+
+        /// <summary>
+        /// A fixed angle without an active scroll still needs a rotation
+        /// mapping and its rounding lemma. Stage B keeps that case refused.
+        /// </summary>
+        [Test]
+        public void FixedLayerAngleWithoutScroll_RefusesWithAngleProperty()
+        {
+            var material = NewLayerMaterial(
+                "fixed_angle", 255, 1f, 1f);
+            material.SetFloat("_Main2ndTexAngle", 0.5f);
+
+            AssertAlphaGateUnknown(
+                InterpretTransparent(material),
+                "_Main2ndTexAngle");
+        }
+
+        [Test]
+        public void NoAlphaSourceImport_CollapsesTheTextureArmToTheTintConstant()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportTexture(
+                    "t_dxt1_noalpha",
+                    ForceDxt1Import(),
+                    sourceHasAlpha: false));
+            Assert.That(
+                ((Texture2D)material.GetTexture(MainTextureProperty)).format,
+                Is.EqualTo(UnityEngine.TextureFormat.DXT1),
+                "fixture precondition: the import must land on DXT1");
+
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+
+            Assert.That(
+                alpha.IsComplete,
+                Is.True,
+                "the no-alpha theorem must keep the alpha provable");
+            Assert.That(
+                alpha.GetCompleteValue().Kind,
+                Is.EqualTo(ScalarSemanticValueKind.Constant),
+                "the theorem replaces the texture sample with a constant");
+            Assert.That(
+                alpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(1f),
+                "the tint alpha of the default fixture is one");
+        }
+
+        private static Action<TextureImporter> ForceDxt1Import()
+        {
+            return importer =>
+            {
+                importer.alphaSource = TextureImporterAlphaSource.None;
+                var settings = importer.GetPlatformTextureSettings("Standalone");
+                settings.overridden = true;
+                settings.format = TextureImporterFormat.DXT1;
+                importer.SetPlatformTextureSettings(settings);
+            };
+        }
 
         [Test]
         public void TransparentTexelOnlyInALowerMip_ForcesMustRemainTransparent()
@@ -1203,14 +1733,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         [TestCase("_UseMain2ndTex")]
         [TestCase("_UseMain3rdTex")]
-        public void ActiveLayer_KeepsAlphaUnknownNamingTheLayerToggle(
+        public void ActiveLayerToggle_IsAlphaNeutralWhileNoWriterRuns(
             string property)
         {
-            var material = NewGateOffMaterialWithOpaqueTexture("t_layer");
+            // Re-pinned by the layer alpha support design: the bare toggle
+            // writes no alpha, so it must stay in the evidence request and
+            // out of the refusal path. Falsifies both an implementation that
+            // restores the all-or-nothing gate and one that drops the toggle
+            // from the capture schema entirely.
+            var material = NewGateOffMaterialWithOpaqueTexture(
+                "t_layer_" + property);
             material.SetFloat(property, 1f);
 
-            // Falsifies: missing the LIL_RENDER != 0 layer alpha writers.
-            AssertAlphaGateUnknown(InterpretTransparent(material), property);
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain());
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         // --- row 11: the ForwardAdd premultiply (copy detector) -----------

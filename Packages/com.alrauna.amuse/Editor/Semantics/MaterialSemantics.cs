@@ -448,6 +448,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         TextureSample,
         TextureSampleTimesConstant,
         ProductOfTextureSamples,
+        ProductChainOfTextureSamples,
+        SaturatingSum,
+        SaturatingDifference,
     }
 
     /// <summary>
@@ -466,6 +469,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         private readonly TextureChannel _channel;
         private readonly TextureChannel _secondChannel;
         private readonly float _multiplier;
+        private readonly TextureSample[] _chainSamples;
+        private readonly TextureChannel[] _chainChannels;
+        private readonly ScalarSemanticValue _firstValue;
+        private readonly ScalarSemanticValue _secondValue;
 
         internal ScalarSemanticValueKind Kind { get; }
 
@@ -477,14 +484,19 @@ namespace Alrauna.Amuse.Editor.Semantics
             TextureChannel channel,
             TextureChannel secondChannel,
             float multiplier)
+            : this(
+                kind,
+                constantValue,
+                sample,
+                secondSample,
+                channel,
+                secondChannel,
+                multiplier,
+                null,
+                null,
+                null,
+                null)
         {
-            Kind = kind;
-            _constantValue = constantValue;
-            _sample = sample;
-            _secondSample = secondSample;
-            _channel = channel;
-            _secondChannel = secondChannel;
-            _multiplier = multiplier;
         }
 
         private ScalarSemanticValue(
@@ -585,7 +597,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal TextureSample GetTextureSample()
         {
             if (Kind == ScalarSemanticValueKind.Constant ||
-                Kind == ScalarSemanticValueKind.ProductOfTextureSamples)
+                Kind == ScalarSemanticValueKind.ProductOfTextureSamples ||
+                Kind == ScalarSemanticValueKind.ProductChainOfTextureSamples ||
+                Kind == ScalarSemanticValueKind.SaturatingSum ||
+                Kind == ScalarSemanticValueKind.SaturatingDifference)
             {
                 throw new InvalidOperationException(
                     "A single texture sample is not meaningful for this " +
@@ -598,7 +613,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal TextureChannel GetChannel()
         {
             if (Kind == ScalarSemanticValueKind.Constant ||
-                Kind == ScalarSemanticValueKind.ProductOfTextureSamples)
+                Kind == ScalarSemanticValueKind.ProductOfTextureSamples ||
+                Kind == ScalarSemanticValueKind.ProductChainOfTextureSamples ||
+                Kind == ScalarSemanticValueKind.SaturatingSum ||
+                Kind == ScalarSemanticValueKind.SaturatingDifference)
             {
                 throw new InvalidOperationException(
                     "A single texture channel is not meaningful for this " +
@@ -646,8 +664,256 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         internal float GetProductMultiplier()
         {
-            RequireProduct();
+            if (Kind != ScalarSemanticValueKind.ProductOfTextureSamples &&
+                Kind != ScalarSemanticValueKind.ProductChainOfTextureSamples)
+            {
+                throw new InvalidOperationException(
+                    "A product multiplier is meaningful only for the " +
+                    "product kinds.");
+            }
+
             return _multiplier;
+        }
+
+        /// <summary>
+        /// The product of two or more sampled terms under one leading constant
+        /// multiplier. The represented value is the sampled factors multiplied
+        /// left to right after the constant: <c>fl(fl(k * f0) * f1) ...</c>.
+        /// Two factors are the historical product's exact shape; three or more
+        /// carry layered alpha chains (main texture, layer textures, masks).
+        /// The resolver owns the product lemmas and fails closed on a
+        /// multiplier it cannot prove.
+        /// </summary>
+        internal static ScalarSemanticValue ProductChain(
+            IReadOnlyList<TextureSample> samples,
+            IReadOnlyList<TextureChannel> channels,
+            float multiplier)
+        {
+            if (samples == null)
+            {
+                throw new ArgumentNullException(nameof(samples));
+            }
+            if (channels == null)
+            {
+                throw new ArgumentNullException(nameof(channels));
+            }
+            if (samples.Count != channels.Count)
+            {
+                throw new ArgumentException(
+                    "Every chain factor needs exactly one channel.",
+                    nameof(channels));
+            }
+            if (samples.Count < 2)
+            {
+                throw new ArgumentException(
+                    "A chain carries at least two sampled factors; a single " +
+                    "sample has its own kind.",
+                    nameof(samples));
+            }
+            for (var index = 0; index < samples.Count; index++)
+            {
+                ValidateTextureArguments(samples[index], channels[index]);
+            }
+            ValidateFinite(multiplier, nameof(multiplier));
+
+            var value = new ScalarSemanticValue(
+                ScalarSemanticValueKind.ProductChainOfTextureSamples,
+                default,
+                null,
+                default,
+                default,
+                default,
+                multiplier);
+            var sampleCopy = new TextureSample[samples.Count];
+            var channelCopy = new TextureChannel[channels.Count];
+            for (var index = 0; index < samples.Count; index++)
+            {
+                sampleCopy[index] = samples[index];
+                channelCopy[index] = channels[index];
+            }
+
+            return value.WithChain(sampleCopy, channelCopy);
+        }
+
+        /// <summary>
+        /// The saturating sum <c>saturate(first + second)</c> of two closed
+        /// forms. lilToon's layer alpha modes 3 and 4 write exactly this shape
+        /// over the prior alpha chain.
+        /// </summary>
+        internal static ScalarSemanticValue SaturatingSum(
+            ScalarSemanticValue first,
+            ScalarSemanticValue second)
+        {
+            if (first == null)
+            {
+                throw new ArgumentNullException(nameof(first));
+            }
+            if (second == null)
+            {
+                throw new ArgumentNullException(nameof(second));
+            }
+
+            var value = new ScalarSemanticValue(
+                ScalarSemanticValueKind.SaturatingSum,
+                default,
+                null,
+                default,
+                default,
+                default,
+                default);
+            return value.WithChildren(first, second);
+        }
+
+        /// <summary>
+        /// The saturating difference <c>saturate(minuend - subtrahend)</c> of
+        /// two closed forms. lilToon's layer alpha mode 4 writes exactly this
+        /// shape over the prior alpha chain.
+        /// </summary>
+        internal static ScalarSemanticValue SaturatingDifference(
+            ScalarSemanticValue minuend,
+            ScalarSemanticValue subtrahend)
+        {
+            if (minuend == null)
+            {
+                throw new ArgumentNullException(nameof(minuend));
+            }
+            if (subtrahend == null)
+            {
+                throw new ArgumentNullException(nameof(subtrahend));
+            }
+
+            var value = new ScalarSemanticValue(
+                ScalarSemanticValueKind.SaturatingDifference,
+                default,
+                null,
+                default,
+                default,
+                default,
+                default);
+            return value.WithChildren(minuend, subtrahend);
+        }
+
+        private ScalarSemanticValue WithChain(
+            TextureSample[] samples,
+            TextureChannel[] channels)
+        {
+            return new ScalarSemanticValue(
+                Kind,
+                _constantValue,
+                _sample,
+                _secondSample,
+                _channel,
+                _secondChannel,
+                _multiplier,
+                samples,
+                channels,
+                _firstValue,
+                _secondValue);
+        }
+
+        private ScalarSemanticValue WithChildren(
+            ScalarSemanticValue first,
+            ScalarSemanticValue second)
+        {
+            return new ScalarSemanticValue(
+                Kind,
+                _constantValue,
+                _sample,
+                _secondSample,
+                _channel,
+                _secondChannel,
+                _multiplier,
+                _chainSamples,
+                _chainChannels,
+                first,
+                second);
+        }
+
+        internal int GetChainFactorCount()
+        {
+            RequireChain();
+            return _chainSamples.Length;
+        }
+
+        internal TextureSample GetChainSample(int index)
+        {
+            RequireChain();
+            return _chainSamples[index];
+        }
+
+        internal TextureChannel GetChainChannel(int index)
+        {
+            RequireChain();
+            return _chainChannels[index];
+        }
+
+        internal ScalarSemanticValue GetSumFirst()
+        {
+            RequireKind(ScalarSemanticValueKind.SaturatingSum);
+            return _firstValue;
+        }
+
+        internal ScalarSemanticValue GetSumSecond()
+        {
+            RequireKind(ScalarSemanticValueKind.SaturatingSum);
+            return _secondValue;
+        }
+
+        internal ScalarSemanticValue GetMinuend()
+        {
+            RequireKind(ScalarSemanticValueKind.SaturatingDifference);
+            return _firstValue;
+        }
+
+        internal ScalarSemanticValue GetSubtrahend()
+        {
+            RequireKind(ScalarSemanticValueKind.SaturatingDifference);
+            return _secondValue;
+        }
+
+        private void RequireChain()
+        {
+            if (Kind != ScalarSemanticValueKind.ProductChainOfTextureSamples)
+            {
+                throw new InvalidOperationException(
+                    "Chain accessors are meaningful only for the chain " +
+                    "kind.");
+            }
+        }
+
+        private void RequireKind(ScalarSemanticValueKind kind)
+        {
+            if (Kind != kind)
+            {
+                throw new InvalidOperationException(
+                    "This accessor is meaningful only for one kind.");
+            }
+        }
+
+        private ScalarSemanticValue(
+            ScalarSemanticValueKind kind,
+            float constantValue,
+            TextureSample sample,
+            TextureSample secondSample,
+            TextureChannel channel,
+            TextureChannel secondChannel,
+            float multiplier,
+            TextureSample[] chainSamples,
+            TextureChannel[] chainChannels,
+            ScalarSemanticValue firstValue,
+            ScalarSemanticValue secondValue)
+        {
+            Kind = kind;
+            _constantValue = constantValue;
+            _sample = sample;
+            _secondSample = secondSample;
+            _channel = channel;
+            _secondChannel = secondChannel;
+            _multiplier = multiplier;
+            _chainSamples = chainSamples;
+            _chainChannels = chainChannels;
+            _firstValue = firstValue;
+            _secondValue = secondValue;
         }
 
         private void RequireProduct()
@@ -684,6 +950,26 @@ namespace Alrauna.Amuse.Editor.Semantics
                            _secondSample.Equals(other._secondSample) &&
                            _secondChannel == other._secondChannel &&
                            _multiplier.Equals(other._multiplier);
+                case ScalarSemanticValueKind.ProductChainOfTextureSamples:
+                    if (_multiplier.Equals(other._multiplier) == false ||
+                        _chainSamples.Length != other._chainSamples.Length)
+                    {
+                        return false;
+                    }
+                    for (var index = 0; index < _chainSamples.Length; index++)
+                    {
+                        if (_chainSamples[index].Equals(
+                                other._chainSamples[index]) == false ||
+                            _chainChannels[index] != other._chainChannels[index])
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                case ScalarSemanticValueKind.SaturatingSum:
+                case ScalarSemanticValueKind.SaturatingDifference:
+                    return _firstValue.Equals(other._firstValue) &&
+                           _secondValue.Equals(other._secondValue);
                 default:
                     return false;
             }
@@ -716,6 +1002,18 @@ namespace Alrauna.Amuse.Editor.Semantics
                         hash = hash * 397 ^ _secondSample.GetHashCode();
                         hash = hash * 397 ^ (int)_secondChannel;
                         return hash * 397 ^ _multiplier.GetHashCode();
+                    case ScalarSemanticValueKind.ProductChainOfTextureSamples:
+                        hash = hash * 397 ^ _multiplier.GetHashCode();
+                        for (var index = 0; index < _chainSamples.Length; index++)
+                        {
+                            hash = hash * 397 ^ _chainSamples[index].GetHashCode();
+                            hash = hash * 397 ^ (int)_chainChannels[index];
+                        }
+                        return hash;
+                    case ScalarSemanticValueKind.SaturatingSum:
+                    case ScalarSemanticValueKind.SaturatingDifference:
+                        hash = hash * 397 ^ _firstValue.GetHashCode();
+                        return hash * 397 ^ _secondValue.GetHashCode();
                     default:
                         return hash;
                 }

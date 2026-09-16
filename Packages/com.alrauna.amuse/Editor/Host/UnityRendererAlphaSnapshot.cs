@@ -12,6 +12,14 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyList<Vector3> Positions { get; }
         internal IReadOnlyList<Vector2> Uv0 { get; }
         internal bool HasUv0 { get; }
+
+        /// <summary>
+        /// The layer UV channels by HLSL uv set: index 0 is uv1 (Unity's
+        /// mesh.uv2), index 1 is uv2, index 2 is uv3. A null entry means the
+        /// channel is absent from the mesh, so a layer naming it cannot be
+        /// sampled and stays unproven.
+        /// </summary>
+        internal IReadOnlyList<IReadOnlyList<Vector2>> ExtraUvSets { get; }
         internal IReadOnlyList<UnitySubmeshAlphaSnapshot> Submeshes { get; }
         internal IReadOnlyList<CapturedAlphaMaterial> Materials { get; }
 
@@ -21,12 +29,22 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Vector2> uv0,
             bool hasUv0,
             IReadOnlyList<UnitySubmeshAlphaSnapshot> submeshes,
-            IReadOnlyList<CapturedAlphaMaterial> materials)
+            IReadOnlyList<CapturedAlphaMaterial> materials,
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets = null)
         {
             VertexCount = vertexCount;
             Positions = Copy(positions);
             Uv0 = Copy(uv0);
             HasUv0 = hasUv0;
+            var sets = extraUvSets == null
+                ? new List<IReadOnlyList<Vector2>> { null, null, null }
+                : new List<IReadOnlyList<Vector2>>(extraUvSets);
+            while (sets.Count < 3)
+            {
+                sets.Add(null);
+            }
+
+            ExtraUvSets = sets.AsReadOnly();
             Submeshes = Copy(submeshes);
             Materials = Copy(materials);
         }

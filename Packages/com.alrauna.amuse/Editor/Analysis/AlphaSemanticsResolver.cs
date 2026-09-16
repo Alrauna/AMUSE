@@ -64,6 +64,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly AlphaResolution _firstFactor;
         private readonly AlphaResolution _secondFactor;
         private readonly bool _isProduct;
+        private readonly bool _isDisjunction;
 
         private AlphaResolution(
             bool isResolved,
@@ -76,7 +77,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             UvMapping mapping,
             AlphaResolution firstFactor,
             AlphaResolution secondFactor,
-            bool isProduct)
+            bool isProduct,
+            bool isDisjunction = false)
         {
             // Invariants: a resolved value carries no failure, a refusal
             // carries one, and a classified value always has its field.
@@ -102,6 +104,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             _firstFactor = firstFactor;
             _secondFactor = secondFactor;
             _isProduct = isProduct;
+            _isDisjunction = isDisjunction;
         }
 
         internal bool IsResolved { get; }
@@ -136,20 +139,15 @@ namespace Alrauna.Amuse.Editor.Analysis
             UvMapping mapping,
             int maxNoiseTexelPercent)
         {
-            // Only `AlphaSemanticsResolver.IsSupportedMapping` decides which
-            // mappings ever reach this factory, and it admits channel 0
-            // only. Enforcing that here (rather than trusting the caller)
-            // means `Classify`'s identity test below can check scale/offset
-            // alone, per design §6.1 step 2: folding a channel test into
-            // that OR would otherwise let a channel-non-zero mapping fall
-            // through to the affine transform, which only ever reads
-            // `TriangleAlphaInput.Uv0` — silently applying another UV set's
-            // ST to UV0 instead of being rejected.
-            if (mapping.Channel != 0)
+            // The resolver accepts the mesh UV channels carried by
+            // `TriangleAlphaInput`. Enforce that boundary here so a direct
+            // caller cannot make classification read a coordinate set that
+            // the proof input does not represent.
+            if (mapping.Channel < 0 || mapping.Channel > 3)
             {
                 throw new ArgumentException(
-                    "A classified resolution's mapping must be for UV " +
-                    "channel 0.",
+                    "A classified resolution's mapping must name a mesh " +
+                    "UV channel the proof carries (0 to 3).",
                     nameof(mapping));
             }
 
@@ -223,6 +221,50 @@ namespace Alrauna.Amuse.Editor.Analysis
 
 
         /// <summary>
+        /// The disjunction of two independently classified factors, the dual
+        /// of <see cref="Product"/>: the sum saturate(a + b) reaches exactly
+        /// one on a triangle exactly when either factor is one there, because
+        /// each factor is bounded in [0,1] by the field contract. The fold
+        /// mirrors the product's absorbing lattice: ProvenOpaque wins over
+        /// Unknown, Unknown wins over MustRemainTransparent, and
+        /// MustRemainTransparent needs both factors non-opaque.
+        /// <para>
+        /// Both factors must be classified, never uniform: the resolver
+        /// resolves uniform factors before it constructs a disjunction.
+        /// </para>
+        /// </summary>
+        internal static AlphaResolution Or(
+            AlphaResolution first,
+            AlphaResolution second)
+        {
+            if (first == null)
+                throw new ArgumentNullException(nameof(first));
+            if (second == null)
+                throw new ArgumentNullException(nameof(second));
+            if (!first.IsResolved || !second.IsResolved ||
+                first.TryGetUniformOutcome(out _) ||
+                second.TryGetUniformOutcome(out _))
+            {
+                throw new ArgumentException(
+                    "A disjunction composes two classified resolutions.");
+            }
+
+            return new AlphaResolution(
+                true,
+                AlphaResolutionFailure.None,
+                false,
+                default,
+                null,
+                default,
+                0,
+                default,
+                first,
+                second,
+                true,
+                true);
+        }
+
+        /// <summary>
         /// Reports the stored uniform outcome, if this resolution has one.
         /// <para>
         /// This exposes an existing immutable fact so a consumer can recognize
@@ -279,7 +321,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return _uniformOutcome;
             }
 
-            if (_isProduct)
+            if (_isProduct && !_isDisjunction)
             {
                 var first = _firstFactor.Classify(triangle);
                 if (first == TriangleAlphaOutcome.MustRemainTransparent)
@@ -299,6 +341,28 @@ namespace Alrauna.Amuse.Editor.Analysis
                     : TriangleAlphaOutcome.Unknown;
             }
 
+            if (_isDisjunction)
+            {
+                var first = _firstFactor.Classify(triangle);
+                if (first == TriangleAlphaOutcome.ProvenOpaque)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+
+                var second = _secondFactor.Classify(triangle);
+                if (second == TriangleAlphaOutcome.ProvenOpaque)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+
+                return first == TriangleAlphaOutcome
+                           .MustRemainTransparent &&
+                       second == TriangleAlphaOutcome
+                           .MustRemainTransparent
+                    ? TriangleAlphaOutcome.MustRemainTransparent
+                    : TriangleAlphaOutcome.Unknown;
+            }
+
 
             // A mip chain is alternative evidence about one configuration, not a
             // set of admitted configurations: the hardware may select any level and
@@ -309,18 +373,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             // evidence - a non-resident consulted mip - refutes the proof for every
             // triangle exactly as an Unknown verdict would, whatever its placeholder
             // grid contains, so its provenance is consulted before the grid.
-            // Identity remains structurally on the historical classifier path;
-            // non-identity UV0 uses the affine helper's Lemma P exact result or
-            // conservative envelope before every mip is considered. The
-            // identity test below checks scale and offset only (design §6.1
-            // step 2): the channel is not part of it, because `Classified`'s
-            // constructor invariant already guarantees `_mapping.Channel == 0`
-            // for every resolution that reaches here — `IsSupportedMapping` is
-            // the only place that decides which channel is admitted. Folding a
-            // channel test into this predicate would be redundant at best and,
-            // for any future caller that relaxed the constructor invariant,
-            // would silently apply a channel-non-zero mapping's scale/offset to
-            // `TriangleAlphaInput.Uv0` instead of rejecting it.
+            // Identity remains on the historical classifier path. A
+            // nonidentity UV0 mapping uses the affine helper before every mip
+            // is considered. The identity test checks scale and offset only.
+            // A nonzero channel reaches the selection below with identity
+            // scale and offset because the layer frontend enforces that
+            // boundary.
             var transformed = triangle;
             var envelope = AlphaUvEnvelope.Zero;
             if (_mapping.Scale.x != 1f ||
@@ -333,6 +391,25 @@ namespace Alrauna.Amuse.Editor.Analysis
                 {
                     return TriangleAlphaOutcome.Unknown;
                 }
+            }
+
+            if (_mapping.Channel != 0)
+            {
+                // A layer channel mapping is exact identity in scale and
+                // offset by the frontend boundary, so the channel selection
+                // substitutes the named channel's vertex coordinates and the
+                // classifier reads them as plain uv0. A channel the mesh
+                // does not carry invalidates only this triangle's proof.
+                if (!triangle.TryGetUvSet(_mapping.Channel,
+                        out var channelA, out var channelB,
+                        out var channelC))
+                {
+                    return TriangleAlphaOutcome.Unknown;
+                }
+
+                transformed = TriangleAlphaInput.WithUv0(
+                    triangle.Position0, triangle.Position1,
+                    triangle.Position2, channelA, channelB, channelC);
             }
 
             var sawUnknown = false;
@@ -417,6 +494,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetProductMultiplier(),
                         fieldProvider,
                         maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.ProductChainOfTextureSamples:
+                    return ResolveProductChain(
+                        value, fieldProvider, maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.SaturatingSum:
+                    return ResolveSaturatingSum(
+                        value, fieldProvider, maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.SaturatingDifference:
+                    return ResolveSaturatingDifference(
+                        value, fieldProvider, maxNoiseTexelPercent);
                 default:
                     // A semantic form added later must fail closed here rather
                     // than fall into a wrong proof path.
@@ -522,6 +608,196 @@ namespace Alrauna.Amuse.Editor.Analysis
             return AlphaResolution.Product(firstResolution, secondResolution);
         }
 
+        /// <summary>
+        /// alpha = (k * f0) * f1 * ... * fn over any number of sampled terms
+        /// bounded in [0,1] by the field contract. The multiplier lemmas are
+        /// the two-factor ones generalized to any arity: a product of values
+        /// in [0,1] rounds to one only when every factor is one, so a leading
+        /// constant below one keeps the product below one everywhere, and a
+        /// constant of one makes the product's predicate the conjunction of
+        /// the per-factor predicates.
+        /// </summary>
+        private static AlphaResolution ResolveProductChain(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var multiplier = value.GetProductMultiplier();
+            if (multiplier > 1f)
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
+            if (multiplier < 1f)
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent);
+            }
+
+            AlphaResolution conjoined = null;
+            for (var index = 0; index < value.GetChainFactorCount(); index++)
+            {
+                var factor = ResolveSampled(
+                    value.GetChainSample(index),
+                    value.GetChainChannel(index),
+                    fieldProvider,
+                    maxNoiseTexelPercent);
+                if (!factor.IsResolved)
+                {
+                    return factor;
+                }
+
+                conjoined = conjoined == null
+                    ? factor
+                    : AlphaResolution.Product(conjoined, factor);
+            }
+
+            return conjoined;
+        }
+
+        /// <summary>
+        /// alpha = saturate(first + second). A side attested exactly one
+        /// decides the sum alone, because the other side's field contract
+        /// bounds it in [0,1] and the saturate clamps at one. Two constants
+        /// fold through the saturate. Anything else stays conservative: the
+        /// sum reaches one on some triangle exactly when either side is one
+        /// there, and cross-field correlation between two sampled terms is
+        /// unknowable from two independent [0,1] contracts, so no per-triangle
+        /// proof exists without an additive classifier.
+        /// </summary>
+        private static AlphaResolution ResolveSaturatingSum(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var first = value.GetSumFirst();
+            var second = value.GetSumSecond();
+            if (first.Kind == ScalarSemanticValueKind.Constant &&
+                second.Kind == ScalarSemanticValueKind.Constant)
+            {
+                var sum = first.GetConstantValue() + second.GetConstantValue();
+                return ResolveScalar(sum > 1f ? 1f : sum);
+            }
+
+            var firstResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(first),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!firstResolution.IsResolved)
+            {
+                return firstResolution;
+            }
+
+            var secondResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(second),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!secondResolution.IsResolved)
+            {
+                return secondResolution;
+            }
+
+            if (IsUniformlyProvenOpaque(firstResolution))
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.ProvenOpaque);
+            }
+
+            if (IsUniformlyProvenOpaque(secondResolution))
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.ProvenOpaque);
+            }
+
+            var firstTransparent = firstResolution.TryGetUniformOutcome(
+                out var firstOutcome) &&
+                firstOutcome == TriangleAlphaOutcome.MustRemainTransparent;
+            var secondTransparent = secondResolution.TryGetUniformOutcome(
+                out var secondOutcome) &&
+                secondOutcome == TriangleAlphaOutcome.MustRemainTransparent;
+            if (firstTransparent)
+            {
+                return secondResolution;
+            }
+
+            if (secondTransparent)
+            {
+                return firstResolution;
+            }
+
+            return AlphaResolution.Or(firstResolution, secondResolution);
+        }
+
+        /// <summary>
+        /// alpha = saturate(minuend - subtrahend). A zero constant subtrahend
+        /// preserves the minuend exactly. Two constants fold through the
+        /// saturate. Everything else stays conservative: m - s reaches one
+        /// only at m = 1 and s = 0, the field contract attests "strictly
+        /// below one" and never "exactly zero", so a sampled subtrahend can
+        /// never be proven away.
+        /// </summary>
+        private static AlphaResolution ResolveSaturatingDifference(
+            ScalarSemanticValue value,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            var minuend = value.GetMinuend();
+            var subtrahend = value.GetSubtrahend();
+            if (minuend.Kind == ScalarSemanticValueKind.Constant &&
+                subtrahend.Kind == ScalarSemanticValueKind.Constant)
+            {
+                var difference =
+                    minuend.GetConstantValue() - subtrahend.GetConstantValue();
+                return ResolveScalar(difference < 0f ? 0f : difference);
+            }
+
+            if (IsProvenExactlyZero(subtrahend))
+            {
+                // saturate(m - 0) is m: a zero constant, or a sampled term
+                // scaled by exactly zero, is exactly zero at every reachable
+                // sample because the field contract bounds the sample finite
+                // in [0,1] and fl(0 * s) is zero for every finite s.
+                return AlphaSemanticsResolver.Resolve(
+                    SemanticOutput<ScalarSemanticValue>.Complete(minuend),
+                    fieldProvider, maxNoiseTexelPercent);
+            }
+
+            var subtrahendResolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(subtrahend),
+                fieldProvider, maxNoiseTexelPercent);
+            if (!subtrahendResolution.IsResolved)
+            {
+                return subtrahendResolution;
+            }
+
+            return AlphaResolution.Uniform(
+                TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        private static bool IsUniformlyProvenOpaque(AlphaResolution resolution)
+        {
+            return resolution.TryGetUniformOutcome(out var outcome) &&
+                outcome == TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// A closed form whose value is exactly zero at every reachable
+        /// sample: the zero constant, or a sampled term scaled by exactly
+        /// zero. The field contract bounds the sampled factor finite in
+        /// [0,1], and a binary32 multiply of zero by any finite value is
+        /// exactly zero, so the lemma needs no texel.
+        /// </summary>
+        private static bool IsProvenExactlyZero(ScalarSemanticValue value)
+        {
+            if (value.Kind == ScalarSemanticValueKind.Constant)
+            {
+                return value.GetConstantValue() == 0f;
+            }
+
+            return value.Kind == ScalarSemanticValueKind
+                .TextureSampleTimesConstant &&
+                value.GetMultiplier() == 0f;
+        }
+
         private static AlphaResolution ResolveSampled(
             TextureSample sample,
             TextureChannel channel,
@@ -552,14 +828,17 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
-        /// The resolver admits UV0 only. For a non-identity mapping, the
-        /// implemented Lemma P predicate in the affine MainTex ST design proves
-        /// the exact transformed domain or supplies the conservative envelope;
-        /// channel selection remains a frontend-owned coordinate-set boundary.
+        /// The resolver admits the four mesh UV channels carried by the
+        /// triangle input. The frontend must prove the mapping form before it
+        /// reaches this boundary.
         /// </summary>
         private static bool IsSupportedMapping(UvMapping mapping)
         {
-            return mapping.Channel == 0;
+            // Channels one to three are the stage B layer channels: the mesh
+            // extraction carries them and the classifier selects the
+            // mapping's channel directly. Channel four is the view-dependent
+            // matcap coordinate and stays refused.
+            return mapping.Channel >= 0 && mapping.Channel <= 3;
         }
 
         /// <summary>

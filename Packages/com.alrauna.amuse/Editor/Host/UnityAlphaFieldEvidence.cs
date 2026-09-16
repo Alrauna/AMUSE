@@ -857,8 +857,8 @@ namespace Alrauna.Amuse.Editor.Host
         /// durable characterization through the R8 predicate path, and an
         /// authoritative decode rule. UNorm decode is n/(2^b - 1), so the result is
         /// structurally finite and within [0, 1]; BC3's alpha block is an exact
-        /// integer scheme; BC7 decompression is specified bit-accurate; RGB24 has no
-        /// alpha channel, so the sampler returns exactly one.
+        /// integer scheme; BC7 decompression is specified bit-accurate; RGB24 and
+        /// DXT1 have no alpha channel, so the sampler returns exactly one.
         /// <para>
         /// Everything else is refused. Float formats cannot supply the
         /// finite-and-[0,1] attestation, because one predicate bit reports the same
@@ -879,6 +879,7 @@ namespace Alrauna.Amuse.Editor.Host
                 case TextureFormat.ARGB32:
                 case TextureFormat.Alpha8:
                 case TextureFormat.RGB24:
+                case TextureFormat.DXT1:
                 case TextureFormat.DXT5:
                 case TextureFormat.BC7:
                     return true;
