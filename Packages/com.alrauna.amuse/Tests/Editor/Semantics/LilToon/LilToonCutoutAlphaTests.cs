@@ -58,6 +58,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_IDMask8",
             "_IDMaskControlsDissolve",
             "_Cutoff",
+            "_Main2ndTex_UVMode",
+            "_Main3rdTex_UVMode",
+            "_Main2ndTexAngle",
+            "_Main3rdTexAngle",
+            "_Main2ndTex_Cull",
+            "_Main3rdTex_Cull",
+            "_Main2ndTexAlphaMode",
+            "_Main3rdTexAlphaMode",
+            "_Main2ndTexIsDecal",
+            "_Main3rdTexIsDecal",
+            "_Main2ndTexIsLeftOnly",
+            "_Main3rdTexIsLeftOnly",
+            "_Main2ndTexIsRightOnly",
+            "_Main3rdTexIsRightOnly",
+            "_Main2ndTexShouldCopy",
+            "_Main3rdTexShouldCopy",
+            "_Main2ndTexShouldFlipMirror",
+            "_Main3rdTexShouldFlipMirror",
+            "_Main2ndTexShouldFlipCopy",
+            "_Main3rdTexShouldFlipCopy",
+            "_Main2ndTexIsMSDF",
+            "_Main3rdTexIsMSDF",
+            "_AudioLink2Main2nd",
+            "_AudioLink2Main3rd",
         };
 
         private static Color32[] OddBoundaryAlphaPixels()
@@ -75,12 +99,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return pixels;
         }
 
-        private static readonly string[] ExpectedAlphaColors = { "_Color" };
+        private static readonly string[] ExpectedAlphaColors =
+        {
+            "_Color",
+            "_Color2nd",
+            "_Color3rd",
+        };
 
         private static readonly string[] ExpectedAlphaVectors =
         {
             "_DissolveParams",
             "_MainTex_ScrollRotate",
+            "_Main2ndTex_ScrollRotate",
+            "_Main3rdTex_ScrollRotate",
+            "_Main2ndDistanceFade",
+            "_Main3rdDistanceFade",
+            "_Main2ndDissolveParams",
+            "_Main3rdDissolveParams",
         };
 
         [Test]
@@ -100,8 +135,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ExpectedAlphaColors, request.ColorProperties);
             CollectionAssert.AreEquivalent(
                 ExpectedAlphaVectors, request.VectorProperties);
-            // CopyTextures sorts by property name, so _AlphaMask is first.
-            Assert.That(request.TextureProperties.Count, Is.EqualTo(2));
+            // CopyTextures sorts by property name: _AlphaMask, then the
+            // layer properties in ordinal order, then _MainTex last.
+            Assert.That(request.TextureProperties.Count, Is.EqualTo(6));
             Assert.That(
                 request.TextureProperties[0].PropertyName,
                 Is.EqualTo("_AlphaMask"));
@@ -115,14 +151,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "sampling facts of its own");
             Assert.That(
                 request.TextureProperties[1].PropertyName,
+                Is.EqualTo("_Main2ndBlendMask"));
+            Assert.That(
+                request.TextureProperties[2].PropertyName,
+                Is.EqualTo("_Main2ndTex"));
+            Assert.That(
+                request.TextureProperties[3].PropertyName,
+                Is.EqualTo("_Main3rdBlendMask"));
+            Assert.That(
+                request.TextureProperties[4].PropertyName,
+                Is.EqualTo("_Main3rdTex"));
+            Assert.That(
+                request.TextureProperties[5].PropertyName,
                 Is.EqualTo("_MainTex"));
+            var blendMaskEvidence =
+                TextureEvidenceKinds.SourceIdentity |
+                TextureEvidenceKinds.RedChannel;
             Assert.That(
                 request.TextureProperties[1].Evidence,
-                Is.EqualTo(
-                    TextureEvidenceKinds.ScaleOffset |
-                    TextureEvidenceKinds.SourceIdentity |
-                    TextureEvidenceKinds.Sampling |
-                    TextureEvidenceKinds.AlphaChannel));
+                Is.EqualTo(blendMaskEvidence),
+                "the layer blend masks ride uvMain and the main sampler");
+            Assert.That(
+                request.TextureProperties[3].Evidence,
+                Is.EqualTo(blendMaskEvidence));
+            var textureEvidence =
+                TextureEvidenceKinds.ScaleOffset |
+                TextureEvidenceKinds.SourceIdentity |
+                TextureEvidenceKinds.Sampling |
+                TextureEvidenceKinds.AlphaChannel |
+                TextureEvidenceKinds.SampledAlphaIsOne;
+            Assert.That(
+                request.TextureProperties[2].Evidence,
+                Is.EqualTo(textureEvidence));
+            Assert.That(
+                request.TextureProperties[4].Evidence,
+                Is.EqualTo(textureEvidence));
+            Assert.That(
+                request.TextureProperties[5].Evidence,
+                Is.EqualTo(textureEvidence));
         }
 
         // --- helpers ----------------------------------------------------------
@@ -588,8 +654,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase("_UDIMDiscardMode", 1f)]
         [TestCase("_ShiftBackfaceUV", 1f)]
         [TestCase("_UseParallax", 1f)]
-        [TestCase("_UseMain2ndTex", 1f)]
-        [TestCase("_UseMain3rdTex", 1f)]
         [TestCase("_AlphaMaskMode", 3f)]
         [TestCase("_AlphaMaskMode", 4f)]
         [TestCase("_UseDither", 1f)]

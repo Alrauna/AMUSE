@@ -778,7 +778,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// fails here rather than passing a hand-picked sample.
         /// </summary>
         [Test]
-        public void TheFormatAllowlistIsExactlyTheSixAdmittedFormats()
+        public void TheFormatAllowlistIsExactlyTheSevenAdmittedFormats()
         {
             var admitted = new HashSet<TextureFormat>
             {
@@ -786,6 +786,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 TextureFormat.ARGB32,
                 TextureFormat.Alpha8,
                 TextureFormat.RGB24,
+                TextureFormat.DXT1,
                 TextureFormat.DXT5,
                 TextureFormat.BC7
             };
@@ -811,7 +812,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 unexpectedlyRefused, Is.Empty,
                 "Admitted formats the predicate refuses.");
-            Assert.That(admitted.Count, Is.EqualTo(6));
+            Assert.That(admitted.Count, Is.EqualTo(7));
         }
 
         [TestCase(BuildTarget.StandaloneWindows64, true)]
@@ -1173,6 +1174,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             for (var mip = 0; mip < chain.Count; mip++)
             {
                 Assert.That(chain[mip].IsFullyOpaque, Is.True, "mip " + mip);
+            }
+        }
+
+        /// <summary>
+        /// DXT1 through the real production shader route, mirroring the RGB24
+        /// characterization: the format stores no alpha channel, so every
+        /// returned byte must be exactly 255 at every level. Falsifier: an
+        /// implementation that refuses every compressed format it has not
+        /// enumerated would reject real all-opaque content.
+        /// </summary>
+        [Test]
+        public void ADxt1OnlyFormatSamplesAlphaExactlyOneAtEveryLevel()
+        {
+            var texture = ImportMipmapped(
+                "dxt1_mipped", QuadrantPixels(), 8, 8,
+                TextureImporterFormat.DXT1);
+
+            Assert.That(texture.format, Is.EqualTo(TextureFormat.DXT1));
+
+            Assert.That(TryChain(texture, out var chain), Is.True);
+            Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
+            for (var level = 0; level < chain.Count; level++)
+            {
+                var grid = chain[level];
+                Assert.That(grid.IsFullyOpaque, Is.True, "level " + level);
+                for (var y = 0; y < grid.Height; y++)
+                {
+                    for (var x = 0; x < grid.Width; x++)
+                    {
+                        Assert.That(
+                            grid.GetAlpha(x, y), Is.EqualTo(255),
+                            $"level {level} texel ({x},{y}) must be exactly 255.");
+                    }
+                }
             }
         }
 

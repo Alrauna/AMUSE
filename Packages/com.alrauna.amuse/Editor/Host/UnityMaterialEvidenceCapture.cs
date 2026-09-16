@@ -351,6 +351,13 @@ namespace Alrauna.Amuse.Editor.Host
         internal bool IsCanonicalNormalMap { get; }
         internal bool HasAlphaChannel { get; }
         internal AlphaMipChain AlphaChannel { get; }
+
+        /// <summary>
+        /// True only when every captured alpha mip carries usable evidence
+        /// and every texel in every mip is exactly one. This is the
+        /// geometry independent proof used by a time varying layer sample.
+        /// </summary>
+        internal bool AlphaChannelIsProvenFullyOpaque { get; }
         internal bool HasRedChannel { get; }
         internal AlphaMipChain RedChannel { get; }
 
@@ -401,10 +408,42 @@ namespace Alrauna.Amuse.Editor.Host
             IsCanonicalNormalMap = isCanonicalNormalMap;
             HasAlphaChannel = hasAlphaChannel;
             AlphaChannel = alphaChannel;
+            AlphaChannelIsProvenFullyOpaque =
+                IsProvenFullyOpaque(
+                    captureThreshold, captureBounds,
+                    hasAlphaChannel, alphaChannel);
             AlphaCaptureRefusal = alphaCaptureRefusal;
             HasRedChannel = hasRedChannel;
             RedChannel = redChannel;
             RedCaptureRefusal = redCaptureRefusal;
+        }
+
+        private static bool IsProvenFullyOpaque(
+            float captureThreshold,
+            AlphaPolicyBounds bounds,
+            bool hasChannel,
+            AlphaMipChain chain)
+        {
+            // A policy opaque verdict can include sub-one texels. Only the
+            // inert exact-255 opaque bound gives an exact-one domain fact.
+            if (captureThreshold != 1f ||
+                bounds.OpaqueBound != byte.MaxValue ||
+                !hasChannel ||
+                chain == null)
+            {
+                return false;
+            }
+
+            for (var mip = 0; mip < chain.Count; mip++)
+            {
+                if (chain.IsLevelWithoutEvidence(mip) ||
+                    !chain[mip].IsFullyOpaque)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 

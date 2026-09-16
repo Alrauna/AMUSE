@@ -2124,6 +2124,295 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// route; the GPU blit route itself stays refused for streaming
         /// textures, whose editor read is measured untrustworthy.
         /// </summary>
+        /// <summary>
+        /// --- Falsifier: an enabled second main texture layer with a fully
+        /// opaque layer texture composes by multiply and the renderer still
+        /// prepares. The pre-change implementation refused the material on
+        /// the bare toggle, so this fails any implementation that restores
+        /// the all-or-nothing layer gate.
+        /// </summary>
+        [Test]
+        public void EnabledSecondLayer_MaterialPreparesAndSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE second layer candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap("layer_main"));
+                material.SetTexture(
+                    "_Main2ndTex",
+                    fixtures.ImportFullyOpaqueMipmap("layer_second"));
+                material.SetFloat("_UseMain2ndTex", 1f);
+                material.SetFloat("_Main2ndTexAlphaMode", 2f);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the enabled layer must not refuse the material");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the opaque main times the opaque layer proves the " +
+                    "triangle");
+                Assert.That(
+                    amuse.Separation,
+                    Is.Not.Null,
+                    "the layered slot must prepare a conversion");
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a layer at mesh UV mode one, two, or three samples
+        /// the named channel, not UV0. The layer texture is transparent at
+        /// the UV0 coordinate and opaque at the named channel coordinate.
+        /// Only an implementation that reads the named channel proves the
+        /// triangle.
+        /// </summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void SecondLayerAtMeshUvMode_ProvesThroughNamedChannel(
+            int uvMode)
+        {
+            const string path = "Assets/AmuseTests_LayerUvMode.png";
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE layer UV mode proof candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            var reported = new List<string>();
+            void CaptureUvMode(
+                string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap("uv_mode_proof_main"));
+
+                // The layer texture: transparent texel (0,0), opaque
+                // elsewhere. The UV0 coordinate lands on the transparent
+                // texel. The named channel coordinate lands on an opaque one.
+                var size = 4;
+                var staging = new UnityEngine.Texture2D(
+                    size, size, UnityEngine.TextureFormat.RGBA32, false);
+                var pixels = new UnityEngine.Color32[size * size];
+                for (var index = 0; index < pixels.Length; index++)
+                {
+                    pixels[index] = new UnityEngine.Color32(255, 255, 255, 255);
+                }
+
+                pixels[0] = new UnityEngine.Color32(255, 255, 255, 0);
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                System.IO.File.WriteAllBytes(
+                    path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+                UnityEditor.AssetDatabase.ImportAsset(
+                    path,
+                    UnityEditor.ImportAssetOptions
+                        .ForceSynchronousImport);
+                var unityImporter = (UnityEditor.TextureImporter)
+                    UnityEditor.AssetImporter.GetAtPath(path);
+                unityImporter.mipmapEnabled = false;
+                unityImporter.SaveAndReimport();
+                var layerTexture = UnityEditor.AssetDatabase
+                    .LoadAssetAtPath<UnityEngine.Texture2D>(path);
+                material.SetTexture("_Main2ndTex", layerTexture);
+
+                material.SetFloat("_UseMain2ndTex", 1f);
+                material.SetFloat("_Main2ndTexAlphaMode", 2f);
+                material.SetFloat("_Main2ndTex_UVMode", uvMode);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                // Fully inside texel (1,1) of the 4-wide layer texture, and
+                // inside the region where bilinear filtering reaches only
+                // that texel: every sampled value is exactly 255.
+                var selectedCoordinates = new List<Vector2>
+                {
+                    new Vector2(0.4f, 0.4f),
+                    new Vector2(0.48f, 0.4f),
+                    new Vector2(0.4f, 0.48f),
+                };
+                mesh.SetUVs(uvMode, selectedCoordinates);
+                var selectedAttribute = uvMode == 1
+                    ? UnityEngine.Rendering.VertexAttribute.TexCoord1
+                    : uvMode == 2
+                        ? UnityEngine.Rendering.VertexAttribute.TexCoord2
+                        : UnityEngine.Rendering.VertexAttribute.TexCoord3;
+                Assert.That(
+                    mesh.HasVertexAttribute(selectedAttribute),
+                    Is.True,
+                    "fixture precondition: the named UV channel must be " +
+                    "allocated on the mesh");
+
+                Application.logMessageReceived += CaptureUvMode;
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the named layer UV mode must admit in stage B; " +
+                    "reported: " + string.Join(" | ", reported));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the layer proof must read the named channel: UV0 names " +
+                    "the transparent texel and would refuse; reported: " +
+                    string.Join(" | ", reported));
+            }
+            finally
+            {
+                Application.logMessageReceived -= CaptureUvMode;
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                if (UnityEditor.AssetDatabase.LoadAssetAtPath<
+                        UnityEngine.Object>(path) != null)
+                {
+                    UnityEditor.AssetDatabase.DeleteAsset(path);
+                }
+
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: the no-alpha-channel report must fire exactly when
+        /// a texture without an alpha channel rides an admitted transparent
+        /// material, and the classification must still prove those triangles
+        /// from the format theorem. An implementation that refuses the
+        /// material, or that stays silent, fails one of the two assertions.
+        /// </summary>
+        [Test]
+        public void NoAlphaSourceTexture_ReportsTheMistakeAndStillSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE no alpha report candidate");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            var reported = new List<string>();
+            void Capture(string condition, string stackTrace, LogType type)
+            {
+                if (condition.Contains("[NDMF] Error Reported: "))
+                {
+                    reported.Add(condition);
+                }
+            }
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportNoAlphaSourceTexture("report_main"));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                Application.logMessageReceived += Capture;
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "the theorem proves the alpha; the report refuses " +
+                    "nothing");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the no-alpha theorem must prove the triangle");
+                Assert.That(
+                    reported,
+                    Has.Some.Contains("_MainTex"),
+                    "the report must name the texture property");
+                Assert.That(
+                    reported,
+                    Has.Some.Contains("no alpha channel"),
+                    "the report must name the missing alpha channel");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Capture;
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+                fixtures.BaseTearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void StreamingMipmapProvesThroughTheReadableClone()
         {
@@ -5412,6 +5701,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 return ImportMipmapTexture(
                     name, 4, 4, FullyOpaquePixels());
+            }
+
+            /// <summary>
+            /// An import whose source file has no alpha channel and whose
+            /// alpha source is none: the runtime samples alpha exactly one
+            /// at every texel, which the importer theorem proves without a
+            /// texel.
+            /// </summary>
+            internal Texture2D ImportNoAlphaSourceTexture(string name)
+            {
+                return ImportTexture(
+                    name,
+                    importer =>
+                    {
+                        importer.alphaSource =
+                            TextureImporterAlphaSource.None;
+                        importer.mipmapEnabled = false;
+                    },
+                    sourceHasAlpha: false);
             }
 
             /// <summary>

@@ -1011,5 +1011,61 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(intersected, Is.EqualTo(only));
             Assert.That(intersected, Is.Not.SameAs(only));
         }
+
+    /// <summary>
+    /// --- Stage B falsifier: the production classify builds per-triangle
+    /// inputs with the mesh's extra UV channel arrays attached, and a
+    /// resolution whose mapping names channel one classifies the triangle
+    /// through uv1. An implementation that drops the extra sets between the
+    /// snapshot and the classify reads uv0 instead and answers transparent
+    /// for this fixture.
+    /// </summary>
+    [Test]
+    public void ProductionClassify_SelectsTheMappingChannel()
+    {
+        var indices = new[] { 0, 1, 2 };
+        var positions = new Vector3[]
+        {
+            Vector3.zero, Vector3.right, Vector3.up,
+        };
+
+        // uv0 points into a transparent region of the layer field; uv1
+        // points into the same field's opaque region.
+        var uv0 = new Vector2[]
+        {
+            new Vector2(0.55f, 0.55f),
+            new Vector2(0.95f, 0.55f),
+            new Vector2(0.55f, 0.95f),
+        };
+        var uv1 = new Vector2[]
+        {
+            new Vector2(0.05f, 0.05f),
+            new Vector2(0.45f, 0.05f),
+            new Vector2(0.05f, 0.45f),
+        };
+        var extra = new IReadOnlyList<Vector2>[] { uv1 };
+
+        var mapping = new UvMapping(
+            1, Vector2.one, Vector2.zero);
+        var chain = new AlphaMipChain(new[]
+        {
+            new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 0, 0 }),
+        });
+        var resolution = AlphaResolution.Classified(
+            chain,
+            new AlphaSamplingSettings(
+                AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+            mapping, 0);
+
+        var outcomes = UnityRendererAlphaAnalysis.Classify(
+            indices, positions, uv0, resolution, extra);
+
+        Assert.That(
+            outcomes[0],
+            Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+            "the uv1 coordinates name the opaque texel; reading uv0 " +
+            "instead would answer transparent");
+    }
     }
 }
