@@ -641,6 +641,46 @@ namespace Alrauna.Amuse.Editor.Host
         /// any other.
         /// </para>
         /// </summary>
+        internal static bool IsCompatibleRendererType(
+            string bindingTypeName,
+            string rendererTypeName)
+        {
+            if (string.IsNullOrEmpty(rendererTypeName) ||
+                string.IsNullOrEmpty(bindingTypeName))
+            {
+                return true;
+            }
+
+            if (string.Equals(
+                    bindingTypeName, rendererTypeName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (string.Equals(
+                    bindingTypeName, typeof(Renderer).FullName, StringComparison.Ordinal) ||
+                string.Equals(
+                    bindingTypeName, nameof(Renderer), StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var bindingShort = ShortName(bindingTypeName);
+            var rendererShort = ShortName(rendererTypeName);
+            return string.Equals(
+                       bindingShort, rendererShort, StringComparison.Ordinal) ||
+                   string.Equals(
+                       bindingShort, nameof(Renderer), StringComparison.Ordinal);
+        }
+
+        private static string ShortName(string typeName)
+        {
+            var lastDot = typeName.LastIndexOf('.');
+            return lastDot >= 0 && lastDot + 1 < typeName.Length
+                ? typeName.Substring(lastDot + 1)
+                : typeName;
+        }
+
         private static bool AddressesAnalyzedRenderer(
             string bindingPath,
             string rendererPath)
