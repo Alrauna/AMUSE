@@ -626,6 +626,183 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
+        /// <summary>
+        /// An active layer scroll or rotation can reach wrapped texels. An all
+        /// opaque mip chain therefore reduces the layer sample to one. The
+        /// replace writer proves opacity without triangle UV data. A blanket
+        /// motion refusal fails these cases.
+        /// </summary>
+        [TestCase(0.25f, 0f)]
+        [TestCase(0f, 0.25f)]
+        public void ActiveLayerScroll_AllOpaqueMipChainProvesWithoutGeometry(
+            float scrollX,
+            float rotationSpeed)
+        {
+            var material = NewLayerMaterial(
+                "scroll_all_opaque", 255, 1f, 1f);
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(scrollX, 0f, 0f, rotationSpeed));
+            material.SetFloat("_Main2ndTexAngle", 0.5f);
+
+            var captured = CaptureTransparentEvidence(material);
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(second.Texture.HasAlphaChannel, Is.True);
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel.IsLevelWithoutEvidence(mip),
+                    Is.False,
+                    "fixture precondition: every mip must carry evidence");
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.True,
+                    "fixture precondition: every mip must be fully opaque");
+            }
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                (TextureSourceId source, TextureChannel channel,
+                    out AlphaMipChain chain) =>
+                {
+                    chain = null;
+                    return false;
+                },
+                0);
+
+            Assert.That(alpha.IsComplete, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome),
+                Is.True,
+                "the full domain proof must not need geometry");
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(TriangleAlphaInput.MissingUv0(
+                    Vector3.zero, Vector3.right, Vector3.up)),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// One sub one texel in the source affects every generated mip. An
+        /// active scroll must refuse this chain instead of checking mip zero
+        /// geometry or assuming that motion makes the sample opaque.
+        /// </summary>
+        [Test]
+        public void ActiveLayerScroll_SubOneTexelInEveryMipRefuses()
+        {
+            var pixels = SolidGrid(4, 4, 255);
+            pixels[0] = new Color32(255, 255, 255, 0);
+            var material = NewLayerMaterial(
+                "scroll_not_opaque", 255, 1f, 1f);
+            material.SetTexture(
+                SecondTextureProperty,
+                ImportMipmapTexture(
+                    "scroll_not_opaque_layer", 4, 4, pixels));
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(0f, 0.25f, 0f, 0f));
+
+            var captured = CaptureTransparentEvidence(material);
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(second.Texture.HasAlphaChannel, Is.True);
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel.IsLevelWithoutEvidence(mip),
+                    Is.False,
+                    "fixture precondition: every mip must carry evidence");
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.False,
+                    "fixture precondition: each mip must keep a sub one texel");
+            }
+
+            AssertAlphaGateUnknown(
+                InterpretTransparent(material),
+                "_Main2ndTex_ScrollRotate");
+        }
+
+        /// <summary>
+        /// The alpha policy can mark sub-one texels as opaque. Those verdicts
+        /// are valid for fixed geometry, but they do not prove that every
+        /// moving sample is exactly one.
+        /// </summary>
+        [Test]
+        public void ActiveLayerScroll_PolicyOpaqueChainDoesNotProveExactOne()
+        {
+            var material = NewLayerMaterial(
+                "scroll_policy_opaque", 254, 1f, 1f);
+            material.SetVector(
+                "_Main2ndTex_ScrollRotate",
+                new Vector4(0.25f, 0f, 0f, 0f));
+
+            var captured = UnityMaterialEvidenceCapture.Capture(
+                new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material,
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest),
+                },
+                AlphaPolicyBounds.From(99, 0))[0];
+            Assert.That(
+                captured.TryGetTexture(
+                    SecondTextureProperty, out var second),
+                Is.True);
+            Assert.That(
+                second.Texture.CaptureBounds.OpaqueBound,
+                Is.LessThan(byte.MaxValue),
+                "fixture precondition: the capture must use policy opacity");
+            for (var mip = 0;
+                 mip < second.Texture.AlphaChannel.Count;
+                 mip++)
+            {
+                Assert.That(
+                    second.Texture.AlphaChannel[mip].IsFullyOpaque,
+                    Is.True,
+                    "fixture precondition: policy opacity must mark every " +
+                    "texel opaque");
+            }
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            Assert.That(
+                alpha.IsComplete,
+                Is.False,
+                "policy opacity cannot replace the exact-one moving-domain " +
+                "proof");
+        }
+
+        /// <summary>
+        /// A fixed angle without an active scroll still needs a rotation
+        /// mapping and its rounding lemma. Stage B keeps that case refused.
+        /// </summary>
+        [Test]
+        public void FixedLayerAngleWithoutScroll_RefusesWithAngleProperty()
+        {
+            var material = NewLayerMaterial(
+                "fixed_angle", 255, 1f, 1f);
+            material.SetFloat("_Main2ndTexAngle", 0.5f);
+
+            AssertAlphaGateUnknown(
+                InterpretTransparent(material),
+                "_Main2ndTexAngle");
+        }
+
         [Test]
         public void NoAlphaSourceImport_CollapsesTheTextureArmToTheTintConstant()
         {

@@ -500,11 +500,6 @@ namespace Alrauna.Amuse.Editor.Host
                 submeshes,
                 capturedSlots,
                 extraUvSets);
-            UnityEngine.Debug.Log("[AMUSE-DBG] extraction uv2 set=" +
-                (extraUvSets[0] == null
-                    ? "absent"
-                    : extraUvSets[0].Count.ToString()) +
-                " verts=" + mesh.vertexCount);
             var target = new UnityRendererMutationTarget(
                 renderer, mesh, materialSlotCount);
             return UnityRendererAlphaExtraction.Accepted(snapshot, target);
@@ -798,13 +793,6 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaResolution resolution,
             IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets = null)
         {
-            UnityEngine.Debug.Log("[AMUSE-DBG] static classify sets=" +
-                (extraUvSets == null
-                    ? "null"
-                    : string.Join("/", System.Linq.Enumerable.Select(
-                        extraUvSets, s => s == null
-                            ? "absent"
-                            : s.Count.ToString()))));
             var outcomes = new TriangleAlphaOutcome[indices.Count / 3];
             if (!resolution.IsResolved)
             {
@@ -842,13 +830,6 @@ namespace Alrauna.Amuse.Editor.Host
                     : TriangleAlphaInput.MissingUv0(
                         positions[a], positions[b], positions[c]);
                 input = input.WithChannels(extraUvSets, a, b, c);
-                UnityEngine.Debug.Log("[AMUSE-DBG] classify extra sets " +
-                    (extraUvSets == null
-                        ? "null"
-                        : string.Join("/", System.Linq.Enumerable.Select(
-                            extraUvSets, s => s == null
-                                ? "absent"
-                                : s.Count.ToString()))));
 
                 outcomes[triangle] = resolution.Classify(input);
             }
