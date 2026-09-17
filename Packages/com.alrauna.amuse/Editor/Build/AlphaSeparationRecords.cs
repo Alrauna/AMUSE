@@ -81,6 +81,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// setting would let the same proof split.</summary>
         OpaqueCoverageBelowMinimum,
 
+        /// <summary>The depth-test policy admitted this slot's source
+        /// material, but the slot's plan is a mixed split: the
+        /// proven-opaque triangles would move onto an appended submesh
+        /// while the unproven triangles stay on the source material, so
+        /// the two parts would draw under different depth rules. The
+        /// slot refuses and keeps every triangle on the source
+        /// material.</summary>
+        DepthTestDivergenceMixedSplit,
+
         // --- Renderer-scoped members. Applied to all candidate slots of one
         // renderer and to nothing else: never to that renderer's alpha
         // analysis, never to another renderer.

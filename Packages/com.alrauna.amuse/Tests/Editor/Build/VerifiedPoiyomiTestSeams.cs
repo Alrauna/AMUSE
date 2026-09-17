@@ -35,19 +35,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static bool VerifiedConversion(
             Material live,
             CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
             Material preparedOpaque,
             out Material opaque,
-            out PoiyomiOpaqueConversionRefusal refusal)
+            out PoiyomiOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
         {
             PoiyomiOpaqueConversion.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
             var eligibility = PoiyomiOpaqueConversion
-                .EvaluateVerifiedEligibility(derived, queue, renderType);
+                .EvaluateVerifiedEligibility(
+                    derived, queue, renderType, allowDepthTestChange);
             switch (eligibility.Outcome)
             {
                 case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
                     opaque = live;
                     refusal = PoiyomiOpaqueConversionRefusal.None;
+                    depthTestDivergence = false;
                     return true;
                 case PoiyomiOpaqueConversionOutcome.Convertible:
                     // An already-prepared artifact for this source is reused
@@ -57,10 +61,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(
                             live);
                     refusal = PoiyomiOpaqueConversionRefusal.None;
+                    depthTestDivergence = eligibility.DepthTestDivergence;
                     return true;
                 default:
                     opaque = null;
                     refusal = eligibility.Refusal;
+                    depthTestDivergence = false;
                     return false;
             }
         }

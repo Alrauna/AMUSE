@@ -221,19 +221,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static bool VerifiedConversion(
             Material live,
             CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
             Material preparedOpaque,
             out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal)
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
         {
             LilToonOpaqueTarget.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
             var eligibility = LilToonCutoutSourceEligibility
-                .EvaluateVerifiedEligibility(derived, queue, renderType);
+                .EvaluateVerifiedEligibility(
+                    derived, queue, renderType, allowDepthTestChange);
             if (eligibility.Outcome !=
                 LilToonOpaqueConversionOutcome.Convertible)
             {
                 opaque = null;
                 refusal = eligibility.Refusal;
+                depthTestDivergence = false;
                 return false;
             }
 
@@ -245,6 +249,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     live, Shader.Find(
                         LilToonFixtureShaderNames.OpaqueTarget));
             refusal = LilToonOpaqueConversionRefusal.None;
+            depthTestDivergence = eligibility.DepthTestDivergence;
             return true;
         }
 
@@ -261,19 +266,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static bool VerifiedTransparentConversionStep(
             Material live,
             CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
             Material preparedOpaque,
             out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal)
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
         {
             LilToonOpaqueTarget.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
             var eligibility = LilToonTransparentSourceEligibility
-                .EvaluateVerifiedEligibility(derived, queue, renderType);
+                .EvaluateVerifiedEligibility(
+                    derived, queue, renderType, allowDepthTestChange);
             if (eligibility.Outcome !=
                 LilToonOpaqueConversionOutcome.Convertible)
             {
                 opaque = null;
                 refusal = eligibility.Refusal;
+                depthTestDivergence = false;
                 return false;
             }
 
@@ -285,6 +294,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     live, Shader.Find(
                         LilToonFixtureShaderNames.OpaqueTarget));
             refusal = LilToonOpaqueConversionRefusal.None;
+            depthTestDivergence = eligibility.DepthTestDivergence;
             return true;
         }
 

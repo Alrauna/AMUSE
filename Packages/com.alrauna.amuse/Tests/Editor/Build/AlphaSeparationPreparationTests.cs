@@ -993,14 +993,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 VerifiedPoiyomiConversion conversion =
                     (Material live, CapturedMaterialEvidence derived,
+                     bool allowDepthTestChange,
                      Material preparedOpaque,
                      out Material opaque,
-                     out PoiyomiOpaqueConversionRefusal refusal) =>
+                     out PoiyomiOpaqueConversionRefusal refusal,
+                     out bool depthTestDivergence) =>
                     {
                         conversionInvocations++;
                         rejectedClone = new Material(live.shader);
                         opaque = rejectedClone;
                         refusal = PoiyomiOpaqueConversionRefusal.None;
+                        depthTestDivergence = false;
                         return true;
                     };
 
@@ -3277,21 +3280,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static bool VerifiedFamilyConversion(
             Material live,
             CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
             Material preparedOpaque,
             out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal)
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
         {
             if (live != null && live.shader == Shader.Find(
                     LilToonFixtureNames.Transparent))
             {
                 return VerifiedLilToonTestSeams
                     .VerifiedTransparentConversionStep(
-                        live, derived, preparedOpaque,
-                        out opaque, out refusal);
+                        live, derived, allowDepthTestChange, preparedOpaque,
+                        out opaque, out refusal, out depthTestDivergence);
             }
 
             return VerifiedLilToonTestSeams.VerifiedConversion(
-                live, derived, preparedOpaque, out opaque, out refusal);
+                live, derived, allowDepthTestChange, preparedOpaque,
+                out opaque, out refusal, out depthTestDivergence);
         }
 
         /// <summary>
@@ -4412,6 +4418,190 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The depth-test policy on a transparent source whose depth
+        /// comparison is Less: a wholly opaque slot converts under the
+        /// policy, a mixed split refuses with the named divergence
+        /// refusal, and the policy off keeps today's conversion refusal.
+        /// </summary>
+        [Test]
+        public void DepthTestDivergenceConvertsWholeSlotsAndRefusesMixedSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_depth_policy_whole");
+
+                // (a) Policy on, wholly opaque plan: every moved triangle
+                // lands on one material, so the divergent source converts.
+                using (var arm = DepthTestPolicyArmFixture.Create(
+                           opaqueTexture,
+                           "AMUSE depth policy whole",
+                           transparent => transparent.SetFloat("_ZTest", 2f),
+                           null,
+                           allowDepthTestChange: true))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(
+                        amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        "fixture precondition: the whole slot's triangle " +
+                        "must prove opaque");
+                    Assert.That(
+                        amuse.Separation, Is.Not.Null,
+                        "the wholly opaque slot must prepare");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(arm.Material, out _),
+                        Is.True,
+                        "the divergent but wholly opaque slot must " +
+                        "convert under the policy");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit),
+                        Is.Zero,
+                        "a wholly opaque plan must never refuse for the " +
+                        "depth-test divergence");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero,
+                        "the conversion itself must succeed");
+                }
+
+                // (b) Policy on, mixed plan: the proven-opaque triangle
+                // would move onto an appended submesh while the unproven
+                // triangle stays, so the two parts would draw under
+                // different depth rules. The slot refuses with the named
+                // divergence refusal.
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                using (var arm = DepthTestPolicyArmFixture.Create(
+                           AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                               "transparent_depth_policy_split"),
+                           "AMUSE depth policy mixed",
+                           transparent => transparent.SetFloat("_ZTest", 2f),
+                           mesh =>
+                           {
+                               // Two triangles on one submesh: the first
+                               // wholly inside the texture's opaque half,
+                               // the second wholly inside the translucent
+                               // half, so the plan is a mixed split.
+                               mesh.vertices = new[]
+                               {
+                                   new Vector3(0f, 0f, 0f),
+                                   new Vector3(1f, 0f, 0f),
+                                   new Vector3(0f, 1f, 0f),
+                                   new Vector3(2f, 0f, 0f),
+                                   new Vector3(3f, 0f, 0f),
+                                   new Vector3(2f, 1f, 0f),
+                               };
+                               mesh.uv = new[]
+                               {
+                                   new Vector2(0.1f, 0.1f),
+                                   new Vector2(0.4f, 0.1f),
+                                   new Vector2(0.1f, 0.4f),
+                                   new Vector2(0.6f, 0.6f),
+                                   new Vector2(0.9f, 0.6f),
+                                   new Vector2(0.6f, 0.9f),
+                               };
+                               mesh.SetTriangles(
+                                   new[] { 0, 1, 2, 3, 4, 5 }, 0);
+                           },
+                           allowDepthTestChange: true))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(
+                        amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        "fixture precondition: only the opaque-half " +
+                        "triangle may prove, or the plan is not a split");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit),
+                        Is.EqualTo(1),
+                        "the flagged mixed slot must refuse with the " +
+                        "named divergence refusal");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero,
+                        "the refusal must be the divergence cause, not " +
+                        "the generic conversion refusal");
+                    Assert.That(
+                        amuse.Separation, Is.Null,
+                        "the only candidate slot was refused, so nothing " +
+                        "is retained");
+                }
+
+                // (c) Policy off: eligibility refuses the Less depth
+                // comparison and the slot keeps today's conversion
+                // refusal.
+                using (var arm = DepthTestPolicyArmFixture.Create(
+                           opaqueTexture,
+                           "AMUSE depth policy off",
+                           transparent => transparent.SetFloat("_ZTest", 2f),
+                           null,
+                           allowDepthTestChange: false))
+                {
+                    var amuse = arm.Run();
+
+                    Assert.That(
+                        amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        "fixture precondition: the slot's triangle must " +
+                        "prove opaque before conversion runs");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.EqualTo(1),
+                        "the unsupported depth comparison must refuse the " +
+                        "slot through today's conversion refusal");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit),
+                        Is.Zero,
+                        "no divergence may be admitted with the policy " +
+                        "off");
+                    Assert.That(
+                        amuse.Separation, Is.Null,
+                        "the only candidate slot was refused, so nothing " +
+                        "is retained");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Task 6 transparent helpers ---------------------------------------
 
         private const string TransparentCloneContractTempFolder =
@@ -4706,6 +4896,97 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         }
 
+        /// <summary>
+        /// One transparent conversion arm for the depth-test policy: a
+        /// caller-owned texture and mesh shape over one transparent slot,
+        /// the policy set through the component's serialized field, run
+        /// through the real barrier with the family-routing conversion
+        /// seam.
+        /// </summary>
+        private sealed class DepthTestPolicyArmFixture : IDisposable
+        {
+            private GameObject root;
+            private Mesh mesh;
+            private AmusePlatformFinishState amuse;
+
+            internal Material Material { get; private set; }
+
+            internal static DepthTestPolicyArmFixture Create(
+                Texture mainTex,
+                string rootName,
+                Action<Material> configure,
+                Action<Mesh> configureMesh,
+                bool allowDepthTestChange)
+            {
+                var fixture = new DepthTestPolicyArmFixture
+                {
+                    root = new GameObject(rootName),
+                    Material = LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial(),
+                };
+                var component = fixture.root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                if (!allowDepthTestChange)
+                {
+                    var serialized = new SerializedObject(component);
+                    serialized.FindProperty("_allowDepthTestChange")
+                        .boolValue = false;
+                    serialized.ApplyModifiedProperties();
+                }
+
+                FixtureProofScope.PinAllSizes(fixture.root);
+                FixtureAvatarIdentity.AttachVrcDescriptor(fixture.root);
+                fixture.Material.SetTexture("_MainTex", mainTex);
+                configure?.Invoke(fixture.Material);
+
+                fixture.mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(fixture.mesh);
+                configureMesh?.Invoke(fixture.mesh);
+
+                var renderer =
+                    fixture.root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = fixture.mesh;
+                renderer.sharedMaterials = new[] { fixture.Material };
+
+                return fixture;
+            }
+
+            internal AmusePlatformFinishState Run()
+            {
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+                return amuse;
+            }
+
+            public void Dispose()
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (Material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(Material);
+                }
+
+                if (root != null) UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
 
         private static int LoadedMaterialCount()
         {
@@ -4916,13 +5197,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var conversionInvocations = 0;
                     var amuse = arm.Run(
                         (Material live, CapturedMaterialEvidence derived,
+                         bool allowDepthTestChange,
                          Material preparedOpaque, out Material opaque,
-                         out LilToonOpaqueConversionRefusal refusal) =>
+                         out LilToonOpaqueConversionRefusal refusal,
+                         out bool depthTestDivergence) =>
                         {
                             conversionInvocations++;
                             opaque = null;
                             refusal =
                                 LilToonOpaqueConversionRefusal.None;
+                            depthTestDivergence = false;
                             return false;
                         });
 
