@@ -89,7 +89,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            bool allowDepthTestChange = false)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -372,6 +373,7 @@ namespace Alrauna.Amuse.Editor.Build
                         preparedOpaque,
                         poiyomiConversion,
                         lilToonConversion,
+                        allowDepthTestChange,
                         out var opaque);
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
@@ -537,6 +539,7 @@ namespace Alrauna.Amuse.Editor.Build
             Material preparedOpaque,
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
+            bool allowDepthTestChange,
             out Material opaque)
         {
             opaque = null;
@@ -653,10 +656,12 @@ namespace Alrauna.Amuse.Editor.Build
                         var eligibility = isTransparent
                             ? LilToonTransparentSourceEligibility
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType)
+                                    derived, queue, renderType,
+                                    allowDepthTestChange)
                             : LilToonCutoutSourceEligibility
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType);
+                                    derived, queue, renderType,
+                                    allowDepthTestChange);
                         if (eligibility.Outcome !=
                             LilToonOpaqueConversionOutcome.Convertible)
                         {
@@ -767,7 +772,8 @@ namespace Alrauna.Amuse.Editor.Build
                         var eligibility =
                             PoiyomiOpaqueConversion
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType);
+                                    derived, queue, renderType,
+                                    allowDepthTestChange);
                         switch (eligibility.Outcome)
                         {
                             case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
