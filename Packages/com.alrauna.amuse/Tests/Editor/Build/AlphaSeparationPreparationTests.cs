@@ -4465,19 +4465,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.True,
                         "the divergent but wholly opaque slot must " +
                         "convert under the policy");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit),
-                        Is.Zero,
-                        "a wholly opaque plan must never refuse for the " +
-                        "depth-test divergence");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .OpaqueConversionRefused),
-                        Is.Zero,
-                        "the conversion itself must succeed");
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "a wholly opaque plan must convert with no " +
+                            "refusal of any kind: " + reason);
+                    }
                 }
 
                 // (b) Policy on, mixed plan: the proven-opaque triangle
@@ -4540,13 +4541,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.EqualTo(1),
                         "the flagged mixed slot must refuse with the " +
                         "named divergence refusal");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .OpaqueConversionRefused),
-                        Is.Zero,
-                        "the refusal must be the divergence cause, not " +
-                        "the generic conversion refusal");
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None ||
+                            reason == AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the refusal must be the divergence cause and " +
+                            "nothing else: " + reason);
+                    }
                     Assert.That(
                         amuse.Separation, Is.Null,
                         "the only candidate slot was refused, so nothing " +
@@ -4583,13 +4593,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.EqualTo(1),
                         "the unsupported depth comparison must refuse the " +
                         "slot through today's conversion refusal");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit),
-                        Is.Zero,
-                        "no divergence may be admitted with the policy " +
-                        "off");
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None ||
+                            reason == AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "with the policy off no other refusal may " +
+                            "fire: " + reason);
+                    }
                     Assert.That(
                         amuse.Separation, Is.Null,
                         "the only candidate slot was refused, so nothing " +
