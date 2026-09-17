@@ -55,12 +55,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal PoiyomiOpaqueConversionOutcome Outcome { get; }
         internal PoiyomiOpaqueConversionRefusal Refusal { get; }
 
+        /// <summary>
+        /// True only when the source depth test is Less and the policy
+        /// admitted it. The conversion then normalizes the comparison to
+        /// LEqual. A caller that moves the material must report the change.
+        /// False on every refusal and on AlreadyOpaque: neither outcome
+        /// moves the material.
+        /// </summary>
+        internal bool DepthTestDivergence { get; }
+
         private PoiyomiOpaqueConversionEligibility(
             PoiyomiOpaqueConversionOutcome outcome,
-            PoiyomiOpaqueConversionRefusal refusal)
+            PoiyomiOpaqueConversionRefusal refusal,
+            bool depthTestDivergence)
         {
             Outcome = outcome;
             Refusal = refusal;
+            DepthTestDivergence = depthTestDivergence;
         }
 
         internal static PoiyomiOpaqueConversionEligibility Refused(
@@ -73,21 +84,24 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return new PoiyomiOpaqueConversionEligibility(
-                PoiyomiOpaqueConversionOutcome.Refused, refusal);
+                PoiyomiOpaqueConversionOutcome.Refused, refusal, false);
         }
 
         internal static PoiyomiOpaqueConversionEligibility AlreadyOpaque()
         {
             return new PoiyomiOpaqueConversionEligibility(
                 PoiyomiOpaqueConversionOutcome.AlreadyOpaque,
-                PoiyomiOpaqueConversionRefusal.None);
+                PoiyomiOpaqueConversionRefusal.None,
+                false);
         }
 
-        internal static PoiyomiOpaqueConversionEligibility Convertible()
+        internal static PoiyomiOpaqueConversionEligibility Convertible(
+            bool depthTestDivergence = false)
         {
             return new PoiyomiOpaqueConversionEligibility(
                 PoiyomiOpaqueConversionOutcome.Convertible,
-                PoiyomiOpaqueConversionRefusal.None);
+                PoiyomiOpaqueConversionRefusal.None,
+                depthTestDivergence);
         }
     }
 
@@ -244,7 +258,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static PoiyomiOpaqueConversionEligibility EvaluateVerifiedEligibility(
             CapturedMaterialEvidence evidence,
             int effectiveRenderQueue,
-            string effectiveRenderType)
+            string effectiveRenderType,
+            bool allowDepthTestChange = false)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
 
@@ -309,9 +324,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    normalized to it: a different comparison changes visibility
             //    independently of alpha, so a material authored to draw with
             //    Always, Greater or Disabled expresses a visibility intent the
-            //    alpha proof knows nothing about. The recipe still writes 4;
-            //    on an eligible material that write is a no-op.
-            if (Read(values, "_ZTest") != LEqualDepthComparison)
+            //    alpha proof knows nothing about. The opt-in policy admits
+            //    Less beside LEqual (design §D2). Less and LEqual differ only
+            //    at exact depth equality. That class depends on depth-buffer
+            //    population. No per-pixel proof reaches it. The admission is
+            //    a stated, consented divergence. The caller learns it through
+            //    DepthTestDivergence. The recipe still writes 4. Without the
+            //    policy that write is a no-op. With the policy it is the
+            //    reported normalization.
+            var depthComparison = Read(values, "_ZTest");
+            if (depthComparison != LEqualDepthComparison &&
+                !(allowDepthTestChange &&
+                  depthComparison == LessDepthComparison))
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -355,7 +379,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
             }
 
-            return PoiyomiOpaqueConversionEligibility.Convertible();
+            return PoiyomiOpaqueConversionEligibility.Convertible(
+                depthComparison == LessDepthComparison);
         }
 
         // Unity blend enum: Zero=0, One=1, DstColor=2, SrcColor=3,
@@ -368,6 +393,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // UnityEngine.Rendering.CompareFunction.LessEqual
         private const float LEqualDepthComparison = 4f;
+
+        // UnityEngine.Rendering.CompareFunction.Less
+        private const float LessDepthComparison = 2f;
 
         /// <summary>One and SrcAlpha both evaluate to 1 at alpha 1.</summary>
         private static bool IsUnitSourceFactorAtAlphaOne(float factor)
