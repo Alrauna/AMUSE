@@ -338,6 +338,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
                 var unconvertedCount = 0;
                 var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
+                var slotDivergence = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
                 foreach (var admittedIndex in
                              slots[slotIndex].AdmittedMaterialIndices)
@@ -393,7 +394,9 @@ namespace Alrauna.Amuse.Editor.Build
                         // when every moved triangle lands on one material.
                         submesh.Disposition ==
                             SubmeshSeparationDisposition.Split,
-                        out var opaque);
+                        out var opaque,
+                        out var materialDivergence);
+                    slotDivergence |= materialDivergence;
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
                         lastConversionRefusal = conversionRefusal;
@@ -456,7 +459,21 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 candidateSlots.Add(new PreparedSlotSeparation(
-                    submesh, mapping));
+                    submesh, mapping, slotDivergence));
+
+                // One Information entry per prepared slot whose
+                // conversion admitted a depth-test divergence, so the
+                // build report names the change for every affected
+                // slot. Unflagged slots keep their previous silence.
+                if (slotDivergence)
+                {
+                    AmuseReports.SlotSeparationDivergence(
+                        target.Renderer,
+                        slotIndex,
+                        target.Renderer != null
+                            ? target.Renderer.gameObject.name
+                            : null);
+                }
             }
 
             if (candidateSlots.Count == 0)
@@ -562,9 +579,11 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             bool allowDepthTestChange,
             bool mixedSplit,
-            out Material opaque)
+            out Material opaque,
+            out bool depthTestDivergence)
         {
             opaque = null;
+            depthTestDivergence = false;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.LilToon:
@@ -648,6 +667,9 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
 
                         if (seamDivergence && mixedSplit)
                         {
@@ -715,6 +737,8 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+                        depthTestDivergence =
+                            eligibility.DepthTestDivergence;
 
                         // The depth-test policy admitted this source, but a
                         // mixed split moves the proven-opaque triangles onto
@@ -808,6 +832,9 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
 
                         if (seamDivergence && mixedSplit)
                         {
@@ -864,6 +891,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 opaque = live;
                                 break;
                             case PoiyomiOpaqueConversionOutcome.Convertible:
+                                depthTestDivergence =
+                                    eligibility.DepthTestDivergence;
                                 // The depth-test policy admitted this
                                 // source, but a mixed split moves the
                                 // proven-opaque triangles onto an appended
