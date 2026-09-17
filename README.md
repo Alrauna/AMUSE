@@ -9,7 +9,7 @@ VCC and ALCOM both need two repositories, in this order:
 1. **NDMF** (the framework AMUSE runs on): add `https://vpm.nadena.dev/vpm.json`.
 2. **AMUSE**: add `https://alrauna.github.io/AMUSE/index.json`.
 
-[![Add to VCC](https://img.shields.io/badge/Add%20to%20VCC-AMUSE-8A2BE2)](vcc://vpm/addRepo?url=https%3A%2F%2Falrauna.github.io%2FAMUSE%2Findex.json)
+[![Add to VCC](https://img.shields.io/badge/Add%20to%20VCC-AMUSE-8A2BE2)](https://alrauna.github.io/AMUSE/)
 
 Then add the **AMUSE** package to your avatar project from the package manager. VCC shows a one-time warning for any community repository; that is expected.
 
