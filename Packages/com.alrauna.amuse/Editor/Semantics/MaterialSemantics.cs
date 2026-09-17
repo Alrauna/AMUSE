@@ -189,7 +189,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
     }
 
-    internal sealed class TextureSample : IEquatable<TextureSample>
+    internal sealed record TextureSample
     {
         internal TextureSourceId Source { get; }
         internal UvMapping Coordinates { get; }
@@ -212,28 +212,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             Sampling = sampling;
         }
 
-        public bool Equals(TextureSample other)
-        {
-            return other != null &&
-                   Source.Equals(other.Source) &&
-                   Coordinates.Equals(other.Coordinates) &&
-                   Sampling.Equals(other.Sampling);
-        }
-
-        public override bool Equals(object obj)
-        {
-            return Equals(obj as TextureSample);
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                var hash = Source.GetHashCode();
-                hash = hash * 397 ^ Coordinates.GetHashCode();
-                return hash * 397 ^ Sampling.GetHashCode();
-            }
-        }
     }
 
     internal enum TextureColorInterpretation
@@ -257,7 +235,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         TextureSampleTimesConstant
     }
 
-    internal sealed class ColorSemanticValue : IEquatable<ColorSemanticValue>
+    internal sealed record ColorSemanticValue
     {
         private readonly Vector3 _constantValue;
         private readonly TextureSample _sample;
@@ -361,56 +339,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return _multiplier;
-        }
-
-        public bool Equals(ColorSemanticValue other)
-        {
-            if (other == null || Kind != other.Kind)
-            {
-                return false;
-            }
-
-            switch (Kind)
-            {
-                case ColorSemanticValueKind.Constant:
-                    return _constantValue.Equals(other._constantValue);
-                case ColorSemanticValueKind.TextureSample:
-                    return _sample.Equals(other._sample) &&
-                           _interpretation == other._interpretation;
-                case ColorSemanticValueKind.TextureSampleTimesConstant:
-                    return _sample.Equals(other._sample) &&
-                           _interpretation == other._interpretation &&
-                           _multiplier.Equals(other._multiplier);
-                default:
-                    return false;
-            }
-        }
-
-        public override bool Equals(object obj)
-        {
-            return Equals(obj as ColorSemanticValue);
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                var hash = (int)Kind;
-                switch (Kind)
-                {
-                    case ColorSemanticValueKind.Constant:
-                        return hash * 397 ^ _constantValue.GetHashCode();
-                    case ColorSemanticValueKind.TextureSample:
-                        hash = hash * 397 ^ _sample.GetHashCode();
-                        return hash * 397 ^ (int)_interpretation;
-                    case ColorSemanticValueKind.TextureSampleTimesConstant:
-                        hash = hash * 397 ^ _sample.GetHashCode();
-                        hash = hash * 397 ^ (int)_interpretation;
-                        return hash * 397 ^ _multiplier.GetHashCode();
-                    default:
-                        return hash;
-                }
-            }
         }
 
         private static void ValidateTextureArguments(
@@ -936,7 +864,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         TangentSpaceNormalMap
     }
 
-    internal sealed class NormalSemanticValue : IEquatable<NormalSemanticValue>
+    internal sealed record NormalSemanticValue
     {
         private readonly TextureSample _sample;
 
@@ -981,25 +909,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             return _sample;
         }
 
-        public bool Equals(NormalSemanticValue other)
-        {
-            return other != null &&
-                   Kind == other.Kind &&
-                   (Kind == NormalSemanticValueKind.Unmodified ||
-                    _sample.Equals(other._sample));
-        }
-
-        public override bool Equals(object obj)
-        {
-            return Equals(obj as NormalSemanticValue);
-        }
-
-        public override int GetHashCode()
-        {
-            return Kind == NormalSemanticValueKind.Unmodified
-                ? (int)Kind
-                : ((int)Kind * 397) ^ _sample.GetHashCode();
-        }
     }
 
     internal readonly struct SemanticOutput<T> : IEquatable<SemanticOutput<T>>
@@ -1060,7 +969,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
     }
 
-    internal sealed class MaterialSemantics : IEquatable<MaterialSemantics>
+    internal sealed record MaterialSemantics
     {
         internal SemanticOutput<ColorSemanticValue> BaseColor { get; }
         internal SemanticOutput<ScalarSemanticValue> Alpha { get; }
@@ -1079,29 +988,5 @@ namespace Alrauna.Amuse.Editor.Semantics
             Normal = normal;
         }
 
-        public bool Equals(MaterialSemantics other)
-        {
-            return other != null &&
-                   BaseColor.Equals(other.BaseColor) &&
-                   Alpha.Equals(other.Alpha) &&
-                   Emission.Equals(other.Emission) &&
-                   Normal.Equals(other.Normal);
-        }
-
-        public override bool Equals(object obj)
-        {
-            return Equals(obj as MaterialSemantics);
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                var hash = BaseColor.GetHashCode();
-                hash = hash * 397 ^ Alpha.GetHashCode();
-                hash = hash * 397 ^ Emission.GetHashCode();
-                return hash * 397 ^ Normal.GetHashCode();
-            }
-        }
     }
 }
