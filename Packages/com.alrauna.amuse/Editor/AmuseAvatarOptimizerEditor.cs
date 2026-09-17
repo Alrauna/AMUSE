@@ -299,9 +299,12 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// The Advanced Settings foldout. It holds the animation-closure
-        /// tolerance setting: the rule for animations that name material
-        /// slots this mesh does not have. Most users never touch it.
+        /// The Advanced Settings foldout. It holds two settings. The
+        /// animation-closure tolerance sets the rule for animations
+        /// that name material slots this mesh does not have. The
+        /// depth-test-change consent permits AMUSE to move triangles
+        /// of materials with a special depth rule onto an opaque copy.
+        /// Most users never touch these settings.
         /// </summary>
         private void DrawAdvancedSettings()
         {
