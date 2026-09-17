@@ -194,14 +194,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// than a new seam.
         /// </summary>
         private static LilToonOpaqueConversionEligibility EvaluateWith(
-            Material material, string property, float value)
+            Material material, string property, float value,
+            bool allowDepthTestChange = false)
         {
             LilToonOpaqueTarget.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility(
                 CaptureConversion(material).WithScalar(property, value),
                 queue,
-                renderType);
+                renderType,
+                allowDepthTestChange);
         }
 
         /// <summary>
@@ -341,6 +343,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             AssertRefusal(
                 EvaluateFor(material),
                 (LilToonOpaqueConversionRefusal)expected);
+        }
+
+        [Test]
+        public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
+        {
+            var eligibility = EvaluateWith(
+                ConversionEligibleStandIn(), "_ZTest", 2f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.True);
+        }
+
+        [Test]
+        public void DepthTestLessWithoutPolicyStillRefuses()
+        {
+            AssertRefusal(
+                EvaluateWith(
+                    ConversionEligibleStandIn(), "_ZTest", 2f, false),
+                LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestGreaterWithPolicyStillRefuses()
+        {
+            AssertRefusal(
+                EvaluateWith(
+                    ConversionEligibleStandIn(), "_ZTest", 5f, true),
+                LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestLEqualWithPolicyCarriesNoDivergence()
+        {
+            var eligibility = EvaluateWith(
+                ConversionEligibleStandIn(), "_ZTest", 4f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
         }
 
         /// <summary>
