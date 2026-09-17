@@ -1411,9 +1411,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             ProductValue(float multiplier)
         {
             return SemanticOutput<ScalarSemanticValue>.Complete(
-                ScalarSemanticValue.ProductOfTextureSamples(
-                    Sample(), TextureChannel.Alpha,
-                    MaskSample(), TextureChannel.Red,
+                ScalarSemanticValue.ProductChain(
+                    new[] { Sample(), MaskSample() },
+                    new[] { TextureChannel.Alpha, TextureChannel.Red },
                     multiplier));
         }
 

@@ -447,27 +447,24 @@ namespace Alrauna.Amuse.Editor.Semantics
         Constant,
         TextureSample,
         TextureSampleTimesConstant,
-        ProductOfTextureSamples,
         ProductChainOfTextureSamples,
         SaturatingSum,
         SaturatingDifference,
     }
 
     /// <summary>
-    /// One normalized scalar built as the product of exactly two sampled
-    /// texture terms and one leading constant multiplier. The first factor
-    /// keeps the historical single-sample accessor meaning: the family that
-    /// composes a second term already knows which texture it read first.
-    /// The multiplier is the leading tint constant, so the represented
-    /// value is <c>fl(fl(m1 * k) * m2)</c> over the two sampled terms.
+    /// One normalized scalar built as a product chain of sampled texture
+    /// terms under one leading constant multiplier. The represented value is
+    /// the sampled factors multiplied left to right after the constant:
+    /// <c>fl(fl(k * f0) * f1) ...</c>. The multiplier is the leading tint
+    /// constant. The resolver owns the product lemmas and fails closed on a
+    /// multiplier it cannot prove.
     /// </summary>
     internal sealed class ScalarSemanticValue : IEquatable<ScalarSemanticValue>
     {
         private readonly float _constantValue;
         private readonly TextureSample _sample;
-        private readonly TextureSample _secondSample;
         private readonly TextureChannel _channel;
-        private readonly TextureChannel _secondChannel;
         private readonly float _multiplier;
         private readonly TextureSample[] _chainSamples;
         private readonly TextureChannel[] _chainChannels;
@@ -480,39 +477,18 @@ namespace Alrauna.Amuse.Editor.Semantics
             ScalarSemanticValueKind kind,
             float constantValue,
             TextureSample sample,
-            TextureSample secondSample,
             TextureChannel channel,
-            TextureChannel secondChannel,
             float multiplier)
             : this(
                 kind,
                 constantValue,
                 sample,
-                secondSample,
                 channel,
-                secondChannel,
                 multiplier,
                 null,
                 null,
                 null,
                 null)
-        {
-        }
-
-        private ScalarSemanticValue(
-            ScalarSemanticValueKind kind,
-            float constantValue,
-            TextureSample sample,
-            TextureChannel channel,
-            float multiplier)
-            : this(
-                kind,
-                constantValue,
-                sample,
-                null,
-                channel,
-                default,
-                multiplier)
         {
         }
 
@@ -566,38 +542,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             return _constantValue;
         }
 
-        /// <summary>
-        /// The product of two sampled terms under one leading constant
-        /// multiplier. Both samples must be non-null; the multiplier is the
-        /// tint constant that multiplies the first term's channel before the
-        /// second term multiplies the result. Construction refuses nothing
-        /// about the multiplier's range: the resolver owns the product
-        /// lemmas and fails closed on a multiplier it cannot prove.
-        /// </summary>
-        internal static ScalarSemanticValue ProductOfTextureSamples(
-            TextureSample first,
-            TextureChannel firstChannel,
-            TextureSample second,
-            TextureChannel secondChannel,
-            float multiplier)
-        {
-            ValidateTextureArguments(first, firstChannel);
-            ValidateTextureArguments(second, secondChannel);
-            ValidateFinite(multiplier, nameof(multiplier));
-            return new ScalarSemanticValue(
-                ScalarSemanticValueKind.ProductOfTextureSamples,
-                default,
-                first,
-                second,
-                firstChannel,
-                secondChannel,
-                multiplier);
-        }
-
         internal TextureSample GetTextureSample()
         {
             if (Kind == ScalarSemanticValueKind.Constant ||
-                Kind == ScalarSemanticValueKind.ProductOfTextureSamples ||
                 Kind == ScalarSemanticValueKind.ProductChainOfTextureSamples ||
                 Kind == ScalarSemanticValueKind.SaturatingSum ||
                 Kind == ScalarSemanticValueKind.SaturatingDifference)
@@ -613,7 +560,6 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal TextureChannel GetChannel()
         {
             if (Kind == ScalarSemanticValueKind.Constant ||
-                Kind == ScalarSemanticValueKind.ProductOfTextureSamples ||
                 Kind == ScalarSemanticValueKind.ProductChainOfTextureSamples ||
                 Kind == ScalarSemanticValueKind.SaturatingSum ||
                 Kind == ScalarSemanticValueKind.SaturatingDifference)
@@ -623,18 +569,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "kind.");
             }
 
-            return _channel;
-        }
-
-        internal TextureSample GetFirstTextureSample()
-        {
-            RequireProduct();
-            return _sample;
-        }
-
-        internal TextureChannel GetFirstChannel()
-        {
-            RequireProduct();
             return _channel;
         }
 
@@ -650,26 +584,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
 
-        internal TextureSample GetSecondTextureSample()
-        {
-            RequireProduct();
-            return _secondSample;
-        }
-
-        internal TextureChannel GetSecondChannel()
-        {
-            RequireProduct();
-            return _secondChannel;
-        }
-
         internal float GetProductMultiplier()
         {
-            if (Kind != ScalarSemanticValueKind.ProductOfTextureSamples &&
-                Kind != ScalarSemanticValueKind.ProductChainOfTextureSamples)
+            if (Kind != ScalarSemanticValueKind.ProductChainOfTextureSamples)
             {
                 throw new InvalidOperationException(
                     "A product multiplier is meaningful only for the " +
-                    "product kinds.");
+                    "chain kind.");
             }
 
             return _multiplier;
@@ -721,8 +642,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 default,
                 null,
                 default,
-                default,
-                default,
                 multiplier);
             var sampleCopy = new TextureSample[samples.Count];
             var channelCopy = new TextureChannel[channels.Count];
@@ -758,8 +677,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 default,
                 null,
                 default,
-                default,
-                default,
                 default);
             return value.WithChildren(first, second);
         }
@@ -787,8 +704,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 default,
                 null,
                 default,
-                default,
-                default,
                 default);
             return value.WithChildren(minuend, subtrahend);
         }
@@ -801,9 +716,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 Kind,
                 _constantValue,
                 _sample,
-                _secondSample,
                 _channel,
-                _secondChannel,
                 _multiplier,
                 samples,
                 channels,
@@ -819,9 +732,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 Kind,
                 _constantValue,
                 _sample,
-                _secondSample,
                 _channel,
-                _secondChannel,
                 _multiplier,
                 _chainSamples,
                 _chainChannels,
@@ -894,9 +805,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             ScalarSemanticValueKind kind,
             float constantValue,
             TextureSample sample,
-            TextureSample secondSample,
             TextureChannel channel,
-            TextureChannel secondChannel,
             float multiplier,
             TextureSample[] chainSamples,
             TextureChannel[] chainChannels,
@@ -906,24 +815,12 @@ namespace Alrauna.Amuse.Editor.Semantics
             Kind = kind;
             _constantValue = constantValue;
             _sample = sample;
-            _secondSample = secondSample;
             _channel = channel;
-            _secondChannel = secondChannel;
             _multiplier = multiplier;
             _chainSamples = chainSamples;
             _chainChannels = chainChannels;
             _firstValue = firstValue;
             _secondValue = secondValue;
-        }
-
-        private void RequireProduct()
-        {
-            if (Kind != ScalarSemanticValueKind.ProductOfTextureSamples)
-            {
-                throw new InvalidOperationException(
-                    "Product accessors are meaningful only for the product " +
-                    "kind.");
-            }
         }
 
         public bool Equals(ScalarSemanticValue other)
@@ -943,12 +840,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 case ScalarSemanticValueKind.TextureSampleTimesConstant:
                     return _sample.Equals(other._sample) &&
                            _channel == other._channel &&
-                           _multiplier.Equals(other._multiplier);
-                case ScalarSemanticValueKind.ProductOfTextureSamples:
-                    return _sample.Equals(other._sample) &&
-                           _channel == other._channel &&
-                           _secondSample.Equals(other._secondSample) &&
-                           _secondChannel == other._secondChannel &&
                            _multiplier.Equals(other._multiplier);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                     if (_multiplier.Equals(other._multiplier) == false ||
@@ -995,12 +886,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                     case ScalarSemanticValueKind.TextureSampleTimesConstant:
                         hash = hash * 397 ^ _sample.GetHashCode();
                         hash = hash * 397 ^ (int)_channel;
-                        return hash * 397 ^ _multiplier.GetHashCode();
-                    case ScalarSemanticValueKind.ProductOfTextureSamples:
-                        hash = hash * 397 ^ _sample.GetHashCode();
-                        hash = hash * 397 ^ (int)_channel;
-                        hash = hash * 397 ^ _secondSample.GetHashCode();
-                        hash = hash * 397 ^ (int)_secondChannel;
                         return hash * 397 ^ _multiplier.GetHashCode();
                     case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                         hash = hash * 397 ^ _multiplier.GetHashCode();

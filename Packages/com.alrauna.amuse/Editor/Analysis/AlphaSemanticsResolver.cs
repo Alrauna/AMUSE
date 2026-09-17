@@ -485,15 +485,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetMultiplier(),
                         fieldProvider,
                         maxNoiseTexelPercent);
-                case ScalarSemanticValueKind.ProductOfTextureSamples:
-                    return ResolveProduct(
-                        value.GetFirstTextureSample(),
-                        value.GetFirstChannel(),
-                        value.GetSecondTextureSample(),
-                        value.GetSecondChannel(),
-                        value.GetProductMultiplier(),
-                        fieldProvider,
-                        maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                     return ResolveProductChain(
                         value, fieldProvider, maxNoiseTexelPercent);
@@ -556,56 +547,6 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return AlphaResolution.Uniform(
                 TriangleAlphaOutcome.MustRemainTransparent);
-        }
-
-        /// <summary>
-        /// alpha = (m1 * k) * m2 over two sampled terms bounded in [0, 1] by
-        /// the field contract. k &lt; 1 forces the product below one at every
-        /// reachable sample by the same range lemma as
-        /// <see cref="ResolveScaledSample"/>: the rounded product of a value
-        /// at most one and a value below one cannot reach one. k &gt; 1 has
-        /// no defined opacity meaning and refuses. k == 1 resolves both
-        /// factors as plain samples and conjoins them: the float product of
-        /// values in [0, 1] is exactly one only when both factors are one,
-        /// so the per-factor exact-one predicates conjoined are the
-        /// product's predicate.
-        /// </summary>
-        private static AlphaResolution ResolveProduct(
-            TextureSample first,
-            TextureChannel firstChannel,
-            TextureSample second,
-            TextureChannel secondChannel,
-            float multiplier,
-            AlphaFieldProvider fieldProvider,
-            int maxNoiseTexelPercent)
-        {
-            if (multiplier > 1f)
-            {
-                return AlphaResolution.Refused(
-                    AlphaResolutionFailure.UnsupportedMultiplier);
-            }
-
-            if (multiplier < 1f)
-            {
-                return AlphaResolution.Uniform(
-                    TriangleAlphaOutcome.MustRemainTransparent);
-            }
-
-            var firstResolution = ResolveSampled(
-                first, firstChannel, fieldProvider, maxNoiseTexelPercent);
-            if (!firstResolution.IsResolved)
-            {
-                return firstResolution;
-            }
-
-            var secondResolution = ResolveSampled(
-                second, secondChannel, fieldProvider, maxNoiseTexelPercent);
-            if (!secondResolution.IsResolved)
-            {
-                return secondResolution;
-            }
-
-            return AlphaResolution.Product(firstResolution, secondResolution);
         }
 
         /// <summary>
