@@ -94,6 +94,9 @@ namespace Alrauna.Amuse.Runtime
         private int _polygonMinimumOpaqueCoveragePercent = 100;
 
         [SerializeField]
+        private bool _allowDepthTestChange = true;
+
+        [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots = true;
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
@@ -154,5 +157,15 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public bool IgnoreOutOfRangeMaterialSlots =>
             _ignoreOutOfRangeMaterialSlots;
+
+        /// <summary>
+        /// When true (default), AMUSE may move proven-opaque triangles of a
+        /// material whose depth test is Less onto the canonical opaque
+        /// material, whose depth test is LessEqual. The moved triangles then
+        /// draw at exactly equal depth too. When false, such materials keep
+        /// every triangle and refuse with the named depth-comparison
+        /// refusal.
+        /// </summary>
+        public bool AllowDepthTestChange => _allowDepthTestChange;
     }
 }
