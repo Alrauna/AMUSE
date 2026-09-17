@@ -85,8 +85,6 @@ namespace Alrauna.Amuse.Research.Collection
                     return Census.AlphaResolutionFailure.UnsupportedMultiplier;
                 case AlphaResolutionFailure.UnsupportedUvMapping:
                     return Census.AlphaResolutionFailure.UnsupportedUvMapping;
-                case AlphaResolutionFailure.UnsupportedSampling:
-                    return Census.AlphaResolutionFailure.UnsupportedSampling;
                 case AlphaResolutionFailure.MissingTextureEvidence:
                     return Census.AlphaResolutionFailure.MissingTextureEvidence;
                 default:

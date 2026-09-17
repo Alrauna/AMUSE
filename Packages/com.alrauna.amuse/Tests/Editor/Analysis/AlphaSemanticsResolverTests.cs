@@ -343,7 +343,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = ResolveSample(
                 Sample(), TextureChannel.Alpha, Providing(field));
             var sampling = new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+                TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -416,13 +416,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         Sample(filter, wrap),
                         TextureChannel.Alpha,
                         Providing(field));
-                    var expected = new AlphaSamplingSettings(
-                        filter == TextureFilterMode.Point
-                            ? AlphaFilterMode.Point
-                            : AlphaFilterMode.Bilinear,
-                        wrap == TextureWrapMode.Clamp
-                            ? AlphaWrapMode.Clamp
-                            : AlphaWrapMode.Repeat);
+                    var expected = new AlphaSamplingSettings(filter, wrap);
 
                     foreach (var triangle in triangles)
                     {
@@ -575,7 +569,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = ResolveSample(
                 Sample(), TextureChannel.Alpha, Providing(field));
             var sampling = new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+                TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             // Falsifies: routing identity through affine tier selection, which
             // changes the zero-containing hull's historical outcome.
@@ -664,7 +658,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     mapping, triangle, out var transformed, out var envelope),
                 Is.True);
             var sampling = new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+                TextureFilterMode.Point, TextureWrapMode.Clamp);
             var mipZero = Field(4, 4, 255);
             // The lower mip must be a mixed field. A uniform mip field cannot
             // defend the triangle/envelope plumbing: Classify short-circuits
@@ -759,7 +753,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var field = MixedField();
             var resolution = ResolveMultiplied(1f, Providing(field));
             var sampling = new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+                TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1021,7 +1015,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // Deliberately a field whose every texel is opaque, so a
             // `Classify`-based implementation would look uniform.
             var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 255)), new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+                TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.TryGetUniformOutcome(out var outcome), Is.False);
@@ -1064,7 +1058,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.Throws<ArgumentException>(() => AlphaResolution.Classified(
                 Chain(Field(2, 2, 255)),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(4, Vector2.one, Vector2.zero), 0));
         }
 
@@ -1073,7 +1067,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void EveryLevelOpaqueIsProvenOpaque()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1083,7 +1077,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ALowerLevelTransparencyDefeatsAMipZeroOpaqueProof()
         {
-            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1093,7 +1087,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void MipZeroTransparencyIsNotOverriddenByALowerOpaqueLevel()
         {
-            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 0), Field(1, 1, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(Chain(Field(2, 2, 0), Field(1, 1, 255)), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1108,7 +1102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void TransparencyOutranksUnknownEvenWhenItComesLast()
         {
-            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 0)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 0)), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -1124,7 +1118,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void OneUnknownLevelWithNoTransparencyIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 255)), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(Chain(BudgetExceedingLevel(), Field(256, 128, 255)), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
                 resolution.Classify(SpanningTriangle()),
@@ -1142,7 +1136,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void EveryLevelUnknownIsUnknown()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             var noUv = TriangleAlphaInput.MissingUv0(
                 Vector3.zero, Vector3.right, Vector3.up);
@@ -1158,7 +1152,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ADisagreeingChainIsNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(OpaqueThenTransparentChain(), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -1171,7 +1165,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AnAgreeingChainIsStillNotAUniformResolution()
         {
-            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
+            var resolution = AlphaResolution.Classified(AllOpaqueChain(), new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp), new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -1192,7 +1186,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ChainWithProvenance(
                     new[] { true, false }, Field(2, 2, 255), Field(1, 1, 255)),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero),
                 0);
 
@@ -1208,7 +1202,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ChainWithProvenance(
                     new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255)),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero),
                 0);
 
@@ -1228,7 +1222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ChainWithProvenance(
                     new[] { true, false }, Field(2, 2, 255), Field(1, 1, 0)),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero),
                 0);
 
@@ -1250,7 +1244,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     new[] { false, true }, Field(2, 2, 255), Field(1, 1, 255))
                     .LimitedTo(0),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero),
                 0);
 
@@ -1287,7 +1281,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var allOpaque = AlphaResolution.Classified(
                 AllOpaqueChain(),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Trilinear, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
             Assert.That(
                 allOpaque.Classify(OpaqueCornerTriangle()),
@@ -1296,7 +1290,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var opaqueThenTransparent = AlphaResolution.Classified(
                 OpaqueThenTransparentChain(),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Trilinear, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Trilinear, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
             Assert.That(
                 opaqueThenTransparent.Classify(OpaqueCornerTriangle()),
@@ -1313,9 +1307,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaResolution.Classified(
                 AllOpaqueChain(),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Bilinear,
-                    AlphaWrapMode.Repeat,
-                    AlphaAnisoMode.Anisotropic),
+                    TextureFilterMode.Bilinear,
+                    TextureWrapMode.Repeat,
+                    TextureAnisoMode.Anisotropic),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
@@ -1333,9 +1327,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaResolution.Classified(
                 Chain(MixedField()),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point,
-                    AlphaWrapMode.Clamp,
-                    AlphaAnisoMode.Anisotropic),
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.Anisotropic),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
@@ -1353,9 +1347,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaResolution.Classified(
                 Chain(MixedField(), Field(1, 1, 0)),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point,
-                    AlphaWrapMode.Clamp,
-                    AlphaAnisoMode.Anisotropic),
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.Anisotropic),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
 
             Assert.That(
@@ -1411,9 +1405,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             ProductValue(float multiplier)
         {
             return SemanticOutput<ScalarSemanticValue>.Complete(
-                ScalarSemanticValue.ProductOfTextureSamples(
-                    Sample(), TextureChannel.Alpha,
-                    MaskSample(), TextureChannel.Red,
+                ScalarSemanticValue.ProductChain(
+                    new[] { Sample(), MaskSample() },
+                    new[] { TextureChannel.Alpha, TextureChannel.Red },
                     multiplier));
         }
 

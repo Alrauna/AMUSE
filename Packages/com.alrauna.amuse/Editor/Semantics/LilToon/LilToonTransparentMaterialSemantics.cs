@@ -740,12 +740,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
                     return multiplier * value.GetMultiplier();
-                case ScalarSemanticValueKind.ProductOfTextureSamples:
-                    samples.Add(value.GetFirstTextureSample());
-                    channels.Add(value.GetFirstChannel());
-                    samples.Add(value.GetSecondTextureSample());
-                    channels.Add(value.GetSecondChannel());
-                    return multiplier * value.GetProductMultiplier();
                 case ScalarSemanticValueKind
                     .ProductChainOfTextureSamples:
                     for (var index = 0;
