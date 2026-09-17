@@ -58,6 +58,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     Capture(material), queue, renderType);
         }
 
+        private static LilToonOpaqueConversionEligibility EvaluateWithPolicy(
+            Material material,
+            string property,
+            float value,
+            bool allowDepthTestChange)
+        {
+            LilToonOpaqueTarget.ReadEffectiveRenderState(
+                material, out var queue, out var renderType);
+            return LilToonTransparentSourceEligibility
+                .EvaluateVerifiedEligibility(
+                    Capture(material).WithScalar(property, value),
+                    queue,
+                    renderType,
+                    allowDepthTestChange);
+        }
+
         private static void AssertRefusal(
             LilToonOpaqueConversionEligibility result,
             LilToonOpaqueConversionRefusal expected)
@@ -248,6 +264,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             AssertRefusal(
                 EvaluateFor(material),
                 (LilToonOpaqueConversionRefusal)expected);
+        }
+
+        [Test]
+        public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
+        {
+            var eligibility = EvaluateWithPolicy(
+                NewTransparentFixtureMaterial(), "_ZTest", 2f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.True);
+        }
+
+        [Test]
+        public void DepthTestLessWithoutPolicyStillRefuses()
+        {
+            var eligibility = EvaluateWithPolicy(
+                NewTransparentFixtureMaterial(), "_ZTest", 2f, false);
+            AssertRefusal(
+                eligibility,
+                LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestGreaterWithPolicyStillRefuses()
+        {
+            var eligibility = EvaluateWithPolicy(
+                NewTransparentFixtureMaterial(), "_ZTest", 5f, true);
+            AssertRefusal(
+                eligibility,
+                LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestLEqualWithPolicyCarriesNoDivergence()
+        {
+            var eligibility = EvaluateWithPolicy(
+                NewTransparentFixtureMaterial(), "_ZTest", 4f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
         }
 
         [Test]
