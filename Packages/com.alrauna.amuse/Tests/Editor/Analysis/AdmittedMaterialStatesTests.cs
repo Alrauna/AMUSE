@@ -4,6 +4,7 @@ using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
@@ -1190,7 +1191,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new AlphaMipChain(
                     new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
                 new AlphaSamplingSettings(
-                    AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
         }
 

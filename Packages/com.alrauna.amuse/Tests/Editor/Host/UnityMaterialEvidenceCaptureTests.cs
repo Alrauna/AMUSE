@@ -8,6 +8,7 @@ using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
@@ -176,7 +177,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return TriangleAlphaClassifier.Classify(
                 triangle,
                 assignment.Texture.AlphaChannel[0],
-                new AlphaSamplingSettings(AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp),
                 AlphaUvEnvelope.Zero);
         }
 
