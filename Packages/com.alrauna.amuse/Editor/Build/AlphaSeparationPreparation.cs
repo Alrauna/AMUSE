@@ -667,9 +667,6 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
-                        // The seam reported the divergence of the
-                        // material that converted.
-                        depthTestDivergence = seamDivergence;
 
                         if (seamDivergence && mixedSplit)
                         {
@@ -689,6 +686,10 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .DepthTestDivergenceMixedSplit;
                         }
+
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
                     }
                     else
                     {
@@ -737,8 +738,6 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
-                        depthTestDivergence =
-                            eligibility.DepthTestDivergence;
 
                         // The depth-test policy admitted this source, but a
                         // mixed split moves the proven-opaque triangles onto
@@ -751,6 +750,9 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .DepthTestDivergenceMixedSplit;
                         }
+
+                        depthTestDivergence =
+                            eligibility.DepthTestDivergence;
 
                         // An already-prepared artifact for this source is
                         // reused here; only a first conversion creates the
@@ -832,9 +834,6 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
-                        // The seam reported the divergence of the
-                        // material that converted.
-                        depthTestDivergence = seamDivergence;
 
                         if (seamDivergence && mixedSplit)
                         {
@@ -854,6 +853,10 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .DepthTestDivergenceMixedSplit;
                         }
+
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
                     }
                     else
                     {
@@ -891,8 +894,6 @@ namespace Alrauna.Amuse.Editor.Build
                                 opaque = live;
                                 break;
                             case PoiyomiOpaqueConversionOutcome.Convertible:
-                                depthTestDivergence =
-                                    eligibility.DepthTestDivergence;
                                 // The depth-test policy admitted this
                                 // source, but a mixed split moves the
                                 // proven-opaque triangles onto an appended
@@ -906,6 +907,9 @@ namespace Alrauna.Amuse.Editor.Build
                                     return AlphaSeparationSlotRefusal
                                         .DepthTestDivergenceMixedSplit;
                                 }
+
+                                depthTestDivergence =
+                                    eligibility.DepthTestDivergence;
 
                                 // An already-prepared artifact for this
                                 // source is reused here; only a first
