@@ -14,7 +14,8 @@ namespace Alrauna.Amuse.Editor.Build
     /// The third PlatformFinish pass: validates every prepared candidate slot
     /// against live build state, finalizes against the surviving set, sweeps
     /// every transient no surviving slot references, and performs the single
-    /// build-avatar mutation through <see cref="AmuseBuildOperation"/>.
+    /// build-avatar mutation: the lifecycle gate, the preparation, and the
+    /// apply run as one direct sequence inside <see cref="Execute"/>.
     /// <para>
     /// It requires an active <see cref="AnimatorServicesContext"/> so it can
     /// reach the reactivated <c>AnimationIndex</c>: validation reads live
@@ -34,16 +35,45 @@ namespace Alrauna.Amuse.Editor.Build
             if (context == null) throw new ArgumentNullException(nameof(context));
 
             var state = context.GetState<AmusePlatformFinishState>();
-            AlphaSeparationFinalization finalization = null;
-            AmuseBuildOperation.Execute(
-                state.Lifecycle,
-                context.AssetSaver,
-                _ => PrepareSurvivingSet(context, state, out finalization),
-                () => ApplyFinalization(finalization, state));
+            var lifecycle = state.Lifecycle;
+            if (lifecycle == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(state) + "." + nameof(lifecycle));
+            }
+
+            if (lifecycle.MayUsePositiveMutation)
+            {
+                // An unexpected preparation defect is not caught: it propagates
+                // so NDMF records a build-blocking InternalError before
+                // anything is mutated.
+                var decision = PrepareSurvivingSet(
+                    context, state, out var finalization);
+
+                if (!decision.IsPrepared)
+                {
+                    // Only Refused(reason) may reach this branch. A defaulted
+                    // struct would otherwise preserve the input while
+                    // explaining nothing, so it is reported as the preparation
+                    // defect it is.
+                    if (string.IsNullOrEmpty(decision.RefusalReason))
+                    {
+                        throw new InvalidOperationException(
+                            "A preparation refusal must be created through " +
+                            "AmusePreparationDecision.Refused(reason).");
+                    }
+                }
+                else if (decision.HasMutation)
+                {
+                    // First mutation boundary. An apply defect is not caught
+                    // either, and nothing is rolled back.
+                    ApplyFinalization(finalization, state);
+                }
+            }
 
             // The summary describes one analyzed run with the counts the
-            // applied writes produced, so it is reported here — after the
-            // mutation — and only when the barrier reached analysis. Builds
+            // applied writes produced, so it is reported here - after the
+            // mutation - and only when the barrier reached analysis. Builds
             // the barrier refused or silent-no-op'd keep their own reporting
             // and never gain a summary line.
             if (state.ReachedRendererAnalysis)
@@ -53,7 +83,7 @@ namespace Alrauna.Amuse.Editor.Build
                     state.AnalyzedRendererCount,
                     state.AppliedOpaqueTriangleCount,
                     state.SemanticallyRefusedRendererCount,
-                    state.Lifecycle.BuildPath,
+                    lifecycle.BuildPath,
                     state.AlphaPolicyActive);
             }
         }
@@ -62,9 +92,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// Validates every candidate slot, finalizes against the surviving
         /// set, and sweeps every transient no surviving slot references.
         /// Reads and AMUSE-owned transient objects only: no renderer, no clip
-        /// and no source asset is written. This is the method
-        /// <see cref="Execute"/> passes to <see cref="AmuseBuildOperation"/>
-        /// as its prepare delegate.
+        /// and no source asset is written. <see cref="Execute"/> calls it
+        /// directly under the lifecycle gate.
         /// </summary>
         internal static AmusePreparationDecision PrepareSurvivingSet(
             BuildContext context,
