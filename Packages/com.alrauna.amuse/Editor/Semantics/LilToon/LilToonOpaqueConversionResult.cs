@@ -77,12 +77,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal LilToonOpaqueConversionOutcome Outcome { get; }
         internal LilToonOpaqueConversionRefusal Refusal { get; }
 
+        /// <summary>
+        /// True only when the source depth test is Less and the policy
+        /// admitted it. The conversion then normalizes the comparison to
+        /// LEqual, so a caller that moves the material must report the
+        /// change. False on every refusal: a refused material is not moved.
+        /// </summary>
+        internal bool DepthTestDivergence { get; }
+
         private LilToonOpaqueConversionEligibility(
             LilToonOpaqueConversionOutcome outcome,
-            LilToonOpaqueConversionRefusal refusal)
+            LilToonOpaqueConversionRefusal refusal,
+            bool depthTestDivergence)
         {
             Outcome = outcome;
             Refusal = refusal;
+            DepthTestDivergence = depthTestDivergence;
         }
 
         internal static LilToonOpaqueConversionEligibility Refused(
@@ -95,14 +105,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return new LilToonOpaqueConversionEligibility(
-                LilToonOpaqueConversionOutcome.Refused, refusal);
+                LilToonOpaqueConversionOutcome.Refused, refusal, false);
         }
 
-        internal static LilToonOpaqueConversionEligibility Convertible()
+        internal static LilToonOpaqueConversionEligibility Convertible(
+            bool depthTestDivergence = false)
         {
             return new LilToonOpaqueConversionEligibility(
                 LilToonOpaqueConversionOutcome.Convertible,
-                LilToonOpaqueConversionRefusal.None);
+                LilToonOpaqueConversionRefusal.None,
+                depthTestDivergence);
         }
     }
 
@@ -126,6 +138,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         // UnityEngine.Rendering.CompareFunction.LessEqual
         internal const float LEqualDepthComparison = 4f;
+
+        // UnityEngine.Rendering.CompareFunction.Less
+        internal const float LessDepthComparison = 2f;
 
         // UnityEngine.Rendering.ColorWriteMask.All
         internal const float ColorMaskAll = 15f;
