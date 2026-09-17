@@ -15,7 +15,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         SemanticsUnknown,
         UnsupportedMultiplier,
         UnsupportedUvMapping,
-        UnsupportedSampling,
         MissingTextureEvidence,
     }
 
@@ -751,11 +750,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                     AlphaResolutionFailure.UnsupportedUvMapping);
             }
 
-            if (!TryMapSampling(sample.Sampling, out var sampling))
-            {
-                return AlphaResolution.Refused(
-                    AlphaResolutionFailure.UnsupportedSampling);
-            }
+            var sampling = new AlphaSamplingSettings(
+                sample.Sampling.Filter,
+                sample.Sampling.Wrap,
+                sample.Sampling.Aniso);
 
             if (!fieldProvider(sample.Source, channel, out var chain) ||
                 chain == null)
@@ -780,64 +778,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             // mapping's channel directly. Channel four is the view-dependent
             // matcap coordinate and stays refused.
             return mapping.Channel >= 0 && mapping.Channel <= 3;
-        }
-
-        /// <summary>
-        /// Exhaustive translation between the two deliberately separate closed
-        /// sampling vocabularies. An undefined value is unreachable through the
-        /// validating semantic constructors; the arm exists so a future semantic
-        /// mode fails closed instead of falling into a wrong classifier mode.
-        /// </summary>
-        private static bool TryMapSampling(
-            TextureSampling semantic,
-            out AlphaSamplingSettings sampling)
-        {
-            sampling = default;
-
-            AlphaFilterMode filter;
-            switch (semantic.Filter)
-            {
-                case TextureFilterMode.Point:
-                    filter = AlphaFilterMode.Point;
-                    break;
-                case TextureFilterMode.Bilinear:
-                    filter = AlphaFilterMode.Bilinear;
-                    break;
-                case TextureFilterMode.Trilinear:
-                    filter = AlphaFilterMode.Trilinear;
-                    break;
-                default:
-                    return false;
-            }
-
-            AlphaWrapMode wrap;
-            switch (semantic.Wrap)
-            {
-                case TextureWrapMode.Clamp:
-                    wrap = AlphaWrapMode.Clamp;
-                    break;
-                case TextureWrapMode.Repeat:
-                    wrap = AlphaWrapMode.Repeat;
-                    break;
-                default:
-                    return false;
-            }
-
-            AlphaAnisoMode aniso;
-            switch (semantic.Aniso)
-            {
-                case TextureAnisoMode.None:
-                    aniso = AlphaAnisoMode.None;
-                    break;
-                case TextureAnisoMode.Anisotropic:
-                    aniso = AlphaAnisoMode.Anisotropic;
-                    break;
-                default:
-                    return false;
-            }
-
-            sampling = new AlphaSamplingSettings(filter, wrap, aniso);
-            return true;
         }
 
         /// <summary>

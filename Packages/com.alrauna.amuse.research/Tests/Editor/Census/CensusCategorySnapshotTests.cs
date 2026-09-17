@@ -59,7 +59,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "SemanticsUnknown",
                     "UnsupportedMultiplier",
                     "UnsupportedUvMapping",
-                    "UnsupportedSampling",
                     "MissingTextureEvidence",
                 },
                 Enum.GetNames(typeof(AlphaResolutionFailure)));
