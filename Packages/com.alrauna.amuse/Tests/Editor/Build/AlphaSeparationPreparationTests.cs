@@ -4423,8 +4423,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// comparison is Less: a wholly opaque slot converts under the
         /// policy and its success report carries the fixed divergence
         /// sentence, a mixed split refuses with the named divergence
-        /// refusal, the policy off keeps today's conversion refusal, and
-        /// an unflagged conversion reports nothing.
+        /// refusal, the policy off keeps today's conversion refusal, an
+        /// unflagged conversion reports nothing, and a refused divergent
+        /// value in a multi-material swap falls back to identity and
+        /// reports nothing.
         /// </summary>
         [Test]
         public void DepthTestDivergenceConvertsWholeSlotsAndRefusesMixedSplits()
@@ -4662,6 +4664,146 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "set a special one."),
                         "an unflagged converted slot must not carry the " +
                         "divergence sentence");
+                }
+
+                // (e) A refused divergent value must not raise the
+                // sentence: on a mixed split, a multi-material swap with
+                // one divergent source falls back to identity for that
+                // source, so no triangle of it moved. The convertible
+                // sibling moved under the normal rule, so the success
+                // report stays silent.
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                var swapTexture = AlphaSeparationSplitTests
+                    .ImportSplitAlphaTexture(
+                        "transparent_depth_policy_swap");
+                GameObject swapRoot = null;
+                Material divergent = null;
+                Material convertible = null;
+                Mesh swapMesh = null;
+                AnimationClip swapClip = null;
+                AnimatorController swapController = null;
+                try
+                {
+                    divergent = LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial();
+                    divergent.SetTexture("_MainTex", swapTexture);
+                    divergent.SetFloat("_ZTest", 2f);
+                    convertible = LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial();
+                    convertible.SetTexture("_MainTex", swapTexture);
+                    convertible.SetFloat("_ZTest", 4f);
+
+                    swapRoot = new GameObject(
+                        "AMUSE depth policy swap fallback");
+                    swapRoot.AddComponent<
+                        Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                    FixtureProofScope.PinAllSizes(swapRoot);
+                    swapMesh = new Mesh
+                    {
+                        vertices = new[]
+                        {
+                            new Vector3(0f, 0f, 0f),
+                            new Vector3(1f, 0f, 0f),
+                            new Vector3(0f, 1f, 0f),
+                            new Vector3(2f, 0f, 0f),
+                            new Vector3(3f, 0f, 0f),
+                            new Vector3(2f, 1f, 0f),
+                        },
+                    };
+                    swapMesh.uv = new[]
+                    {
+                        new Vector2(0.1f, 0.1f),
+                        new Vector2(0.4f, 0.1f),
+                        new Vector2(0.1f, 0.4f),
+                        new Vector2(0.6f, 0.6f),
+                        new Vector2(0.9f, 0.6f),
+                        new Vector2(0.6f, 0.9f),
+                    };
+                    swapMesh.SetTriangles(
+                        new[] { 0, 1, 2, 3, 4, 5 }, 0);
+                    var swapRenderer =
+                        swapRoot.AddComponent<SkinnedMeshRenderer>();
+                    swapRenderer.sharedMesh = swapMesh;
+                    swapRenderer.sharedMaterials = new[] { convertible };
+
+                    swapClip = NewSwapClip(
+                        "AMUSE depth policy swap clip",
+                        string.Empty, 0, (0f, divergent));
+                    swapController = NewController(
+                        swapRoot, "AMUSE depth policy swap graph",
+                        swapClip);
+
+                    AmusePlatformFinishState swapState = null;
+                    var swapReports = ErrorReport.CaptureErrors(
+                        () => swapState = RunBarrier(
+                            swapRoot,
+                            selectRequest: VerifiedLilToonTestSeams
+                                .SelectVerifiedFixtureRequest,
+                            capturer: VerifiedLilToonTestSeams
+                                .CaptureVerifiedFixtureMaterials,
+                            resolveSemantics: VerifiedLilToonTestSeams
+                                .VerifiedAlphaOnly,
+                            lilToonConversion: VerifiedFamilyConversion));
+
+                    Assert.That(
+                        swapState.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        swapState.Separation, Is.Not.Null,
+                        "fixture precondition: the swap slot must " +
+                        "prepare through the identity fallback");
+                    var swapMapping = swapState.Separation.Renderers[0]
+                        .CandidateSlots[0].OpaqueOfAdmitted;
+                    Assert.That(swapMapping, Has.Count.EqualTo(2),
+                        "fixture precondition: both swap values must " +
+                        "map");
+                    Assert.That(
+                        swapMapping[divergent], Is.SameAs(divergent),
+                        "fixture precondition: the refused divergent " +
+                        "value falls back to identity, so no triangle " +
+                        "of it moved");
+                    Assert.That(
+                        swapState.Separation.TryGetOpaque(
+                            convertible, out _),
+                        Is.True,
+                        "fixture precondition: the convertible sibling " +
+                        "converts under the normal rule");
+                    Assert.That(
+                        swapReports.Select(r => r.TheError.ToMessage()),
+                        Has.None.Contains(
+                            "Some moved triangles now use the normal " +
+                            "depth rule because their source material " +
+                            "set a special one."),
+                        "a slot whose divergent value never moved must " +
+                        "not carry the divergence sentence");
+                }
+                finally
+                {
+                    DestroyControllerGraph(swapRoot, swapController);
+                    if (swapMesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(swapMesh);
+                    }
+
+                    if (swapRoot != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(swapRoot);
+                    }
+
+                    if (divergent != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(divergent);
+                    }
+
+                    if (convertible != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(convertible);
+                    }
+
+                    if (swapClip != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(swapClip);
+                    }
                 }
             }
             finally
