@@ -78,6 +78,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             DestroyTracked();
         }
 
+        [Test]
+        public void PreparationRefusalRequiresAReason()
+        {
+            Assert.Throws<ArgumentException>(
+                () => AmusePreparationDecision.Refused(null));
+            Assert.Throws<ArgumentException>(
+                () => AmusePreparationDecision.Refused(string.Empty));
+        }
+
+        /// <summary>
+        /// A standing guard for the asset-ownership boundary: generated output
+        /// belongs to the NDMF asset saver, so no AMUSE Editor source may reach
+        /// past it into the asset database itself. This runs with every suite, so
+        /// a future change that adds custom persistence fails here rather than
+        /// waiting for someone to repeat a one-off scan by hand.
+        /// </summary>
+        [Test]
+        public void ProductionEditorCodePersistsOnlyThroughTheNdmfAssetSaver()
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(
+                typeof(AlphaSeparationApply).Assembly);
+            Assert.That(
+                package,
+                Is.Not.Null,
+                "could not resolve the AMUSE package from its Editor assembly, so " +
+                "the production source could not be scanned");
+
+            var editorRoot = Path.Combine(package.resolvedPath, "Editor");
+            Assert.That(
+                Directory.Exists(editorRoot),
+                Is.True,
+                "expected AMUSE Editor sources at " + editorRoot);
+
+            var sources = Directory.GetFiles(
+                editorRoot, "*.cs", SearchOption.AllDirectories);
+            Assert.That(
+                sources,
+                Is.Not.Empty,
+                "scanned no AMUSE Editor source files under " + editorRoot +
+                ", so this test proved nothing");
+
+            var offenders = sources
+                .Where(path =>
+                {
+                    var text = File.ReadAllText(path);
+                    return text.Contains("AssetDatabase.CreateAsset") ||
+                           text.Contains("AssetDatabase.AddObjectToAsset");
+                })
+                .Select(path => path
+                    .Substring(package.resolvedPath.Length)
+                    .Replace('\\', '/')
+                    .TrimStart('/'))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToList();
+
+            Assert.That(
+                offenders,
+                Is.Empty,
+                "AMUSE production code must persist generated output only through " +
+                "BuildContext.AssetSaver, but these files call the asset database " +
+                "directly: " + string.Join(", ", offenders));
+        }
+
         private void DestroyTracked()
         {
             for (var index = tracked.Count - 1; index >= 0; index--)
