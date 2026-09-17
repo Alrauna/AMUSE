@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Alrauna.Amuse.Editor.Semantics;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using BigInteger = System.Numerics.BigInteger;
 
 namespace Alrauna.Amuse.Editor.Analysis
@@ -12,62 +14,48 @@ namespace Alrauna.Amuse.Editor.Analysis
         Unknown
     }
 
-    internal enum AlphaFilterMode
-    {
-        Point,
-        Bilinear,
-
-        /// <summary>
-        /// Bilinear within the selected level plus a blend of the two adjacent
-        /// selected levels. The within-level footprint model is identical to
-        /// bilinear; the between-level blend is monotone, so the mip-chain
-        /// conjunction - which proves every level - supplies the blend's two
-        /// operands and the classification carries over.
-        /// </summary>
-        Trilinear
-    }
-
-    internal enum AlphaWrapMode
-    {
-        Clamp,
-        Repeat
-    }
-
     /// <summary>
-    /// Whether the sample averages an anisotropic footprint. An anisotropic
-    /// footprint is unmodeled, so an anisotropic sample classifies only
-    /// through a level's fully-opaque fast path; anywhere else it stays
-    /// unknown.
+    /// The sampling shape the classifier proves under, in the semantics
+    /// layer's own closed vocabulary. Construction validates every mode,
+    /// so an undefined value fails at the construction site instead of
+    /// inside the proof.
     /// </summary>
-    internal enum AlphaAnisoMode
-    {
-        None,
-        Anisotropic
-    }
-
     internal readonly struct AlphaSamplingSettings
     {
-        private const AlphaAnisoMode DefaultAniso = AlphaAnisoMode.None;
+        private const TextureAnisoMode DefaultAniso = TextureAnisoMode.None;
 
-        internal AlphaFilterMode FilterMode { get; }
-        internal AlphaWrapMode WrapMode { get; }
-        internal AlphaAnisoMode AnisoMode { get; }
+        internal TextureFilterMode FilterMode { get; }
+        internal TextureWrapMode WrapMode { get; }
+        internal TextureAnisoMode AnisoMode { get; }
 
         /// <summary>
         /// The common sampling shape: no anisotropy.
         /// </summary>
         internal AlphaSamplingSettings(
-            AlphaFilterMode filterMode,
-            AlphaWrapMode wrapMode)
+            TextureFilterMode filterMode,
+            TextureWrapMode wrapMode)
             : this(filterMode, wrapMode, DefaultAniso)
         {
         }
 
         internal AlphaSamplingSettings(
-            AlphaFilterMode filterMode,
-            AlphaWrapMode wrapMode,
-            AlphaAnisoMode anisoMode)
+            TextureFilterMode filterMode,
+            TextureWrapMode wrapMode,
+            TextureAnisoMode anisoMode)
         {
+            if (!Enum.IsDefined(typeof(TextureFilterMode), filterMode))
+            {
+                throw new ArgumentOutOfRangeException(nameof(filterMode));
+            }
+            if (!Enum.IsDefined(typeof(TextureWrapMode), wrapMode))
+            {
+                throw new ArgumentOutOfRangeException(nameof(wrapMode));
+            }
+            if (!Enum.IsDefined(typeof(TextureAnisoMode), anisoMode))
+            {
+                throw new ArgumentOutOfRangeException(nameof(anisoMode));
+            }
+
             FilterMode = filterMode;
             WrapMode = wrapMode;
             AnisoMode = anisoMode;
@@ -335,7 +323,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 throw new ArgumentNullException(nameof(texture));
             }
-            ValidateSampling(sampling);
             ValidateDensityPolicy(maxNoiseTexelPercent);
             ValidateFinite(triangle.Position0, nameof(triangle.Position0));
             ValidateFinite(triangle.Position1, nameof(triangle.Position1));
@@ -369,28 +356,28 @@ namespace Alrauna.Amuse.Editor.Analysis
             // unknown, and the chain conjunction then admits an anisotropic
             // triangle only when every level is fully opaque, which is
             // exactly the anisotropic soundness condition.
-            if (sampling.AnisoMode == AlphaAnisoMode.Anisotropic)
+            if (sampling.AnisoMode == TextureAnisoMode.Anisotropic)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
 
-            if (sampling.FilterMode == AlphaFilterMode.Point &&
-                sampling.WrapMode == AlphaWrapMode.Clamp)
+            if (sampling.FilterMode == TextureFilterMode.Point &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
             {
                 return ClassifyPointClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == AlphaFilterMode.Point &&
-                sampling.WrapMode == AlphaWrapMode.Repeat)
+            if (sampling.FilterMode == TextureFilterMode.Point &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
             {
                 return ClassifyPointRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
-                sampling.WrapMode == AlphaWrapMode.Clamp)
+            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
             {
                 return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == AlphaFilterMode.Bilinear &&
-                sampling.WrapMode == AlphaWrapMode.Repeat)
+            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
             {
                 return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
@@ -399,13 +386,13 @@ namespace Alrauna.Amuse.Editor.Analysis
             // between-level blend of the two adjacent selected levels is
             // monotone, and the chain conjunction in the resolver proves both
             // operands, so the bilinear per-level verdict carries over.
-            if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
-                sampling.WrapMode == AlphaWrapMode.Clamp)
+            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
             {
                 return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == AlphaFilterMode.Trilinear &&
-                sampling.WrapMode == AlphaWrapMode.Repeat)
+            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
             {
                 return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
@@ -1280,24 +1267,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
         }
 
-        private static void ValidateSampling(AlphaSamplingSettings sampling)
-        {
-            if (sampling.FilterMode != AlphaFilterMode.Point &&
-                sampling.FilterMode != AlphaFilterMode.Bilinear &&
-                sampling.FilterMode != AlphaFilterMode.Trilinear)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sampling));
-            }
-            if (sampling.WrapMode != AlphaWrapMode.Clamp &&
-                sampling.WrapMode != AlphaWrapMode.Repeat)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sampling));
-            }
-            if (!Enum.IsDefined(typeof(AlphaAnisoMode), sampling.AnisoMode))
-            {
-                throw new ArgumentOutOfRangeException(nameof(sampling));
-            }
-        }
 
         private static void ValidateFinite(Vector3 value, string parameterName)
         {

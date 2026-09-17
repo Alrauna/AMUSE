@@ -7,6 +7,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
@@ -1337,7 +1338,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     0, 0, 0, 255,
                 });
             var sampling = new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp);
+                TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
                 TriangleAlphaClassifier.Classify(

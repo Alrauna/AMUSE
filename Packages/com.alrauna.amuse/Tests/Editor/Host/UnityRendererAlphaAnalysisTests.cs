@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -1073,7 +1074,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         var resolution = AlphaResolution.Classified(
             chain,
             new AlphaSamplingSettings(
-                AlphaFilterMode.Point, AlphaWrapMode.Clamp),
+                TextureFilterMode.Point, TextureWrapMode.Clamp),
             mapping, 0);
 
         var outcomes = UnityRendererAlphaAnalysis.Classify(

@@ -15,7 +15,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         SemanticsUnknown,
         UnsupportedMultiplier,
         UnsupportedUvMapping,
-        UnsupportedSampling,
         MissingTextureEvidence,
     }
 
@@ -485,15 +484,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetMultiplier(),
                         fieldProvider,
                         maxNoiseTexelPercent);
-                case ScalarSemanticValueKind.ProductOfTextureSamples:
-                    return ResolveProduct(
-                        value.GetFirstTextureSample(),
-                        value.GetFirstChannel(),
-                        value.GetSecondTextureSample(),
-                        value.GetSecondChannel(),
-                        value.GetProductMultiplier(),
-                        fieldProvider,
-                        maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                     return ResolveProductChain(
                         value, fieldProvider, maxNoiseTexelPercent);
@@ -556,56 +546,6 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return AlphaResolution.Uniform(
                 TriangleAlphaOutcome.MustRemainTransparent);
-        }
-
-        /// <summary>
-        /// alpha = (m1 * k) * m2 over two sampled terms bounded in [0, 1] by
-        /// the field contract. k &lt; 1 forces the product below one at every
-        /// reachable sample by the same range lemma as
-        /// <see cref="ResolveScaledSample"/>: the rounded product of a value
-        /// at most one and a value below one cannot reach one. k &gt; 1 has
-        /// no defined opacity meaning and refuses. k == 1 resolves both
-        /// factors as plain samples and conjoins them: the float product of
-        /// values in [0, 1] is exactly one only when both factors are one,
-        /// so the per-factor exact-one predicates conjoined are the
-        /// product's predicate.
-        /// </summary>
-        private static AlphaResolution ResolveProduct(
-            TextureSample first,
-            TextureChannel firstChannel,
-            TextureSample second,
-            TextureChannel secondChannel,
-            float multiplier,
-            AlphaFieldProvider fieldProvider,
-            int maxNoiseTexelPercent)
-        {
-            if (multiplier > 1f)
-            {
-                return AlphaResolution.Refused(
-                    AlphaResolutionFailure.UnsupportedMultiplier);
-            }
-
-            if (multiplier < 1f)
-            {
-                return AlphaResolution.Uniform(
-                    TriangleAlphaOutcome.MustRemainTransparent);
-            }
-
-            var firstResolution = ResolveSampled(
-                first, firstChannel, fieldProvider, maxNoiseTexelPercent);
-            if (!firstResolution.IsResolved)
-            {
-                return firstResolution;
-            }
-
-            var secondResolution = ResolveSampled(
-                second, secondChannel, fieldProvider, maxNoiseTexelPercent);
-            if (!secondResolution.IsResolved)
-            {
-                return secondResolution;
-            }
-
-            return AlphaResolution.Product(firstResolution, secondResolution);
         }
 
         /// <summary>
@@ -810,11 +750,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                     AlphaResolutionFailure.UnsupportedUvMapping);
             }
 
-            if (!TryMapSampling(sample.Sampling, out var sampling))
-            {
-                return AlphaResolution.Refused(
-                    AlphaResolutionFailure.UnsupportedSampling);
-            }
+            var sampling = new AlphaSamplingSettings(
+                sample.Sampling.Filter,
+                sample.Sampling.Wrap,
+                sample.Sampling.Aniso);
 
             if (!fieldProvider(sample.Source, channel, out var chain) ||
                 chain == null)
@@ -839,64 +778,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             // mapping's channel directly. Channel four is the view-dependent
             // matcap coordinate and stays refused.
             return mapping.Channel >= 0 && mapping.Channel <= 3;
-        }
-
-        /// <summary>
-        /// Exhaustive translation between the two deliberately separate closed
-        /// sampling vocabularies. An undefined value is unreachable through the
-        /// validating semantic constructors; the arm exists so a future semantic
-        /// mode fails closed instead of falling into a wrong classifier mode.
-        /// </summary>
-        private static bool TryMapSampling(
-            TextureSampling semantic,
-            out AlphaSamplingSettings sampling)
-        {
-            sampling = default;
-
-            AlphaFilterMode filter;
-            switch (semantic.Filter)
-            {
-                case TextureFilterMode.Point:
-                    filter = AlphaFilterMode.Point;
-                    break;
-                case TextureFilterMode.Bilinear:
-                    filter = AlphaFilterMode.Bilinear;
-                    break;
-                case TextureFilterMode.Trilinear:
-                    filter = AlphaFilterMode.Trilinear;
-                    break;
-                default:
-                    return false;
-            }
-
-            AlphaWrapMode wrap;
-            switch (semantic.Wrap)
-            {
-                case TextureWrapMode.Clamp:
-                    wrap = AlphaWrapMode.Clamp;
-                    break;
-                case TextureWrapMode.Repeat:
-                    wrap = AlphaWrapMode.Repeat;
-                    break;
-                default:
-                    return false;
-            }
-
-            AlphaAnisoMode aniso;
-            switch (semantic.Aniso)
-            {
-                case TextureAnisoMode.None:
-                    aniso = AlphaAnisoMode.None;
-                    break;
-                case TextureAnisoMode.Anisotropic:
-                    aniso = AlphaAnisoMode.Anisotropic;
-                    break;
-                default:
-                    return false;
-            }
-
-            sampling = new AlphaSamplingSettings(filter, wrap, aniso);
-            return true;
         }
 
         /// <summary>

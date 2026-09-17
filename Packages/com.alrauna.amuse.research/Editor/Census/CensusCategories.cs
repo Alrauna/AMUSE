@@ -59,7 +59,6 @@ namespace Alrauna.Amuse.Research.Census
         SemanticsUnknown,
         UnsupportedMultiplier,
         UnsupportedUvMapping,
-        UnsupportedSampling,
         MissingTextureEvidence,
     }
 
