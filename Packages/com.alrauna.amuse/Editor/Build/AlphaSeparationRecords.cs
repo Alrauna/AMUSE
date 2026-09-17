@@ -280,14 +280,24 @@ namespace Alrauna.Amuse.Editor.Build
     {
         internal PreparedSlotSeparation(
             SubmeshSeparationPlan plan,
-            IReadOnlyDictionary<Material, Material> opaqueOfAdmitted)
+            IReadOnlyDictionary<Material, Material> opaqueOfAdmitted,
+            bool depthTestDivergence)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             OpaqueOfAdmitted = opaqueOfAdmitted
                 ?? throw new ArgumentNullException(nameof(opaqueOfAdmitted));
+            DepthTestDivergence = depthTestDivergence;
         }
 
         internal SubmeshSeparationPlan Plan { get; }
+
+        /// <summary>
+        /// True when this slot's conversion moved triangles of a source
+        /// material that authored a special depth rule. The moved
+        /// triangles draw under the opaque target's normal rule, so the
+        /// slot's success report names the change.
+        /// </summary>
+        internal bool DepthTestDivergence { get; }
 
         /// <summary>
         /// This slot's admitted source materials mapped to their opaque results.

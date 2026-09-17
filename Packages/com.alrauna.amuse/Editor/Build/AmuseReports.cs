@@ -101,6 +101,29 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// One Information entry per prepared slot whose conversion
+        /// admitted a depth-test divergence: the slot converted, and its
+        /// moved triangles now draw under the normal depth rule. The
+        /// report carries the fixed sentence that names the change. A
+        /// slot without the divergence reports nothing here, exactly as
+        /// before.
+        /// </summary>
+        internal static void SlotSeparationDivergence(
+            Renderer renderer,
+            int slotIndex,
+            string rendererName = null)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.SlotSeparationDivergenceKey,
+                    slotIndex,
+                    rendererName);
+            }
+        }
+        /// <summary>
         /// One Information entry per texture whose capture refused, with
         /// the slot index, the texture property, and the sampled channel:
         /// the triangles that sample it have no proof and stay on the

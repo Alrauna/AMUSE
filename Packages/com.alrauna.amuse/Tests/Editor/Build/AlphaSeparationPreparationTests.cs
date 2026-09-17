@@ -4421,8 +4421,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The depth-test policy on a transparent source whose depth
         /// comparison is Less: a wholly opaque slot converts under the
-        /// policy, a mixed split refuses with the named divergence
-        /// refusal, and the policy off keeps today's conversion refusal.
+        /// policy and its success report carries the fixed divergence
+        /// sentence, a mixed split refuses with the named divergence
+        /// refusal, the policy off keeps today's conversion refusal, and
+        /// an unflagged conversion reports nothing.
         /// </summary>
         [Test]
         public void DepthTestDivergenceConvertsWholeSlotsAndRefusesMixedSplits()
@@ -4444,7 +4446,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            null,
                            allowDepthTestChange: true))
                 {
-                    var amuse = arm.Run();
+                    AmusePlatformFinishState amuse = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = arm.Run());
 
                     Assert.That(
                         amuse.AvatarRefusal,
@@ -4479,6 +4483,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "a wholly opaque plan must convert with no " +
                             "refusal of any kind: " + reason);
                     }
+                    // Foreign NDMF plugins may add their own report lines
+                    // to the same capture, so the count is asserted on the
+                    // sentence itself, never on the whole capture.
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "Some moved triangles now use the normal " +
+                            "depth rule because their source material " +
+                            "set a special one."),
+                        "the flagged wholly opaque slot must report its " +
+                        "converted divergence exactly once");
                 }
 
                 // (b) Policy on, mixed plan: the proven-opaque triangle
@@ -4613,6 +4628,40 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         amuse.Separation, Is.Null,
                         "the only candidate slot was refused, so nothing " +
                         "is retained");
+                }
+
+                // (d) An unflagged conversion reports nothing: a source
+                // whose depth test already equals the opaque target
+                // keeps the slot's previous report silence.
+                using (var arm = DepthTestPolicyArmFixture.Create(
+                           opaqueTexture,
+                           "AMUSE depth policy unflagged",
+                           transparent => transparent.SetFloat("_ZTest", 4f),
+                           null,
+                           allowDepthTestChange: true))
+                {
+                    AmusePlatformFinishState unflagged = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => unflagged = arm.Run());
+
+                    Assert.That(
+                        unflagged.Separation, Is.Not.Null,
+                        "fixture precondition: the unflagged slot must " +
+                        "prepare");
+                    Assert.That(
+                        unflagged.Separation.TryGetOpaque(
+                            arm.Material, out _),
+                        Is.True,
+                        "fixture precondition: the unflagged slot must " +
+                        "convert");
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.None.Contains(
+                            "Some moved triangles now use the normal " +
+                            "depth rule because their source material " +
+                            "set a special one."),
+                        "an unflagged converted slot must not carry the " +
+                        "divergence sentence");
                 }
             }
             finally

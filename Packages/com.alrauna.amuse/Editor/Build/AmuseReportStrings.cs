@@ -438,6 +438,17 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.DepthTestDivergenceMixedSplit:hint"] =
                 "Make every triangle of the slot opaque, or accept that " +
                 "this slot stays unchanged.",
+            ["amuse.slotSeparation.DepthTestDivergence"] =
+                "AMUSE separated material slot {0} of renderer '{1}'.",
+            ["amuse.slotSeparation.DepthTestDivergence:description"] =
+                "AMUSE moved the proven-opaque triangles of material " +
+                "slot {0} of renderer '{1}' onto an opaque material. " +
+                "Some moved triangles now use the normal depth rule " +
+                "because their source material set a special one.",
+            ["amuse.slotSeparation.DepthTestDivergence:hint"] =
+                "Turn off Allow Depth Test Change on Moved Triangles to " +
+                "keep materials with a special depth rule on their " +
+                "original material.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
@@ -543,6 +554,17 @@ namespace Alrauna.Amuse.Editor.Build
             AlphaSeparationSlotRefusal cause)
         {
             return Prefix + "slotSeparation." + cause;
+        }
+
+        /// <summary>
+        /// The report key for one prepared slot whose conversion
+        /// admitted a depth-test divergence. The report names the slot,
+        /// the renderer, and the fixed sentence that discloses the
+        /// change.
+        /// </summary>
+        internal static string SlotSeparationDivergenceKey
+        {
+            get { return Prefix + "slotSeparation.DepthTestDivergence"; }
         }
     }
 }
