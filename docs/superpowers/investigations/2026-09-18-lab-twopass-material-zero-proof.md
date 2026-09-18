@@ -188,16 +188,47 @@ with a UV mapping; the per-triangle classification then throws a
 NullReferenceException. The production classification stage crashes on this
 material shape rather than answering Unknown or ProvenOpaque.
 
-## 10. Blocker
+## 10. Blocker and the confirmed contradiction (2026-09-18, later)
 
-The development editor's compile pipeline wedged again mid-session (the same
-failure the 2026-09-15 layer-alpha note recorded: source changes and forced
-refreshes stop producing new assemblies). The instrumented probe cannot run
-against fresh assemblies until the dev editor restarts. After the restart:
-re-run `AmuseDbgDxt1Probe.Dbg_Dxt1Mask_FactorTrace`, read the
-NullReferenceException stack, and name the exact production dereference.
+The compile-pipeline wedge resolved after a forced script recompilation (no
+editor restart needed). On the fresh assembly, both facts now hold
+simultaneously:
 
-## 11. Relation to existing records
+1. The end-to-end falsifier `Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque`
+   still fails: the materials resolve, no refusal fires, and the white-region
+   triangle proves 0 of 1.
+2. The direct seam-driven probe of the same material proves the same
+   triangle `ProvenOpaque` through `GatherAlphaFields` + `ResolveFor` +
+   `Classify`: resolution `IsResolved=True`, chain level 0 exactly
+   8192/16384 (the white half), classify outcome `ProvenOpaque`.
+
+So the capture, the field set, the resolution, and the classifier all behave
+correctly when driven through the verified seams. The zero-proof is
+introduced by whatever the end-to-end prepare path does differently — prime
+suspects: the renderer snapshot geometry capture (`Capture(renderer)` — the
+UV0 domain the build actually consults), the policy bounds threading through
+`RunBarrier` (the fixture pins sizes; the analysis may see different bounds
+than the probe's inert defaults), or the per-triangle input construction in
+the production `Analyze`.
+
+The falsifier stays RED as the regression pin. Next step: attach the managed
+debugger (or continue the AMUSE-DBG instrumentation) inside the end-to-end
+`Analyze(renderer)` path and dump its resolution and chain against the
+probe's — the first divergence is the defect.
+
+## 11. Blocker
+
+~~The development editor's compile pipeline wedged again mid-session~~
+Resolved: a forced `RequestScriptCompilation` cleared the wedge without an
+editor restart. The instrumented probe then ran green (section 10), which
+isolates the defect to the end-to-end prepare path.
+
+Next session: run the falsifier under the managed debugger (or extend the
+AMUSE-DBG dump into the end-to-end `Analyze(renderer)` path) and diff its
+resolution, chain, and UV envelope against the direct probe. The first
+divergence is the defect.
+
+## 12. Relation to existing records
 
 The 2026-09-17 notes stand unchanged. This build confirms their Finding A is
 fixed and moves the open defect from conversion eligibility to per-triangle
