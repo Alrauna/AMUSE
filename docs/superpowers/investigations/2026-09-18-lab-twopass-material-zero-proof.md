@@ -168,7 +168,36 @@ fixture shaped like this material (DXT1 sRGB mask, replace mode, two-region
 coverage) will name the unknown factor, and the RED test from section 7
 applies unchanged.
 
-## 9. Relation to existing records
+## 9. Reproduction on the development branch (2026-09-18)
+
+The defect now reproduces in the development project's own test suite. The
+new falsifier `Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque` in
+`Tests/Editor/Build/AlphaSeparationPreparationTests.cs` builds a transparent
+stand-in whose alpha mask imports compressed (DXT1) under an sRGB import with
+mips, in replace mode, with one triangle whose domain sits inside the exactly
+opaque region. Observed RED: the materials resolve, no refusal fires, and the
+white-region triangle fails to prove (expected 1, was 0). This pins the
+zero-proof in a deterministic, CI-runnable fixture and isolates it from
+everything Lab-specific.
+
+A temporary debug probe (`AmuseDbgDxt1Probe.cs`, tagged AMUSE-DBG, for
+removal) drives the same pipeline stage by stage. Observed: selection and
+closed capture succeed; the field set holds both fields (main alpha and mask
+red, threshold 1); the resolution is a classified, non-uniform resolution
+with a UV mapping; the per-triangle classification then throws a
+NullReferenceException. The production classification stage crashes on this
+material shape rather than answering Unknown or ProvenOpaque.
+
+## 10. Blocker
+
+The development editor's compile pipeline wedged again mid-session (the same
+failure the 2026-09-15 layer-alpha note recorded: source changes and forced
+refreshes stop producing new assemblies). The instrumented probe cannot run
+against fresh assemblies until the dev editor restarts. After the restart:
+re-run `AmuseDbgDxt1Probe.Dbg_Dxt1Mask_FactorTrace`, read the
+NullReferenceException stack, and name the exact production dereference.
+
+## 11. Relation to existing records
 
 The 2026-09-17 notes stand unchanged. This build confirms their Finding A is
 fixed and moves the open defect from conversion eligibility to per-triangle

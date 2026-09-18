@@ -4812,6 +4812,153 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// --- Falsifier: a transparent source whose alpha mask imports
+        /// compressed (DXT1) under an sRGB import must still prove the
+        /// triangles whose mask domain is exactly one at every consulted
+        /// level. The Census Lab characterization of 2026-09-18 showed a
+        /// real garment of this shape proving zero of 524288 triangles
+        /// while 228408 held exactly-one domains. An implementation whose
+        /// capture or resolution loses DXT1 sRGB exactness proves nothing
+        /// and fails here.
+        /// </summary>
+        [Test]
+        public void Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            const string path = "Assets/AmuseTests_Dxt1SrgbMask.png";
+            var fixtures = new LilToonTransparentConversionFixtures();
+            Material material = null;
+            Mesh mesh = null;
+            try
+            {
+                fixtures.BaseSetUp();
+                var mainTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "dxt1_mask_main");
+
+                var staging = new Texture2D(
+                    128, 128, TextureFormat.RGBA32, true);
+                var pixels = new Color32[128 * 128];
+                for (var y = 0; y < 128; y++)
+                {
+                    for (var x = 0; x < 128; x++)
+                    {
+                        pixels[y * 128 + x] = x < 64
+                            ? new Color32(255, 255, 255, 255)
+                            : new Color32(0, 0, 0, 255);
+                    }
+                }
+
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = true;
+                importer.sRGBTexture = true;
+                importer.textureCompression =
+                    TextureImporterCompression.Compressed;
+                importer.isReadable = false;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                importer.streamingMipmaps = false;
+                importer.SaveAndReimport();
+                var mask = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    mask,
+                    Is.Not.Null,
+                    "fixture precondition: the DXT1 sRGB mask must import");
+                Assert.That(
+                    mask.format,
+                    Is.EqualTo(TextureFormat.DXT1),
+                    "fixture precondition: the mask must import compressed");
+
+                material = LilToonFixtureTestBase
+                    .CreateTransparentConversionMaterial();
+                material.SetTexture("_MainTex", mainTexture);
+                material.SetTexture("_AlphaMask", mask);
+                material.SetFloat("_AlphaMaskMode", 1f);
+                material.SetFloat("_Cutoff", 0.001f);
+
+                var root = new GameObject(
+                    "AMUSE dxt1 srgb mask candidate");
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                // The triangle's UV domain sits inside the white half, far
+                // from the region boundary, so every consulted level
+                // samples only exactly-one texels.
+                mesh.uv = new[]
+                {
+                    new Vector2(0.05f, 0.05f),
+                    new Vector2(0.2f, 0.05f),
+                    new Vector2(0.05f, 0.2f),
+                };
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                AmusePlatformFinishState amuse = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(
+                        root,
+                        selectRequest: VerifiedLilToonTestSeams
+                            .SelectVerifiedFixtureRequest,
+                        capturer: VerifiedLilToonTestSeams
+                            .CaptureVerifiedFixtureMaterials,
+                        resolveSemantics: VerifiedLilToonTestSeams
+                            .VerifiedAlphaOnly));
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "the materials must resolve: reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "the white-region triangle's mask domain is exactly " +
+                    "one at every consulted level and must prove: " +
+                    "reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path)
+                    != null)
+                {
+                    AssetDatabase.DeleteAsset(path);
+                }
+            }
+        }
+
         // --- Task 6 transparent helpers ---------------------------------------
 
         private const string TransparentCloneContractTempFolder =
