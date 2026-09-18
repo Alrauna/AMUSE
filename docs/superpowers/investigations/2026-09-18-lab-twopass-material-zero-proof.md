@@ -146,6 +146,18 @@ Read-only probes through the development bridge, after section 7 was written:
 5. The texture coordinates of the flagged submesh read fine through both
    the legacy getter and the channel API, so the stage-B legacy-getter
    defect does not apply to the zero-proof.
+6. The captured chain content is verified correct. A red-channel capture of
+   the flagged material's mask in the Lab editor returns twelve levels with
+   no missing evidence: 54.03 percent of level 0 texels hold the exactly
+   opaque verdict, 45.44 percent at the policy's consulted level 4, zero
+   erased bytes, zero out-of-vocabulary bytes, and the per-level decay
+   matches the direct graphics readback. The capture and the semantics are
+   both exonerated: the semantic output for a replace mask is complete and
+   discards the main texture alpha (verified in source), and the captured
+   chain is exact. The unknown factor therefore arises in the seam between
+   the captured chain and the per-triangle outcome: the alpha field set
+   lookup for the mask source, the resolution's texture-coordinate mapping,
+   or the classifier input wiring.
 
 What stays open: which factor of the resolved alpha chain is unknown. The
 in-editor reflection probes that drive the full resolution hit the bridge's
