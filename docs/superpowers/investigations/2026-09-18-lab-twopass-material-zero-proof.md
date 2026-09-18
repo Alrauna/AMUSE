@@ -216,17 +216,24 @@ debugger (or continue the AMUSE-DBG instrumentation) inside the end-to-end
 `Analyze(renderer)` path and dump its resolution and chain against the
 probe's — the first divergence is the defect.
 
-## 11. Blocker
+## 11. Blocker and next step
 
-~~The development editor's compile pipeline wedged again mid-session~~
-Resolved: a forced `RequestScriptCompilation` cleared the wedge without an
-editor restart. The instrumented probe then ran green (section 10), which
-isolates the defect to the end-to-end prepare path.
+The contradiction is confirmed on the fresh assembly: the unit-level seam
+path (capture → gather → resolve → classify, all production code) proves the
+white-region triangle `ProvenOpaque`, while the end-to-end prepare path
+(`RunBarrier` → `ResolveRuntimeStates` with the component's default policy:
+mip cap 4, min texture size 128) proves 0 of 1. The prepare path threads
+`maxMipLevel=4, minTextureSize=128` into `GatherAlphaFields` correctly, and
+the policy bounds are inert defaults on both paths.
 
-Next session: run the falsifier under the managed debugger (or extend the
-AMUSE-DBG dump into the end-to-end `Analyze(renderer)` path) and diff its
-resolution, chain, and UV envelope against the direct probe. The first
-divergence is the defect.
+The remaining divergence sits inside `AdmittedMaterialStates.ResolveSlot` —
+the state-admission composition between the captured evidence, the animation
+closure, and the per-state resolutions — or in `DistinctResolutions`. Next
+session: instrument `ResolveSlot` (AMUSE-DBG) to dump its admitted states
+and each state's resolution for the falsifier fixture, and diff against the
+direct probe's single Classified resolution. The RED falsifier
+(`Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque`) is committed and stays as
+the regression pin for the eventual fix.
 
 ## 12. Relation to existing records
 
