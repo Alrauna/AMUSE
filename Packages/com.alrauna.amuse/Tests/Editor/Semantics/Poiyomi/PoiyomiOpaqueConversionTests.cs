@@ -569,6 +569,40 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConvertible(EvaluateFor(material));
         }
 
+        [Test]
+        public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
+        {
+            var eligibility = EvaluateWithPolicy(
+                ConvertibleFade(), "_ZTest", 2f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.True);
+        }
+
+        [Test]
+        public void DepthTestLessWithoutPolicyStillRefuses()
+        {
+            AssertRefusal(
+                EvaluateWithPolicy(ConvertibleFade(), "_ZTest", 2f, false),
+                PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestGreaterWithPolicyStillRefuses()
+        {
+            AssertRefusal(
+                EvaluateWithPolicy(ConvertibleFade(), "_ZTest", 5f, true),
+                PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
+        }
+
+        [Test]
+        public void DepthTestLEqualWithPolicyCarriesNoDivergence()
+        {
+            var eligibility = EvaluateWithPolicy(
+                ConvertibleFade(), "_ZTest", 4f, true);
+            AssertConvertible(eligibility);
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
+        }
+
         [TestCase(0f, 1f, 0f)]
         [TestCase(0f, 1f, 10f)]
         [TestCase(0f, 5f, 0f)]
@@ -859,6 +893,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 CaptureConversion(material).WithScalar(property, value),
                 queue,
                 renderType);
+        }
+
+        private static PoiyomiOpaqueConversionEligibility EvaluateWithPolicy(
+            Material material,
+            string property,
+            float value,
+            bool allowDepthTestChange)
+        {
+            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+                material, out var queue, out var renderType);
+            return PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
+                CaptureConversion(material).WithScalar(property, value),
+                queue,
+                renderType,
+                allowDepthTestChange);
         }
 
         [Test]

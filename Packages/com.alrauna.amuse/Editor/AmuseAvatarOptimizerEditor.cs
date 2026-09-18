@@ -299,9 +299,12 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// The Advanced Settings foldout. It holds the animation-closure
-        /// tolerance setting: the rule for animations that name material
-        /// slots this mesh does not have. Most users never touch it.
+        /// The Advanced Settings foldout. It holds two settings. The
+        /// animation-closure tolerance sets the rule for animations
+        /// that name material slots this mesh does not have. The
+        /// depth-test-change consent permits AMUSE to move triangles
+        /// of materials with a special depth rule onto an opaque copy.
+        /// Most users never touch these settings.
         /// </summary>
         private void DrawAdvancedSettings()
         {
@@ -319,6 +322,24 @@ namespace Alrauna.Amuse.Editor
                     "Some animation files animate material slots that do not exist on this mesh. " +
                     "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
                     "Turn this setting off to refuse meshes with extra slot animations."));
+
+            EditorGUILayout.PropertyField(
+                serializedObject.FindProperty("_allowDepthTestChange"),
+                new GUIContent(
+                    "Allow Depth Test Change on Moved Triangles",
+                    "Some materials set a special depth rule: draw a " +
+                    "pixel only when it is strictly closer than " +
+                    "everything already drawn. When AMUSE moves solid " +
+                    "triangles of such a material onto an opaque copy, " +
+                    "those triangles use the normal depth rule, which " +
+                    "also draws pixels at the same distance. On rare " +
+                    "layered parts, surfaces at exactly the same " +
+                    "distance can swap their draw order or flicker." +
+                    "\n\n" +
+                    "By default, AMUSE accepts this stated change and " +
+                    "moves the triangles. Turn this setting off to keep " +
+                    "materials with a special depth rule on their " +
+                    "original material."));
             serializedObject.ApplyModifiedProperties();
         }
 

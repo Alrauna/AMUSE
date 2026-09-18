@@ -139,7 +139,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal static LilToonOpaqueConversionEligibility EvaluateVerifiedEligibility(
             CapturedMaterialEvidence evidence,
             int effectiveRenderQueue,
-            string effectiveRenderType)
+            string effectiveRenderType,
+            bool allowDepthTestChange = false)
         {
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
 
@@ -198,10 +199,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    normalized to it: a different comparison changes visibility
             //    independently of alpha, so a material authored to draw with
             //    Always, Greater or Disabled expresses a visibility intent
-            //    the alpha proof knows nothing about. The recipe still
-            //    writes 4; on an eligible material that write is a no-op.
-            if (Read(values, "_ZTest") !=
-                LilToonOpaqueConversionFactors.LEqualDepthComparison)
+            //    the alpha proof knows nothing about. The opt-in policy
+            //    admits Less beside LEqual (design §D2). Less and LEqual
+            //    differ only at exact depth equality. That class depends on
+            //    depth-buffer population. No per-pixel proof reaches it.
+            //    The admission is a stated, consented divergence. The
+            //    caller learns it through DepthTestDivergence. The recipe
+            //    still writes 4. Without the policy that write is a no-op.
+            //    With the policy it is the reported normalization.
+            var depthComparison = Read(values, "_ZTest");
+            if (depthComparison !=
+                    LilToonOpaqueConversionFactors.LEqualDepthComparison &&
+                !(allowDepthTestChange &&
+                  depthComparison ==
+                  LilToonOpaqueConversionFactors.LessDepthComparison))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -311,7 +322,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // setting (B2 §3.4) — the property modulates the mask
             // derivative, not the a=1 sample itself.
 
-            return LilToonOpaqueConversionEligibility.Convertible();
+            return LilToonOpaqueConversionEligibility.Convertible(
+                depthComparison ==
+                LilToonOpaqueConversionFactors.LessDepthComparison);
         }
 
         /// <summary>

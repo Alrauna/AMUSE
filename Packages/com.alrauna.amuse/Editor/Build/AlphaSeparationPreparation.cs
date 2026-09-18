@@ -13,13 +13,20 @@ namespace Alrauna.Amuse.Editor.Build
     /// <summary>
     /// Substitutes only one family's shader-opaque-conversion step for one
     /// admitted material — attestation, eligibility and clone preparation —
-    /// returning either a mapped opaque <see cref="Material"/> or a
-    /// conversion refusal. They exist so public-package fixtures whose
-    /// stand-in shaders deliberately fail source attestation can still drive
-    /// the feature: the internal barrier overload takes them as optional
-    /// final parameters, and production passes nothing and runs the real
+    /// taking the depth-test policy the avatar chose and returning either a
+    /// mapped opaque <see cref="Material"/> or a conversion refusal, plus
+    /// whether eligibility admitted the source through that policy. They
+    /// exist so public-package fixtures whose stand-in shaders deliberately
+    /// fail source attestation can still drive the feature: the internal
+    /// barrier overload takes them as optional final parameters, and
+    /// production passes nothing and runs the real
     /// <see cref="PoiyomiOpaqueConversion"/> and
     /// <see cref="LilToonOpaqueTarget"/> paths.
+    /// <para>
+    /// The policy input and the divergence output make the seam boundary
+    /// carry the same two facts the real route reads off its eligibility
+    /// result, so the mixed-split guard sees one contract on both routes.
+    /// </para>
     /// <para>
     /// Delegates on an existing overload, not an interface, registry,
     /// adapter hierarchy, result framework, or a test fixture framework.
@@ -28,9 +35,11 @@ namespace Alrauna.Amuse.Editor.Build
     internal delegate bool VerifiedPoiyomiConversion(
         Material live,
         CapturedMaterialEvidence derived,
+        bool allowDepthTestChange,
         Material preparedOpaque,
         out Material opaque,
-        out PoiyomiOpaqueConversionRefusal refusal);
+        out PoiyomiOpaqueConversionRefusal refusal,
+        out bool depthTestDivergence);
 
     /// <summary>
     /// The verified-fixture seam for the lilToon conversion families
@@ -41,9 +50,11 @@ namespace Alrauna.Amuse.Editor.Build
     internal delegate bool VerifiedLilToonConversion(
         Material live,
         CapturedMaterialEvidence derived,
+        bool allowDepthTestChange,
         Material preparedOpaque,
         out Material opaque,
-        out LilToonOpaqueConversionRefusal refusal);
+        out LilToonOpaqueConversionRefusal refusal,
+        out bool depthTestDivergence);
 
     /// <summary>
     /// Barrier-side alpha-separation preparation: conversion-relevance
@@ -89,7 +100,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            bool allowDepthTestChange = false)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -326,6 +338,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
                 var unconvertedCount = 0;
                 var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
+                var slotDivergence = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
                 foreach (var admittedIndex in
                              slots[slotIndex].AdmittedMaterialIndices)
@@ -372,7 +385,18 @@ namespace Alrauna.Amuse.Editor.Build
                         preparedOpaque,
                         poiyomiConversion,
                         lilToonConversion,
-                        out var opaque);
+                        allowDepthTestChange,
+                        // The split decision the planner made for this
+                        // slot: a mixed split appends a submesh, a wholly
+                        // opaque plan replaces the slot's material whole.
+                        // The conversion boundary needs it because the
+                        // depth-test divergence it reports is only safe
+                        // when every moved triangle lands on one material.
+                        submesh.Disposition ==
+                            SubmeshSeparationDisposition.Split,
+                        out var opaque,
+                        out var materialDivergence);
+                    slotDivergence |= materialDivergence;
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
                         lastConversionRefusal = conversionRefusal;
@@ -435,7 +459,21 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 candidateSlots.Add(new PreparedSlotSeparation(
-                    submesh, mapping));
+                    submesh, mapping, slotDivergence));
+
+                // One Information entry per prepared slot whose
+                // conversion admitted a depth-test divergence, so the
+                // build report names the change for every affected
+                // slot. Unflagged slots keep their previous silence.
+                if (slotDivergence)
+                {
+                    AmuseReports.SlotSeparationDivergence(
+                        target.Renderer,
+                        slotIndex,
+                        target.Renderer != null
+                            ? target.Renderer.gameObject.name
+                            : null);
+                }
             }
 
             if (candidateSlots.Count == 0)
@@ -526,7 +564,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// family's own conversion request, the conversion step (the real
         /// family route, or the verified-fixture seam), and the renderer-wide
         /// runtime-overwrite rule against the family's own recipe. Returns
-        /// the mapped opaque result, or the slot-local refusal.
+        /// the mapped opaque result, or the slot-local refusal. A material
+        /// the depth-test policy admitted onto a mixed-split plan refuses
+        /// here, before any material is prepared for that slot.
         /// </summary>
         private static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
             CapturedAlphaMaterial captured,
@@ -537,9 +577,13 @@ namespace Alrauna.Amuse.Editor.Build
             Material preparedOpaque,
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
-            out Material opaque)
+            bool allowDepthTestChange,
+            bool mixedSplit,
+            out Material opaque,
+            out bool depthTestDivergence)
         {
             opaque = null;
+            depthTestDivergence = false;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.LilToon:
@@ -607,16 +651,45 @@ namespace Alrauna.Amuse.Editor.Build
                         // the real canonical
                         // clone recipe — and deliberately skips the
                         // source-identity check no stand-in shader can pass.
+                        // The policy crosses the seam as an input and the
+                        // divergence as an output, so the guard below sees
+                        // the same fact the real route reads off its own
+                        // eligibility result.
                         if (!lilToonConversion(
                                 live,
                                 derived,
+                                allowDepthTestChange,
                                 preparedOpaque,
                                 out opaque,
-                                out _))
+                                out _,
+                                out var seamDivergence))
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+
+                        if (seamDivergence && mixedSplit)
+                        {
+                            // The seam may already have created the clone
+                            // for this source. The real route refuses
+                            // before its clone exists, so mirror that here:
+                            // an AMUSE-owned transient from this same call
+                            // is destroyed, while an avatar-wide prepared
+                            // artifact and the live source stay untouched.
+                            if (!ReferenceEquals(opaque, live) &&
+                                !ReferenceEquals(opaque, preparedOpaque))
+                            {
+                                UnityEngine.Object.DestroyImmediate(opaque);
+                            }
+
+                            opaque = null;
+                            return AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit;
+                        }
+
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
                     }
                     else
                     {
@@ -653,16 +726,33 @@ namespace Alrauna.Amuse.Editor.Build
                         var eligibility = isTransparent
                             ? LilToonTransparentSourceEligibility
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType)
+                                    derived, queue, renderType,
+                                    allowDepthTestChange)
                             : LilToonCutoutSourceEligibility
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType);
+                                    derived, queue, renderType,
+                                    allowDepthTestChange);
                         if (eligibility.Outcome !=
                             LilToonOpaqueConversionOutcome.Convertible)
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+
+                        // The depth-test policy admitted this source, but a
+                        // mixed split moves the proven-opaque triangles onto
+                        // an appended submesh while the unproven triangles
+                        // stay, so the two parts would draw under different
+                        // depth rules. The slot refuses before the clone is
+                        // prepared for it.
+                        if (eligibility.DepthTestDivergence && mixedSplit)
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit;
+                        }
+
+                        depthTestDivergence =
+                            eligibility.DepthTestDivergence;
 
                         // An already-prepared artifact for this source is
                         // reused here; only a first conversion creates the
@@ -729,19 +819,48 @@ namespace Alrauna.Amuse.Editor.Build
                         // state, real eligibility and the real canonical
                         // clone recipe — and deliberately skips the
                         // source-identity check no stand-in shader can pass.
+                        // The policy crosses the seam as an input and the
+                        // divergence as an output, exactly as on the
+                        // lilToon route above.
                         if (!poiyomiConversion(
                                 live,
                                 derived,
+                                allowDepthTestChange,
                                 preparedOpaque,
                                 out opaque,
-                                out _))
+                                out _,
+                                out var seamDivergence))
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
+
+                        if (seamDivergence && mixedSplit)
+                        {
+                            // The seam may already have created the clone
+                            // for this source. The real route refuses
+                            // before its clone exists, so mirror that here:
+                            // an AMUSE-owned transient from this same call
+                            // is destroyed, while an avatar-wide prepared
+                            // artifact and the live source stay untouched.
+                            if (!ReferenceEquals(opaque, live) &&
+                                !ReferenceEquals(opaque, preparedOpaque))
+                            {
+                                UnityEngine.Object.DestroyImmediate(opaque);
+                            }
+
+                            opaque = null;
+                            return AlphaSeparationSlotRefusal
+                                .DepthTestDivergenceMixedSplit;
+                        }
+
+                        // The seam reported the divergence of the
+                        // material that converted.
+                        depthTestDivergence = seamDivergence;
                     }
                     else
                     {
+
                         // Effective non-property facts, read in the barrier
                         // beside the evidence: neither fact is
                         // animation-reachable, so reading them here is not a
@@ -767,13 +886,31 @@ namespace Alrauna.Amuse.Editor.Build
                         var eligibility =
                             PoiyomiOpaqueConversion
                                 .EvaluateVerifiedEligibility(
-                                    derived, queue, renderType);
+                                    derived, queue, renderType,
+                                    allowDepthTestChange);
                         switch (eligibility.Outcome)
                         {
                             case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
                                 opaque = live;
                                 break;
                             case PoiyomiOpaqueConversionOutcome.Convertible:
+                                // The depth-test policy admitted this
+                                // source, but a mixed split moves the
+                                // proven-opaque triangles onto an appended
+                                // submesh while the unproven triangles stay,
+                                // so the two parts would draw under different
+                                // depth rules. The slot refuses before the
+                                // clone is prepared for it.
+                                if (eligibility.DepthTestDivergence &&
+                                    mixedSplit)
+                                {
+                                    return AlphaSeparationSlotRefusal
+                                        .DepthTestDivergenceMixedSplit;
+                                }
+
+                                depthTestDivergence =
+                                    eligibility.DepthTestDivergence;
+
                                 // An already-prepared artifact for this
                                 // source is reused here; only a first
                                 // conversion creates the canonical clone.

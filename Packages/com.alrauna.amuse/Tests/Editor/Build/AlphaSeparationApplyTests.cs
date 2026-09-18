@@ -361,21 +361,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static bool VerifiedFamilyConversion(
             Material live,
             CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
             Material preparedOpaque,
             out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal)
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
         {
             if (live != null && live.shader == Shader.Find(
                     LilToonConversionShaderNames.Transparent))
             {
                 return VerifiedLilToonTestSeams
                     .VerifiedTransparentConversionStep(
-                        live, derived, preparedOpaque,
-                        out opaque, out refusal);
+                        live, derived, allowDepthTestChange, preparedOpaque,
+                        out opaque, out refusal, out depthTestDivergence);
             }
 
             return VerifiedLilToonTestSeams.VerifiedConversion(
-                live, derived, preparedOpaque, out opaque, out refusal);
+                live, derived, allowDepthTestChange, preparedOpaque,
+                out opaque, out refusal, out depthTestDivergence);
         }
 
         private static VerifiedPoiyomiConversion ConversionOverride
@@ -1798,12 +1801,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     using (new ConversionOverrideScope(
                         (Material live, CapturedMaterialEvidence derived,
+                         bool allowDepthTestChange,
                          Material preparedOpaque,
                          out Material opaque,
-                         out PoiyomiOpaqueConversionRefusal refusal) =>
+                         out PoiyomiOpaqueConversionRefusal refusal,
+                         out bool depthTestDivergence) =>
                         {
                             opaque = live;
                             refusal = PoiyomiOpaqueConversionRefusal.None;
+                            depthTestDivergence = false;
                             return true;
                         }))
                     {
@@ -1920,9 +1926,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Material generatedClone = null;
                     using (new ConversionOverrideScope(
                         (Material live, CapturedMaterialEvidence derived,
+                         bool allowDepthTestChange,
                          Material preparedOpaque,
                          out Material opaque,
-                         out PoiyomiOpaqueConversionRefusal refusal) =>
+                         out PoiyomiOpaqueConversionRefusal refusal,
+                         out bool depthTestDivergence) =>
                         {
                             if (ReferenceEquals(live, split))
                             {
@@ -1930,11 +1938,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                     .PrepareCanonicalOpaqueClone(live);
                                 opaque = generatedClone;
                                 refusal = PoiyomiOpaqueConversionRefusal.None;
+                                depthTestDivergence = false;
                                 return true;
                             }
 
                             opaque = null;
                             refusal = PoiyomiOpaqueConversionRefusal.UnattestedMaterial;
+                            depthTestDivergence = false;
                             return false;
                         }))
                     {
@@ -2130,12 +2140,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         root, "AMUSE cross-avatar graph", validClip, inertClip);
                     using (new ConversionOverrideScope(
                         (Material live, CapturedMaterialEvidence derived,
+                         bool allowDepthTestChange,
                          Material preparedOpaque,
                          out Material opaque,
-                         out PoiyomiOpaqueConversionRefusal refusal) =>
+                         out PoiyomiOpaqueConversionRefusal refusal,
+                         out bool depthTestDivergence) =>
                         {
                             opaque = live;
                             refusal = PoiyomiOpaqueConversionRefusal.None;
+                            depthTestDivergence = false;
                             return true;
                         }))
                     {
