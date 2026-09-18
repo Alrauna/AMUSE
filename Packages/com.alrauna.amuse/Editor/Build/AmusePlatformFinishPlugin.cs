@@ -458,6 +458,8 @@ namespace Alrauna.Amuse.Editor.Build
                 opaqueAlphaPercent < 100 || polygonClampPercent > 0;
             var ignoreOutOfRangeSlots =
                 optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
+            var allowDepthTestChange =
+                optimizer == null || optimizer.AllowDepthTestChange;
 
 
             foreach (var renderer in context.AvatarRootObject
@@ -627,7 +629,8 @@ namespace Alrauna.Amuse.Editor.Build
                             poiyomiConversion,
                             lilToonConversion,
                             minimumOpaqueCoveragePercent,
-                            rendererTypeName);
+                            rendererTypeName,
+                            allowDepthTestChange);
                     }
                 }
 
@@ -1174,7 +1177,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            bool allowDepthTestChange = false)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -1186,7 +1190,8 @@ namespace Alrauna.Amuse.Editor.Build
                 poiyomiConversion,
                 lilToonConversion,
                 minimumOpaqueCoveragePercent,
-                rendererTypeName);
+                rendererTypeName,
+                allowDepthTestChange);
             if (prepared == null)
             {
                 return;
