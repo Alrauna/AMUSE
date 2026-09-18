@@ -124,7 +124,39 @@ package links today.
    importer-capped, with a two-region mask and a mesh whose triangles sit
    inside the white region.
 
-## 8. Relation to existing records
+## 8. Same-day probe addendum (2026-09-18)
+
+Read-only probes through the development bridge, after section 7 was written:
+
+1. The depth-test policy is confirmed live in the Lab build: the build
+   reported the materials resolved, so the eligibility admitted the source.
+   The old depth refusal is gone.
+2. The render-state gates are all clean on the Lab editor: build target
+   admitted, the mask format is on the admitted allowlist (DXT1), no mipmap
+   limit is active (global limit zero, master limit zero), the mask is not a
+   streaming texture.
+3. A direct red-channel capture of the mask texture succeeds with no
+   refusal and returns a mip chain. The capture arm is not the blocker at
+   the texture level.
+4. The alpha mask replace semantics are implemented correctly in the shipped
+   transparent frontend: for a replace-mode sample mask, the semantic output
+   is complete and the main texture alpha is discarded. The main texture's
+   alpha channel would otherwise be a suspect: about 27 percent of its
+   texels sit at 254, strictly below one.
+5. The texture coordinates of the flagged submesh read fine through both
+   the legacy getter and the channel API, so the stage-B legacy-getter
+   defect does not apply to the zero-proof.
+
+What stays open: which factor of the resolved alpha chain is unknown. The
+in-editor reflection probes that drive the full resolution hit the bridge's
+30 second transport window, because the closed capture re-runs the vendor
+attestation digest on every call. The instrumented run belongs in the
+development project: a debug-instrumented classification of a stand-in
+fixture shaped like this material (DXT1 sRGB mask, replace mode, two-region
+coverage) will name the unknown factor, and the RED test from section 7
+applies unchanged.
+
+## 9. Relation to existing records
 
 The 2026-09-17 notes stand unchanged. This build confirms their Finding A is
 fixed and moves the open defect from conversion eligibility to per-triangle
