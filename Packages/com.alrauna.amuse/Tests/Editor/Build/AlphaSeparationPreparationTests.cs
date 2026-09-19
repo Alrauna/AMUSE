@@ -4422,14 +4422,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The depth-test policy on a transparent source whose depth
         /// comparison is Less: a wholly opaque slot converts under the
         /// policy and its success report carries the fixed divergence
-        /// sentence, a mixed split refuses with the named divergence
-        /// refusal, the policy off keeps today's conversion refusal, an
-        /// unflagged conversion reports nothing, and a refused divergent
-        /// value in a multi-material swap falls back to identity and
-        /// reports nothing.
+        /// sentence, a mixed split also converts under the policy and
+        /// carries the same disclosure exactly once, the policy off keeps
+        /// today's conversion refusal, an unflagged conversion reports
+        /// nothing, and a divergent value in a multi-material swap
+        /// converts and moves its proven triangles under the same
+        /// disclosure.
         /// </summary>
         [Test]
-        public void DepthTestDivergenceConvertsWholeSlotsAndRefusesMixedSplits()
+        public void
+            DepthTestDivergencePolicyConvertsWholeAndMixedSplits()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonTransparentConversionFixtures();
@@ -4499,10 +4501,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 // (b) Policy on, mixed plan: the proven-opaque triangle
-                // would move onto an appended submesh while the unproven
-                // triangle stays, so the two parts would draw under
-                // different depth rules. The slot refuses with the named
-                // divergence refusal.
+                // moves onto an appended submesh while the unproven
+                // triangle stays on the source material. The policy
+                // admitted the depth divergence, so the slot converts
+                // and the prepared separation discloses it exactly once.
                 AlphaSeparationSplitTests.EnsureSplitFolder();
                 using (var arm = DepthTestPolicyArmFixture.Create(
                            AlphaSeparationSplitTests.ImportSplitAlphaTexture(
@@ -4538,46 +4540,54 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            },
                            allowDepthTestChange: true))
                 {
-                    var amuse = arm.Run();
+                    AmusePlatformFinishState mixedState = null;
+                    var mixedReports = ErrorReport.CaptureErrors(
+                        () => mixedState = arm.Run());
 
                     Assert.That(
-                        amuse.AvatarRefusal,
+                        mixedState.AvatarRefusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
                     Assert.That(
-                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        mixedState.SemanticallyRefusedRendererCount, Is.Zero,
                         "fixture precondition: the renderer must be " +
                         "analyzable");
                     Assert.That(
-                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        mixedState.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
                         "fixture precondition: only the opaque-half " +
                         "triangle may prove, or the plan is not a split");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit),
-                        Is.EqualTo(1),
-                        "the flagged mixed slot must refuse with the " +
-                        "named divergence refusal");
                     foreach (AlphaSeparationSlotRefusal reason in Enum
                                  .GetValues(
                                      typeof(AlphaSeparationSlotRefusal)))
                     {
-                        if (reason == AlphaSeparationSlotRefusal.None ||
-                            reason == AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit)
+                        if (reason == AlphaSeparationSlotRefusal.None)
                         {
                             continue;
                         }
 
                         Assert.That(
-                            amuse.SlotRefusalCount(reason), Is.Zero,
-                            "the refusal must be the divergence cause and " +
-                            "nothing else: " + reason);
+                            mixedState.SlotRefusalCount(reason), Is.Zero,
+                            "a mixed split under the policy must convert " +
+                            "with no refusal of any kind: " + reason);
                     }
                     Assert.That(
-                        amuse.Separation, Is.Null,
-                        "the only candidate slot was refused, so nothing " +
-                        "is retained");
+                        mixedState.Separation, Is.Not.Null,
+                        "the mixed split slot must prepare under the " +
+                        "policy");
+                    Assert.That(
+                        mixedState.Separation.TryGetOpaque(
+                            arm.Material, out _),
+                        Is.True,
+                        "the divergent mixed split slot must convert " +
+                        "under the policy");
+                    Assert.That(
+                        mixedReports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "Some moved triangles now use the normal " +
+                            "depth rule because their source material " +
+                            "set a special one."),
+                        "the flagged mixed split slot must report its " +
+                        "converted divergence exactly once");
                 }
 
                 // (c) Policy off: eligibility refuses the Less depth
@@ -4666,12 +4676,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "divergence sentence");
                 }
 
-                // (e) A refused divergent value must not raise the
-                // sentence: on a mixed split, a multi-material swap with
-                // one divergent source falls back to identity for that
-                // source, so no triangle of it moved. The convertible
-                // sibling moved under the normal rule, so the success
-                // report stays silent.
+                // (e) A divergent value in a multi-material swap now
+                // converts on a mixed split: its proven triangles move
+                // onto the prepared opaque clone, and the slot's success
+                // report carries the divergence sentence exactly once.
+                // The convertible sibling converts under the normal rule.
                 AlphaSeparationSplitTests.EnsureSplitFolder();
                 var swapTexture = AlphaSeparationSplitTests
                     .ImportSplitAlphaTexture(
@@ -4758,10 +4767,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: both swap values must " +
                         "map");
                     Assert.That(
-                        swapMapping[divergent], Is.SameAs(divergent),
-                        "fixture precondition: the refused divergent " +
-                        "value falls back to identity, so no triangle " +
-                        "of it moved");
+                        swapMapping[divergent], Is.Not.SameAs(divergent),
+                        "the divergent value converts under the policy, " +
+                        "so its proven triangles move onto the prepared " +
+                        "opaque clone");
                     Assert.That(
                         swapState.Separation.TryGetOpaque(
                             convertible, out _),
@@ -4770,12 +4779,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "converts under the normal rule");
                     Assert.That(
                         swapReports.Select(r => r.TheError.ToMessage()),
-                        Has.None.Contains(
+                        Has.Exactly(1).Contains(
                             "Some moved triangles now use the normal " +
                             "depth rule because their source material " +
                             "set a special one."),
-                        "a slot whose divergent value never moved must " +
-                        "not carry the divergence sentence");
+                        "the slot whose divergent value moved must " +
+                        "carry the divergence sentence exactly once");
                 }
                 finally
                 {

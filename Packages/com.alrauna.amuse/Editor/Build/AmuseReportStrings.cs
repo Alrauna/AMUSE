@@ -427,17 +427,6 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:hint"] =
                 "Lower the minimum opaque coverage setting on the AMUSE " +
                 "component if you want this split.",
-            ["amuse.slotSeparation.DepthTestDivergenceMixedSplit"] =
-                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
-            ["amuse.slotSeparation.DepthTestDivergenceMixedSplit:description"] =
-                "Material slot {0} of renderer '{2}' mixes opaque and " +
-                "non-opaque triangles, and its depth test differs from the " +
-                "opaque target. Reason: {1}. A split would draw the two " +
-                "parts under different depth rules. The slot keeps its " +
-                "original material.",
-            ["amuse.slotSeparation.DepthTestDivergenceMixedSplit:hint"] =
-                "Make every triangle of the slot opaque, or accept that " +
-                "this slot stays unchanged.",
             ["amuse.slotSeparation.DepthTestDivergence"] =
                 "AMUSE separated material slot {0} of renderer '{1}'.",
             ["amuse.slotSeparation.DepthTestDivergence:description"] =
