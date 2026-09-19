@@ -271,6 +271,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var resolution =
                     AlphaSemanticsResolver.Resolve(
                         semantics.Alpha, materialFields, maxNoiseTexelPercent);
+                AmuseDbgTrace.Line(
+                    "resolveSlot material=" + index +
+                    " family=" + material.Family +
+                    " failure=" + resolution.Failure +
+                    " resolver=" + resolveSemantics.Method.Name);
+                AmuseDbgTrace.Resolution(resolution, "resolveSlot.m" + index);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
                     return SlotResolutionResult.Refused(

@@ -244,3 +244,90 @@ stays open and is unrelated to this zero-proof outcome.
 
 Branch: `feat/ztest-alpha-policy` at `24ddb87`. This note is uncommitted. Git
 authorization stays with the product owner.
+
+## 13. Resolution: the zero-proof is the exact wrap-blend rule (2026-09-18)
+
+Privacy note: same sanitization as section 1. This section records
+instrumented runs of public synthetic fixtures in the development editor
+instance. It names no private avatar, renderer, material, or texture.
+
+Method: temporary AMUSE-DBG trace hooks in `ResolveRuntimeStates`,
+`AdmittedMaterialStates.ResolveSlot`, and `IntersectResolvedOutcomes`, plus a
+reflection dump helper. The hooks observed the real falsifier build through
+the production entry. Removal is tracked below and in the fix commit.
+
+### 13.1 What the trace showed
+
+The end-to-end prepare path behaved exactly per contract at every stage:
+
+1. Policy: mip cap 4, minimum texture size 1 (the fixture pins All Sizes),
+   density cap 0, no proof-relevant bindings, one slot, one admitted
+   material.
+2. `ResolveSlot` returned one classified resolution. Chain level 0 held
+   exactly 8192 of 16384 opaque verdicts, levels 1 to 4 held exactly half
+   each. Mapping identity, channel 0, bilinear repeat sampling. This is the
+   same resolution the direct seam run produced.
+3. `DistinctResolutions` kept 1 of 1.
+4. The snapshot UV0 values equaled the authored fixture values exactly.
+5. The resolution itself classified the authored triangle input
+   `MustRemainTransparent`.
+
+So the suspect list from section 11 is cleared. The capture, the field set,
+`ResolveSlot`, `DistinctResolutions`, the snapshot geometry, and the
+classifier input wiring are all exact.
+
+### 13.2 Which level refutes, and why
+
+A per-level bisect of the same resolution on the same input gave
+`ProvenOpaque` at levels 0 to 3 and `MustRemainTransparent` at level 4.
+
+At level 4 the mask is 8 by 8. The white half spans texels 0 to 3. The
+triangle domain starts at 0.05 of the texture width, which is 0.4 texels.
+The bilinear support of a texel under repeat spans half a texel on each
+side, so the wrapped black column 7 carries the support interval from minus
+0.5 to plus 0.5 texels. The domain edge at 0.4 texels sits inside that
+interval. A bilinear sample at the domain edge provably blends the wrapped
+black column, so the sampled alpha is provably below one.
+`MustRemainTransparent` is absorbing across the consulted chain, so one
+refuting level keeps the triangle on the original material.
+
+This is the documented contract, not a defect: the hardware may select any
+consulted level, and a triangle that provably samples a sub-one blend at
+some consulted level is not proven opaque. The falsifier fixture's premise,
+"far from the region boundary at every consulted level", is false at level
+4. The fixture carries the defect, not the pipeline.
+
+### 13.3 Why section 10 saw a contradiction
+
+The direct seam probe captured with minimum texture size 128. A 128 by 128
+texture answers that scope at level 0 only, so the probe's chain held one
+level and the domain proves there. The falsifier pins All Sizes, so the
+prepare path consults levels 0 to 4. The two runs used different proof
+scopes. Section 11's claim that the policy threading matched was wrong on
+that parameter. The old probe run logs confirm it: the direct run dumped one
+chain level, the prepare run dumped five.
+
+### 13.4 Consequence for the Lab renderer
+
+The bounding-box addendum in section 4 counted a triangle when the triangle's
+box sat in pure white at one level. It did not model the half-texel bilinear
+support margin, the repeat seam, or the all-level conjunction. So "at least
+228408 provable" was never established under the actual proof rule. The
+observed zero on that renderer is consistent with the exact rule: a dense
+garment layout at a 128 by 128 coarsest consulted level leaves most
+triangles within half a texel of some non-opaque texel at some level.
+
+### 13.5 Fix plan
+
+1. Correct the falsifier fixture so its triangle domain clears every
+   non-opaque support at every consulted level. A domain inside 0.3 to 0.4
+   of the texture width clears the wrapped seam and the black half at all
+   levels 0 to 4. The falsifier then goes green and pins the true contract.
+2. Add one characterization test that keeps a seam-adjacent domain
+   unproven, so a later classifier change cannot silently drop the wrap
+   support rule. This assertion passes on first run and is recorded as
+   characterization, never as RED.
+3. Remove the temporary trace hooks, the dump helper, and the temporary
+   probe.
+4. Observe the falsifier green, then the full product and research EditMode
+   assemblies. Counts land in section 14.
