@@ -331,3 +331,26 @@ triangles within half a texel of some non-opaque texel at some level.
    probe.
 4. Observe the falsifier green, then the full product and research EditMode
    assemblies. Counts land in section 14.
+
+## 14. Validation observed (2026-09-18)
+
+All runs went through the Unity Test Runner in the development editor
+instance, EditMode, on this branch after the fix and the instrumentation
+removal. Observed counts:
+
+1. `Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque` passed. The fixture
+   correction turned the RED pin green without any production change.
+2. `Dxt1SrgbMask_SeamBlendTriangleStaysUnproven` passed. First observation,
+   recorded as characterization.
+3. Full product and research assemblies: 2258 tests, 2258 passed, 0 failed,
+   0 skipped, in 210 seconds. Two environment-gated DAO integration tests
+   reported Inconclusive outside their gated integration project, which the
+   gate itself declares.
+4. A research assembly probe run passed with 1 of 1, confirming the research
+   assembly loads and executes in the same session.
+
+The temporary trace hooks, the dump helper, and the temporary probe are
+removed in the fix commit. A repository-wide source search for the debug tag
+returns zero hits after removal. The falsifier and its companion test remain
+as the permanent pins: one proves the wrap-clear contract, one pins the
+conservative refusal at the seam.
