@@ -144,6 +144,59 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(sourceId.Value, Does.StartWith("unity-asset:"));
         }
 
+        [Test]
+        public void TryGetSourceId_VrcFuryBuildContainerSubAsset_Succeeds()
+        {
+            // The play-mode build path of the VRCFury host clones every
+            // avatar texture into one persisted binary container before any
+            // NDMF plugin runs. The clones keep their original names, so a
+            // name marker cannot characterize them. The characterization
+            // pins the container object instead: its full type name and its
+            // object name, exactly as VRCFury writes them.
+            var containerPath = TempFolder + "/VRCFury Other.asset";
+            var container = ScriptableObject.CreateInstance<VF.Utils.BinaryContainer>();
+            AssetDatabase.CreateAsset(container, containerPath);
+
+            var mask = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            mask.name = "SomeAvatar_Mask_1";
+            AssetDatabase.AddObjectToAsset(mask, containerPath);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(AssetDatabase.IsSubAsset(mask), Is.True);
+            Assert.That(
+                UnityTextureEvidence.TryGetSourceId(mask, out var sourceId),
+                Is.True);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                mask, out var guid, out long localId);
+            Assert.That(
+                sourceId,
+                Is.EqualTo(new TextureSourceId(
+                    "unity-asset:" + guid.ToLowerInvariant() + ":" + localId)));
+        }
+
+        [Test]
+        public void TryGetColorInterpretation_VrcFurySubAsset_ReadsGraphicsFormat()
+        {
+            var containerPath = TempFolder + "/VrcFuryColorContainer.asset";
+            var container = ScriptableObject.CreateInstance<VF.Utils.BinaryContainer>();
+            container.name = "VRCFury Other";
+            AssetDatabase.CreateAsset(container, containerPath);
+            container.name = "VRCFury Other";
+
+            var mask = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            mask.name = "SomeAvatar_Mask_2";
+            AssetDatabase.AddObjectToAsset(mask, containerPath);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(
+                UnityTextureEvidence.TryGetColorInterpretation(
+                    mask, out var interpretation),
+                Is.True);
+            Assert.That(
+                interpretation,
+                Is.EqualTo(TextureColorInterpretation.Srgb));
+        }
+
         // --- TryGetSampling ---
 
         [Test]
@@ -423,5 +476,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "IsCanonicalNormalMapImport",
                 }));
         }
+    }
+}
+
+/// <summary>
+/// Stand-in for the pinned vendor container type of the VRCFury play-mode
+/// build path. It carries the same full type name as the vendor container
+/// and no vendor code, in the same spirit as the stand-in test shaders.
+/// </summary>
+namespace VF.Utils
+{
+    internal sealed class BinaryContainer : ScriptableObject
+    {
     }
 }
