@@ -354,3 +354,117 @@ removed in the fix commit. A repository-wide source search for the debug tag
 returns zero hits after removal. The falsifier and its companion test remain
 as the permanent pins: one proves the wrap-clear contract, one pins the
 conservative refusal at the seam.
+
+## 15. The Lab zero has a second cause: the host container identity
+   refusal (2026-09-18)
+
+Privacy note: same sanitization as section 1. This section characterizes the
+host build pipeline and one texture fact. It names no avatar, renderer, or
+texture identifier, and no machine-specific path.
+
+### 15.1 Why the falsifier fix could not change the Lab
+
+The falsifier fix corrected a fixture premise, so production behavior stayed
+the same. The Lab build kept reporting the renderer refusal with every
+triangle answer Unknown. This section records the continuation.
+
+Method: one read-only session against the Census Lab editor through the
+development bridge. Reflection probes drove the production seams on the live
+renderer. No scene, asset, or file in the Census Lab project was modified.
+One console record read came from the last editor log of the Lab session.
+
+### 15.2 What the NDMF console showed
+
+The build ran the production pipeline end to end. The materials resolved.
+The renderer then reported the all-Unknown refusal, and the summary counted
+zero analyzed renderers. The second avatar in the scene had every production
+pass marked incompatible, which is a separate gate observation recorded for
+a later session.
+
+### 15.3 The evidence chain, in order
+
+Each probe narrowed the stage. All stages before the last were exact:
+
+1. The renderer snapshot: refusal None, full vertex, position, and UV0
+   arrays, submesh index count exact, no extra UV channels with content.
+2. The animation closure: no material curves and no material swaps on the
+   flagged renderer path across all controller layers and 527 clips.
+3. The mask source morphology: the source image is 55.3 percent exactly
+   white, and 30.2 percent of the area sits at least 1.5 coarsest-level
+   texels inside an exactly white region. The exact wrap-blend rule
+   therefore cannot refute every triangle, so the section 13 refutation does
+   not explain the Lab zero.
+4. The production analyze on the isolated snapshot: refusal None, but the
+   slot analysis failed with SemanticsUnknown, so classification never ran.
+5. The frontend diagnostic: the alpha output was incomplete with code
+   UnstableTextureIdentity and detail _AlphaMask.
+6. The texture identity: every referenced mask texture in the scene, the
+   original included, is a sub-asset of the host's play-mode container asset.
+   The host clones all avatar textures into one persisted container before
+   any NDMF plugin runs.
+
+### 15.4 The defect
+
+`UnityTextureEvidence.TryGetSourceId` refused every sub-asset that a
+characterized producer did not create. The identity gate then answered false
+for the mask, the frontend refused with UnstableTextureIdentity, the alpha
+semantics stayed incomplete, the slot failed with SemanticsUnknown, and the
+classifier answered Unknown for every triangle. The play-mode build path of
+this host is therefore inert for AMUSE on any avatar whose textures the host
+repacks. The existing pinned test for uncharacterized sub-assets stays
+valid; the defect is a missing characterization, not a wrong refusal.
+
+### 15.5 The fix
+
+`GeneratedTextureAttestation` gained a characterization for the host build
+container producer, pinned to the container object's full type name and its
+object name. That producer's sub-assets keep their original texture names,
+so a texture name marker cannot characterize them. With the
+characterization, the identity resolves through the existing container
+identity path, and the color interpretation reads the graphics format like
+the other characterized producers.
+
+RED first: two new tests in `UnityTextureEvidenceTests` failed on the
+unfixed tree, one for identity and one for color interpretation. GREEN
+after the fix: both pass, and both existing sub-asset refusal pins still
+pass. The full product and research assemblies then ran 2260 tests with 0
+failures in 289 seconds, with the two environment-gated DAO integration
+tests Inconclusive outside their gated project as their gate declares.
+
+### 15.6 Lab verification status
+
+The Lab editor recompiled the fixed working tree. The re-drive of the
+production analyze on the real renderer now runs the mask chain capture and
+the full per-triangle classification, which exceeds the bridge transport
+window on this machine. The verification result is recorded in section 16
+when the run completes. The unit suite and the falsifier pin carry the
+regression proof either way.
+
+## 16. Lab verification result (2026-09-18)
+
+The re-drive of the production path on the real renderer, with the fix
+compiled into the Lab working tree, observed:
+
+1. Capture refusal None.
+2. The frontend alpha output complete. Before the fix it was incomplete
+   with UnstableTextureIdentity on the mask.
+3. One classified resolution with the mask chain of five consulted levels,
+   no level missing evidence, identity UV0 mapping.
+4. The captured chain verdict fractions match the section 8 measurements:
+   54.03 percent exactly opaque at level 0 and 45.44 percent at level 4.
+
+The chain verdicts and the full mesh went through a conservative geometric
+check that lower-bounds the production proof: a triangle counts as proven
+only when the bilinear support window of its bounding domain holds only
+exactly opaque verdicts at every consulted level. The exact production
+classifier uses precise triangle geometry, so production proves at least
+this count. Observed: 175696 of 524288 triangles prove, about 33.5 percent.
+The first refuting level is level 0 for 263776 triangles, whose domains
+cover non-opaque mask regions, and level 4 for 43960 triangles, where the
+half-texel margin rule refutes a small tail. The zero-proof is gone. The
+conservative estimate in section 4 never accounted for the margin rule and
+overcounted, exactly as section 13.4 states for the falsifier.
+
+The remaining count of triangles stays on their original material by
+contract: their sampled alpha is provably below one at some consulted
+level. That is the conservative behavior the policy declares.
