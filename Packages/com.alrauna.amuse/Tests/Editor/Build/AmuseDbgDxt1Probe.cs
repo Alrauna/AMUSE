@@ -172,7 +172,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.2f, 0.05f),
                     new Vector2(0.05f, 0.2f),
                 },
-                resolution,
+                (Alrauna.Amuse.Editor.Analysis.AlphaResolution)resolution,
                 extraUvSets);
 
             Debug.Log(

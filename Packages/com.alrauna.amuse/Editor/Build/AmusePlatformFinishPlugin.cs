@@ -1037,6 +1037,13 @@ namespace Alrauna.Amuse.Editor.Build
                 evidence.AdmittedMaterials,
                 maxMipLevel,
                 minTextureSize);
+            AmuseDbgTrace.Line(
+                "resolveRuntimeStates mipCap=" + maxMipLevel +
+                " minSize=" + minTextureSize +
+                " densityCap=" + densityCapPercent +
+                " bindings=" + relevantBindings.Count +
+                " slots=" + slots.Count +
+                " admitted=" + evidence.AdmittedMaterials.Count);
 
             // Every slot is resolved; no slot's failure stops the loop. A
             // slot's admission failure is a fact about that slot's own admitted
@@ -1071,9 +1078,14 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 anySlotResolved = true;
-                slotResults[slotIndex] = SlotResolutionResult.Resolved(
-                    AdmittedMaterialStates.DistinctResolutions(
-                        resolved.Resolutions));
+                var distinct = AdmittedMaterialStates.DistinctResolutions(
+                    resolved.Resolutions);
+                AmuseDbgTrace.Line(
+                    "slot " + slotIndex + " resolved raw=" +
+                    resolved.Resolutions.Count +
+                    " distinct=" + distinct.Count);
+                slotResults[slotIndex] =
+                    SlotResolutionResult.Resolved(distinct);
             }
 
             // Nothing resolved, so there is no partial result to preserve and
@@ -1216,10 +1228,98 @@ namespace Alrauna.Amuse.Editor.Build
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
                     resolution,
                     snapshot.ExtraUvSets);
+                AmuseDbgTrace.Line(
+                    "intersect submesh=" + submesh.SubmeshIndex +
+                    " slot=" + submesh.MaterialSlotIndex +
+                    " hasUv0=" + snapshot.HasUv0 +
+                    " uv0Count=" +
+                    (snapshot.HasUv0 ? snapshot.Uv0.Count : -1) +
+                    " extraSets=" +
+                    (snapshot.ExtraUvSets == null
+                        ? "null"
+                        : snapshot.ExtraUvSets.Count.ToString()) +
+                    " outcomes=[" + string.Join(",", outcomes) + "]");
+                if (snapshot.HasUv0 && submesh.Indices.Count >= 3)
+                {
+                    var a = submesh.Indices[0];
+                    var b = submesh.Indices[1];
+                    var c = submesh.Indices[2];
+                    AmuseDbgTrace.Line(
+                        "intersect uv0=" + snapshot.Uv0[a] + " " +
+                        snapshot.Uv0[b] + " " + snapshot.Uv0[c] +
+                        " pos=" + snapshot.Positions[a] + " " +
+                        snapshot.Positions[b] + " " +
+                        snapshot.Positions[c]);
+                    const System.Reflection.BindingFlags flags =
+                        System.Reflection.BindingFlags.NonPublic
+                        | System.Reflection.BindingFlags.Instance;
+                    var sampling = resolution.GetType()
+                        .GetField("_sampling", flags).GetValue(resolution);
+                    var mapping = resolution.GetType()
+                        .GetField("_mapping", flags).GetValue(resolution);
+                    var samplingType = sampling.GetType();
+                    var mappingType = mapping.GetType();
+                    AmuseDbgTrace.Line(
+                        "intersect sampling=" +
+                        AmuseDbgTrace.Member(
+                            samplingType, "FilterMode", sampling) + "/" +
+                        AmuseDbgTrace.Member(
+                            samplingType, "WrapMode", sampling) + "/" +
+                        AmuseDbgTrace.Member(
+                            samplingType, "AnisoMode", sampling) +
+                        " mappingScale=" + AmuseDbgTrace.Member(
+                            mappingType, "Scale", mapping) +
+                        " mappingOffset=" + AmuseDbgTrace.Member(
+                            mappingType, "Offset", mapping) +
+                        " mappingChannel=" + AmuseDbgTrace.Member(
+                            mappingType, "Channel", mapping));
+                    var authored = TriangleAlphaInput.WithUv0(
+                        snapshot.Positions[a],
+                        snapshot.Positions[b],
+                        snapshot.Positions[c],
+                        new Vector2(0.05f, 0.05f),
+                        new Vector2(0.2f, 0.05f),
+                        new Vector2(0.05f, 0.2f));
+                    AmuseDbgTrace.Line(
+                        "intersect authoredUvOutcome=" +
+                        resolution.Classify(authored));
+                    var chainField = resolution.GetType()
+                        .GetField("_chain", flags).GetValue(resolution)
+                        as AlphaMipChain;
+                    if (chainField != null)
+                    {
+                        for (var level = 0; level < chainField.Count; level++)
+                        {
+                            if (chainField.IsLevelWithoutEvidence(level))
+                            {
+                                AmuseDbgTrace.Line(
+                                    "intersect level" + level +
+                                    " noEvidence");
+                                continue;
+                            }
+
+                            var levelOutcome =
+                                TriangleAlphaClassifier.Classify(
+                                    authored,
+                                    chainField[level],
+                                    (AlphaSamplingSettings)sampling,
+                                    AlphaUvEnvelope.Zero,
+                                    0);
+                            AmuseDbgTrace.Line(
+                                "intersect level" + level + " outcome=" +
+                                levelOutcome);
+                        }
+                    }
+                }
+
                 perResolution.Add(outcomes);
             }
 
-            return UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
+            var intersected =
+                UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
+            AmuseDbgTrace.Line(
+                "intersect result=[" + string.Join(",", intersected) + "]");
+            return intersected;
         }
 
         /// <summary>
