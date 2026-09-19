@@ -468,3 +468,69 @@ overcounted, exactly as section 13.4 states for the falsifier.
 The remaining count of triangles stays on their original material by
 contract: their sampled alpha is provably below one at some consulted
 level. That is the conservative behavior the policy declares.
+
+## 17. The mixed split refused by the depth-test policy, and the policy
+## slice that fixes it (2026-09-19)
+
+Privacy note: this section observes one private avatar in the Census Lab
+through the read-only build path. It names no avatar, renderer, material,
+or texture, and records aggregate counts only.
+
+### 17.1 The observed refusal
+
+After the container-identity fix in section 16, the production build still
+split nothing. The avatar summary counted zero moved triangles, and the
+NDMF report named the cause: the slot-separation refusal that the
+2026-09-17 treatment note (Path C) called the first-slice restriction.
+The plan for this garment is a mixed split: some triangles prove, the rest
+stay. The restriction refused every mixed split whose source depth
+comparison is `Less`, even with the depth-test policy enabled, and its
+report told the author to make every triangle opaque or keep the slot
+unchanged.
+
+### 17.2 Why the restriction was weaker than its rationale
+
+The restriction guarded against a coplanar pair flipping its draw winner
+when one member moves to the `LEqual` target and one stays on the `Less`
+source. Two facts shrink that class to near emptiness:
+
+1. Duplicate and coplanar partner geometry shares its UV0 domain, and the
+   classification is a pure function of that domain, so partners classify
+   together and land on the same side of the split. A moved-and-staying
+   coplanar pair requires near-coplanar geometry with different UVs, a
+   much weaker risk class than the one the restriction named.
+2. The eligibility gates already force the source to write depth (`_ZWrite`
+   on) and already admit the queue normalization, so the comparison value
+   is the only divergence the split introduces. The policy had already
+   accepted exactly this divergence for wholly opaque slots, with a fixed
+   disclosure sentence.
+
+### 17.3 The contract change
+
+The depth-test policy now covers mixed splits. The slot-separation refusal
+member, its report strings, its four refusal sites, and the planner split
+input to the conversion boundary are removed. A `Less` source under the
+policy converts on a wholly opaque plan or on a mixed split, and the
+prepared slot discloses the divergence through the existing report. With
+the policy off, a `Less` source still refuses at eligibility, unchanged.
+
+This closes the decision the 2026-09-17 note marked open, as the next Path
+C slice under the same policy value. It is a stated divergence, never a
+proven identity, and it stays disclosed per build.
+
+### 17.4 Evidence
+
+RED first: the rewritten mixed-split test failed against the old
+production code with exactly the old refusal member recorded once. GREEN
+after the change: the rewritten test passes, the policy-off pin still
+refuses with the conversion refusal, and the unflagged pin still reports
+nothing. Full product EditMode assembly: 2122 passed, 0 failed. Research
+assembly: 138 passed, 0 failed.
+
+Lab verification on the real garment, same day, production path in play
+mode: capture refusal None, one analyzed renderer, 176905 of 524288
+triangles moved to the appended opaque submesh, the renderer reports the
+original material and the generated opaque material, the divergence
+disclosure fired once, and no refusal report fired. The production exact
+classifier proves slightly above the 175696 conservative lower bound that
+section 16 measured, as expected.

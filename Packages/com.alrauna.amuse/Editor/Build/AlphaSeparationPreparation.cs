@@ -386,14 +386,6 @@ namespace Alrauna.Amuse.Editor.Build
                         poiyomiConversion,
                         lilToonConversion,
                         allowDepthTestChange,
-                        // The split decision the planner made for this
-                        // slot: a mixed split appends a submesh, a wholly
-                        // opaque plan replaces the slot's material whole.
-                        // The conversion boundary needs it because the
-                        // depth-test divergence it reports is only safe
-                        // when every moved triangle lands on one material.
-                        submesh.Disposition ==
-                            SubmeshSeparationDisposition.Split,
                         out var opaque,
                         out var materialDivergence);
                     slotDivergence |= materialDivergence;
@@ -578,7 +570,6 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             bool allowDepthTestChange,
-            bool mixedSplit,
             out Material opaque,
             out bool depthTestDivergence)
         {
@@ -668,25 +659,6 @@ namespace Alrauna.Amuse.Editor.Build
                                 .OpaqueConversionRefused;
                         }
 
-                        if (seamDivergence && mixedSplit)
-                        {
-                            // The seam may already have created the clone
-                            // for this source. The real route refuses
-                            // before its clone exists, so mirror that here:
-                            // an AMUSE-owned transient from this same call
-                            // is destroyed, while an avatar-wide prepared
-                            // artifact and the live source stay untouched.
-                            if (!ReferenceEquals(opaque, live) &&
-                                !ReferenceEquals(opaque, preparedOpaque))
-                            {
-                                UnityEngine.Object.DestroyImmediate(opaque);
-                            }
-
-                            opaque = null;
-                            return AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit;
-                        }
-
                         // The seam reported the divergence of the
                         // material that converted.
                         depthTestDivergence = seamDivergence;
@@ -737,18 +709,6 @@ namespace Alrauna.Amuse.Editor.Build
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
-                        }
-
-                        // The depth-test policy admitted this source, but a
-                        // mixed split moves the proven-opaque triangles onto
-                        // an appended submesh while the unproven triangles
-                        // stay, so the two parts would draw under different
-                        // depth rules. The slot refuses before the clone is
-                        // prepared for it.
-                        if (eligibility.DepthTestDivergence && mixedSplit)
-                        {
-                            return AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit;
                         }
 
                         depthTestDivergence =
@@ -835,25 +795,6 @@ namespace Alrauna.Amuse.Editor.Build
                                 .OpaqueConversionRefused;
                         }
 
-                        if (seamDivergence && mixedSplit)
-                        {
-                            // The seam may already have created the clone
-                            // for this source. The real route refuses
-                            // before its clone exists, so mirror that here:
-                            // an AMUSE-owned transient from this same call
-                            // is destroyed, while an avatar-wide prepared
-                            // artifact and the live source stay untouched.
-                            if (!ReferenceEquals(opaque, live) &&
-                                !ReferenceEquals(opaque, preparedOpaque))
-                            {
-                                UnityEngine.Object.DestroyImmediate(opaque);
-                            }
-
-                            opaque = null;
-                            return AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit;
-                        }
-
                         // The seam reported the divergence of the
                         // material that converted.
                         depthTestDivergence = seamDivergence;
@@ -894,20 +835,6 @@ namespace Alrauna.Amuse.Editor.Build
                                 opaque = live;
                                 break;
                             case PoiyomiOpaqueConversionOutcome.Convertible:
-                                // The depth-test policy admitted this
-                                // source, but a mixed split moves the
-                                // proven-opaque triangles onto an appended
-                                // submesh while the unproven triangles stay,
-                                // so the two parts would draw under different
-                                // depth rules. The slot refuses before the
-                                // clone is prepared for it.
-                                if (eligibility.DepthTestDivergence &&
-                                    mixedSplit)
-                                {
-                                    return AlphaSeparationSlotRefusal
-                                        .DepthTestDivergenceMixedSplit;
-                                }
-
                                 depthTestDivergence =
                                     eligibility.DepthTestDivergence;
 
