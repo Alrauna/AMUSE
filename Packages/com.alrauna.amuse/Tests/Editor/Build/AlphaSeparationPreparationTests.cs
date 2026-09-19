@@ -4422,14 +4422,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The depth-test policy on a transparent source whose depth
         /// comparison is Less: a wholly opaque slot converts under the
         /// policy and its success report carries the fixed divergence
-        /// sentence, a mixed split refuses with the named divergence
-        /// refusal, the policy off keeps today's conversion refusal, an
-        /// unflagged conversion reports nothing, and a refused divergent
-        /// value in a multi-material swap falls back to identity and
-        /// reports nothing.
+        /// sentence, a mixed split also converts under the policy and
+        /// carries the same disclosure exactly once, the policy off keeps
+        /// today's conversion refusal, an unflagged conversion reports
+        /// nothing, and a divergent value in a multi-material swap
+        /// converts and moves its proven triangles under the same
+        /// disclosure.
         /// </summary>
         [Test]
-        public void DepthTestDivergenceConvertsWholeSlotsAndRefusesMixedSplits()
+        public void
+            DepthTestDivergencePolicyConvertsWholeAndMixedSplits()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonTransparentConversionFixtures();
@@ -4499,10 +4501,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 // (b) Policy on, mixed plan: the proven-opaque triangle
-                // would move onto an appended submesh while the unproven
-                // triangle stays, so the two parts would draw under
-                // different depth rules. The slot refuses with the named
-                // divergence refusal.
+                // moves onto an appended submesh while the unproven
+                // triangle stays on the source material. The policy
+                // admitted the depth divergence, so the slot converts
+                // and the prepared separation discloses it exactly once.
                 AlphaSeparationSplitTests.EnsureSplitFolder();
                 using (var arm = DepthTestPolicyArmFixture.Create(
                            AlphaSeparationSplitTests.ImportSplitAlphaTexture(
@@ -4538,46 +4540,54 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            },
                            allowDepthTestChange: true))
                 {
-                    var amuse = arm.Run();
+                    AmusePlatformFinishState mixedState = null;
+                    var mixedReports = ErrorReport.CaptureErrors(
+                        () => mixedState = arm.Run());
 
                     Assert.That(
-                        amuse.AvatarRefusal,
+                        mixedState.AvatarRefusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
                     Assert.That(
-                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        mixedState.SemanticallyRefusedRendererCount, Is.Zero,
                         "fixture precondition: the renderer must be " +
                         "analyzable");
                     Assert.That(
-                        amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                        mixedState.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
                         "fixture precondition: only the opaque-half " +
                         "triangle may prove, or the plan is not a split");
-                    Assert.That(
-                        amuse.SlotRefusalCount(
-                            AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit),
-                        Is.EqualTo(1),
-                        "the flagged mixed slot must refuse with the " +
-                        "named divergence refusal");
                     foreach (AlphaSeparationSlotRefusal reason in Enum
                                  .GetValues(
                                      typeof(AlphaSeparationSlotRefusal)))
                     {
-                        if (reason == AlphaSeparationSlotRefusal.None ||
-                            reason == AlphaSeparationSlotRefusal
-                                .DepthTestDivergenceMixedSplit)
+                        if (reason == AlphaSeparationSlotRefusal.None)
                         {
                             continue;
                         }
 
                         Assert.That(
-                            amuse.SlotRefusalCount(reason), Is.Zero,
-                            "the refusal must be the divergence cause and " +
-                            "nothing else: " + reason);
+                            mixedState.SlotRefusalCount(reason), Is.Zero,
+                            "a mixed split under the policy must convert " +
+                            "with no refusal of any kind: " + reason);
                     }
                     Assert.That(
-                        amuse.Separation, Is.Null,
-                        "the only candidate slot was refused, so nothing " +
-                        "is retained");
+                        mixedState.Separation, Is.Not.Null,
+                        "the mixed split slot must prepare under the " +
+                        "policy");
+                    Assert.That(
+                        mixedState.Separation.TryGetOpaque(
+                            arm.Material, out _),
+                        Is.True,
+                        "the divergent mixed split slot must convert " +
+                        "under the policy");
+                    Assert.That(
+                        mixedReports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "Some moved triangles now use the normal " +
+                            "depth rule because their source material " +
+                            "set a special one."),
+                        "the flagged mixed split slot must report its " +
+                        "converted divergence exactly once");
                 }
 
                 // (c) Policy off: eligibility refuses the Less depth
@@ -4666,12 +4676,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "divergence sentence");
                 }
 
-                // (e) A refused divergent value must not raise the
-                // sentence: on a mixed split, a multi-material swap with
-                // one divergent source falls back to identity for that
-                // source, so no triangle of it moved. The convertible
-                // sibling moved under the normal rule, so the success
-                // report stays silent.
+                // (e) A divergent value in a multi-material swap now
+                // converts on a mixed split: its proven triangles move
+                // onto the prepared opaque clone, and the slot's success
+                // report carries the divergence sentence exactly once.
+                // The convertible sibling converts under the normal rule.
                 AlphaSeparationSplitTests.EnsureSplitFolder();
                 var swapTexture = AlphaSeparationSplitTests
                     .ImportSplitAlphaTexture(
@@ -4758,10 +4767,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: both swap values must " +
                         "map");
                     Assert.That(
-                        swapMapping[divergent], Is.SameAs(divergent),
-                        "fixture precondition: the refused divergent " +
-                        "value falls back to identity, so no triangle " +
-                        "of it moved");
+                        swapMapping[divergent], Is.Not.SameAs(divergent),
+                        "the divergent value converts under the policy, " +
+                        "so its proven triangles move onto the prepared " +
+                        "opaque clone");
                     Assert.That(
                         swapState.Separation.TryGetOpaque(
                             convertible, out _),
@@ -4770,12 +4779,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "converts under the normal rule");
                     Assert.That(
                         swapReports.Select(r => r.TheError.ToMessage()),
-                        Has.None.Contains(
+                        Has.Exactly(1).Contains(
                             "Some moved triangles now use the normal " +
                             "depth rule because their source material " +
                             "set a special one."),
-                        "a slot whose divergent value never moved must " +
-                        "not carry the divergence sentence");
+                        "the slot whose divergent value moved must " +
+                        "carry the divergence sentence exactly once");
                 }
                 finally
                 {
@@ -4809,6 +4818,303 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a transparent source whose alpha mask imports
+        /// compressed (DXT1) under an sRGB import must still prove the
+        /// triangles whose mask domain is exactly one at every consulted
+        /// level. The Census Lab characterization of 2026-09-18 showed a
+        /// real garment of this shape proving zero of 524288 triangles
+        /// while 228408 held exactly-one domains. An implementation whose
+        /// capture or resolution loses DXT1 sRGB exactness proves nothing
+        /// and fails here.
+        /// </summary>
+        [Test]
+        public void Dxt1SrgbMask_WhiteRegionTriangleProvesOpaque()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            const string path = "Assets/AmuseTests_Dxt1SrgbMask.png";
+            var fixtures = new LilToonTransparentConversionFixtures();
+            Material material = null;
+            Mesh mesh = null;
+            try
+            {
+                fixtures.BaseSetUp();
+                var mainTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "dxt1_mask_main");
+
+                var staging = new Texture2D(
+                    128, 128, TextureFormat.RGBA32, true);
+                var pixels = new Color32[128 * 128];
+                for (var y = 0; y < 128; y++)
+                {
+                    for (var x = 0; x < 128; x++)
+                    {
+                        pixels[y * 128 + x] = x < 64
+                            ? new Color32(255, 255, 255, 255)
+                            : new Color32(0, 0, 0, 255);
+                    }
+                }
+
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = true;
+                importer.sRGBTexture = true;
+                importer.textureCompression =
+                    TextureImporterCompression.Compressed;
+                importer.isReadable = false;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                importer.streamingMipmaps = false;
+                importer.SaveAndReimport();
+                var mask = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    mask,
+                    Is.Not.Null,
+                    "fixture precondition: the DXT1 sRGB mask must import");
+                Assert.That(
+                    mask.format,
+                    Is.EqualTo(TextureFormat.DXT1),
+                    "fixture precondition: the mask must import compressed");
+
+                material = LilToonFixtureTestBase
+                    .CreateTransparentConversionMaterial();
+                material.SetTexture("_MainTex", mainTexture);
+                material.SetTexture("_AlphaMask", mask);
+                material.SetFloat("_AlphaMaskMode", 1f);
+                material.SetFloat("_Cutoff", 0.001f);
+
+                var root = new GameObject(
+                    "AMUSE dxt1 srgb mask candidate");
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                // The domain clears every non-opaque texel support at every
+                // consulted level. The coarsest consulted level is 8 by 8
+                // under the default mip cap of 4. There the white half
+                // covers texels 0 to 3 and their bilinear supports span
+                // 0.5 to 3.5 texels. A domain edge within half a texel of
+                // the repeat seam or of the black half blends a non-opaque
+                // texel, and the triangle stays unproven by design.
+                mesh.uv = new[]
+                {
+                    new Vector2(0.3f, 0.3f),
+                    new Vector2(0.4f, 0.3f),
+                    new Vector2(0.3f, 0.4f),
+                };
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                AmusePlatformFinishState amuse = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(
+                        root,
+                        selectRequest: VerifiedLilToonTestSeams
+                            .SelectVerifiedFixtureRequest,
+                        capturer: VerifiedLilToonTestSeams
+                            .CaptureVerifiedFixtureMaterials,
+                        resolveSemantics: VerifiedLilToonTestSeams
+                            .VerifiedAlphaOnly));
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "the materials must resolve: reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "the white-region triangle's mask domain is exactly " +
+                    "one at every consulted level and must prove: " +
+                    "reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path)
+                    != null)
+                {
+                    AssetDatabase.DeleteAsset(path);
+                }
+            }
+        }
+
+        [Test]
+        public void Dxt1SrgbMask_SeamBlendTriangleStaysUnproven()
+        {
+            // --- Falsifier: a classifier that drops the bilinear repeat
+            // support margin proves this triangle. The exact rule refuses
+            // it: at the coarsest consulted level the domain edge sits
+            // within half a texel of the repeat seam and provably blends
+            // the wrapped black column. Characterization: this assertion
+            // passed on first observation, so it pins the existing exact
+            // behavior rather than a regression fix.
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            const string path = "Assets/AmuseTests_Dxt1SrgbMaskSeam.png";
+            var fixtures = new LilToonTransparentConversionFixtures();
+            Material material = null;
+            Mesh mesh = null;
+            try
+            {
+                fixtures.BaseSetUp();
+                var mainTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "dxt1_mask_seam_main");
+
+                var staging = new Texture2D(
+                    128, 128, TextureFormat.RGBA32, true);
+                var pixels = new Color32[128 * 128];
+                for (var y = 0; y < 128; y++)
+                {
+                    for (var x = 0; x < 128; x++)
+                    {
+                        pixels[y * 128 + x] = x < 64
+                            ? new Color32(255, 255, 255, 255)
+                            : new Color32(0, 0, 0, 255);
+                    }
+                }
+
+                staging.SetPixels32(pixels);
+                staging.Apply();
+                File.WriteAllBytes(path, staging.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(staging);
+                AssetDatabase.ImportAsset(
+                    path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.mipmapEnabled = true;
+                importer.sRGBTexture = true;
+                importer.textureCompression =
+                    TextureImporterCompression.Compressed;
+                importer.isReadable = false;
+                importer.filterMode = FilterMode.Bilinear;
+                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                importer.streamingMipmaps = false;
+                importer.SaveAndReimport();
+                var mask = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(
+                    mask,
+                    Is.Not.Null,
+                    "fixture precondition: the DXT1 sRGB mask must import");
+                Assert.That(
+                    mask.format,
+                    Is.EqualTo(TextureFormat.DXT1),
+                    "fixture precondition: the mask must import compressed");
+
+                material = LilToonFixtureTestBase
+                    .CreateTransparentConversionMaterial();
+                material.SetTexture("_MainTex", mainTexture);
+                material.SetTexture("_AlphaMask", mask);
+                material.SetFloat("_AlphaMaskMode", 1f);
+                material.SetFloat("_Cutoff", 0.001f);
+
+                var root = new GameObject(
+                    "AMUSE dxt1 srgb mask seam candidate");
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                // The domain edge at 0.05 sits 0.4 texels from the repeat
+                // seam on the 8 by 8 coarsest consulted level. The wrapped
+                // black column's bilinear support reaches 0.5 texels, so
+                // the edge blend is provably sub-one at that level.
+                mesh.uv = new[]
+                {
+                    new Vector2(0.05f, 0.05f),
+                    new Vector2(0.2f, 0.05f),
+                    new Vector2(0.05f, 0.2f),
+                };
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                AmusePlatformFinishState amuse = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(
+                        root,
+                        selectRequest: VerifiedLilToonTestSeams
+                            .SelectVerifiedFixtureRequest,
+                        capturer: VerifiedLilToonTestSeams
+                            .CaptureVerifiedFixtureMaterials,
+                        resolveSemantics: VerifiedLilToonTestSeams
+                            .VerifiedAlphaOnly));
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "the materials must resolve: reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(0),
+                    "the domain edge provably blends the wrapped black " +
+                    "column at the coarsest consulted level, so the " +
+                    "triangle must stay on its original material: " +
+                    "reported " +
+                    string.Join(
+                        " | ",
+                        reports.Select(r => r.TheError.ToMessage())));
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path)
+                    != null)
+                {
+                    AssetDatabase.DeleteAsset(path);
+                }
             }
         }
 
