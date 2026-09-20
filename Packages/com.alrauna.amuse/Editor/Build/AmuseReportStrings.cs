@@ -160,6 +160,28 @@ namespace Alrauna.Amuse.Editor.Build
                 "Clean up the animation curves that point at missing " +
                 "properties.",
 
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested"] =
+                "This renderer holds a locked material AMUSE cannot trace.",
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:description"] =
+                "The material is locked. Its recorded original shader is " +
+                "missing, or it is not the version AMUSE knows. AMUSE " +
+                "cannot read a locked material, so it changed nothing on " +
+                "this renderer.",
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
+                "Check that the original shader of the material is " +
+                "installed at the version the lock recorded.",
+
+            ["amuse.renderer.LockedPoiyomiThryUnattested"] =
+                "This renderer holds a locked material, and the lock tool " +
+                "on this machine is unknown.",
+            ["amuse.renderer.LockedPoiyomiThryUnattested:description"] =
+                "The material is locked. The lock tool installed here is " +
+                "not the version AMUSE can verify. AMUSE changed nothing " +
+                "on this renderer.",
+            ["amuse.renderer.LockedPoiyomiThryUnattested:hint"] =
+                "Install the supported lock tool version, then run the " +
+                "build again.",
+
             // --- Avatar-scoped animation refusals ---
             ["amuse.avatar.UnsupportedAnimatorControllerForm"] =
                 "This avatar has an animator controller AMUSE cannot read.",

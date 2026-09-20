@@ -519,7 +519,8 @@ namespace Alrauna.Amuse.Editor.Build
                             CaptureThroughEffectiveMaterials(
                                 renderer, capturer ?? effectiveCapturer),
                             ignoreOutOfRangeSlots,
-                            rendererTypeName);
+                            rendererTypeName,
+                            LockedMaterialIdentity.PreCheckRefusal);
                 }
                 else if (selectRequest == null)
                 {
@@ -533,7 +534,8 @@ namespace Alrauna.Amuse.Editor.Build
                         CaptureThroughEffectiveMaterials(
                             renderer, effectiveCapturer),
                         ignoreOutOfRangeSlots,
-                        rendererTypeName);
+                        rendererTypeName,
+                        LockedMaterialIdentity.PreCheckRefusal);
                 }
                 else
                 {
@@ -549,7 +551,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 renderer, capturer),
                             out admittedLiveMaterials,
                             ignoreOutOfRangeSlots,
-                            rendererTypeName);
+                            rendererTypeName,
+                            LockedMaterialIdentity.PreCheckRefusal);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders

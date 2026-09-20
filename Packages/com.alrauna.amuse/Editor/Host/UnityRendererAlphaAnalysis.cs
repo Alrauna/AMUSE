@@ -84,6 +84,28 @@ namespace Alrauna.Amuse.Editor.Host
         /// equation, so the slot has no attested alpha semantics to classify.
         /// </summary>
         AdmittedMaterialSemanticsUnknown,
+
+        /// <summary>
+        /// The installed Thry <c>ShaderOptimizer</c> source is not the
+        /// attested pin, so a recognized locked material cannot be restored
+        /// by it. This increment declares the member with its report strings
+        /// and its census row. No code path emits it yet: the Thry
+        /// source-digest attestation that decides it arrives with the unlock
+        /// window.
+        /// </summary>
+        LockedPoiyomiThryUnattested,
+
+        /// <summary>
+        /// This renderer holds a material whose serialization carries the
+        /// Thry locked identity, and that identity names an original shader
+        /// the AssetDatabase cannot resolve or that fails the pinned Poiyomi
+        /// identity. The generic semantics-unknown refusal would hide a
+        /// recognized lock behind an unnamed cause, so this refusal names
+        /// the lock. A locked serialization that records no original shader
+        /// stays on the 2026-09-19 orphan refusal
+        /// <see cref="AdmittedMaterialSemanticsUnknown"/>.
+        /// </summary>
+        LockedPoiyomiOriginalShaderUnattested,
     }
 
     /// <summary>

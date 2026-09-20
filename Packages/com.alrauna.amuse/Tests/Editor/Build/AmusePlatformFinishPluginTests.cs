@@ -1177,6 +1177,264 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void LockedMaterialWithUnresolvableOriginalRefusesByName()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked unresolvable fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            Material locked = null;
+
+            try
+            {
+                controller = new AnimatorController { name = "locked-fake-guid" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0");
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                fixture = AddAnalyzableRenderer(root);
+                locked = LockedMaterial();
+                locked.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    ".poiyomi/Poiyomi Toon");
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    "ffffffffffffffffffffffffffffffff");
+                fixture.Renderer.sharedMaterials = new[] { locked };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.EqualTo(1),
+                    "a recognized locked material whose original shader " +
+                    "GUID resolves to nothing must refuse by name");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.Zero,
+                    "the named refusal replaces the generic destination, " +
+                    "it does not stack on it");
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (locked != null) Object.DestroyImmediate(locked);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void LockedMaterialWithUnattestedOriginalRefusesByName()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked unattested fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            Material locked = null;
+
+            try
+            {
+                // The named original resolves to a real stand-in shader
+                // asset, so this case exercises the attestation pins, not
+                // the resolution step. No stand-in passes the pinned
+                // Poiyomi identity, which is exactly the unattested
+                // direction.
+                var original = Shader.Find(LockedOriginalStandInShaderName);
+                Assert.That(original, Is.Not.Null,
+                    $"'{LockedOriginalStandInShaderName}' must import.");
+                Assert.That(
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                        original, out var originalGuid, out long _),
+                    Is.True);
+
+                controller = new AnimatorController { name = "locked-unattested" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0");
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                fixture = AddAnalyzableRenderer(root);
+                locked = LockedMaterial();
+                locked.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    ".poiyomi/Poiyomi Toon");
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    originalGuid);
+                fixture.Renderer.sharedMaterials = new[] { locked };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.EqualTo(1),
+                    "a recognized locked material whose original shader " +
+                    "fails the pinned identity must refuse by name");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (locked != null) Object.DestroyImmediate(locked);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void LockedMaterialMissingOriginalKeepsOrphanRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked no original fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            Material locked = null;
+
+            try
+            {
+                controller = new AnimatorController { name = "locked-orphan" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0");
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                fixture = AddAnalyzableRenderer(root);
+                locked = LockedMaterial();
+                locked.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+                fixture.Renderer.sharedMaterials = new[] { locked };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "a locked serialization that names no original shader " +
+                    "stays on the 2026-09-19 orphan refusal");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (locked != null) Object.DestroyImmediate(locked);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void UnlockedMaterialWithStaleTagsKeepsOrphanRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE stale tags fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            Material stale = null;
+
+            try
+            {
+                controller = new AnimatorController { name = "stale-tags" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0");
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                fixture = AddAnalyzableRenderer(root);
+                stale = LockedMaterial();
+                stale.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 0f);
+                stale.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    ".poiyomi/Poiyomi Toon");
+                stale.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    "ffffffffffffffffffffffffffffffff");
+                fixture.Renderer.sharedMaterials = new[] { stale };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "the optimizer flag is off, so the stale tags are " +
+                    "never lock evidence and the orphan refusal stands");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.Zero);
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (stale != null) Object.DestroyImmediate(stale);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void VerifiedFixture_AnimatedSwapToTransparentMaterialRemovesOpacity()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
@@ -3042,6 +3300,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
             mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
             return mesh;
+        }
+
+        /// <summary>
+        /// The declared name of the locked stand-in shader starts with the
+        /// real locked prefix. That is a deliberate, documented exception to
+        /// the stand-in naming rule: the production pre-check reads the live
+        /// shader name, so the wiring test cannot exercise it on a stand-in
+        /// name. The asset itself lives under the stand-in folder, carries no
+        /// vendor source, and its tags arrive per material through override
+        /// tags.
+        /// </summary>
+        private const string LockedStandInShaderName =
+            "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
+
+        private const string LockedOriginalStandInShaderName =
+            "Hidden/Alrauna/AmuseTests/LockedStandInOriginal";
+
+        private static Material LockedMaterial()
+        {
+            var shader = Shader.Find(LockedStandInShaderName);
+            Assert.That(
+                shader,
+                Is.Not.Null,
+                $"'{LockedStandInShaderName}' must import.");
+            return new Material(shader);
         }
 
         private static AnalyzableRendererFixture AddAnalyzableRenderer(
