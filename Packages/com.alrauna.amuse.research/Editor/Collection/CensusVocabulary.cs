@@ -65,6 +65,12 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown:
                     return Census.RendererRefusal
                         .AdmittedMaterialSemanticsUnknown;
+                case RendererAnalysisRefusal.LockedPoiyomiThryUnattested:
+                    return Census.RendererRefusal
+                        .LockedPoiyomiThryUnattested;
+                case RendererAnalysisRefusal.LockedPoiyomiOriginalShaderUnattested:
+                    return Census.RendererRefusal
+                        .LockedPoiyomiOriginalShaderUnattested;
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refusal),

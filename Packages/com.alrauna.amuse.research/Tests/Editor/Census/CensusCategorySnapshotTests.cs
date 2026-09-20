@@ -45,6 +45,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "UnsupportedAnimationCurveForm",
                     "AnimatedMaterialPropertyNotSingleton",
                     "AdmittedMaterialSemanticsUnknown",
+                    "LockedPoiyomiThryUnattested",
+                    "LockedPoiyomiOriginalShaderUnattested",
                 },
                 Enum.GetNames(typeof(RendererRefusal)));
         }

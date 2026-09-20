@@ -47,6 +47,8 @@ namespace Alrauna.Amuse.Research.Census
         UnsupportedAnimationCurveForm,
         AnimatedMaterialPropertyNotSingleton,
         AdmittedMaterialSemanticsUnknown,
+        LockedPoiyomiThryUnattested,
+        LockedPoiyomiOriginalShaderUnattested,
     }
 
     /// <summary>

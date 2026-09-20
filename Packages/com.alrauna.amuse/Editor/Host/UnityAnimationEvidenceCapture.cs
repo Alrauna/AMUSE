@@ -91,6 +91,18 @@ namespace Alrauna.Amuse.Editor.Host
         AlphaPolicyBounds bounds,
         out IReadOnlyList<CapturedAlphaMaterial> captured);
 
+    /// <summary>
+    /// The locked-identity selection pre-check. It answers, for one live
+    /// material that selection could not attest, the named renderer refusal
+    /// the recognized locked identity demands, or
+    /// <see cref="RendererAnalysisRefusal.None"/> when the material stays on
+    /// the generic path. The answer is recorded once, at capture time,
+    /// because this is the only point where the live serialization is still
+    /// readable. It reads the serialization only and mutates nothing.
+    /// </summary>
+    internal delegate RendererAnalysisRefusal LockedMaterialRefusalCheck(
+        Material material);
+
     internal static class UnityAnimationEvidenceCapture
     {
         private const string MaterialPrefix = "material.";
@@ -138,7 +150,8 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             ClosedAlphaMaterialCapturer capturer = null,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            LockedMaterialRefusalCheck lockedRefusalCheck = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -150,7 +163,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck);
         }
         // Public-project vendor fixtures exercise verified frontend equations but
         // intentionally do not publish vendor source assets. This seam exists only
@@ -217,7 +231,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            LockedMaterialRefusalCheck lockedRefusalCheck = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -229,7 +244,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck);
         }
 
         /// <summary>
@@ -251,7 +267,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaMaterialRequestSelector selectRequest = null,
             ClosedAlphaMaterialCapturer capturer = null,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            LockedMaterialRefusalCheck lockedRefusalCheck = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -296,7 +313,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck);
         }
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
@@ -308,7 +326,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            LockedMaterialRefusalCheck lockedRefusalCheck = null)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -342,7 +361,8 @@ namespace Alrauna.Amuse.Editor.Host
                 capturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck);
         }
         private static CapturedAnimationEvidence CaptureObserved(
             string rendererPath,
@@ -354,7 +374,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            LockedMaterialRefusalCheck lockedRefusalCheck = null)
         {
             // Assigned once here so that EVERY closure-failure return below hands
             // back an empty list rather than a partial one. The real pairing is
@@ -494,8 +515,17 @@ namespace Alrauna.Amuse.Editor.Host
                     alphaRequest == null ||
                     materialCaptureRequest == null)
                 {
+                    // The locked-identity pre-check answers once, here,
+                    // while the live serialization is still readable. The
+                    // answer rides on the sentinel: slot resolution reads
+                    // the recorded fact and refuses by name instead of the
+                    // generic destination.
+                    var lockedRefusal = lockedRefusalCheck?.Invoke(
+                        admitted[index])
+                        ?? RendererAnalysisRefusal.None;
                     capturedByIndex[index] =
-                        UnityMaterialSemantics.UnattestedMaterial();
+                        UnityMaterialSemantics.UnattestedMaterial(
+                            lockedRefusal);
                     continue;
                 }
 
