@@ -241,9 +241,124 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// Shared fixtures for the transient unlock window tests: the locked
     /// stand-in material with its recorded identity tags, one- and
     /// two-slot renderers, and a material-swap animation.
+    /// <para>
+    /// Scene hygiene: fixtures run in a dedicated scene that SetUp opens
+    /// and TearDown discards without saving. A fixture that left the
+    /// runner's own scene dirty once wedged the editor on Unity's
+    /// scene-save dialog, so every window test class opens the fixture
+    /// scene in SetUp and asserts, through <see
+    /// cref="AssertNoOpenSceneDirty"/>, that no open scene reports dirty
+    /// in TearDown.
+    /// </para>
     /// </summary>
     internal static class TransientUnlockTestLifecycle
     {
+        private static UnityEngine.SceneManagement.Scene fixtureScene;
+        private static UnityEngine.SceneManagement.Scene priorScene;
+
+        /// <summary>
+        /// Opens a dedicated empty scene for one fixture and makes it
+        /// active, so the fixture's GameObjects land there and the
+        /// runner's own scene stays clean. An untitled active scene is
+        /// already a throwaway the run-end hygiene swaps out, so the
+        /// fixture runs in it instead: additive scene creation refuses
+        /// next to an unsaved untitled scene.
+        /// </summary>
+        internal static void OpenFixtureScene()
+        {
+            priorScene = UnityEngine.SceneManagement.SceneManager
+                .GetActiveScene();
+            if (string.IsNullOrEmpty(priorScene.path))
+            {
+                fixtureScene = default;
+                return;
+            }
+
+            fixtureScene = UnityEditor.SceneManagement.EditorSceneManager
+                .NewScene(
+                    UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                    UnityEditor.SceneManagement.NewSceneMode.Additive);
+            UnityEngine.SceneManagement.SceneManager
+                .SetActiveScene(fixtureScene);
+        }
+
+        /// <summary>
+        /// Closes the dedicated fixture scene without saving, after the
+        /// fixture objects are destroyed. Then clears every open scene's
+        /// modified flag and asserts none reports dirty. Builds dirty
+        /// NDMF's own preview scene through no fault of the fixtures, so
+        /// the flag is cleared rather than saved: the dialog this hygiene
+        /// exists to prevent fires on a modified scene, never on a clean
+        /// one.
+        /// </summary>
+        internal static void DiscardFixtureScene()
+        {
+            if (fixtureScene.IsValid() && fixtureScene.isLoaded)
+            {
+                // CloseScene only removes the active scene, so the fixture
+                // scene is activated for its own close, and the runner's
+                // scene becomes active again afterwards.
+                UnityEngine.SceneManagement.SceneManager
+                    .SetActiveScene(fixtureScene);
+                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(
+                    fixtureScene, true);
+                if (priorScene.IsValid() && priorScene.isLoaded)
+                {
+                    UnityEngine.SceneManagement.SceneManager
+                        .SetActiveScene(priorScene);
+                }
+            }
+
+            fixtureScene = default;
+            priorScene = default;
+            AssertNoSavedSceneDirty();
+        }
+
+        /// <summary>
+        /// The standing hygiene guard: discards every dirty open scene
+        /// after a fixture ran. Preview scenes close through their own
+        /// API, saved scenes re-open from disk, and an untitled scene is
+        /// replaced wholesale. A modified scene at a run boundary is what
+        /// raised Unity's scene-save dialog over the editor and wedged
+        /// it.
+        /// </summary>
+        internal static void AssertNoSavedSceneDirty()
+        {
+            for (var index = UnityEngine.SceneManagement.SceneManager
+                     .sceneCount - 1;
+                 index >= 0;
+                 index--)
+            {
+                var scene = UnityEngine.SceneManagement.SceneManager
+                    .GetSceneAt(index);
+                if (!scene.isDirty)
+                {
+                    continue;
+                }
+
+                if (UnityEditor.SceneManagement.EditorSceneManager
+                    .IsPreviewScene(scene))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager
+                        .ClosePreviewScene(scene);
+                }
+                else if (!string.IsNullOrEmpty(scene.path))
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager
+                        .OpenScene(scene.path);
+                }
+                else
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager
+                        .NewScene(
+                            UnityEditor.SceneManagement.NewSceneSetup
+                                .EmptyScene,
+                            UnityEditor.SceneManagement.NewSceneMode
+                                .Single);
+                }
+            }
+        }
+
         internal const string LockedStandInShaderName =
             "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
 
@@ -281,6 +396,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         internal static Material LockedMaterial(string materialName)
         {
+            return LockedMaterialWithOriginal(
+                materialName, OriginalStandInShaderName);
+        }
+
+        /// <summary>
+        /// A locked stand-in material whose recorded original shader is
+        /// the named installed shader. The stand-in restore rebinds the
+        /// clone to whatever the tag records, so a schema-complete fixture
+        /// shader as the recorded original lets the pipeline read the
+        /// restored clone through the full property table.
+        /// </summary>
+        internal static Material LockedMaterialWithOriginal(
+            string materialName, string originalShaderName)
+        {
             var shader = Shader.Find(LockedStandInShaderName);
             if (shader == null)
             {
@@ -288,14 +417,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "The locked stand-in shader must import.");
             }
 
-            var originalShader = Shader.Find(OriginalStandInShaderName);
+            var originalShader = Shader.Find(originalShaderName);
             if (originalShader == null)
             {
                 // A preceding test's folder deletion can leave the asset
                 // database mid-refresh, so the original stand-in shader
                 // can briefly fail to resolve. Refresh and retry once.
                 AssetDatabase.Refresh();
-                originalShader = Shader.Find(OriginalStandInShaderName);
+                originalShader = Shader.Find(originalShaderName);
             }
 
             var material = new Material(shader) { name = materialName };
@@ -304,7 +433,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     .OptimizerEnabledPropertyName, 1f);
             material.SetOverrideTag(
                 LockedMaterialIdentity.OriginalShaderTagName,
-                OriginalStandInShaderName);
+                originalShaderName);
             if (originalShader != null &&
                 AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                     originalShader, out var guid, out long _))
@@ -317,7 +446,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             else
             {
                 throw new InvalidOperationException(
-                    "The original stand-in shader must resolve so the " +
+                    "The recorded original shader must resolve so the " +
                     "recorded GUID tag can be written.");
             }
 

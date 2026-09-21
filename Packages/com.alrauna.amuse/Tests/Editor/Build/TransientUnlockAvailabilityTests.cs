@@ -27,6 +27,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             TransientUnlockAvailability.ClearCache();
             Thry.ThryEditor.ShaderOptimizer.Reset();
+            TransientUnlockTestLifecycle.OpenFixtureScene();
         }
 
         [TearDown]
@@ -41,6 +42,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             _tracked.Clear();
+            TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockAvailability.ClearCache();
             Thry.ThryEditor.ShaderOptimizer.Reset();
         }

@@ -214,11 +214,14 @@ namespace Alrauna.Amuse.Editor.Build
         /// whose original does not attest keeps the earlier named refusal
         /// the selection pre-check already produces. Reads live state,
         /// mutates nothing, and clones nothing: the check runs before any
-        /// clone step by contract.
+        /// clone step by contract. The optional seam substitutes only the
+        /// machine-readiness answer for tests; null keeps the production
+        /// <see cref="WindowVendorReady"/>.
         /// </summary>
         internal static RendererAnalysisRefusal RendererPreCheckRefusal(
             Renderer renderer,
-            Func<Material, bool> originalShaderAttested)
+            Func<Material, bool> originalShaderAttested,
+            Func<bool> vendorReady = null)
         {
             if (renderer == null)
             {
@@ -227,6 +230,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             var attests = originalShaderAttested ??
                 LockedMaterialIdentity.OriginalShaderAttested;
+            var ready = vendorReady ?? WindowVendorReady;
 
             foreach (var material in renderer.sharedMaterials)
             {
@@ -241,7 +245,7 @@ namespace Alrauna.Amuse.Editor.Build
                 // One eligible locked material is enough to consult the
                 // vendor-side precondition, and its negative refuses the
                 // renderer before any clone exists.
-                if (!WindowVendorReady())
+                if (!ready())
                 {
                     return RendererAnalysisRefusal
                         .LockedPoiyomiThryUnattested;
@@ -258,13 +262,17 @@ namespace Alrauna.Amuse.Editor.Build
         /// on this build: a recognized locked identity whose original
         /// shader attests, on a machine where the vendor side is ready.
         /// Only an eligible build asks for the window's per-build consent.
+        /// The optional seam substitutes only the machine-readiness answer
+        /// for tests; null keeps the production <see cref="WindowVendorReady"/>.
         /// </summary>
         internal static bool WindowEligibleForConsent(
             IEnumerable<Material> assignedMaterials,
-            Func<Material, bool> originalShaderAttested)
+            Func<Material, bool> originalShaderAttested,
+            Func<bool> vendorReady = null)
         {
             var attests = originalShaderAttested ??
                 LockedMaterialIdentity.OriginalShaderAttested;
+            var ready = vendorReady ?? WindowVendorReady;
 
             foreach (var material in assignedMaterials)
             {
@@ -276,7 +284,7 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                return WindowVendorReady();
+                return ready();
             }
 
             return false;

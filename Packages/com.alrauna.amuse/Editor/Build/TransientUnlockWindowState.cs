@@ -51,6 +51,35 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// The material the swapped world shows for one observed material:
+        /// the open pair's unlocked clone for a locked original, otherwise
+        /// the material itself. The capture reads the world through this
+        /// view while the window is open, so a material-swap keyframe read
+        /// from the pre-swap committed graph resolves to the same one
+        /// clone the slot arrays and the live clips hold. Reads live state
+        /// and mutates nothing.
+        /// </summary>
+        internal Material SwappedView(Material material)
+        {
+            if (material == null)
+            {
+                return null;
+            }
+
+            foreach (var pair in openPairs)
+            {
+                if (ReferenceEquals(pair.LockedOriginal, material) ||
+                    (material is Material asMaterial &&
+                        asMaterial == pair.LockedOriginal))
+                {
+                    return pair.UnlockedClone;
+                }
+            }
+
+            return material;
+        }
+
+        /// <summary>
         /// Opens the one pair for a locked material. One clone per locked
         /// material across the avatar: an existing pair for the same
         /// material wins, and a second call never clones again.

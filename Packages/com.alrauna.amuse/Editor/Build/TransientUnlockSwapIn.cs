@@ -21,10 +21,12 @@ namespace Alrauna.Amuse.Editor.Build
     /// <para>
     /// The locked original L is never mutated and never destroyed. The
     /// clone U is AMUSE-owned container content and the only destroyable
-    /// side. This increment applies no transformation: material selection
-    /// stays closed, no material is admitted for analysis, and the
-    /// pipeline body is untouched, so the window is behavior-neutral by
-    /// construction.
+    /// side. The service runs before capture: every admitted read after it
+    /// sees the unlocked world, so capture, classification, planning,
+    /// conversion, and apply run unchanged with no knowledge that a lock
+    /// existed. One U exists per L across slots and animation closure,
+    /// including an L referenced only by clips: such an L gets its clone,
+    /// and its clip-only references remap too.
     /// </para>
     /// </summary>
     internal static class TransientUnlockSwapIn
@@ -49,10 +51,18 @@ namespace Alrauna.Amuse.Editor.Build
 
             internal TransientRelockDelegate Relock { get; }
 
-            /// <summary>The production availability.</summary>
-            internal static Availability FromProduction()
+            /// <summary>
+            /// The production availability. The optional seam substitutes
+            /// only the machine-readiness answer for tests, exactly as the
+            /// original-shader attestation seam does; null keeps the
+            /// production <see cref="TransientUnlockAvailability.WindowVendorReady"/>.
+            /// </summary>
+            internal static Availability FromProduction(
+                Func<bool> vendorReady = null)
             {
-                if (!TransientUnlockAvailability.WindowVendorReady())
+                var ready = vendorReady ??
+                    TransientUnlockAvailability.WindowVendorReady;
+                if (!ready())
                 {
                     return new Availability(false, null, null);
                 }
@@ -145,6 +155,13 @@ namespace Alrauna.Amuse.Editor.Build
                 LockedMaterialIdentity.OriginalShaderAttested;
             var finishState = context.GetState<AmusePlatformFinishState>();
 
+            // The virtual clips are the only writable curve view while the
+            // animator extension is active, so the closure discovery and
+            // the closure remap read and write through the same
+            // AnimationIndex the apply pass does.
+            var animationIndex = context
+                .Extension<AnimatorServicesContext>().AnimationIndex;
+
             // Pass one: group every locked slot by its locked material, in
             // deterministic renderer-then-slot order. The identity gate is
             // the classifier's own two-signal rule, so an unlocked
@@ -178,11 +195,70 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            // The virtual clips are the only writable curve view while the
-            // animator extension is active, so the closure remap reads and
-            // writes through the same AnimationIndex the apply pass does.
-            var animationIndex = context
-                .Extension<AnimatorServicesContext>().AnimationIndex;
+            // The same pass covers the animation closure: an L referenced
+            // only by clips, or by another renderer's clips than the slot
+            // that holds it, gets the same one clone per L and its
+            // bindings remap with the rest. Discovery is per renderer path
+            // and parsed slot, so the recorded rewrite identities stay the
+            // ones the fallback inverts; a slot array that does not hold L
+            // simply never substitutes, because the substitution rechecks
+            // the live array.
+            foreach (var renderer in context.AvatarRootObject
+                         .GetComponentsInChildren<Renderer>(true))
+            {
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform, context.AvatarRootObject.transform);
+                var rendererTypeName = renderer.GetType().FullName;
+                foreach (var clip in animationIndex
+                             .ClipsWithObjectCurves
+                             .ToList())
+                {
+                    foreach (var binding in clip.GetObjectCurveBindings())
+                    {
+                        if (!LiveAnimationObservation
+                                .TryParseMaterialSlotBinding(
+                                    binding.propertyName,
+                                    out var slotIndex) ||
+                            !string.Equals(
+                                binding.path,
+                                rendererPath,
+                                StringComparison.Ordinal) ||
+                            !UnityAnimationEvidenceCapture
+                                .IsCompatibleRendererType(
+                                    binding.type.FullName,
+                                    rendererTypeName))
+                        {
+                            continue;
+                        }
+
+                        var values = clip.GetObjectCurve(binding);
+                        if (values == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var keyframe in values)
+                        {
+                            if (!(keyframe.value is Material closure) ||
+                                !LockedMaterialIdentity
+                                    .RecognizedLockedIdentity(closure))
+                            {
+                                continue;
+                            }
+
+                            var existing = lockedSlots.Find(found =>
+                                ReferenceEquals(found.Locked, closure));
+                            if (existing == null)
+                            {
+                                existing = new LockedSlots(closure);
+                                lockedSlots.Add(existing);
+                            }
+
+                            existing.Add(renderer, slotIndex);
+                        }
+                    }
+                }
+            }
 
             // Pass two: one clone per locked material, then the whole
             // substitution for it. Registration precedes mutation, exactly
@@ -388,9 +464,12 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Remaps every animation-closure material reference from L to U
         /// through the live curve-rewrite machinery, in deterministic
-        /// clip-then-binding order, and records every rewrite on the pair
-        /// as binding identity, so the close pass can invert exactly these
-        /// bindings on the committed clips. A marker
+        /// renderer-then-clip-then-binding order across the whole avatar,
+        /// and records every rewrite on the pair as binding identity, so
+        /// the close pass can invert exactly these bindings on the
+        /// committed clips. The walk covers every renderer, not only the
+        /// renderer whose slot held L: a material-swap keyframe on a
+        /// sibling renderer references the same one U. A marker
         /// clip silently no-ops the write, which leaves the curve on L;
         /// L stays alive through the whole window, so that residue is
         /// harmless and never becomes a missing reference.
@@ -401,14 +480,9 @@ namespace Alrauna.Amuse.Editor.Build
             LockedSlots entry,
             TransientUnlockWindowState.SwappedPair pair)
         {
-            foreach (var slot in entry.Slots)
+            foreach (var renderer in context.AvatarRootObject
+                         .GetComponentsInChildren<Renderer>(true))
             {
-                var renderer = slot.Renderer;
-                if (renderer == null)
-                {
-                    continue;
-                }
-
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform,
                     context.AvatarRootObject.transform);
@@ -424,7 +498,6 @@ namespace Alrauna.Amuse.Editor.Build
                                 .TryParseMaterialSlotBinding(
                                     binding.propertyName,
                                     out var slotIndex) ||
-                            slotIndex != slot.SlotIndex ||
                             !string.Equals(
                                 binding.path,
                                 rendererPath,
@@ -438,7 +511,7 @@ namespace Alrauna.Amuse.Editor.Build
                         }
 
                         RewriteCurve(entry, pair, clip, binding,
-                            slot.SlotIndex);
+                            slotIndex);
                     }
                 }
             }
@@ -530,6 +603,19 @@ namespace Alrauna.Amuse.Editor.Build
 
             internal void Add(Renderer renderer, int slotIndex)
             {
+                // One discovery per renderer slot: the slot-array pass and
+                // the animation-closure pass can both find the same
+                // holding slot, and a doubled entry would double the
+                // mismatch accounting for it.
+                foreach (var existing in slots)
+                {
+                    if (ReferenceEquals(existing.Renderer, renderer) &&
+                        existing.SlotIndex == slotIndex)
+                    {
+                        return;
+                    }
+                }
+
                 slots.Add(new TransientUnlockWindowState.SlotSwap(
                     renderer, slotIndex));
             }
