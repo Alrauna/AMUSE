@@ -160,6 +160,28 @@ namespace Alrauna.Amuse.Editor.Build
                 "Clean up the animation curves that point at missing " +
                 "properties.",
 
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested"] =
+                "This renderer holds a locked material AMUSE cannot trace.",
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:description"] =
+                "The material is locked. Its recorded original shader is " +
+                "missing, or it is not the version AMUSE knows. AMUSE " +
+                "cannot read a locked material, so it changed nothing on " +
+                "this renderer.",
+            ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
+                "Check that the original shader of the material is " +
+                "installed at the version the lock recorded.",
+
+            ["amuse.renderer.LockedPoiyomiThryUnattested"] =
+                "This renderer holds a locked material, and the lock tool " +
+                "on this machine is unknown.",
+            ["amuse.renderer.LockedPoiyomiThryUnattested:description"] =
+                "The material is locked. The lock tool installed here is " +
+                "not the version AMUSE can verify. AMUSE changed nothing " +
+                "on this renderer.",
+            ["amuse.renderer.LockedPoiyomiThryUnattested:hint"] =
+                "Install the supported lock tool version, then run the " +
+                "build again.",
+
             // --- Avatar-scoped animation refusals ---
             ["amuse.avatar.UnsupportedAnimatorControllerForm"] =
                 "This avatar has an animator controller AMUSE cannot read.",
@@ -476,6 +498,45 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.RendererChangedSincePreparation:hint"] =
                 "Another build step replaced the mesh or the slots. Run " +
                 "AMUSE last, or accept the slot stays unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material. AMUSE unlocked a copy of it for the build, but " +
+                "the copy did not pass verification. Reason: {1}. The " +
+                "slot keeps its original locked material.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch:hint"] =
+                "Check that the lock tool and the original shader are the " +
+                "installed versions the lock recorded.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material that AMUSE unlocked for the build. The lock " +
+                "tool did not lock the copy again, so AMUSE put your " +
+                "original locked material back in the slot. Reason: {1}. " +
+                "An animation may still apply the AMUSE-generated " +
+                "material to this slot. The mesh split AMUSE generated " +
+                "may also remain.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed:hint"] =
+                "Check that the lock tool works on this machine, then " +
+                "run the build again.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained"] =
+                "AMUSE kept an unlocked copy for material slot {0} of " +
+                "renderer '{2}'.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained:description"] =
+                "Material slot {0} of renderer '{2}' holds your original " +
+                "locked material. The lock tool did not lock the build " +
+                "copy again. AMUSE could not prove that every animation " +
+                "now uses your locked material. A destroyed material " +
+                "that an animation still names would break the build, so " +
+                "AMUSE kept the unlocked copy alive. Reason: {1}. At " +
+                "runtime an animation may still show the unlocked copy " +
+                "in this slot.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained:hint"] =
+                "Check the animations that swap this slot, and check " +
+                "that the lock tool works on this machine, then run the " +
+                "build again.",
         };
 
 

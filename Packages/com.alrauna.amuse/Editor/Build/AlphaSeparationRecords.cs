@@ -105,6 +105,36 @@ namespace Alrauna.Amuse.Editor.Build
         /// refusal, not a defect: another pass in this phase may legitimately
         /// have replaced the mesh or the slot array.</summary>
         RendererChangedSincePreparation,
+
+        // --- Transient-unlock window members, appended at the tail. The
+        // window swap-in and the window close are their only writers, and
+        // they name slot-scoped outcomes of the unlock window. The census
+        // mirrors renderer-scoped refusals only, so these members carry no
+        // census surface; their report strings carry them instead.
+
+        /// <summary>The unlock window's restored clone failed one fact of
+        /// the restore verification contract, so the clone never swapped
+        /// in and the slot keeps its original locked material. One record
+        /// per affected slot.</summary>
+        TransientUnlockRestoreMismatch,
+
+        /// <summary>The window close could not verify this slot's swapped
+        /// clone as locked again, so the fallback inverted the swap-in
+        /// remap and the slot holds its original locked material again.
+        /// When the committed-curve inversion is provably complete the
+        /// clone is destroyed; otherwise the clone is retained and named
+        /// by <see cref="TransientUnlockCloneRetained"/>. One record per
+        /// affected slot.</summary>
+        TransientUnlockRelockFailed,
+
+        /// <summary>The window close could not prove that every committed
+        /// animation curve was inverted for this slot's failed pair, so
+        /// the unlocked clone stays alive: a destroyed material that a
+        /// committed curve still references would serialize as a missing
+        /// reference. The slot holds its original locked material, and an
+        /// animation may still apply the unlocked clone. One record per
+        /// affected slot.</summary>
+        TransientUnlockCloneRetained,
     }
 
     /// <summary>
