@@ -153,6 +153,21 @@ namespace Alrauna.Amuse.Editor.Build
         /// result instead of enumerating again.
         /// </summary>
         internal CommittedControllerGraphResult StructuralGraph { get; set; }
+
+        /// <summary>
+        /// The finalization the apply pass last mutated the build avatar
+        /// with, or null when apply performed no mutation. The window
+        /// close reads the recorded slot writes from here, because the
+        /// phase-end animator rebind re-applies stale t=0 curve values
+        /// over the live slot arrays: the recorded write, not the live
+        /// array, is what apply intended the slot to hold. Live transient
+        /// host capability, deliberately outside the evidence graph.
+        /// </summary>
+        internal AlphaSeparationFinalization AppliedFinalization
+        {
+            get;
+            set;
+        }
     }
 
     [RunsOnPlatforms(WellKnownPlatforms.VRChatAvatar30)]
@@ -230,6 +245,7 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
+                null,
                 null);
         }
 
@@ -253,6 +269,7 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 consentPresenter,
+                null,
                 null);
         }
 
@@ -281,7 +298,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion = null,
             VerifiedLilToonConversion lilToonConversion = null,
             VersionConsentPresenter consentPresenter = null,
-            Func<Material, bool> lockedOriginalAttestation = null)
+            Func<Material, bool> lockedOriginalAttestation = null,
+            Func<bool> windowVendorReady = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -304,7 +322,8 @@ namespace Alrauna.Amuse.Editor.Build
                 poiyomiConversion,
                 lilToonConversion,
                 consentPresenter,
-                lockedOriginalAttestation);
+                lockedOriginalAttestation,
+                windowVendorReady);
         }
 
         /// <summary>
@@ -366,7 +385,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             VersionConsentPresenter consentPresenter,
-            Func<Material, bool> lockedOriginalAttestation)
+            Func<Material, bool> lockedOriginalAttestation,
+            Func<bool> windowVendorReady)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -410,7 +430,8 @@ namespace Alrauna.Amuse.Editor.Build
             var windowEligible = TransientUnlockAvailability
                 .WindowEligibleForConsent(
                     AllAssignedMaterials(context),
-                    lockedOriginalAttestation);
+                    lockedOriginalAttestation,
+                    windowVendorReady);
             if (windowEligible)
             {
                 subjects.Add(
@@ -476,10 +497,37 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
-            // Every avatar-scope gate has passed: from here the run is
-            // reported, so the apply pass may summarize it with applied
-            // counts.
+            // Every avatar-scope gate has passed: the unlock window opens
+            // here, before capture, so the whole pipeline below reads the
+            // swapped world. The swap-in holds its own consent gate and
+            // vendor precondition, so an ineligible build reaches it as a
+            // counted no-op, and an unattested machine never clones, so
+            // the pre-check below still refuses before any clone exists.
+            TransientUnlockSwapIn.SwapIn(
+                context,
+                context.GetState<TransientUnlockWindowState>(),
+                TransientUnlockSwapIn.Availability.FromProduction(
+                    windowVendorReady),
+                lockedOriginalAttestation);
+
+            // From here the run is reported, so the apply pass may
+            // summarize it with applied counts.
             state.ReachedRendererAnalysis = true;
+
+            // While the window is open, the capture reads the world
+            // through the swapped view: the stored committed graph was
+            // enumerated before the swap-in and still carries every
+            // observed locked original, while the slot arrays and the
+            // live clips hold the clones. Folding the substitution into
+            // the observed values keeps one admitted material per
+            // binding, which is exactly what the apply pass validates
+            // against.
+            var window = context.GetState<TransientUnlockWindowState>();
+            Func<Material, Material> swappedView = window.OpenPairs.Count
+                > 0
+                ? window.SwappedView
+                : null;
+
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             var maxMipLevel = ProofMipCapFrom(optimizer);
@@ -514,13 +562,16 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                // The Thry precondition precedes any clone step: a
-                // renderer holding an eligible locked material on a
-                // machine whose lock tool does not attest refuses by
-                // name here, before the window could ever clone.
+                // The Thry precondition refuses a renderer holding an
+                // eligible locked material on a machine whose lock tool
+                // does not attest. The swap-in above consults the same
+                // readiness and opens nothing on such a machine, so this
+                // refusal still lands before any clone exists, and before
+                // capture reads the renderer.
                 var lockedToolRefusal =
                     TransientUnlockAvailability.RendererPreCheckRefusal(
-                        renderer, lockedOriginalAttestation);
+                        renderer, lockedOriginalAttestation,
+                        windowVendorReady);
                 if (lockedToolRefusal != RendererAnalysisRefusal.None)
                 {
                     state.RecordRendererRefusal(lockedToolRefusal);
@@ -575,7 +626,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 renderer, capturer ?? effectiveCapturer),
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
-                            LockedMaterialIdentity.PreCheckRefusal);
+                            LockedMaterialIdentity.PreCheckRefusal,
+                            swappedView);
                 }
                 else if (selectRequest == null)
                 {
@@ -590,7 +642,8 @@ namespace Alrauna.Amuse.Editor.Build
                             renderer, effectiveCapturer),
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
-                        LockedMaterialIdentity.PreCheckRefusal);
+                        LockedMaterialIdentity.PreCheckRefusal,
+                        swappedView);
                 }
                 else
                 {
@@ -607,7 +660,8 @@ namespace Alrauna.Amuse.Editor.Build
                             out admittedLiveMaterials,
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
-                            LockedMaterialIdentity.PreCheckRefusal);
+                            LockedMaterialIdentity.PreCheckRefusal,
+                            swappedView);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
@@ -708,18 +762,6 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
-
-            // The unlock window opens after analysis. Every renderer and
-            // every slot was already read for analysis, so a swap-in here
-            // cannot perturb it, and this increment's round trip stays
-            // behavior-neutral toward analysis by construction. The swap-in
-            // holds its own consent gate and vendor precondition, so an
-            // ineligible build reaches it as a counted no-op.
-            TransientUnlockSwapIn.SwapIn(
-                context,
-                context.GetState<TransientUnlockWindowState>(),
-                TransientUnlockSwapIn.Availability.FromProduction(),
-                lockedOriginalAttestation);
         }
 
         /// <summary>

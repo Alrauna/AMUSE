@@ -151,7 +151,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer = null,
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
-            LockedMaterialRefusalCheck lockedRefusalCheck = null)
+            LockedMaterialRefusalCheck lockedRefusalCheck = null,
+            Func<Material, Material> observedMaterialMapper = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -164,7 +165,8 @@ namespace Alrauna.Amuse.Editor.Host
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
-                lockedRefusalCheck);
+                lockedRefusalCheck,
+                observedMaterialMapper);
         }
         // Public-project vendor fixtures exercise verified frontend equations but
         // intentionally do not publish vendor source assets. This seam exists only
@@ -232,7 +234,8 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
-            LockedMaterialRefusalCheck lockedRefusalCheck = null)
+            LockedMaterialRefusalCheck lockedRefusalCheck = null,
+            Func<Material, Material> observedMaterialMapper = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -245,7 +248,8 @@ namespace Alrauna.Amuse.Editor.Host
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
-                lockedRefusalCheck);
+                lockedRefusalCheck,
+                observedMaterialMapper);
         }
 
         /// <summary>
@@ -254,7 +258,13 @@ namespace Alrauna.Amuse.Editor.Host
         /// the AnimationIndex holds for this renderer's object path, so the
         /// admitted swap set matches what the apply pass validates against.
         /// The graph still decides the structural facts; the index only
-        /// adds clip observations for this renderer path.
+        /// adds clip observations for this renderer path. The two views
+        /// can disagree on values: the stored graph was enumerated before
+        /// the build substituted any material, while the index holds the
+        /// live clips. The optional observed-material mapper folds such a
+        /// substitution into the admitted set, so both views resolve to
+        /// the same material per binding; null keeps every observed value
+        /// as-is.
         /// </summary>
         internal static CapturedAnimationEvidence CaptureWithAnimationIndex(
             string rendererPath,
@@ -268,7 +278,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer = null,
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
-            LockedMaterialRefusalCheck lockedRefusalCheck = null)
+            LockedMaterialRefusalCheck lockedRefusalCheck = null,
+            Func<Material, Material> observedMaterialMapper = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -314,7 +325,8 @@ namespace Alrauna.Amuse.Editor.Host
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
-                lockedRefusalCheck);
+                lockedRefusalCheck,
+                observedMaterialMapper);
         }
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
@@ -327,7 +339,8 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
-            LockedMaterialRefusalCheck lockedRefusalCheck = null)
+            LockedMaterialRefusalCheck lockedRefusalCheck = null,
+            Func<Material, Material> observedMaterialMapper = null)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -362,7 +375,8 @@ namespace Alrauna.Amuse.Editor.Host
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
-                lockedRefusalCheck);
+                lockedRefusalCheck,
+                observedMaterialMapper);
         }
         private static CapturedAnimationEvidence CaptureObserved(
             string rendererPath,
@@ -375,7 +389,8 @@ namespace Alrauna.Amuse.Editor.Host
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
-            LockedMaterialRefusalCheck lockedRefusalCheck = null)
+            LockedMaterialRefusalCheck lockedRefusalCheck = null,
+            Func<Material, Material> observedMaterialMapper = null)
         {
             // Assigned once here so that EVERY closure-failure return below hands
             // back an empty list rather than a partial one. The real pairing is
@@ -424,14 +439,32 @@ namespace Alrauna.Amuse.Editor.Host
             var admitted = new List<Material>();
             var materialIndices = new Dictionary<Material, int>(
                 ReferenceComparer<Material>.Instance);
+
+            // The observed-material view. A caller whose build substituted
+            // materials between the stored committed-graph enumeration and
+            // this capture hands in the substitution here, so a keyframe
+            // value read from the pre-substitution graph resolves to the
+            // same material the live clip view and the slot arrays hold.
+            // Null keeps the observed value as-is.
+            Material View(Material material)
+            {
+                if (material == null)
+                {
+                    return null;
+                }
+
+                return observedMaterialMapper?.Invoke(material) ?? material;
+            }
+
             bool TryAdmit(Material material, out int index)
             {
                 index = default;
                 if (material == null) return false;
-                if (materialIndices.TryGetValue(material, out index)) return true;
+                var viewed = View(material);
+                if (materialIndices.TryGetValue(viewed, out index)) return true;
                 index = admitted.Count;
-                materialIndices.Add(material, index);
-                admitted.Add(material);
+                materialIndices.Add(viewed, index);
+                admitted.Add(viewed);
                 return true;
             }
 
@@ -624,7 +657,7 @@ namespace Alrauna.Amuse.Editor.Host
 
                         foreach (var value in binding.Values)
                         {
-                            indices.Add(materialIndices[(Material)value]);
+                            indices.Add(materialIndices[View((Material)value)]);
                         }
                     }
 

@@ -114,10 +114,16 @@ namespace Alrauna.Amuse.Editor.Build
             // The shipped references are written here, after every
             // extension deactivation, so no later commit or rebind can
             // overwrite them. Verified pairs ship the re-locked clone;
-            // failed pairs revert to the locked original.
+            // failed pairs revert to the locked original. For a pair
+            // whose slots apply transformed, the recorded finalization
+            // write wins: the phase-end animator rebind re-applies the
+            // authored clip's stale t=0 value over apply's slot write,
+            // and re-asserting the clone there would clobber the
+            // canonical material apply derived from the unlocked clone.
+            var recorded = finishState.AppliedFinalization;
             foreach (var pair in verified)
             {
-                ReassertShippedSlots(pair);
+                ReassertShippedSlots(pair, recorded);
             }
 
             foreach (var pair in failed)
@@ -192,15 +198,21 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Puts the re-locked clone back into every recorded slot of a
-        /// verified pair, value-level on a fresh live read. The commit's
-        /// animator rebind can leave the authored locked original in the
-        /// array; this write is the one that ships. A slot a foreign pass
-        /// filled with anything else is never stomped: the window reverts
-        /// or re-asserts exactly its own substitution.
+        /// Restores every recorded slot of a verified pair to what the
+        /// build intends it to hold, value-level on a fresh live read.
+        /// For a slot the apply pass transformed, the recorded
+        /// finalization write is the intent and is re-asserted, because
+        /// the phase-end animator rebind may have overwritten it with the
+        /// authored clip's stale t=0 value. For any other slot holding L,
+        /// the re-locked clone is re-asserted, because the rebind leaves L
+        /// where the swap-in put the clone. A slot holding the clone, and
+        /// a slot a foreign pass filled with anything else, are never
+        /// stomped: the window reverts or re-asserts exactly its own
+        /// substitution.
         /// </summary>
         private static void ReassertShippedSlots(
-            TransientUnlockWindowState.SwappedPair pair)
+            TransientUnlockWindowState.SwappedPair pair,
+            AlphaSeparationFinalization recorded)
         {
             var clone = pair.UnlockedClone;
             foreach (var slot in pair.Slots)
@@ -233,9 +245,41 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                live[slot.SlotIndex] = clone;
+                live[slot.SlotIndex] =
+                    RecordedWriteMaterial(recorded, renderer, slot.SlotIndex)
+                    ?? clone;
                 renderer.sharedMaterials = live;
             }
+        }
+
+        /// <summary>
+        /// The material apply's recorded finalization intended one renderer
+        /// slot to hold, or null when apply wrote nothing for that slot.
+        /// Reads build state only; never the live array, which the
+        /// animator rebind may already have clobbered.
+        /// </summary>
+        private static Material RecordedWriteMaterial(
+            AlphaSeparationFinalization recorded,
+            Renderer renderer,
+            int slotIndex)
+        {
+            if (recorded == null)
+            {
+                return null;
+            }
+
+            foreach (var write in recorded.Writes)
+            {
+                if (!ReferenceEquals(write.Renderer, renderer) ||
+                    slotIndex >= write.Materials.Length)
+                {
+                    continue;
+                }
+
+                return write.Materials[slotIndex];
+            }
+
+            return null;
         }
 
         /// <summary>

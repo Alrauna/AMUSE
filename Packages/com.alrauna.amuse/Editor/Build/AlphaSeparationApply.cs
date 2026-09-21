@@ -66,8 +66,12 @@ namespace Alrauna.Amuse.Editor.Build
                 else if (decision.HasMutation)
                 {
                     // First mutation boundary. An apply defect is not caught
-                    // either, and nothing is rolled back.
+                    // either, and nothing is rolled back. The finalization is
+                    // recorded on the build state: the window close re-asserts
+                    // these recorded slot writes after the animator rebind,
+                    // whose stale t=0 application would otherwise win.
                     ApplyFinalization(finalization, state);
+                    state.AppliedFinalization = finalization;
                 }
             }
 

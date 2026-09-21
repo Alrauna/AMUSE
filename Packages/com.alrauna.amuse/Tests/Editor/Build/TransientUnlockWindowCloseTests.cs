@@ -26,6 +26,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
+            TransientUnlockTestLifecycle.OpenFixtureScene();
         }
 
         [TearDown]
@@ -33,6 +34,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
             DestroyTracked();
+            TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
             DeleteTempFolder();
         }
