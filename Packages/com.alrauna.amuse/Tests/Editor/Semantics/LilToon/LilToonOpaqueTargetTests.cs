@@ -61,6 +61,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         private const string ConversionTempFolder = "Assets/AmuseTests_LilToonConversion";
 
+        /// <summary>
+        /// The Thry optimizer lock-button attribute, stated literally. The
+        /// scan's subject is the vendor attribute itself; deriving it from
+        /// any production constant would let production test itself, and
+        /// no production constant for it exists or belongs.
+        /// </summary>
+        private const string ThryLockButtonAttribute =
+            "ThryShaderOptimizerLockButton";
+
         // --- Tuple and request shape ----------------------------------------
 
         [Test]
@@ -645,6 +654,120 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             {
                 DeleteConversionTempFolder();
             }
+        }
+
+        /// <summary>
+        /// Verification task V1 of the transient-unlock design, spec
+        /// section 16: the attested canonical opaque target shader declares
+        /// no Thry lock-button attribute. The attribute is what makes the
+        /// upload-time lock process a material on machines with Thry
+        /// installed, so a declaration on the pinned target would expose
+        /// AMUSE's canonical materials to that lock. That is a recorded
+        /// consent exposure, never an inherited silence: every surface
+        /// checked here fails with a message naming the exposure, so a
+        /// future shader bump surfaces it instead of passing silently.
+        /// The target resolves through the production attestation seam,
+        /// and the scan runs against the attested identity, never a typed
+        /// shader name. First-run green is characterization: the observed
+        /// scan found zero occurrences on any surface.
+        /// </summary>
+        [Test]
+        public void
+            AttestedCanonicalOpaqueTarget_CarriesNoThryShaderOptimizerLockButtonAttribute()
+        {
+            // Resolve the target name through the production routing, the
+            // decision the conversion itself makes for an attested cutout
+            // source. The precondition assert is a tripwire, not a proof:
+            // if the routing ever moves the target to another asset, this
+            // test must fail here instead of scanning the wrong shader.
+            var targetName = LilToonSourceAttestation
+                .ResolveCanonicalTargetShaderName(
+                    LilToonSourceAttestation.CutoutShaderName);
+            Assert.That(
+                targetName,
+                Is.EqualTo(LilToonSourceAttestation.SupportedShaderName),
+                "the canonical opaque routing moved off the pinned " +
+                "target; re-derive this scan against the new target " +
+                "before trusting a green result");
+
+            var target = Shader.Find(targetName);
+            Assume.That(
+                target, Is.Not.Null,
+                "the jp.lilxyzw.liltoon package is not installed in this"
+                + " project; the pinned opaque target cannot resolve."
+                + " Install it to run this verification.");
+
+            // The attestation reads the shader-format stamp off captured
+            // material evidence, exactly as the production wrapper feeds
+            // it, so the capture uses the production conversion request.
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    Track(new Material(target)),
+                    LilToonCutoutSourceEligibility
+                        .ConversionEvidenceRequest),
+            })[0];
+
+            var evidence = LilToonSourceAttestation
+                .GatherOpaqueTargetSourceEvidence(target, captured);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyIdentityForShaderName(
+                    evidence, out var diagnostic),
+                Is.True,
+                "the pinned opaque target failed source attestation: "
+                + (diagnostic != null ? diagnostic.Detail : "no detail")
+                + ". Re-derive the pins before trusting any scan.");
+
+            // Surface 1: the declared property attributes Unity compiles
+            // for the target, the surface the upload-time lock's property
+            // predicate reads.
+            var offendingProperties = new List<string>();
+            var count = target.GetPropertyCount();
+            for (var index = 0; index < count; index++)
+            {
+                foreach (var attribute in target.GetPropertyAttributes(index))
+                {
+                    if (string.Equals(
+                            attribute,
+                            ThryLockButtonAttribute,
+                            StringComparison.Ordinal))
+                    {
+                        offendingProperties.Add(
+                            target.GetPropertyName(index));
+                    }
+                }
+            }
+
+            Assert.That(
+                offendingProperties, Is.Empty,
+                "the attested canonical opaque target shader declares '" +
+                ThryLockButtonAttribute + "' on " +
+                offendingProperties.Count + " declared property or "
+                + "properties: the upload-time lock processes AMUSE's "
+                + "canonical materials on machines with Thry installed. "
+                + "Record the exposure and obtain consent; never "
+                + "inherit it silently.");
+
+            // Surface 2: the attested source text of both pinned assets,
+            // so a declaration the property API does not surface still
+            // fails by name.
+            Assert.That(
+                evidence.ShaderCanonicalization.CanonicalSource,
+                Does.Not.Contain(ThryLockButtonAttribute),
+                "the attested canonical opaque target shader's own "
+                + "source declares '" + ThryLockButtonAttribute + "'. "
+                + "The upload-time lock processes AMUSE's canonical "
+                + "materials on machines with Thry installed. Record "
+                + "the exposure and obtain consent; never inherit it "
+                + "silently.");
+            Assert.That(
+                evidence.PassCanonicalization.CanonicalSource,
+                Does.Not.Contain(ThryLockButtonAttribute),
+                "the attested opaque pass asset's source declares '"
+                + ThryLockButtonAttribute + "'. The upload-time lock "
+                + "processes AMUSE's canonical materials on machines "
+                + "with Thry installed. Record the exposure and obtain "
+                + "consent; never inherit it silently.");
         }
 
         private static string ValidStandInLilToonSource(string guid)
