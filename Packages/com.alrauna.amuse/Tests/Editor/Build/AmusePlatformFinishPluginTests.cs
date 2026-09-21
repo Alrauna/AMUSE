@@ -1399,10 +1399,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "no clone exists for a refused renderer");
                 Assert.That(
                     consentSubjects,
-                    Has.None.EqualTo(
-                        TransientUnlockAvailability.WindowConsentSubject),
-                    "the window consent subject stays out of the dialog " +
-                    "while the vendor side is unready");
+                    Is.Empty,
+                    "an unready vendor side adds no consent subject of " +
+                    "any kind");
             }
             finally
             {

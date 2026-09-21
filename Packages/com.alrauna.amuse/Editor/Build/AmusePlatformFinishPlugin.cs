@@ -422,21 +422,18 @@ namespace Alrauna.Amuse.Editor.Build
                 .CollectTransferConsent(AllAssignedMaterials(context));
             var subjects = new List<string>(lifecycle.ConsentSubjects);
             subjects.AddRange(shaderTransfer.Subjects);
-            // The unlock window asks in the same consolidated dialog, and
-            // only when a locked material makes the window eligible on
-            // this machine. An eligible build that passes the dialog
-            // grants the window for this build; batch mode and a decline
-            // both stop the whole build, exactly as the D8 layer does.
+            // The unlock window no longer carries its own per-build
+            // consent subject. V2 and V4 passed live observation on
+            // 2026-09-21, so per spec section 12 the gate moved to the
+            // D8 pattern: an eligible build on a machine where the vendor
+            // side is ready opens the window without asking. An unready
+            // vendor side never grants, and the renderer pre-check
+            // refuses by name before any clone exists.
             var windowEligible = TransientUnlockAvailability
                 .WindowEligibleForConsent(
                     AllAssignedMaterials(context),
                     lockedOriginalAttestation,
                     windowVendorReady);
-            if (windowEligible)
-            {
-                subjects.Add(
-                    TransientUnlockAvailability.WindowConsentSubject);
-            }
 
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
