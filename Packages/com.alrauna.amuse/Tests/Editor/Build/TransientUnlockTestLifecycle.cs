@@ -316,46 +316,80 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The standing hygiene guard: discards every dirty open scene
-        /// after a fixture ran. Preview scenes close through their own
-        /// API, saved scenes re-open from disk, and an untitled scene is
-        /// replaced wholesale. A modified scene at a run boundary is what
-        /// raised Unity's scene-save dialog over the editor and wedged
-        /// it.
+        /// after a fixture ran, then re-scans and fails the offending
+        /// class if any scene still reports dirty. Preview scenes close
+        /// through their own API, saved scenes re-open from disk, and an
+        /// untitled scene is replaced wholesale. A modified scene at a
+        /// run boundary is what raised Unity's scene-save dialog over
+        /// the editor and wedged it.
         /// </summary>
         internal static void AssertNoSavedSceneDirty()
         {
-            for (var index = UnityEngine.SceneManagement.SceneManager
-                     .sceneCount - 1;
-                 index >= 0;
-                 index--)
+            // The discard mutates the scene collection (a wholesale
+            // untitled replacement collapses it), so each mutation
+            // restarts the scan instead of walking stale indices.
+            var scans = 0;
+            var discarded = true;
+            while (discarded && scans < 8)
+            {
+                discarded = false;
+                scans++;
+                for (var index = UnityEngine.SceneManagement.SceneManager
+                         .sceneCount - 1;
+                     index >= 0;
+                     index--)
+                {
+                    var scene = UnityEngine.SceneManagement.SceneManager
+                        .GetSceneAt(index);
+                    if (!scene.isDirty)
+                    {
+                        continue;
+                    }
+
+                    if (UnityEditor.SceneManagement.EditorSceneManager
+                        .IsPreviewScene(scene))
+                    {
+                        UnityEditor.SceneManagement.EditorSceneManager
+                            .ClosePreviewScene(scene);
+                        discarded = true;
+                    }
+                    else if (!string.IsNullOrEmpty(scene.path))
+                    {
+                        UnityEditor.SceneManagement.EditorSceneManager
+                            .OpenScene(scene.path);
+                        discarded = true;
+                    }
+                    else
+                    {
+                        UnityEditor.SceneManagement.EditorSceneManager
+                            .NewScene(
+                                UnityEditor.SceneManagement.NewSceneSetup
+                                    .EmptyScene,
+                                UnityEditor.SceneManagement.NewSceneMode
+                                    .Single);
+                        discarded = true;
+                    }
+
+                    break;
+                }
+            }
+
+            // The tripwire. The discard above is best effort; a scene it
+            // cannot clean must fail this class here instead of raising
+            // the scene-save dialog over the editor later.
+            for (var index = 0;
+                 index < UnityEngine.SceneManagement.SceneManager.sceneCount;
+                 index++)
             {
                 var scene = UnityEngine.SceneManagement.SceneManager
                     .GetSceneAt(index);
-                if (!scene.isDirty)
-                {
-                    continue;
-                }
-
-                if (UnityEditor.SceneManagement.EditorSceneManager
-                    .IsPreviewScene(scene))
-                {
-                    UnityEditor.SceneManagement.EditorSceneManager
-                        .ClosePreviewScene(scene);
-                }
-                else if (!string.IsNullOrEmpty(scene.path))
-                {
-                    UnityEditor.SceneManagement.EditorSceneManager
-                        .OpenScene(scene.path);
-                }
-                else
-                {
-                    UnityEditor.SceneManagement.EditorSceneManager
-                        .NewScene(
-                            UnityEditor.SceneManagement.NewSceneSetup
-                                .EmptyScene,
-                            UnityEditor.SceneManagement.NewSceneMode
-                                .Single);
-                }
+                Assert.That(
+                    scene.isDirty,
+                    Is.False,
+                    "an open scene was left modified: " +
+                    (string.IsNullOrEmpty(scene.path)
+                        ? scene.name + " (untitled)"
+                        : scene.path));
             }
         }
 
