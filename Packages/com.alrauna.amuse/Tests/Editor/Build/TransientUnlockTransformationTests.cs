@@ -189,6 +189,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, mesh, locked));
             TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
+            var lockedShaderBefore = locked.shader;
+            var lockedFlagBefore = locked.GetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName);
 
             Material unlockedClone = null;
             TransientUnlockTestKnobs.BeforeClose = context =>
@@ -232,6 +235,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the eligible build must ask for the window consent");
             Assert.That(locked, Is.Not.Null,
                 "the locked original must survive untouched");
+            Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
+                "the locked original keeps its locked stand-in shader");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(lockedFlagBefore),
+                "the locked original keeps its lock flag at the locked " +
+                "stand-in form");
 
             // The pipeline ran on the unlocked world.
             Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),

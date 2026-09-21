@@ -11,7 +11,9 @@ namespace Alrauna.Amuse.Tests.Editor
     /// their own API, saved scenes are re-opened from disk, and an
     /// untitled scene is replaced wholesale. The population therefore
     /// never ends with a modified scene open, which is what raised
-    /// Unity's scene-save dialog over the editor and wedged it.
+    /// Unity's scene-save dialog over the editor and wedged it. Each
+    /// discard restarts the scan, because a wholesale untitled
+    /// replacement collapses the scene collection.
     /// <para>
     /// Discard semantics are deliberate and documented: the test editor is
     /// a dedicated lab instance, and every scene a population dirties is
@@ -25,31 +27,51 @@ namespace Alrauna.Amuse.Tests.Editor
         [OneTimeTearDown]
         public void LeaveNoModifiedSceneOpen()
         {
-            for (var index = SceneManager.sceneCount - 1;
-                 index >= 0;
-                 index--)
+            // The discard mutates the scene collection (a wholesale
+            // untitled replacement collapses it), so each discard
+            // restarts the scan instead of walking stale indices. The
+            // capped restart loop mirrors
+            // TransientUnlockTestLifecycle.AssertNoSavedSceneDirty.
+            var scans = 0;
+            var discarded = true;
+            while (discarded && scans < 8)
             {
-                var scene = SceneManager.GetSceneAt(index);
-                if (!scene.isDirty)
+                discarded = false;
+                scans++;
+                for (var index = SceneManager.sceneCount - 1;
+                     index >= 0;
+                     index--)
                 {
-                    continue;
-                }
+                    var scene = SceneManager.GetSceneAt(index);
+                    if (!scene.isDirty)
+                    {
+                        continue;
+                    }
 
-                if (EditorSceneManager.IsPreviewScene(scene))
-                {
-                    EditorSceneManager.ClosePreviewScene(scene);
-                }
-                else if (!string.IsNullOrEmpty(scene.path))
-                {
-                    EditorSceneManager.OpenScene(scene.path);
-                }
-                else
-                {
-                    EditorSceneManager.NewScene(
-                        NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                    if (EditorSceneManager.IsPreviewScene(scene))
+                    {
+                        EditorSceneManager.ClosePreviewScene(scene);
+                        discarded = true;
+                    }
+                    else if (!string.IsNullOrEmpty(scene.path))
+                    {
+                        EditorSceneManager.OpenScene(scene.path);
+                        discarded = true;
+                    }
+                    else
+                    {
+                        EditorSceneManager.NewScene(
+                            NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                        discarded = true;
+                    }
+
+                    break;
                 }
             }
 
+            // The tripwire. The discard above is best effort; a scene it
+            // cannot clean must fail here instead of raising the
+            // scene-save dialog over the editor later.
             for (var index = 0;
                  index < SceneManager.sceneCount;
                  index++)
