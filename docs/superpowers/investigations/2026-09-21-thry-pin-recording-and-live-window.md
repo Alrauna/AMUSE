@@ -244,8 +244,9 @@ Divergences and notes against the older records:
 
 ## 11. Next steps
 
-1. Consent move session: settle the play path engagement from section 6
-   before moving the gate to the D8 pattern.
+1. The consent move landed the same day, see section 12.1. The play
+   path engagement question from section 6 stays open for follow-up,
+   because the moved gate no longer asks on any path.
 2. Fixture owner: re-check the fixture lock flag before each Lab session,
    and decide whether the generated asset deletion that regressed the
    fixture needs a guard.
@@ -253,3 +254,70 @@ Divergences and notes against the older records:
    forced fallback if a clean injection point appears.
 4. Design owner: the d4rk active-component observation on a re-locked
    avatar, listed in section 7, stays open.
+5. Coverage: exact alpha semantics for premultiplied Poiyomi materials,
+   per section 12.2.
+
+## 12. Same-day addendum: the consent move and the all-unknown
+## diagnosis
+
+Privacy note: same sanitization as section 1. Date: 2026-09-21, later
+the same day.
+
+### 12.1 The consent move landed
+
+The owner authorized the consent move after reviewing the V2 and V4
+evidence. Repository commit `e6c73a8` on
+`feat/transient-unlock-window` removes the window's per-build consent
+subject. An eligible build on a machine where the vendor side attests
+now opens the window without asking. An unready vendor side never
+grants, and the renderer pre-check still refuses by name before any
+clone exists, so the fail-closed direction of spec section 5 is
+unchanged. The D8 subjects for host versions and shader sources are
+untouched and still ask through the same consolidated dialog.
+
+RED evidence: the test that pinned the old ask contract failed against
+the new production code with exactly the expected message, while the
+window's own run assertions inside the same test stayed green, which
+proves the silent grant. GREEN evidence: the full both-assembly EditMode
+population ran 2311 of 2311 with exactly the 5 proven environment
+failures.
+
+### 12.2 Why the fixture renderer reports all-unknown
+
+The owner reported the renderer report
+`amuse.renderer.AdmittedMaterialSemanticsUnknown` on the fixture. A
+read-only probe diagnosed it the same day.
+
+Method. The probe cloned the fixture material in memory, persisted the
+clone as a temporary asset, unlocked the clone through the embedded era
+1 tool, drove the production Poiyomi frontend entry on the unlocked
+clone, and read the semantic result and its diagnostics. The temporary
+asset was deleted after the probe.
+
+Findings, in order:
+
+1. The vendor restore returns success only for a persisted clone. An
+   in-memory clone keeps its locked form after a successful return.
+   This matches the spec section 6 persistence requirement and
+   falsifier F9, and the window's own verification catches it.
+2. On a persisted clone, restore works: the clone binds the original
+   shader and the lock flag returns to 0.
+3. The production Poiyomi frontend admits the unlocked material. The
+   material is supported.
+4. The alpha output is incomplete with one named diagnostic:
+   the unsupported feature `_AlphaPremultiply`. Other outputs carry
+   unsupported feature diagnostics for `_DetailEnabled`.
+
+Conclusion. The garment enables Poiyomi's premultiply feature. The
+frontend does not yet support alpha semantics for premultiplied
+materials, so every triangle answers unknown, the renderer keeps its
+original materials, and the report fires. This is the designed
+conservative outcome for an unsupported feature, not a regression from
+the unlock window. The report is filed at information severity; the
+console prefix that calls every report an error belongs to NDMF, not
+to AMUSE.
+
+Coverage next step: exact alpha semantics for premultiplied Poiyomi
+materials is a real product extension with its own design and RED and
+GREEN obligations. Until it lands, this garment keeps its original
+materials by contract.
