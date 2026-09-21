@@ -172,6 +172,48 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// Whether one live material carries the recognized locked
+        /// identity: both required signals hold, the locked name prefix
+        /// and the optimizer flag equal to one. The transient unlock
+        /// window's pre-check and swap-in read this. It reads live
+        /// serialization state only and mutates nothing.
+        /// </summary>
+        internal static bool RecognizedLockedIdentity(Material material)
+        {
+            if (material == null || material.shader == null)
+            {
+                return false;
+            }
+
+            return Classify(SerializationOf(material)).IsLocked;
+        }
+
+        /// <summary>
+        /// Whether the live material's recorded original shader resolves
+        /// through the AssetDatabase and passes the pinned Poiyomi
+        /// identity. The transient unlock window's precondition calls
+        /// this; it is the same conjunction <see
+        /// cref="PreCheckRefusal"/> applies, so the two paths cannot pin
+        /// differently. Reads live state only and mutates nothing.
+        /// </summary>
+        internal static bool OriginalShaderAttested(Material material)
+        {
+            if (material == null || material.shader == null)
+            {
+                return false;
+            }
+
+            var identity = Classify(SerializationOf(material));
+            if (identity.OriginalShaderGuid == null &&
+                identity.OriginalShader == null)
+            {
+                return false;
+            }
+
+            return ResolvesToAttestedPoiyomi(identity.OriginalShaderGuid);
+        }
+
+        /// <summary>
         /// Reads the serialization facts of one live material: the shader
         /// name, the lock flag float, the three identity tags, and the
         /// generated shader asset presence. The tag read follows the
