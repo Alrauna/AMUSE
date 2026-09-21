@@ -449,6 +449,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The same material-swap object curve, but resident under a blend
+        /// tree state instead of a direct clip state. The animation index
+        /// the swap-in remaps through walks the whole virtual node graph,
+        /// so this curve is rewritten like any other.
+        /// </summary>
+        internal static AnimationClip AddBlendTreeSwapAnimation(
+            GameObject root,
+            Renderer renderer,
+            int slotIndex,
+            params Material[] swapValues)
+        {
+            var clip = new AnimationClip { name = "AMUSE material swap" };
+            var path = AnimationUtility.CalculateTransformPath(
+                renderer.transform, root.transform);
+            var keyframes = swapValues.Select((material, index) =>
+                new ObjectReferenceKeyframe
+                {
+                    time = index,
+                    value = material,
+                }).ToArray();
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    path,
+                    renderer.GetType(),
+                    "m_Materials.Array.data[" + slotIndex + "]"),
+                keyframes);
+
+            var controller = new AnimatorController
+            {
+                name = "AMUSE swap graph",
+            };
+            controller.AddLayer("L0");
+            controller.AddParameter(
+                "Blend", AnimatorControllerParameterType.Float);
+            var blendTree = new BlendTree
+            {
+                name = "AMUSE swap tree",
+                blendType = BlendTreeType.Simple1D,
+                blendParameter = "Blend",
+            };
+            blendTree.AddChild(clip);
+            controller.layers[0].stateMachine.AddState("S0").motion =
+                blendTree;
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+            return clip;
+        }
+
+        /// <summary>
         /// A float curve whose property name carries the rename suffix the
         /// stand-in material name produces. Written onto the swap clip, so
         /// the suffixed binding and the material swap travel together.

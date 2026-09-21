@@ -472,9 +472,31 @@ namespace Alrauna.Amuse.Editor.Build
         private static IEnumerable<AnimationClip> ClipsInMotion(
             Motion motion, HashSet<AnimationClip> seen)
         {
-            if (motion is AnimationClip clip && seen.Add(clip))
+            if (motion is AnimationClip clip)
             {
-                yield return clip;
+                if (seen.Add(clip))
+                {
+                    yield return clip;
+                }
+
+                yield break;
+            }
+
+            // The swap-in remaps through the animation index, and that
+            // index walks the whole virtual node graph, including blend
+            // tree children. A material swap can therefore live under a
+            // blend tree, and the committed walk must cover it or the
+            // fallback leaves a surviving clone reference behind.
+            if (motion is BlendTree blendTree)
+            {
+                foreach (var child in blendTree.children)
+                {
+                    foreach (var found in ClipsInMotion(
+                                 child.motion, seen))
+                    {
+                        yield return found;
+                    }
+                }
             }
         }
     }

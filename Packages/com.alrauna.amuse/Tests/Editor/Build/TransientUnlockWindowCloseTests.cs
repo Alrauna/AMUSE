@@ -90,7 +90,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The clip the build committed back onto the avatar's animator.
         /// Virtualization may commit a clone rather than the authored
         /// instance, so curve assertions must read through the animator,
-        /// never through the fixture's original clip reference.
+        /// never through the fixture's original clip reference. Blend tree
+        /// states are descended, because a material swap can live there.
         /// </summary>
         private static AnimationClip CommittedClip(GameObject root)
         {
@@ -106,9 +107,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 foreach (var state in layer.stateMachine.states)
                 {
-                    if (state.state.motion is AnimationClip clip)
+                    var clip = ClipInMotion(state.state.motion);
+                    if (clip != null)
                     {
                         return clip;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static AnimationClip ClipInMotion(Motion motion)
+        {
+            if (motion is AnimationClip clip)
+            {
+                return clip;
+            }
+
+            if (motion is BlendTree blendTree)
+            {
+                foreach (var child in blendTree.children)
+                {
+                    var found = ClipInMotion(child.motion);
+                    if (found != null)
+                    {
+                        return found;
                     }
                 }
             }
@@ -291,6 +315,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var curveMaterials = CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the material-swap curve must survive the fallback");
+            Assert.That(curveMaterials, Has.All.EqualTo(locked),
+                "no surviving curve reference may point at the clone");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockRelockFailed),
+                Is.EqualTo(1),
+                "the fallback records the named refusal per affected " +
+                "slot");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
+        }
+
+        /// <summary>
+        /// The F11 family, blend-tree coverage. A material swap clip that
+        /// lives under a blend tree state is rewritten by the swap-in
+        /// through the animation index like any other object curve, so the
+        /// fallback must invert it on the committed clips too: every
+        /// keyframe back to L, no surviving reference to the clone, and
+        /// the clone destroyed only after the inversion.
+        /// </summary>
+        [Test]
+        public void ABlendTreeResidentSwapClipFallsBackToL()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
+                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
+
+            var root = BuildAvatarRoot("AMUSE blend tree fallback fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
+                "TreeCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked);
+            TransientUnlockTestLifecycle.AddBlendTreeSwapAnimation(
+                root, renderer, 0, locked);
+
+            var cloneRef = default(Object);
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                cloneRef = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+            var clip = CommittedClip(root);
+
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "the fallback puts the original locked material back in " +
+                "the slot");
+            Assert.That(cloneRef == null, Is.True,
+                "the fallback destroys the clone, but only after every " +
+                "reference is back on L");
+            var curveMaterials = CurveMaterials(clip);
+            Assert.That(curveMaterials, Is.Not.Empty,
+                "the blend-tree-resident material-swap curve must " +
+                "survive the fallback");
             Assert.That(curveMaterials, Has.All.EqualTo(locked),
                 "no surviving curve reference may point at the clone");
             Assert.That(state.SlotRefusalCount(
