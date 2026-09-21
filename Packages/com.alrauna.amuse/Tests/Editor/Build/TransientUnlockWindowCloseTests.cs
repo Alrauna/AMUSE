@@ -429,6 +429,126 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A bindings stand-in whose committed-graph enumeration refuses:
+        /// the innate-controller entry carries an override controller,
+        /// which is a runtime controller but not an AnimatorController,
+        /// so the graph reports an unsupported controller form. This is
+        /// the shape the close pass must treat as "a committed curve may
+        /// still reference the clone": the fallback cannot prove the
+        /// curve inversion complete, so the clone must stay alive, and
+        /// the retention must be named.
+        /// </summary>
+        private sealed class RefusingStubBindings :
+            nadena.dev.ndmf.animator.IPlatformAnimatorBindings
+        {
+            private readonly AnimatorOverrideController controller;
+
+            internal RefusingStubBindings(
+                AnimatorOverrideController trackedController)
+            {
+                controller = trackedController;
+            }
+
+            public bool IsSpecialMotion(Motion motion)
+            {
+                return false;
+            }
+
+            public System.Collections.Generic.IEnumerable<
+                (object, RuntimeAnimatorController, bool)>
+                GetInnateControllers(GameObject root)
+            {
+                yield return (null, controller, false);
+            }
+
+            public void CommitControllers(
+                GameObject root,
+                System.Collections.Generic.IDictionary<
+                    object, RuntimeAnimatorController> controllers)
+            {
+                throw new System.InvalidOperationException(
+                    "the close pass never commits controllers");
+            }
+        }
+
+        /// <summary>
+        /// The third outcome of the close, named. A pair whose re-lock
+        /// failed and whose committed-curve inversion cannot be proven
+        /// complete keeps the unlocked clone alive, because a destroyed
+        /// material that a committed curve still references would
+        /// serialize as a missing reference. The named wrong
+        /// implementation is the close pass that retains the clone
+        /// silently: the slot reverts to L and no record names the
+        /// retained unlocked reference.
+        /// </summary>
+        [Test]
+        public void ARelockFailureWithoutProvenInversionNamesTheRetainedClone()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
+                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
+
+            var root = BuildAvatarRoot("AMUSE retained clone fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
+                "RetainedCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked);
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            var cloneRef = default(Object);
+            var stub = new RefusingStubBindings(
+                Track(new AnimatorOverrideController()));
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var pair = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0];
+                cloneRef = pair.UnlockedClone;
+                // Replace the retained host bindings after the swap-in,
+                // so the close pass's committed-graph enumeration refuses
+                // and the curve inversion cannot be proven complete.
+                context.GetState<AmusePlatformFinishState>()
+                    .AnimatorBindings = stub;
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+            var clip = CommittedClip(root);
+
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "the fallback puts the original locked material back in " +
+                "the slot");
+            Assert.That(cloneRef == null, Is.False,
+                "the close pass must keep the clone alive when a " +
+                "committed curve may still reference it");
+            var curveMaterials = CurveMaterials(clip);
+            Assert.That(curveMaterials, Has.Some.EqualTo(cloneRef),
+                "the fixture precondition: a committed curve still " +
+                "references the clone, which is why the clone stays " +
+                "alive");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockRelockFailed),
+                Is.EqualTo(1),
+                "the re-lock failure stays named");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(1),
+                "the retention of the unlocked clone must be named, " +
+                "never pass silently");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
+        }
+
+        /// <summary>
         /// F13. The fallback object is never destroyed; only references
         /// drop, and the clone is the only destroyable side. The named
         /// wrong implementation is a sweep that destroys the fallback.

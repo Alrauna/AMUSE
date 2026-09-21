@@ -34,8 +34,13 @@ namespace Alrauna.Amuse.Editor.Build
     /// destroyed, because a destroyed clone still referenced by a
     /// rewritten curve would serialize as a missing reference. Only the
     /// fallback destroys clones, and it destroys only the clones: the
-    /// locked originals are never destroyed by anything. A build that
-    /// completes holds zero open pairs, and no pair ships unlocked.
+    /// locked originals are never destroyed by anything. When the
+    /// fallback cannot prove the committed-curve inversion complete, it
+    /// keeps the unlocked clone alive and records the named
+    /// <see cref="AlphaSeparationSlotRefusal.TransientUnlockCloneRetained"/>
+    /// refusal for every slot of the pair, so the retention never passes
+    /// silently. A build that completes holds zero open pairs, and no
+    /// pair ships unlocked.
     /// </para>
     /// </summary>
     internal static class TransientUnlockWindowClose
@@ -154,12 +159,32 @@ namespace Alrauna.Amuse.Editor.Build
                 // content, so the asset flag is required. A committed
                 // curve the fallback could not enumerate keeps the clone
                 // alive instead: a destroyed but still referenced clone
-                // would serialize as a missing reference.
+                // would serialize as a missing reference. That retention
+                // is a named outcome, never a silent one: every slot of
+                // the pair records that the unlocked clone stays alive
+                // and that an animation may still apply it.
                 if (CurveInversionWasComplete(context, pair))
                 {
                     UnityEngine.Object.DestroyImmediate(
                         pair.UnlockedClone, true);
                     pair.UnlockedClone = null;
+                }
+                else
+                {
+                    foreach (var slot in pair.Slots)
+                    {
+                        finishState.RecordSlotRefusal(
+                            AlphaSeparationSlotRefusal
+                                .TransientUnlockCloneRetained);
+                        AmuseReports.SlotSeparationRefusal(
+                            slot.Renderer,
+                            slot.SlotIndex,
+                            AlphaSeparationSlotRefusal
+                                .TransientUnlockCloneRetained,
+                            slot.Renderer != null
+                                ? slot.Renderer.gameObject.name
+                                : null);
+                    }
                 }
 
                 window.Remove(pair);

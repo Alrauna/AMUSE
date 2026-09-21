@@ -513,12 +513,30 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.TransientUnlockRelockFailed:description"] =
                 "Material slot {0} of renderer '{2}' holds a locked " +
                 "material that AMUSE unlocked for the build. The lock " +
-                "tool did not lock the copy again, so AMUSE restored your " +
-                "original locked material. Reason: {1}. The shipped " +
-                "avatar shows the original locked material.",
+                "tool did not lock the copy again, so AMUSE put your " +
+                "original locked material back in the slot. Reason: {1}. " +
+                "An animation may still apply the AMUSE-generated " +
+                "material to this slot. The mesh split AMUSE generated " +
+                "may also remain.",
             ["amuse.slotSeparation.TransientUnlockRelockFailed:hint"] =
                 "Check that the lock tool works on this machine, then " +
                 "run the build again.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained"] =
+                "AMUSE kept an unlocked copy for material slot {0} of " +
+                "renderer '{2}'.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained:description"] =
+                "Material slot {0} of renderer '{2}' holds your original " +
+                "locked material. The lock tool did not lock the build " +
+                "copy again. AMUSE could not prove that every animation " +
+                "now uses your locked material. A destroyed material " +
+                "that an animation still names would break the build, so " +
+                "AMUSE kept the unlocked copy alive. Reason: {1}. At " +
+                "runtime an animation may still show the unlocked copy " +
+                "in this slot.",
+            ["amuse.slotSeparation.TransientUnlockCloneRetained:hint"] =
+                "Check the animations that swap this slot, and check " +
+                "that the lock tool works on this machine, then run the " +
+                "build again.",
         };
 
 

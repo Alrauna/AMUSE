@@ -120,9 +120,21 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>The window close could not verify this slot's swapped
         /// clone as locked again, so the fallback inverted the swap-in
-        /// remap: the slot holds its original locked material again and
-        /// the clone is destroyed. One record per affected slot.</summary>
+        /// remap and the slot holds its original locked material again.
+        /// When the committed-curve inversion is provably complete the
+        /// clone is destroyed; otherwise the clone is retained and named
+        /// by <see cref="TransientUnlockCloneRetained"/>. One record per
+        /// affected slot.</summary>
         TransientUnlockRelockFailed,
+
+        /// <summary>The window close could not prove that every committed
+        /// animation curve was inverted for this slot's failed pair, so
+        /// the unlocked clone stays alive: a destroyed material that a
+        /// committed curve still references would serialize as a missing
+        /// reference. The slot holds its original locked material, and an
+        /// animation may still apply the unlocked clone. One record per
+        /// affected slot.</summary>
+        TransientUnlockCloneRetained,
     }
 
     /// <summary>

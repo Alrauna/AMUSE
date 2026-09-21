@@ -74,7 +74,6 @@ namespace Alrauna.Amuse.Editor.Build
         /// archive digests themselves are already pinned in the recorded
         /// characterization, so the lab recording only hashes the named
         /// source file inside each verified archive.
-        /// </para>
         /// </summary>
         /// <remarks>
         /// Fail closed. With no digest pinned, no machine ever attests, so
@@ -92,16 +91,23 @@ namespace Alrauna.Amuse.Editor.Build
         /// language. Short sentences. It names the window, the active
         /// re-lock, the render-equivalence basis, the fallback behavior,
         /// the fact that the upload-time lock is not load-bearing for
-        /// swapped materials, and the post-build re-processing disclosure.
+        /// swapped materials, the post-build re-processing disclosure,
+        /// and the two order-100 residues of spec section 9.
         /// </summary>
         internal const string WindowConsentSubject =
             "Transient unlock window: AMUSE unlocks the locked materials " +
             "of this avatar for the duration of the build and locks the " +
             "swapped copies again before the build ships. The recorded " +
             "round trip characterization is the render-equivalence basis. " +
-            "When the second lock fails, AMUSE restores your original " +
-            "locked materials. The upload-time lock is not load-bearing " +
-            "for materials AMUSE swapped. Tools that run after the NDMF " +
+            "When the second lock fails, AMUSE puts your original locked " +
+            "materials back in their slots. An animation may still apply " +
+            "an AMUSE-generated material to a slot. A mesh split AMUSE " +
+            "generated may also remain. The upload-time lock is not " +
+            "load-bearing for materials AMUSE swapped. Materials that " +
+            "AMUSE did not swap still depend on the upload-time lock " +
+            "callback exactly as they did without AMUSE. The VRChat SDK " +
+            "can abort an upload for a malformed descriptor. That abort " +
+            "message is not about AMUSE. Tools that run after the NDMF " +
             "build may re-process the re-locked output.";
 
         // Per-domain caches. The three states are 0 unknown, 1 negative,
