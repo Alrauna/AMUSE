@@ -91,30 +91,6 @@ namespace Alrauna.Amuse.Editor.Build
                 "7c1ffe78c872288ec605b5bd742467401c952562701aa171fead0df4ae1883ee",
             };
 
-        /// <summary>
-        /// The per-build consent subject for the unlock window, in neutral
-        /// language. Short sentences. It names the window, the active
-        /// re-lock, the render-equivalence basis, the fallback behavior,
-        /// the fact that the upload-time lock is not load-bearing for
-        /// swapped materials, the post-build re-processing disclosure,
-        /// and the two order-100 residues of spec section 9.
-        /// </summary>
-        internal const string WindowConsentSubject =
-            "Transient unlock window: AMUSE unlocks the locked materials " +
-            "of this avatar for the duration of the build and locks the " +
-            "swapped copies again before the build ships. The recorded " +
-            "round trip characterization is the render-equivalence basis. " +
-            "When the second lock fails, AMUSE puts your original locked " +
-            "materials back in their slots. An animation may still apply " +
-            "an AMUSE-generated material to a slot. A mesh split AMUSE " +
-            "generated may also remain. The upload-time lock is not " +
-            "load-bearing for materials AMUSE swapped. Materials that " +
-            "AMUSE did not swap still depend on the upload-time lock " +
-            "callback exactly as they did without AMUSE. The VRChat SDK " +
-            "can abort an upload for a malformed descriptor. That abort " +
-            "message is not about AMUSE. Tools that run after the NDMF " +
-            "build may re-process the re-locked output.";
-
         // Per-domain caches. The three states are 0 unknown, 1 negative,
         // 2 positive. Unity never reloads the assembly inside one domain,
         // so a keyed static is the whole cache contract.
@@ -272,9 +248,11 @@ namespace Alrauna.Amuse.Editor.Build
         /// Whether any assigned material makes the unlock window eligible
         /// on this build: a recognized locked identity whose original
         /// shader attests, on a machine where the vendor side is ready.
-        /// Only an eligible build asks for the window's per-build consent.
-        /// The optional seam substitutes only the machine-readiness answer
-        /// for tests; null keeps the production <see cref="WindowVendorReady"/>.
+        /// V2 and V4 passed live observation on 2026-09-21, so an
+        /// eligible build grants the window without per-build consent
+        /// per spec section 12. The optional seam substitutes only the
+        /// machine-readiness answer for tests; null keeps the production
+        /// <see cref="WindowVendorReady"/>.
         /// </summary>
         internal static bool WindowEligibleForConsent(
             IEnumerable<Material> assignedMaterials,

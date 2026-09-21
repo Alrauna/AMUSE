@@ -230,9 +230,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the swapped pair must hold its unlocked clone at close");
             Assert.That(
                 TransientUnlockTransformationTestPlugin.ConsentSubjectsSeen,
-                Has.Some.EqualTo(
-                    TransientUnlockAvailability.WindowConsentSubject),
-                "the eligible build must ask for the window consent");
+                Is.Empty,
+                "the attested window combination must run without a " +
+                "per-build consent dialog");
             Assert.That(locked, Is.Not.Null,
                 "the locked original must survive untouched");
             Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
