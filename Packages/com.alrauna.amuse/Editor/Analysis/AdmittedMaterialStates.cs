@@ -245,7 +245,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.Family,
                         evidence,
                         material.PoiyomiEvidence,
-                        material.LilToonEvidence);
+                        material.LilToonEvidence,
+                        material.LockedIdentityRefusal);
                 var semantics = resolveSemantics(admitted)
                     ?? UnityMaterialSemantics.AllUnknown();
                 // Field lookups are scoped to this admitted material's own
@@ -273,9 +274,19 @@ namespace Alrauna.Amuse.Editor.Analysis
                         semantics.Alpha, materialFields, maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
-                    return SlotResolutionResult.Refused(
-                        RendererAnalysisRefusal
-                            .AdmittedMaterialSemanticsUnknown);
+                    // A recognized locked material refuses by its own name
+                    // instead of the generic destination. Every earlier
+                    // refusal path returned above and keeps its precedence.
+                    // A locked serialization that records no original
+                    // shader carries None and keeps the 2026-09-19
+                    // destination.
+                    var slotRefusal =
+                        material.LockedIdentityRefusal !=
+                        RendererAnalysisRefusal.None
+                            ? material.LockedIdentityRefusal
+                            : RendererAnalysisRefusal
+                                .AdmittedMaterialSemanticsUnknown;
+                    return SlotResolutionResult.Refused(slotRefusal);
                 }
 
                 resolutions.Add(resolution);

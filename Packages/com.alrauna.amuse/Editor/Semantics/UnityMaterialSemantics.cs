@@ -25,15 +25,35 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal PoiyomiSourceEvidence PoiyomiEvidence { get; }
         internal LilToonSourceEvidence LilToonEvidence { get; }
 
+        /// <summary>
+        /// The named renderer refusal the capture recorded for this
+        /// material's recognized locked identity, or None. Recognition
+        /// happens once, at capture time, where the live material's
+        /// serialization is still readable. When set, a slot that would
+        /// refuse this material as semantics-unknown refuses with this
+        /// name instead. Every other refusal path ignores it.
+        /// </summary>
+        internal RendererAnalysisRefusal LockedIdentityRefusal { get; }
+
         internal CapturedAlphaMaterial(
             CapturedAlphaMaterialFamily family,
             CapturedMaterialEvidence evidence,
             PoiyomiSourceEvidence poiyomiEvidence,
-            LilToonSourceEvidence lilToonEvidence)
+            LilToonSourceEvidence lilToonEvidence,
+            RendererAnalysisRefusal lockedIdentityRefusal =
+                RendererAnalysisRefusal.None)
         {
             if (!Enum.IsDefined(typeof(CapturedAlphaMaterialFamily), family))
             {
                 throw new ArgumentOutOfRangeException(nameof(family));
+            }
+
+            if (!Enum.IsDefined(
+                    typeof(RendererAnalysisRefusal),
+                    lockedIdentityRefusal))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(lockedIdentityRefusal));
             }
 
             Family = family;
@@ -41,6 +61,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 ?? throw new ArgumentNullException(nameof(evidence));
             PoiyomiEvidence = poiyomiEvidence;
             LilToonEvidence = lilToonEvidence;
+            LockedIdentityRefusal = lockedIdentityRefusal;
         }
     }
 
@@ -709,8 +730,17 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <c>AdmittedMaterialSemanticsUnknown</c>. The refusal is scoped to
         /// the slots that can hold the material; sibling slots whose
         /// materials attest keep their own proofs.
+        /// <para>
+        /// A non-None <paramref name="lockedIdentityRefusal"/> records that
+        /// the capture recognized this material's locked identity and that
+        /// its original shader is unresolvable or unattested. Slot
+        /// resolution then refuses by that name instead of the generic
+        /// destination.
+        /// </para>
         /// </summary>
-        internal static CapturedAlphaMaterial UnattestedMaterial()
+        internal static CapturedAlphaMaterial UnattestedMaterial(
+            RendererAnalysisRefusal lockedIdentityRefusal =
+                RendererAnalysisRefusal.None)
         {
             return new CapturedAlphaMaterial(
                 CapturedAlphaMaterialFamily.Unsupported,
@@ -723,7 +753,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                     Array.Empty<CapturedMaterialEvidence.TextureEntry>(),
                     Array.Empty<CapturedTextureEvidence>()),
                 default(PoiyomiSourceEvidence),
-                null);
+                null,
+                lockedIdentityRefusal);
         }
 
         internal static MaterialSemantics AllUnknown()
