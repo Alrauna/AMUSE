@@ -67,24 +67,29 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// The pinned <c>ShaderOptimizer</c> source digests, lowercase hex
-        /// SHA-256, one per attested tooling pin. The set is deliberately
-        /// empty today: the two pin values, one for the 9.3.64 embedded
-        /// tool and one for the 2.74.2 standalone tool, await recording
-        /// against the verified vendor archives in the lab session. The
-        /// archive digests themselves are already pinned in the recorded
-        /// characterization, so the lab recording only hashes the named
-        /// source file inside each verified archive.
+        /// SHA-256, one per attested tooling pin. Recorded on 2026-09-21
+        /// from freshly fetched vendor archives whose archive SHA-256
+        /// matched the pins in the 2026-09-19 characterization: the first
+        /// entry is the <c>Editor/ShaderOptimizer.cs</c> embedded in
+        /// <c>com.poiyomi.toon</c> 9.3.64, the second is the one shipped
+        /// in <c>com.poiyomi.thryeditor</c> 2.74.2.
         /// </summary>
         /// <remarks>
-        /// Fail closed. With no digest pinned, no machine ever attests, so
-        /// every recognized locked material refuses with
+        /// Fail closed. An empty table, zero locator hits, several hits,
+        /// and an unpinned digest all attest nothing, so every recognized
+        /// locked material refuses with
         /// <see cref="RendererAnalysisRefusal.LockedPoiyomiThryUnattested"/>
-        /// before any clone exists, and the shipped behavior matches the
-        /// 2026-09-19 sentinel path. Recording a digest is a reviewed
+        /// before any clone exists. Recording a digest is a reviewed
         /// change to this one table and nothing else.
         /// </remarks>
         internal static readonly string[] PinnedSourceDigests =
-            new string[] { };
+            new string[]
+            {
+                // 9.3.64 embedded tooling, era 1.
+                "9000377ab486863e20d25b8bd025863c7590354ea3cdb1a5ca493d8e5045f3e5",
+                // 2.74.2 standalone tooling, era 2.
+                "7c1ffe78c872288ec605b5bd742467401c952562701aa171fead0df4ae1883ee",
+            };
 
         /// <summary>
         /// The per-build consent subject for the unlock window, in neutral
@@ -314,8 +319,8 @@ namespace Alrauna.Amuse.Editor.Build
         {
             if (PinnedSourceDigests.Length == 0)
             {
-                // Fail closed while the pin table awaits the lab
-                // recording. Nothing else runs, so no machine attests.
+                // Fail closed when nothing is pinned. Nothing else runs,
+                // so no machine attests.
                 return false;
             }
 

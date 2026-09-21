@@ -10,12 +10,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 {
     /// <summary>
     /// The transient unlock window's machine-side availability. The
-    /// attestation rule is testable without a vendor install, because the
-    /// pinned digest table is deliberately empty until the lab session
-    /// records the two pin values, so the fail-closed answer is the
-    /// observed one. The seam and the production delegates resolve against
-    /// the stand-in vendor type, whose declaring full name and method
-    /// shapes mirror the live-verified vendor signatures.
+    /// attestation rule is testable without a vendor install, because
+    /// this repository installs no vendor shader, so the locator sees
+    /// zero ShaderOptimizer MonoScripts and the fail-closed answer is
+    /// the observed one. The seam and the production delegates resolve
+    /// against the stand-in vendor type, whose declaring full name and
+    /// method shapes mirror the live-verified vendor signatures.
     /// </summary>
     public sealed class TransientUnlockAvailabilityTests
     {
@@ -48,21 +48,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void ThePinnedDigestTableStaysEmptyUntilTheLabRecording()
+        public void ThePinnedDigestTableCarriesTheTwoRecordedToolDigests()
         {
-            // The pin values await recording against the verified vendor
-            // archives in the lab session. Fail closed until then: an
-            // empty table attests nothing, so every recognized locked
-            // material refuses by name before any clone exists. Recording
-            // a digest is a reviewed change to this one table, and this
-            // guard is the friction that makes it a decision.
+            // The two values were recorded on 2026-09-21 from freshly
+            // fetched vendor archives whose archive SHA-256 matched the
+            // pins in the 2026-09-19 characterization. First the
+            // Editor/ShaderOptimizer.cs embedded in com.poiyomi.toon
+            // 9.3.64, then the one shipped in com.poiyomi.thryeditor
+            // 2.74.2. The literals are pinned exactly, so any table edit
+            // is a visible decision, as for the lilToon source pins.
             Assert.That(
                 TransientUnlockAvailability.PinnedSourceDigests,
-                Is.Empty);
+                Is.EqualTo(new[]
+                {
+                    "9000377ab486863e20d25b8bd025863c7590354ea3cdb1a5ca493d8e5045f3e5",
+                    "7c1ffe78c872288ec605b5bd742467401c952562701aa171fead0df4ae1883ee",
+                }));
+            // This repository installs no vendor shader, so the locator
+            // sees zero ShaderOptimizer MonoScripts and the machine-side
+            // answer stays fail closed here.
             Assert.That(
                 TransientUnlockAvailability.ThrySourceAttested(),
                 Is.False,
-                "an empty pinned digest table must attest nothing");
+                "a machine with zero locator hits must attest nothing");
         }
 
         [Test]
