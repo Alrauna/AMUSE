@@ -498,6 +498,27 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.RendererChangedSincePreparation:hint"] =
                 "Another build step replaced the mesh or the slots. Run " +
                 "AMUSE last, or accept the slot stays unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material. AMUSE unlocked a copy of it for the build, but " +
+                "the copy did not pass verification. Reason: {1}. The " +
+                "slot keeps its original locked material.",
+            ["amuse.slotSeparation.TransientUnlockRestoreMismatch:hint"] =
+                "Check that the lock tool and the original shader are the " +
+                "installed versions the lock recorded.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material that AMUSE unlocked for the build. The lock " +
+                "tool did not lock the copy again, so AMUSE restored your " +
+                "original locked material. Reason: {1}. The shipped " +
+                "avatar shows the original locked material.",
+            ["amuse.slotSeparation.TransientUnlockRelockFailed:hint"] =
+                "Check that the lock tool works on this machine, then " +
+                "run the build again.",
         };
 
 

@@ -1317,6 +1317,104 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void LockedMaterialWithReadyOriginalRefusesWhenThryUnattested()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked thry fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            Material locked = null;
+            var consentSubjects = new List<string>();
+
+            try
+            {
+                controller = new AnimatorController { name = "locked-thry" };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0");
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                fixture = AddAnalyzableRenderer(root);
+                locked = LockedMaterial();
+                locked.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    ".poiyomi/Poiyomi Toon");
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    "ffffffffffffffffffffffffffffffff");
+                fixture.Renderer.sharedMaterials = new[] { locked };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                // The injected original-shader attestation stands in for a
+                // machine whose original resolves and passes, which is the
+                // only state where the Thry precondition decides. This
+                // environment has no pinned Thry digest, so the vendor
+                // side is unready and the renderer refuses by name. The
+                // recording presenter proves the window never asked for
+                // consent while the vendor side is unready.
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest,
+                    VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials,
+                    VerifiedLilToonTestSeams.VerifiedAlphaOnly,
+                    consentPresenter: subjects =>
+                    {
+                        consentSubjects.AddRange(subjects);
+                        return true;
+                    },
+                    lockedOriginalAttestation: _ => true);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiThryUnattested),
+                    Is.EqualTo(1),
+                    "a locked material with a ready original must refuse " +
+                    "by name when the lock tool does not attest, before " +
+                    "any clone exists");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.Zero,
+                    "the Thry precondition answers only after the " +
+                    "original attests");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                    "the renderer refused before capture ran");
+
+                var window =
+                    context.GetState<TransientUnlockWindowState>();
+                Assert.That(window.ConsentGranted, Is.False,
+                    "an unready vendor side never asks for and never " +
+                    "receives the window consent");
+                Assert.That(window.OpenPairs, Is.Empty,
+                    "no clone exists for a refused renderer");
+                Assert.That(
+                    consentSubjects,
+                    Has.None.EqualTo(
+                        TransientUnlockAvailability.WindowConsentSubject),
+                    "the window consent subject stays out of the dialog " +
+                    "while the vendor side is unready");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (locked != null) Object.DestroyImmediate(locked);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void LockedMaterialMissingOriginalKeepsOrphanRefusal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);

@@ -198,6 +198,20 @@ namespace Alrauna.Amuse.Editor.Build
                         AlphaSeparationApply.PassName,
                         ctx => AlphaSeparationApply.Execute(ctx));
                 });
+
+            // The window close is the fourth and last pass, extension-free
+            // and after the animator scope has closed. NDMF commits the
+            // virtual animator graph when the scope deactivates, and that
+            // commit's controller assignment makes the editor animator
+            // rebind, which applies the pre-commit animation state over
+            // the renderer material arrays. Running the close here makes
+            // its reference writes the final word: it re-asserts the
+            // re-locked clone for verified pairs, re-asserts L and inverts
+            // the committed clips for failed pairs, and destroys clones
+            // only after every reference is back on L.
+            sequence.Run(
+                TransientUnlockWindowClose.PassName,
+                ctx => TransientUnlockWindowClose.Execute(ctx));
         }
     }
 
@@ -210,6 +224,7 @@ namespace Alrauna.Amuse.Editor.Build
                 context,
                 state,
                 HostLifecycleCapability.CaptureAndEvaluate(context),
+                null,
                 null,
                 null,
                 null,
@@ -237,7 +252,8 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 null,
-                consentPresenter);
+                consentPresenter,
+                null);
         }
 
         /// <summary>
@@ -264,7 +280,8 @@ namespace Alrauna.Amuse.Editor.Build
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion = null,
             VerifiedLilToonConversion lilToonConversion = null,
-            VersionConsentPresenter consentPresenter = null)
+            VersionConsentPresenter consentPresenter = null,
+            Func<Material, bool> lockedOriginalAttestation = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -286,7 +303,8 @@ namespace Alrauna.Amuse.Editor.Build
                 resolveSemantics,
                 poiyomiConversion,
                 lilToonConversion,
-                consentPresenter);
+                consentPresenter,
+                lockedOriginalAttestation);
         }
 
         /// <summary>
@@ -347,7 +365,8 @@ namespace Alrauna.Amuse.Editor.Build
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
-            VersionConsentPresenter consentPresenter)
+            VersionConsentPresenter consentPresenter,
+            Func<Material, bool> lockedOriginalAttestation)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -383,6 +402,21 @@ namespace Alrauna.Amuse.Editor.Build
                 .CollectTransferConsent(AllAssignedMaterials(context));
             var subjects = new List<string>(lifecycle.ConsentSubjects);
             subjects.AddRange(shaderTransfer.Subjects);
+            // The unlock window asks in the same consolidated dialog, and
+            // only when a locked material makes the window eligible on
+            // this machine. An eligible build that passes the dialog
+            // grants the window for this build; batch mode and a decline
+            // both stop the whole build, exactly as the D8 layer does.
+            var windowEligible = TransientUnlockAvailability
+                .WindowEligibleForConsent(
+                    AllAssignedMaterials(context),
+                    lockedOriginalAttestation);
+            if (windowEligible)
+            {
+                subjects.Add(
+                    TransientUnlockAvailability.WindowConsentSubject);
+            }
+
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
                     subjects,
@@ -396,6 +430,12 @@ namespace Alrauna.Amuse.Editor.Build
                     "amuse.consent.Declined");
                 AmuseReports.ConsentDeclined(subjects);
                 return;
+            }
+
+            if (windowEligible)
+            {
+                context.GetState<TransientUnlockWindowState>()
+                    .ConsentGranted = true;
             }
 
             var transferShaders = shaderTransfer.GrantedShaderNames.Count > 0;
@@ -471,6 +511,21 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     state.RecordRendererRefusal(refusal);
                     AmuseReports.RendererRefusal(renderer, refusal);
+                    continue;
+                }
+
+                // The Thry precondition precedes any clone step: a
+                // renderer holding an eligible locked material on a
+                // machine whose lock tool does not attest refuses by
+                // name here, before the window could ever clone.
+                var lockedToolRefusal =
+                    TransientUnlockAvailability.RendererPreCheckRefusal(
+                        renderer, lockedOriginalAttestation);
+                if (lockedToolRefusal != RendererAnalysisRefusal.None)
+                {
+                    state.RecordRendererRefusal(lockedToolRefusal);
+                    AmuseReports.RendererRefusal(
+                        renderer, lockedToolRefusal);
                     continue;
                 }
 
@@ -653,6 +708,18 @@ namespace Alrauna.Amuse.Editor.Build
                 state.OpaqueCandidateTriangleCount +=
                     opaqueCandidateTriangleCount;
             }
+
+            // The unlock window opens after analysis. Every renderer and
+            // every slot was already read for analysis, so a swap-in here
+            // cannot perturb it, and this increment's round trip stays
+            // behavior-neutral toward analysis by construction. The swap-in
+            // holds its own consent gate and vendor precondition, so an
+            // ineligible build reaches it as a counted no-op.
+            TransientUnlockSwapIn.SwapIn(
+                context,
+                context.GetState<TransientUnlockWindowState>(),
+                TransientUnlockSwapIn.Availability.FromProduction(),
+                lockedOriginalAttestation);
         }
 
         /// <summary>

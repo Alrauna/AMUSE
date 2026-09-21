@@ -6,6 +6,7 @@ Shader "Hidden/Alrauna/AmuseTests/LockedStandInOriginal"
     Properties
     {
         _MainTex ("Main Texture", 2D) = "white" {}
+        _ShaderOptimizerEnabled ("Shader Optimizer Enabled", Float) = 0
     }
     SubShader
     {
