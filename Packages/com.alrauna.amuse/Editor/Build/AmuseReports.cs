@@ -123,6 +123,31 @@ namespace Alrauna.Amuse.Editor.Build
                     rendererName);
             }
         }
+
+        /// <summary>
+        /// One Information entry per prepared slot whose conversion used
+        /// the revised premultiply premise: the source scaled its color
+        /// by alpha, the proof moves only triangles whose alpha is
+        /// exactly one, and the opaque material reproduces those colors
+        /// exactly. A slot without a premultiply conversion reports
+        /// nothing here, exactly as before.
+        /// </summary>
+        internal static void SlotSeparationPremultiplyNormalization(
+            Renderer renderer,
+            int slotIndex,
+            string rendererName = null)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationKey,
+                    slotIndex,
+                    rendererName);
+            }
+        }
         /// <summary>
         /// One Information entry per texture whose capture refused, with
         /// the slot index, the texture property, and the sampled channel:

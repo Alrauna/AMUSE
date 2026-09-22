@@ -23,9 +23,10 @@ namespace Alrauna.Amuse.Editor.Build
     /// <see cref="PoiyomiOpaqueConversion"/> and
     /// <see cref="LilToonOpaqueTarget"/> paths.
     /// <para>
-    /// The policy input and the divergence output make the seam boundary
-    /// carry the same two facts the real route reads off its eligibility
-    /// result, so the mixed-split guard sees one contract on both routes.
+    /// The policy input and the divergence and normalization outputs make
+    /// the seam boundary carry the same facts the real route reads off its
+    /// eligibility result, so the per-slot disclosures see one contract on
+    /// both routes.
     /// </para>
     /// <para>
     /// Delegates on an existing overload, not an interface, registry,
@@ -39,7 +40,8 @@ namespace Alrauna.Amuse.Editor.Build
         Material preparedOpaque,
         out Material opaque,
         out PoiyomiOpaqueConversionRefusal refusal,
-        out bool depthTestDivergence);
+        out bool depthTestDivergence,
+        out bool premultiplyNormalization);
 
     /// <summary>
     /// The verified-fixture seam for the lilToon conversion families
@@ -339,6 +341,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var unconvertedCount = 0;
                 var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
                 var slotDivergence = false;
+                var slotPremultiply = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
                 foreach (var admittedIndex in
                              slots[slotIndex].AdmittedMaterialIndices)
@@ -387,8 +390,10 @@ namespace Alrauna.Amuse.Editor.Build
                         lilToonConversion,
                         allowDepthTestChange,
                         out var opaque,
-                        out var materialDivergence);
+                        out var materialDivergence,
+                        out var materialPremultiply);
                     slotDivergence |= materialDivergence;
+                    slotPremultiply |= materialPremultiply;
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
                         lastConversionRefusal = conversionRefusal;
@@ -451,7 +456,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 candidateSlots.Add(new PreparedSlotSeparation(
-                    submesh, mapping, slotDivergence));
+                    submesh, mapping, slotDivergence, slotPremultiply));
 
                 // One Information entry per prepared slot whose
                 // conversion admitted a depth-test divergence, so the
@@ -460,6 +465,21 @@ namespace Alrauna.Amuse.Editor.Build
                 if (slotDivergence)
                 {
                     AmuseReports.SlotSeparationDivergence(
+                        target.Renderer,
+                        slotIndex,
+                        target.Renderer != null
+                            ? target.Renderer.gameObject.name
+                            : null);
+                }
+
+                // One Information entry per prepared slot whose
+                // conversion used the revised premultiply premise, so the
+                // build report states the normalization through its own
+                // sentence. The depth sentence stays depth-only, and a
+                // slot without a premultiply conversion stays silent.
+                if (slotPremultiply)
+                {
+                    AmuseReports.SlotSeparationPremultiplyNormalization(
                         target.Renderer,
                         slotIndex,
                         target.Renderer != null
@@ -571,10 +591,12 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             bool allowDepthTestChange,
             out Material opaque,
-            out bool depthTestDivergence)
+            out bool depthTestDivergence,
+            out bool premultiplyNormalization)
         {
             opaque = null;
             depthTestDivergence = false;
+            premultiplyNormalization = false;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.LilToon:
@@ -780,8 +802,8 @@ namespace Alrauna.Amuse.Editor.Build
                         // clone recipe — and deliberately skips the
                         // source-identity check no stand-in shader can pass.
                         // The policy crosses the seam as an input and the
-                        // divergence as an output, exactly as on the
-                        // lilToon route above.
+                        // divergence and normalization as outputs, exactly
+                        // as on the lilToon route above.
                         if (!poiyomiConversion(
                                 live,
                                 derived,
@@ -789,15 +811,17 @@ namespace Alrauna.Amuse.Editor.Build
                                 preparedOpaque,
                                 out opaque,
                                 out _,
-                                out var seamDivergence))
+                                out var seamDivergence,
+                                out var seamPremultiply))
                         {
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
 
-                        // The seam reported the divergence of the
-                        // material that converted.
+                        // The seam reported the facts of the material that
+                        // converted.
                         depthTestDivergence = seamDivergence;
+                        premultiplyNormalization = seamPremultiply;
                     }
                     else
                     {
@@ -837,6 +861,8 @@ namespace Alrauna.Amuse.Editor.Build
                             case PoiyomiOpaqueConversionOutcome.Convertible:
                                 depthTestDivergence =
                                     eligibility.DepthTestDivergence;
+                                premultiplyNormalization =
+                                    eligibility.PremultiplyNormalization;
 
                                 // An already-prepared artifact for this
                                 // source is reused here; only a first

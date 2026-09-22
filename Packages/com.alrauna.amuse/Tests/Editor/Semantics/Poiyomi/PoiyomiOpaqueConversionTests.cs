@@ -521,46 +521,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConvertible(EvaluateFor(material));
         }
 
+        /// <summary>
+        /// The vendor premultiply feature scales the color by
+        /// saturate(alpha) in three passes and never writes the alpha
+        /// value. The proof moves only triangles whose alpha is exactly 1,
+        /// so the factor is exactly 1 on the whole proven domain and the
+        /// canonical clone reproduces the source color exactly there. A
+        /// premultiply material that is otherwise eligible is therefore
+        /// convertible, and the admission sets no depth divergence, so the
+        /// depth sentence stays depth-only. A wrong implementation that
+        /// keeps the committed gate refuses by name.
+        /// </summary>
         [Test]
-        public void PremultipliedAlpha_Refuses()
+        public void Premultiply_ConversionConvertible_WhenOtherwiseEligible()
         {
+            // No-op guard: the same material without the feature converts
+            // and carries no depth divergence. The refusal below can only
+            // come from the premultiply gate.
+            Assert.That(
+                EvaluateFor(ConvertibleFade()).DepthTestDivergence, Is.False);
+
             var material = ConvertibleFade();
             material.SetFloat("_AlphaPremultiply", 1f);
 
-            AssertRefusal(
-                EvaluateFor(material),
-                PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
+            var eligibility = EvaluateFor(material);
+            AssertConvertible(eligibility);
+            Assert.That(
+                eligibility.DepthTestDivergence, Is.False,
+                "the premultiply admission must not set the depth " +
+                "divergence flag");
         }
 
         // --- Falsifier 2: additive blend coverage ---------------------------
         //
         // The conversion blend gates still cover the additive factors. The
         // existing ForwardAdd blend tests in this class own that coverage and
-        // pass unchanged in both runs of this task. The test below is the
-        // transitional premultiply gate guard.
-
-        /// <summary>
-        /// Transitional contract guard. It expires when a later parity slice
-        /// admits premultiply in the conversion. Until then the conversion
-        /// keeps refusing a premultiply material even though the alpha
-        /// equation admits the feature. Premultiply changes how RGB is
-        /// produced, so the opaque conversion premise stays closed until that
-        /// slice rewrites it.
-        /// </summary>
-        [Test]
-        public void Premultiply_ConversionStillRefusesUntilSlice7()
-        {
-            // No-op guard: the same material without the feature converts.
-            // The refusal below comes from the premultiply gate.
-            AssertConvertible(EvaluateFor(ConvertibleFade()));
-
-            var material = ConvertibleFade();
-            material.SetFloat("_AlphaPremultiply", 1f);
-
-            AssertRefusal(
-                EvaluateFor(material),
-                PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
-        }
+        // pass unchanged in both runs of this task.
 
         [Test]
         public void AlphaToCoverage_Refuses()
@@ -821,12 +817,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void PresetTransparent_RefusesOnPremultipliedAlpha()
+        public void PresetTransparent_IsConvertible()
         {
-            AssertRefusal(
-                EvaluateFor(Preset(
-                    3f, 3000, "Transparent", 0f, 0f, 1f, 10f, 0f, 1f, 1f)),
-                PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
+            AssertConvertible(EvaluateFor(Preset(
+                3f, 3000, "Transparent", 0f, 0f, 1f, 10f, 0f, 1f, 1f)));
         }
 
         [Test]

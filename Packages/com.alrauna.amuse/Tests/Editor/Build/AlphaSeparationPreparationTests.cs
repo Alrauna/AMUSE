@@ -989,13 +989,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                      Material preparedOpaque,
                      out Material opaque,
                      out PoiyomiOpaqueConversionRefusal refusal,
-                     out bool depthTestDivergence) =>
+                     out bool depthTestDivergence,
+                     out bool premultiplyNormalization) =>
                     {
                         conversionInvocations++;
                         return VerifiedPoiyomiTestSeams.VerifiedConversion(
                             live, derived, allowDepthTestChange,
                             preparedOpaque, out opaque, out refusal,
-                            out depthTestDivergence);
+                            out depthTestDivergence,
+                            out premultiplyNormalization);
                     };
 
                 amuse = RunBarrier(root, poiyomiConversion: conversion);
@@ -1090,13 +1092,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                      Material preparedOpaque,
                      out Material opaque,
                      out PoiyomiOpaqueConversionRefusal refusal,
-                     out bool depthTestDivergence) =>
+                     out bool depthTestDivergence,
+                     out bool premultiplyNormalization) =>
                     {
                         conversionInvocations++;
                         rejectedClone = new Material(live.shader);
                         opaque = rejectedClone;
                         refusal = PoiyomiOpaqueConversionRefusal.None;
                         depthTestDivergence = false;
+                        premultiplyNormalization = false;
                         return true;
                     };
 
@@ -1264,6 +1268,314 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
                 if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        // --- Task 7: premultiply conversion admission -----------------------
+
+        /// <summary>
+        /// --- Falsifier 1: unproven region ---
+        /// A premultiply material with any unproven triangle never
+        /// completes a premultiply conversion claim for that region. The
+        /// split texture proves one triangle at alpha exactly 1 and leaves
+        /// the sub-one half unproven, so the premultiply material must
+        /// prepare as a mixed split. The unproven triangle stays on the
+        /// original material, and only the proven share maps onto the
+        /// canonical clone. A wrong implementation with an unscoped
+        /// admission converts the whole material, and the committed gate
+        /// refuses the slot outright.
+        /// </summary>
+        [Test]
+        public void PremultiplyConversion_WithUnprovenTriangle_StaysRefused()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AlphaSeparationSplitTests.EnsureSplitFolder();
+            var root = new GameObject("AMUSE premultiply unproven region");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                    AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                        "premultiply_unproven"));
+                material.SetFloat("_AlphaPremultiply", 1f);
+
+                // Two triangles on one submesh: the first wholly inside
+                // the texture's opaque half, the second wholly inside the
+                // translucent half, so the plan is a mixed split.
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        new Vector3(0f, 0f, 0f),
+                        new Vector3(1f, 0f, 0f),
+                        new Vector3(0f, 1f, 0f),
+                        new Vector3(2f, 0f, 0f),
+                        new Vector3(3f, 0f, 0f),
+                        new Vector3(2f, 1f, 0f),
+                    },
+                    uv = new[]
+                    {
+                        new Vector2(0.1f, 0.1f),
+                        new Vector2(0.4f, 0.1f),
+                        new Vector2(0.1f, 0.4f),
+                        new Vector2(0.6f, 0.6f),
+                        new Vector2(0.9f, 0.6f),
+                        new Vector2(0.6f, 0.9f),
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: only the alpha exactly one half " +
+                    "may prove, or the fixture carries no unproven region");
+
+                // The slot prepares, so the admission is scoped by the
+                // split plan instead of refusing or moving the whole
+                // material.
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "a premultiply slot with an unproven region must " +
+                        "prepare as a split with no refusal of any kind: " +
+                        reason);
+                }
+
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "the premultiply slot with an unproven region must " +
+                    "prepare instead of refusing");
+                var slot = amuse.Separation.Renderers[0]
+                    .CandidateSlots.Single();
+                Assert.That(
+                    slot.Plan.Disposition,
+                    Is.EqualTo(SubmeshSeparationDisposition.Split));
+                Assert.That(
+                    slot.Plan.OpaqueTriangleOrdinals,
+                    Is.EqualTo(new[] { 0 }),
+                    "only the proven triangle may enter the claim");
+                Assert.That(
+                    slot.Plan.TransparentTriangleOrdinals,
+                    Is.EqualTo(new[] { 1 }),
+                    "the unproven triangle stays refused from the claim " +
+                    "and keeps the original material");
+
+                // The claim covers only the proven share. The clone
+                // normalizes the premultiply premise, and the source keeps
+                // its own feature untouched.
+                var clone = slot.OpaqueOfAdmitted[material];
+                Assert.That(clone, Is.Not.SameAs(material),
+                    "the proven share must map onto a canonical clone");
+                Assert.That(
+                    clone.GetFloat("_AlphaPremultiply"), Is.Zero,
+                    "the clone must carry the canonical premultiply value");
+                Assert.That(
+                    material.GetFloat("_AlphaPremultiply"), Is.EqualTo(1f),
+                    "the source material must keep its own premultiply " +
+                    "state");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 2: disclosure count ---
+        /// The disclosure fires once per prepared slot, and never on a
+        /// slot without a premultiply conversion. A premultiply material
+        /// over an exactly one alpha domain converts and reports its
+        /// normalization sentence exactly once, with no depth sentence.
+        /// The same material without the feature converts and reports no
+        /// premultiply sentence. A wrong implementation stays silent,
+        /// reports per triangle, or reuses the depth sentence.
+        /// </summary>
+        [Test]
+        public void PremultiplyDisclosure_FiresOncePerPreparedSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+
+            // (a) Premultiply on: the prepared slot reports exactly one
+            // premultiply normalization entry and no depth entry.
+            var rootA = new GameObject("AMUSE premultiply disclosure on");
+            FixtureAvatarIdentity.AttachVrcDescriptor(rootA);
+            rootA.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(rootA);
+            Material materialA = null;
+            Mesh meshA = null;
+            AmusePlatformFinishState amuseA = null;
+
+            try
+            {
+                materialA = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+                materialA.SetFloat("_AlphaForceOpaque", 0f);
+                materialA.SetFloat("_MainAlphaMaskMode", 0f);
+                materialA.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+                materialA.SetFloat("_AlphaPremultiply", 1f);
+                meshA = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                meshA.SetTriangles(new[] { 0, 1, 2 }, 0);
+                var rendererA = rootA.AddComponent<SkinnedMeshRenderer>();
+                rendererA.sharedMesh = meshA;
+                rendererA.sharedMaterials = new[] { materialA };
+
+                var reportsA = ErrorReport.CaptureErrors(
+                    () => amuseA = RunBarrier(rootA));
+
+                Assert.That(amuseA.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuseA.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(amuseA.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the exactly one alpha domain " +
+                    "must prove the triangle");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuseA.SlotRefusalCount(reason), Is.Zero,
+                        "the premultiply slot must convert with no refusal " +
+                        "of any kind: " + reason);
+                }
+
+                Assert.That(amuseA.Separation, Is.Not.Null,
+                    "the premultiply slot must prepare, or its disclosure " +
+                    "would prove nothing");
+
+                // Foreign NDMF plugins may add their own report lines to
+                // the same capture, so the count is asserted on the
+                // sentence itself, never on the whole capture.
+                Assert.That(
+                    reportsA.Select(r => r.TheError.ToMessage()),
+                    Has.Exactly(1).Contains(
+                        "The opaque material reproduces those colors " +
+                        "exactly."),
+                    "the flagged slot must report its premultiply " +
+                    "normalization exactly once");
+                Assert.That(
+                    reportsA.Select(r => r.TheError.ToMessage()),
+                    Has.None.Contains(
+                        "Some moved triangles now use the normal depth " +
+                        "rule"),
+                    "the premultiply disclosure must not reuse the depth " +
+                    "sentence");
+            }
+            finally
+            {
+                DestroyGenerated(amuseA);
+                if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
+                UnityEngine.Object.DestroyImmediate(rootA);
+                if (materialA != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(materialA);
+                }
+            }
+
+            // (b) The same material without the feature: the slot still
+            // converts, and no premultiply sentence appears.
+            var rootB = new GameObject("AMUSE premultiply disclosure off");
+            FixtureAvatarIdentity.AttachVrcDescriptor(rootB);
+            rootB.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(rootB);
+            Material materialB = null;
+            Mesh meshB = null;
+            AmusePlatformFinishState amuseB = null;
+
+            try
+            {
+                materialB = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+                materialB.SetFloat("_AlphaForceOpaque", 0f);
+                materialB.SetFloat("_MainAlphaMaskMode", 0f);
+                materialB.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+                materialB.SetFloat("_AlphaPremultiply", 0f);
+                meshB = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                meshB.SetTriangles(new[] { 0, 1, 2 }, 0);
+                var rendererB = rootB.AddComponent<SkinnedMeshRenderer>();
+                rendererB.sharedMesh = meshB;
+                rendererB.sharedMaterials = new[] { materialB };
+
+                var reportsB = ErrorReport.CaptureErrors(
+                    () => amuseB = RunBarrier(rootB));
+
+                Assert.That(amuseB.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuseB.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(amuseB.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the unflagged material must " +
+                    "still prove its triangle");
+                Assert.That(amuseB.Separation, Is.Not.Null,
+                    "fixture precondition: the unflagged slot must still " +
+                    "convert, or the absent disclosure would prove nothing");
+                Assert.That(
+                    reportsB.Select(r => r.TheError.ToMessage()),
+                    Has.None.Contains(
+                        "The opaque material reproduces those colors " +
+                        "exactly."),
+                    "a slot without a premultiply conversion must never " +
+                    "report the premultiply normalization");
+            }
+            finally
+            {
+                DestroyGenerated(amuseB);
+                if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
+                UnityEngine.Object.DestroyImmediate(rootB);
+                if (materialB != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(materialB);
+                }
             }
         }
 

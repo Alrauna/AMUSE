@@ -302,12 +302,14 @@ namespace Alrauna.Amuse.Editor.Build
         internal PreparedSlotSeparation(
             SubmeshSeparationPlan plan,
             IReadOnlyDictionary<Material, Material> opaqueOfAdmitted,
-            bool depthTestDivergence)
+            bool depthTestDivergence,
+            bool premultiplyNormalization)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             OpaqueOfAdmitted = opaqueOfAdmitted
                 ?? throw new ArgumentNullException(nameof(opaqueOfAdmitted));
             DepthTestDivergence = depthTestDivergence;
+            PremultiplyNormalization = premultiplyNormalization;
         }
 
         internal SubmeshSeparationPlan Plan { get; }
@@ -319,6 +321,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// slot's success report names the change.
         /// </summary>
         internal bool DepthTestDivergence { get; }
+
+        /// <summary>
+        /// True when this slot's conversion used the revised premultiply
+        /// premise: the source scaled its color by alpha, and the moved
+        /// triangles' alpha is exactly 1, so the canonical clone
+        /// reproduces those colors exactly. The slot's success report
+        /// names the normalization.
+        /// </summary>
+        internal bool PremultiplyNormalization { get; }
 
         /// <summary>
         /// This slot's admitted source materials mapped to their opaque results.
