@@ -134,7 +134,7 @@ the property that carries the decision.
 
 ## 8. The behavior change on already-admitted materials
 
-One narrowing is deliberate. Today, a material with both rim enable
+One narrowing is deliberate. As of 2026-09-22, a material with both rim enable
 floats at zero passes the rim gates even if `_RimApplyAlpha` is
 nonzero, while the vendor call sites guard on keywords, not floats: a
 keyword-compiled poi arm would write alpha behind a passing gate.
@@ -158,8 +158,8 @@ implementation it kills:
 
 1. Slot 1 enabled, `_RimApplyAlpha` zero: alpha completes.
 2. Both slots enabled, `_RimApplyAlpha` zero: alpha completes.
-   Cases 1 and 2 are the RED obligations against today's refusal
-   naming the enables.
+   Cases 1 and 2 are the RED obligations against the refusal as of
+   2026-09-22 naming the enables.
 3. Slot 1 enabled, `_RimApplyAlpha` one (add): alpha refuses naming
    `_RimApplyAlpha`. RED.
 4. Any rim state, `_RimApplyAlpha` two (multiply): alpha refuses
@@ -168,7 +168,7 @@ implementation it kills:
 5. Both enable floats zero, `_RimApplyAlpha` one: alpha refuses naming
    `_RimApplyAlpha`. Falsifier for an implementation that binds the
    check on the enable floats; this is the closed soundness hole of
-   section 8. RED, because today's code completes it.
+   section 8. RED, because the code as of 2026-09-22 completes it.
 6. `_RimApplyAlpha` absent from the material: alpha refuses naming
    `_RimApplyAlpha`. Falsifier for an implementation that treats a
    missing property as inert. Fail-closed direction.
