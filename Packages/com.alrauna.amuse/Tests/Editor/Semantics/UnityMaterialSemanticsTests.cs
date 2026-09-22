@@ -1018,6 +1018,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _EnableAudioLink (""Audio"", Float) = 0
         _AlphaGlobalMask (""Global Mask"", Float) = 0
         _AlphaPremultiply (""Premultiply"", Float) = 0
+        _BSSEnabled (""Beat Saber"", Float) = 0
         _BackFaceEnabled (""Backface"", Float) = 0
         _RGBMaskEnabled (""RGB Mask"", Float) = 0
         _DecalEnabled (""Decal 0"", Float) = 0

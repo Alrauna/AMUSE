@@ -414,6 +414,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaDithering",
             "_EnableDissolve",
             "_EnableUDIMDiscardOptions",
+            "_BSSEnabled",
         };
 
         // Enabled writers/masks that modify the non-forced alpha term.
@@ -657,6 +658,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 property);
+        }
+
+        // --- Falsifier 1: enabled module over an exactly-one domain ---------
+
+        /// <summary>
+        /// The Beat Saber module toggle turns on a post-clip alpha writer: the
+        /// pass rewrites alpha as alpha = alpha * emission.z and rewrites the
+        /// alpha blend pair. The color alpha here is exactly one on the whole
+        /// domain, so a wrong implementation that ignores the module proves
+        /// the base chain on every triangle. The alpha output must stay
+        /// unknown and name the module property.
+        /// </summary>
+        [Test]
+        public void BeatSaberModuleEnabled_KeepsAlphaUnknownNamingTheProperty()
+        {
+            // No-op guard: with the module off the same exactly-one domain
+            // proves, so the refusal below comes from the module gate.
+            AssertOutputComplete(
+                Interpret(NonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
+
+            var material = NonForcedMaterial();
+            material.SetFloat("_BSSEnabled", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_BSSEnabled");
+        }
+
+        // --- Falsifier 2: enabled module under force-opaque -----------------
+
+        /// <summary>
+        /// The coverage gate run precedes the forced-opaque short-circuit, so
+        /// an enabled module refuses the forced path too. A wrong
+        /// implementation that gates only the non-forced path proves the
+        /// forced material as a constant one.
+        /// </summary>
+        [Test]
+        public void BeatSaberModuleEnabled_WithForcedOpaque_StillRefuses()
+        {
+            // No-op guard: without the module the forced material proves the
+            // constant, so the refusal below comes from the module gate.
+            AssertOutputComplete(
+                Interpret(NewFixtureMaterial()), PoiyomiSemanticOutput.Alpha);
+
+            var material = NewFixtureMaterial();
+            material.SetFloat("_BSSEnabled", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_BSSEnabled");
         }
 
         [Test]

@@ -50,6 +50,9 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _EnableAudioLink ("Enable AudioLink", Float) = 0
         _AlphaGlobalMask ("Alpha Global Mask", Float) = 0
         _AlphaPremultiply ("Alpha Premultiply", Float) = 0
+        // The Beat Saber module toggle. The vendor pass runs a post-clip
+        // alpha writer under it and rewrites the alpha blend pair.
+        _BSSEnabled ("Beat Saber", Float) = 0
 
         // Emission (four slots; slot 0 detail).
         _EnableEmission ("Enable Emission 0", Float) = 0

@@ -186,6 +186,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaDithering",
             "_EnableDissolve",
             "_EnableUDIMDiscardOptions",
+
+            // The Beat Saber module toggle of the pinned source (note 4.7).
+            // When it is on, the pass writes alpha after the clip as
+            // alpha = alpha * emission.z and rewrites the alpha blend pair.
+            // An enabled module must never sit inside a claimed exactly-one
+            // alpha. The coverage gate run precedes the _AlphaForceOpaque
+            // short-circuit, so this entry keeps the forced path protected.
+            "_BSSEnabled",
         };
 
         // Enabled writers/masks that add to or replace the non-forced alpha
