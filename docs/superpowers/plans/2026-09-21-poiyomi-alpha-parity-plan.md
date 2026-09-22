@@ -45,7 +45,7 @@ from the design. The prompt restates it as settled before code moves.
 - No staging, committing, pushing, or PR without explicit authorization
   in the task prompt.
 
-## 3. Task 1: BeatSaber gate
+## Task 1: BeatSaber gate
 
 ### Base facts
 
@@ -91,7 +91,7 @@ and then the full assembly report their observed counts. No census,
 report string, or conversion change appears. The Console shows no new
 errors.
 
-## 4. Task 2: premultiply alpha admission
+## Task 2: premultiply alpha admission
 
 ### Base facts
 
@@ -141,7 +141,7 @@ of a premultiply stand-in with an exact-one domain completes. The
 base-color output and conversion gate 5 keep refusing, observed by test.
 Full assembly counts recorded.
 
-## 5. Task 3: mask replace with the admitted pair and invert
+## Task 3: mask replace with the admitted pair and invert
 
 ### Base facts
 
@@ -205,7 +205,7 @@ role completes its alpha end to end on the fixture seam. Full assembly
 counts recorded. No new diagnostic code, no census change, no report
 change.
 
-## 6. Task 4: mask multiply with the declared default
+## Task 4: mask multiply with the declared default
 
 ### Base facts
 
@@ -250,7 +250,7 @@ Four new tests in the RED then GREEN order. A default-shaped stand-in
 completes alpha. Full assembly counts recorded. No census or report
 change.
 
-## 7. Task 5: Two Pass routing and second-family gates
+## Task 5: Two Pass routing and second-family gates
 
 ### Pre-task decisions
 
@@ -309,7 +309,7 @@ Four new tests in the RED then GREEN order. A Two Pass stand-in with
 both families provable completes alpha. A Two Pass conversion attempt
 refuses with the chosen named path. Full assembly counts recorded.
 
-## 8. Task 6: cutout coverage split by cutoff
+## Task 6: cutout coverage split by cutoff
 
 ### Pre-task decision
 
@@ -358,7 +358,7 @@ Four new tests in the RED then GREEN order. A cutout stand-in proves a
 triangle between the cutoff and 1. The same chain under a blending
 preset stays exact-one. Full assembly counts recorded.
 
-## 9. Task 7: premultiply conversion admission
+## Task 7: premultiply conversion admission
 
 ### Pre-task decisions
 
