@@ -133,7 +133,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     ? null
                     : materials[index].shader;
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
+                    materials[index],
+                    request,
+                    UnityMaterialSemantics.AlphaPredicateRequestFor(
+                        materials[index], families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(

@@ -29,17 +29,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         /// <summary>
         /// The render-state and masking properties the Poiyomi fixture exposes
         /// and that the interpreter never names: a UI preset selector, the
-        /// cutout threshold, the two blend factors, and the alpha-mask texture
-        /// slot (only its <c>_MainAlphaMaskMode</c> selector is read).
+        /// two blend factors, and the alpha-mask texture slot (only its
+        /// <c>_MainAlphaMaskMode</c> selector is read).
         ///
         /// PoiyomiBaseColorAlphaTests.RenderStateProperties_DoNotChangeAlpha
         /// already pins four of these against the Alpha equation alone. This
         /// generalizes the claim to every output at once, and adds the mask slot.
+        ///
+        /// _Cutoff left this list in the cutout-coverage-split task: the vendor
+        /// clips with clip(alpha - _Cutoff) in every pass without condition,
+        /// so the alpha equation now reads the captured cutoff at its clip
+        /// gate and a value above one refuses the claim by name.
         /// </summary>
         private static readonly string[] IrrelevantFloats =
         {
             "_Mode",
-            "_Cutoff",
 
             // _SrcBlend, _DstBlend, _BlendOp, and _BlendOpAlpha left this
             // list in S10: the multipass rule reads the primary blend pair,

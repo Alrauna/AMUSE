@@ -101,7 +101,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             for (var index = 0; index < materials.Count; index++)
             {
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
+                    materials[index],
+                    request,
+                    UnityMaterialSemantics.AlphaPredicateRequestFor(
+                        materials[index], families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(

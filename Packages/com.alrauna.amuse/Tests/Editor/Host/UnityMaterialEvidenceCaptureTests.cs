@@ -456,10 +456,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void FamilyAlphaRequestsExcludeUnconsumedAndOtherFamilyProperties()
         {
             var poiyomi = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+
+            // _Mode and _Cutoff joined the alpha request with the cutout
+            // coverage split: the interpretation branches on the captured
+            // preset and the main texture request declares the cutoff, so
+            // both scalars are captured facts now. They therefore sit on the
+            // consumed side of this list, not the excluded side.
             foreach (var property in new[]
             {
-                "_Cutoff",
-                "_Mode",
                 "_SrcBlendFA",
                 "_DstBlendFA",
                 "_EmissionColor",
