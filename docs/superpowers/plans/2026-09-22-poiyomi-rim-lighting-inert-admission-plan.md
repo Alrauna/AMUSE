@@ -292,7 +292,7 @@ One recorded deviation from the design's case 6: the design asked for a material
 
 - [ ] **Step 4: Refresh Unity and run the filtered test class**
 
-Refresh assets, then `run_tests` (EditMode, filter `PoiyomiRimLightingAlphaTests`) in the pinned dev editor instance after its identity check. Expected: eight of the nine tests fail, and only the forced-opaque guard passes. Precisely: cases 1 and 2 fail refusing naming `_EnableRimLighting`; cases 3 and 4 fail refusing naming `_EnableRimLighting` instead of `_RimApplyAlpha`; case 5 fails because today's code completes the material; case 6 fails because today's code completes it; both Two Pass cases fail like their plain twins. Record the observed failure count and names. A green run here means the plan's premise is wrong: stop and re-read the spec.
+Refresh assets, then `run_tests` (EditMode, filter `PoiyomiRimLightingAlphaTests`) in the pinned dev editor instance after its identity check. Expected: eight of the nine tests fail, and only the forced-opaque guard passes. Precisely: cases 1 and 2 fail refusing naming `_EnableRimLighting`; cases 3 and 4 fail refusing naming `_EnableRimLighting` instead of `_RimApplyAlpha`; case 5 fails because the code as of 2026-09-22 completes the material; case 6 fails for the same reason; both Two Pass cases fail like their plain twins. Record the observed failure count and names. A green run here means the plan's premise is wrong: stop and re-read the spec.
 
 - [ ] **Step 5: Run the touched neighbor classes**
 
