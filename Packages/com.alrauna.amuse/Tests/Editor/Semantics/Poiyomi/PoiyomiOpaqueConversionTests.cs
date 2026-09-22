@@ -538,8 +538,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: the same material without the feature converts
             // and carries no depth divergence. The refusal below can only
             // come from the premultiply gate.
-            Assert.That(
-                EvaluateFor(ConvertibleFade()).DepthTestDivergence, Is.False);
+            AssertConvertible(EvaluateFor(ConvertibleFade()));
 
             var material = ConvertibleFade();
             material.SetFloat("_AlphaPremultiply", 1f);

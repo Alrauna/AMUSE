@@ -27,23 +27,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         : PoiyomiFixtureTestBase
     {
         /// <summary>
-        /// The render-state and masking properties the Poiyomi fixture exposes
-        /// and that the interpreter never names: a UI preset selector, the
-        /// two blend factors, and the alpha-mask texture slot (only its
-        /// <c>_MainAlphaMaskMode</c> selector is read).
+        /// The render-state properties the Poiyomi fixture exposes and that
+        /// the interpreter never names: the add-pass blend state, the depth
+        /// state, and the outline render state. The alpha-mask texture slot
+        /// has its own test below, because only its
+        /// <c>_MainAlphaMaskMode</c> selector is read.
         ///
         /// PoiyomiBaseColorAlphaTests.RenderStateProperties_DoNotChangeAlpha
-        /// already pins four of these against the Alpha equation alone. This
-        /// generalizes the claim to every output at once, and adds the mask slot.
+        /// pins the preset selector and the primary blend factors against the
+        /// Alpha equation alone. This list generalizes the same idea to every
+        /// output at once.
         ///
         /// _Cutoff left this list in the cutout-coverage-split task: the vendor
         /// clips with clip(alpha - _Cutoff) in every pass without condition,
         /// so the alpha equation now reads the captured cutoff at its clip
         /// gate and a value above one refuses the claim by name.
+        ///
+        /// _Mode left it in the final review fix wave: the cutout split
+        /// branches on the preset selector, so the interpretation reads it
+        /// and a changed mode can change the claim.
         /// </summary>
         private static readonly string[] IrrelevantFloats =
         {
-            "_Mode",
+            // _Mode left this list in the final review fix wave: the cutout
+            // split branches on the preset selector, so the interpretation
+            // reads it now.
 
             // _SrcBlend, _DstBlend, _BlendOp, and _BlendOpAlpha left this
             // list in S10: the multipass rule reads the primary blend pair,

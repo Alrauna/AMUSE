@@ -471,9 +471,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// The exact shader-name map selection and batch capture must agree
         /// on. One map, two consumers: a second place deciding "is this a
         /// supported lilToon material" could only drift away from the
-        /// first. Every supported name is exact, the transparent normal
-        /// one and the three S8 outline wrappers included; other near-miss
-        /// vendor names stay Unsupported and are refused downstream. The
+        /// first. Every supported name is exact. The admitted names are the
+        /// plain one, the cutout name, the transparent normal one, the three
+        /// S8 outline wrappers, and the one-pass and two-pass transparent
+        /// variants with their outline wrappers. Other near-miss vendor
+        /// names stay Unsupported and are refused downstream. The known
+        /// near misses are one-character mimic names of the admitted
+        /// identities, the transparent outline mimics among them. The
         /// Two Pass generated shader is a second admitted identity of the
         /// Poiyomi frontend, and it routes to its own family member with
         /// its own request, whose second-family scalars the plain request
