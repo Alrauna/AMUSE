@@ -200,6 +200,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // term. The alpha mask mode is deliberately absent: it is interpreted by
         // TryInterpretAlphaMask rather than gated, because its Replace mode is
         // provable when no mask texture is bound.
+        //
+        // _AlphaPremultiply is deliberately absent. The vendor premultiply
+        // scales the base color by saturate(alpha) in three passes at vendor
+        // lines 30216, 47274, 58331 and never writes the alpha value (note
+        // 4.3). The proof only moves triangles whose alpha is exactly 1, so
+        // the factor is exactly 1 there and the feature is an identity on the
+        // proven domain. The base-color gate list keeps the entry because the
+        // color equation genuinely changes per pixel.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
@@ -209,7 +217,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaAudioLinkEnabled",
             "_EnableAudioLink",
             "_AlphaGlobalMask",
-            "_AlphaPremultiply",
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
             "_DecalEnabled",
