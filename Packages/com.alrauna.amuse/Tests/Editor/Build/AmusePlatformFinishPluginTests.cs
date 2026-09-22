@@ -3958,6 +3958,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 resolving = VerifiedForceOpaqueMaterial(1f);
                 refusing = VerifiedForceOpaqueMaterial(0f);
+                // The multiply mask slice admits the declared mask mode 2, so
+                // a fresh material no longer refuses on the mask. The refusing
+                // slot pins the saturating mode 3 instead, which keeps the
+                // mixed-slot fixture: one slot proves, one slot refuses.
+                refusing.SetFloat("_MainAlphaMaskMode", 3f);
                 var renderer = AddTwoSlotRenderer(
                     root, resolving, refusing, out mesh);
                 AssertTwoSlotTriangleFixture(mesh);

@@ -8,20 +8,24 @@ using CoreWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     /// <summary>
-    /// Alpha-mask Replace-mode tests. The pinned Poiyomi 9.3.64 mask expression
+    /// Alpha-mask mode tests. The pinned Poiyomi 9.3.64 mask expression
     /// is
     /// <code>
     /// alphaMask = saturate(mask.r * _AlphaMaskBlendStrength
     ///                      + (_AlphaMaskInvert ? -_AlphaMaskValue : _AlphaMaskValue));
     /// if (_AlphaMaskInvert) alphaMask = 1 - alphaMask;
-    /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;   // Replace
+    /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;          // Replace
+    /// if (_MainAlphaMaskMode == 2) alpha = alpha * alphaMask;  // Multiply
     /// </code>
     /// With <c>_AlphaMask</c> unassigned the shader binds its declared "white"
     /// default, so <c>mask.r</c> is exactly one and the expression collapses to a
     /// constant this suite pins exactly. A bound mask proves through its
     /// red channel exactly under the pairs whose binary32 arithmetic needs
     /// no texel threshold: (1, 0) and the provably saturated (1, value &gt;= 1).
-    /// Every other pair refuses, naming the culprit property.
+    /// Every other pair refuses, naming the culprit property. Multiply is the
+    /// vendor's declared default mode: it admits a mask term of exactly one
+    /// with the chain unchanged and folds an admitted bound term into the
+    /// running chain through the exact product machinery.
     /// </summary>
     public sealed class PoiyomiAlphaMaskTests : PoiyomiFixtureTestBase
     {
@@ -261,8 +265,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         [Test]
         public void UnsupportedMaskMode_IsUnsupportedFeature(
-            [Values(2f, 3f, 4f, 1.5f, -1f)] float mode)
+            [Values(1.5f, -1f)] float mode)
         {
+            // The vendor mode map is Off 0, Replace 1, Multiply 2, Add 3,
+            // Subtract 4. Multiply stopped refusing in the multiply slice and
+            // Add and Subtract carry their own dedicated refusal row, so this
+            // former blanket pin keeps only the values outside the vendor's
+            // own mode map.
             var material = NewFixtureMaterial();
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat(MaskMode, mode);
@@ -762,6 +771,176 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 expectedDetail);
+        }
+
+        // --- Task 4: mask multiply with the declared default ---------------
+
+        /// <summary>
+        /// Non-forced material left at the vendor's declared mask defaults:
+        /// mode 2, no mask bound, strength 1, value 0, invert off. The vendor
+        /// declares mode 2 as the default, so a material that never touched
+        /// the mask section carries it.
+        /// </summary>
+        private Material DefaultShapedMaterial()
+        {
+            var material = NewFixtureMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            return material;
+        }
+
+        /// <summary>
+        /// The main-tex sample the base chain builds at the fixture defaults:
+        /// UV0 under the identity affine of the default import's bilinear and
+        /// repeat sampler.
+        /// </summary>
+        private static TextureSample MainFieldSample(string token)
+        {
+            return new TextureSample(
+                new TextureSourceId(token),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                new TextureSampling(
+                    TextureFilterMode.Bilinear, CoreWrapMode.Repeat));
+        }
+
+        [Test]
+        public void MultiplyUnboundMask_DefaultPair_LeavesChainUnchanged()
+        {
+            // The unbound mask samples its declared "white" default, so the
+            // multiply term is exactly one and the chain stands unchanged,
+            // the role the lilToon term names MainUnchanged. The proven value
+            // must be the plain base term, exactly the value the mode-0 twin
+            // proves. A wrong implementation that replaces the chain proves
+            // the unbound constant one instead, and one that keeps refusing
+            // completes nothing.
+            var main = ImportTexture("multiply_unbound_main");
+            var material = DefaultShapedMaterial();
+            material.SetFloat(MaskMode, 2f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            material.SetTexture("_MainTex", main);
+
+            var value = Alpha(Interpret(material));
+
+            var twin = NewFixtureMaterial();
+            twin.SetFloat("_AlphaForceOpaque", 0f);
+            twin.SetFloat(MaskMode, 0f);
+            twin.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            twin.SetTexture("_MainTex", main);
+
+            Assert.That(value, Is.EqualTo(Alpha(Interpret(twin))));
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ScalarSemanticValueKind.TextureSampleTimesConstant));
+            Assert.That(value.GetMultiplier(), Is.EqualTo(0.5f));
+        }
+
+        // --- Falsifier 2: fresh default material ---
+        [Test]
+        public void DefaultShapedMaterial_NeverTouchedMaskSection_CompletesAlpha()
+        {
+            // A fresh material of the stand-in shader carries the declared
+            // mask defaults: mode 2, no mask bound, pair (1, 0), invert off.
+            // It must complete its alpha when the rest of the material
+            // proves, so a declared default can never block the proof again.
+            var material = DefaultShapedMaterial();
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            material.SetTexture(
+                "_MainTex", ImportTexture("default_shaped_main"));
+
+            var result = Interpret(material);
+            AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
+
+            var value = result.Semantics.Alpha.GetCompleteValue();
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ScalarSemanticValueKind.TextureSampleTimesConstant));
+            Assert.That(value.GetMultiplier(), Is.EqualTo(0.5f));
+        }
+
+        // --- Falsifier 1: bound hole in multiply mode ---
+        [Test]
+        public void MultiplyBoundMask_WithHole_ClassifiesTheHoleUnknown()
+        {
+            // The admitted (1, 0) pair with invert off makes the term the
+            // sampled red, and the fold is the two-factor exact product the
+            // lilToon machinery builds for the same inputs: the running main
+            // alpha sample, then the mask red sample riding the main
+            // sampler's captured state, under the mask's own plain affine.
+            var main = ImportTexture("multiply_bound_main");
+            var mask = ImportTexture("multiply_bound_hole_mask");
+            var material = NewFixtureMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat(MaskMode, 2f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            material.SetTexture("_MainTex", main);
+            material.SetTexture(Mask, mask);
+
+            var value = Alpha(Interpret(material));
+
+            var expected = ScalarSemanticValue.ProductChain(
+                new[]
+                {
+                    MainFieldSample(ExpectedToken(main)),
+                    RedFieldSample(
+                        ExpectedToken(mask),
+                        Vector2.one,
+                        new TextureSampling(
+                            TextureFilterMode.Bilinear, CoreWrapMode.Repeat)),
+                },
+                new[] { TextureChannel.Alpha, TextureChannel.Red },
+                1f);
+            Assert.That(value, Is.EqualTo(expected));
+
+            // No-op guard: the solid field proves the interior triangle, so
+            // the outcomes below come from the hole texels alone.
+            var solid = ResolveRed(value, SolidRedField());
+            Assert.That(solid.IsResolved, Is.True);
+            Assert.That(
+                solid.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            // A red hole inside the domain takes the triangle off the opaque
+            // plan: its bilinear footprint blends the sub-one texel, so the
+            // blended alpha dips below one inside the triangle and the
+            // verdict must not claim it opaque.
+            var holed = ResolveRed(value, RedFieldWithHole(1, 1));
+            Assert.That(holed.IsResolved, Is.True);
+            Assert.That(
+                holed.Classify(InteriorTriangle()),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            // The same hole shape sits in the wrapped first texel column. The
+            // seam triangle's domain is the last half texel column, whose
+            // bilinear footprint blends the wrapped texels. The wrap-blend
+            // rule keeps that triangle unproven, while the same field proves
+            // the interior triangle that never touches the wrapped support.
+            // A hole must therefore never widen into a transparency claim
+            // over the triangles it does not touch.
+            var seam = ResolveRed(value, RedFieldWithHole(0, 3));
+            Assert.That(seam.IsResolved, Is.True);
+            Assert.That(
+                seam.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                seam.Classify(SeamTriangle()),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        // --- Falsifier 3: saturating modes ---
+        [Test]
+        public void MultiplyModes3And4_RefuseNamingMode(
+            [Values(3f, 4f)] float mode)
+        {
+            // Add and Subtract saturate a sum or a difference after the mask
+            // term. Proving them needs the deferred threshold-envelope
+            // contract, so both keep refusing and name the mode property.
+            var material = DefaultShapedMaterial();
+            material.SetFloat(MaskMode, mode);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                MaskMode);
         }
     }
 }
