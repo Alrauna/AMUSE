@@ -244,6 +244,13 @@ non-identity mask affine still proves.
    must state the rounding argument in the proof comment, as the lilToon
    term does for its own constant cases.
 
+Amended 2026-09-22: the landed code admits the pair (1, 0) for replace
+in both invert states. The bound multiply route refuses the invert-on
+half of that pair. Its term is `saturate(1 - r)`, and the product of a
+chain with a saturating difference has no association-invariant
+exact-one predicate. The lilToon mirror shares the boundary. This
+product-of-difference shape is a deferred follow-up.
+
 ## 7. Slice 4: mask multiply with the declared default
 
 The declared vendor default of `_MainAlphaMaskMode` is 2 (multiply), not
@@ -274,6 +281,17 @@ lilToon exact product term for the same inputs.
 
 1. None beyond slice 3. The product machinery and the admitted pairs are
    shared.
+
+Amended 2026-09-22: the landed boundaries refine this contract. The
+bound multiply extension keeps one slice 3 refusal: the invert-on half
+of the (1, 0) pair. Its term is `saturate(1 - r)`, a saturating
+difference, and the exact product fold refuses any product with a
+saturating factor. This product-of-difference shape is a deferred
+follow-up, shared with the lilToon mirror. The unbound admission is
+wider than the pair (1, 0): an unbound mask in multiply mode admits
+exactly when the collapsed mask constant is one. The pair (0.5, 0.5)
+with invert off and the saturated pairs in both invert states collapse
+to one and admit through the constant fold.
 
 ## 8. Slice 5: Two Pass routing and second-family gates
 
@@ -370,6 +388,17 @@ because the shader discards it and no claim survives.
    little, one request keeps the capture seam single, and the mode value
    itself gates nothing until the split route reads it. The plan task
    records the choice and its reason.
+
+Amended 2026-09-22: the landed capture is per-material. A material that
+declares the cutout preset captures through the binarizing request
+variant. Every other material captures through the plain variant
+(PlainAlphaEvidenceRequest). Both variants carry one schema, so the
+closed batch stays single.
+
+Amended 2026-09-22: a field-predicate agreement gate guards the
+exact-one rule. A binarized alpha field under a non-cutout claim means
+capture and interpretation disagree. The claim refuses and names
+_Cutoff.
 
 ## 10. Slice 7: premultiply conversion admission
 
