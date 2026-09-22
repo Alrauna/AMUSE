@@ -1805,11 +1805,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                          Material preparedOpaque,
                          out Material opaque,
                          out PoiyomiOpaqueConversionRefusal refusal,
-                         out bool depthTestDivergence) =>
+                         out bool depthTestDivergence,
+                         out bool premultiplyNormalization) =>
                         {
                             opaque = live;
                             refusal = PoiyomiOpaqueConversionRefusal.None;
                             depthTestDivergence = false;
+                            premultiplyNormalization = false;
                             return true;
                         }))
                     {
@@ -1930,7 +1932,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                          Material preparedOpaque,
                          out Material opaque,
                          out PoiyomiOpaqueConversionRefusal refusal,
-                         out bool depthTestDivergence) =>
+                         out bool depthTestDivergence,
+                         out bool premultiplyNormalization) =>
                         {
                             if (ReferenceEquals(live, split))
                             {
@@ -1939,12 +1942,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 opaque = generatedClone;
                                 refusal = PoiyomiOpaqueConversionRefusal.None;
                                 depthTestDivergence = false;
+                                premultiplyNormalization = false;
                                 return true;
                             }
 
                             opaque = null;
                             refusal = PoiyomiOpaqueConversionRefusal.UnattestedMaterial;
                             depthTestDivergence = false;
+                            premultiplyNormalization = false;
                             return false;
                         }))
                     {
@@ -2144,11 +2149,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                          Material preparedOpaque,
                          out Material opaque,
                          out PoiyomiOpaqueConversionRefusal refusal,
-                         out bool depthTestDivergence) =>
+                         out bool depthTestDivergence,
+                         out bool premultiplyNormalization) =>
                         {
                             opaque = live;
                             refusal = PoiyomiOpaqueConversionRefusal.None;
                             depthTestDivergence = false;
+                            premultiplyNormalization = false;
                             return true;
                         }))
                     {

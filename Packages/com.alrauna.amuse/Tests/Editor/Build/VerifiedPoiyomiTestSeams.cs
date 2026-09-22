@@ -39,7 +39,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Material preparedOpaque,
             out Material opaque,
             out PoiyomiOpaqueConversionRefusal refusal,
-            out bool depthTestDivergence)
+            out bool depthTestDivergence,
+            out bool premultiplyNormalization)
         {
             PoiyomiOpaqueConversion.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
@@ -52,6 +53,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     opaque = live;
                     refusal = PoiyomiOpaqueConversionRefusal.None;
                     depthTestDivergence = false;
+                    premultiplyNormalization = false;
                     return true;
                 case PoiyomiOpaqueConversionOutcome.Convertible:
                     // An already-prepared artifact for this source is reused
@@ -62,11 +64,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             live);
                     refusal = PoiyomiOpaqueConversionRefusal.None;
                     depthTestDivergence = eligibility.DepthTestDivergence;
+                    premultiplyNormalization =
+                        eligibility.PremultiplyNormalization;
                     return true;
                 default:
                     opaque = null;
                     refusal = eligibility.Refusal;
                     depthTestDivergence = false;
+                    premultiplyNormalization = false;
                     return false;
             }
         }
@@ -101,7 +106,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             for (var index = 0; index < materials.Count; index++)
             {
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], request);
+                    materials[index],
+                    request,
+                    UnityMaterialSemantics.AlphaPredicateRequestFor(
+                        materials[index], families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(

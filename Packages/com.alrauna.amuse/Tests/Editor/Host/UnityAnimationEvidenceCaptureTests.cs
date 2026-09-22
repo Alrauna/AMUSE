@@ -1931,8 +1931,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 out IReadOnlyList<CapturedAlphaMaterial> captured)
         {
             var inputs = materials
-                .Select(material =>
-                    new MaterialEvidenceCaptureInput(material, request))
+                .Select((material, index) =>
+                    new MaterialEvidenceCaptureInput(
+                        material,
+                        request,
+                        UnityMaterialSemantics.AlphaPredicateRequestFor(
+                            material, families[index])))
                 .ToArray();
             var evidence = UnityMaterialEvidenceCapture.Capture(
                 inputs, bounds);

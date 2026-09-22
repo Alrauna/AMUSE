@@ -397,7 +397,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             for (var index = 0; index < materials.Length; index++)
             {
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index], Relevance);
+                    materials[index],
+                    Relevance,
+                    PoiyomiMaterialSemantics.AlphaPredicateRequestFor(
+                        materials[index], false));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);

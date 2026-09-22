@@ -262,7 +262,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
                     inputs.Add(new MaterialEvidenceCaptureInput(
                         effectiveSlots[slot],
-                        PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+                        PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                        PoiyomiMaterialSemantics.AlphaPredicateRequestFor(
+                            effectiveSlots[slot], false)));
                     slotIndices.Add(slot);
                 }
 
