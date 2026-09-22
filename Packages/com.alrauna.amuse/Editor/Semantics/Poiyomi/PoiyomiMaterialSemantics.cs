@@ -200,9 +200,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // Enabled writers/masks that add to or replace the non-forced alpha
         // term. The alpha mask mode is deliberately absent: it is interpreted by
-        // TryInterpretAlphaMask rather than gated, because its Replace mode is
-        // provable with no mask bound and, for the admitted strength-value
-        // pairs, through the bound mask's red field.
+        // TryInterpretAlphaMask rather than gated, because Replace is provable
+        // with no mask bound and, for the admitted strength-value pairs,
+        // through the bound mask's red field, and Multiply is provable for the
+        // declared default shape and for the same admitted pairs through the
+        // exact product fold.
         //
         // _AlphaPremultiply is deliberately absent. The vendor premultiply
         // scales the base color by saturate(alpha) in three passes at vendor
@@ -656,12 +658,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// off on every path. A forced-opaque material is a constant one.
         /// Otherwise the alpha mask mode is interpreted: Replace with no bound
         /// mask is a proven constant, and a bound Replace mask proves through
-        /// its red field exactly under the admitted strength-value pairs,
-        /// while any other mode or pair stays Unknown. With the mask off,
-        /// alpha is <c>_Color.a</c>, optionally multiplying the alpha channel
-        /// of a single supported <c>_MainTex</c> sample; that texture-backed
-        /// form additionally requires parallax to be proven off, because it
-        /// alone depends on the sampling coordinate. Any enabled alpha writer,
+        /// its red field exactly under the admitted strength-value pairs.
+        /// Multiply is the declared default mode: with no bound mask it admits
+        /// only a mask term of exactly one and leaves the running chain
+        /// unchanged, and with a bound mask it folds the admitted term into
+        /// the running chain through the exact product machinery. Any other
+        /// mode or pair stays Unknown. With the mask leaving no factor, alpha
+        /// is <c>_Color.a</c>, optionally multiplying the alpha channel of a
+        /// single supported <c>_MainTex</c> sample. That texture-backed form
+        /// additionally requires parallax to be proven off, because it alone
+        /// depends on the sampling coordinate. Any enabled alpha writer,
         /// non-binary flag, or unprovable sample keeps the output Unknown with
         /// one diagnostic. Alpha is a raw scalar, so no color-import evidence
         /// is required.
@@ -763,7 +769,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (!TryInterpretAlphaMask(
                     evidence,
                     diagnostics,
-                    out var maskReplacement))
+                    out var maskReplacement,
+                    out var maskMultiplier))
             {
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
@@ -807,41 +814,61 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     MainTextureProperty);
             }
 
+            ScalarSemanticValue baseChain;
             if (ignoreAlpha || !mainTexture.IsAssigned)
             {
+                baseChain = ScalarSemanticValue.Constant(colorAlpha);
+            }
+            else
+            {
+                // Only a texture-backed claim depends on the sampling
+                // coordinate, so the parallax proof is required here and
+                // nowhere earlier.
+                var samplingGate =
+                    FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                }
+
+                if (!TryInterpretMainSample(
+                        evidence,
+                        PoiyomiSemanticOutput.Alpha,
+                        requireColorInterpretation: false,
+                        diagnostics,
+                        out var sample,
+                        out _))
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+
+                baseChain = colorAlpha == 1f
+                    ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
+                    : ScalarSemanticValue.TextureTimesConstant(
+                        sample, TextureChannel.Alpha, colorAlpha);
+            }
+
+            // Multiply folds the admitted mask term into the running chain
+            // through the exact product machinery, the same fold the lilToon
+            // term performs over its layered chain.
+            if (maskMultiplier != null)
+            {
+                var multiplied = MultiplyAlphaValues(
+                    baseChain, maskMultiplier, diagnostics);
+                if (multiplied == null)
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+
                 return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(colorAlpha));
+                    multiplied);
             }
 
-            // Only a texture-backed claim depends on the sampling coordinate, so
-            // the parallax proof is required here and nowhere earlier.
-            var samplingGate =
-                FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
-            if (samplingGate != null)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    samplingGate);
-            }
-
-            if (!TryInterpretMainSample(
-                    evidence,
-                    PoiyomiSemanticOutput.Alpha,
-                    requireColorInterpretation: false,
-                    diagnostics,
-                    out var sample,
-                    out _))
-            {
-                return SemanticOutput<ScalarSemanticValue>.Unknown();
-            }
-
-            var value = colorAlpha == 1f
-                ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
-                : ScalarSemanticValue.TextureTimesConstant(
-                    sample, TextureChannel.Alpha, colorAlpha);
-            return SemanticOutput<ScalarSemanticValue>.Complete(value);
+            return SemanticOutput<ScalarSemanticValue>.Complete(baseChain);
         }
 
         /// <summary>
@@ -903,34 +930,55 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// alphaMask = saturate(mask.r * _AlphaMaskBlendStrength
         ///             + (_AlphaMaskInvert ? -_AlphaMaskValue : _AlphaMaskValue));
         /// if (_AlphaMaskInvert) alphaMask = 1 - alphaMask;
-        /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;   // Replace
+        /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;          // Replace
+        /// if (_MainAlphaMaskMode == 2) alpha = alpha * alphaMask;  // Multiply
         /// </code>
         /// Mode 0 never samples the mask and leaves the alpha term to the
-        /// caller. Mode 1 replaces it. With no mask bound, the pinned source
-        /// declares the <c>"white"</c> default, so <c>mask.r</c> is exactly one
-        /// and the expression collapses to a constant. A bound mask proves
-        /// through its red channel exactly under the pairs whose binary32
-        /// arithmetic needs no texel threshold: (1, 0), where the term is the
-        /// sampled red alone or its one-minus form under invert, and
-        /// (1, value &gt;= 1), where the term saturates to exactly one for both
-        /// invert states. The mask coordinate is <c>uv[_AlphaMaskUV]</c> under
-        /// the mask's own plain affine with zero pan, and the sample rides the
-        /// main sampler. The Multiply, Add and Subtract modes keep refusing,
-        /// and so does every other strength-value pair, because proving the
-        /// saturate of <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c>
-        /// needs a per-texel threshold envelope. Every refusal records one
-        /// scoped diagnostic naming the property that could not be proven.
+        /// caller. Mode 1 replaces it. Mode 2 is the vendor's declared default,
+        /// so a material that never touched the mask section carries it (note
+        /// 7.3). With no mask bound, the pinned source declares the
+        /// <c>"white"</c> default, so <c>mask.r</c> is exactly one and the
+        /// expression collapses to a constant. Under Replace that constant is
+        /// the alpha. Under Multiply the chain stands unchanged exactly when
+        /// the constant is one, which covers the declared default pair (1, 0)
+        /// with invert off, and any other sub-one constant refuses, the role
+        /// the lilToon term names <c>MainUnchanged</c> and its sub-one
+        /// refusal. A bound mask proves through its red channel exactly under
+        /// the pairs whose binary32 arithmetic needs no texel threshold:
+        /// (1, 0), where the term is the sampled red alone or its one-minus
+        /// form under invert, and (1, value &gt;= 1), where the term saturates
+        /// to exactly one for both invert states. Under Replace the term is
+        /// the alpha. Under Multiply the term folds into the running chain
+        /// through the exact product machinery: the saturated pairs are a
+        /// constant one, so the chain stands unchanged, and the invert-off
+        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term is
+        /// a saturating difference, and a product with a saturating factor has
+        /// no association-invariant exact-one predicate, so it refuses naming
+        /// the mode property, exactly like the lilToon fold. The mask
+        /// coordinate is <c>uv[_AlphaMaskUV]</c> under the mask's own plain
+        /// affine with zero pan, and the sample rides the main sampler. Add
+        /// and Subtract and every other mode keep refusing, and so does every
+        /// other strength-value pair, because proving the saturate of
+        /// <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c> needs a
+        /// per-texel threshold envelope. Every refusal records one scoped
+        /// diagnostic naming the property that could not be proven.
         /// </summary>
         /// <param name="replacement">
-        /// The proven replace value, or null on mode 0, where the caller
-        /// continues with the base alpha term.
+        /// The proven Replace value, or null when the caller continues with
+        /// the base alpha term.
+        /// </param>
+        /// <param name="multiplier">
+        /// The admitted Multiply factor for the running chain, or null when
+        /// the mode contributes no factor.
         /// </param>
         private static bool TryInterpretAlphaMask(
             CapturedMaterialEvidence evidence,
             List<PoiyomiSemanticDiagnostic> diagnostics,
-            out ScalarSemanticValue replacement)
+            out ScalarSemanticValue replacement,
+            out ScalarSemanticValue multiplier)
         {
             replacement = null;
+            multiplier = null;
 
             if (!evidence.TryGetScalar(
                     MainAlphaMaskModeProperty, out var mode) ||
@@ -951,9 +999,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return true;
             }
 
-            // Replace is the only interpreted mode. Multiply, Add and Subtract
-            // all combine a mask term the closed vocabulary cannot express.
-            if (mode != 1f)
+            // Replace and Multiply are the interpreted modes. Add and Subtract
+            // saturate a sum or a difference, and every other value is outside
+            // the vendor's own mode map.
+            if (mode != 1f && mode != 2f)
             {
                 AddDiagnostic(
                     diagnostics,
@@ -962,6 +1011,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     MainAlphaMaskModeProperty);
                 return false;
             }
+
+            var replace = mode == 1f;
 
             if (!evidence.TryGetScalar(
                     AlphaMaskBlendStrengthProperty, out var blendStrength) ||
@@ -1026,8 +1077,34 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     return false;
                 }
 
-                replacement = ScalarSemanticValue.Constant(alpha);
-                return true;
+                if (replace)
+                {
+                    replacement = ScalarSemanticValue.Constant(alpha);
+                    return true;
+                }
+
+                // Multiply against the unbound mask. The declared default pair
+                // (1, 0) with invert off makes the constant above exactly one,
+                // so the product is the chain itself and the chain stands
+                // unchanged, the role the lilToon term names MainUnchanged. A
+                // sub-one constant would need a constant-factor fold the
+                // lilToon mirror refuses too, so it refuses and names the
+                // first culprit in the declared diagnostic order.
+                if (alpha == 1f)
+                {
+                    return true;
+                }
+
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    blendStrength != 1f
+                        ? AlphaMaskBlendStrengthProperty
+                        : value != 0f
+                            ? AlphaMaskValueProperty
+                            : AlphaMaskInvertProperty);
+                return false;
             }
 
             // --- Bound mask: the red field route ---------------------------
@@ -1157,10 +1234,34 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     main.Texture.Sampling);
                 var red = ScalarSemanticValue.Texture(
                     maskSample, TextureChannel.Red);
-                replacement = invert
-                    ? ScalarSemanticValue.SaturatingDifference(
-                        ScalarSemanticValue.Constant(1f), red)
-                    : red;
+
+                if (!replace && invert)
+                {
+                    // The Multiply term is saturate(1 - r), a saturating
+                    // difference. A product with a saturating factor has no
+                    // association-invariant exact-one predicate, so the exact
+                    // product machinery refuses it and names the mode
+                    // property, exactly like the lilToon fold.
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainAlphaMaskModeProperty);
+                    return false;
+                }
+
+                if (replace)
+                {
+                    replacement = invert
+                        ? ScalarSemanticValue.SaturatingDifference(
+                            ScalarSemanticValue.Constant(1f), red)
+                        : red;
+                }
+                else
+                {
+                    multiplier = red;
+                }
+
                 return true;
             }
 
@@ -1170,11 +1271,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // fused or unfused sum stays at or above one and the saturate
             // yields exactly one. Invert on: r * 1 - value <= 1 - value <= 0
             // for r in [0, 1], so the saturate yields exactly zero and
-            // 1 - 0 is exactly one. Both invert states replace the alpha
-            // with the constant one and consult no texel of the mask.
+            // 1 - 0 is exactly one. Both invert states make the mask term
+            // the constant one and consult no texel of the mask. Replace
+            // writes that constant. Multiply folds it as a constant, so the
+            // running chain stands unchanged.
             if (blendStrength == 1f && value >= 1f)
             {
-                replacement = ScalarSemanticValue.Constant(1f);
+                if (replace)
+                {
+                    replacement = ScalarSemanticValue.Constant(1f);
+                }
+
                 return true;
             }
 
@@ -1191,6 +1298,97 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     ? AlphaMaskBlendStrengthProperty
                     : AlphaMaskValueProperty);
             return false;
+        }
+
+        /// <summary>
+        /// The exact product fold the Multiply mask mode shares with the
+        /// lilToon term. The exact-one predicate of a product of values
+        /// bounded in [0, 1] is association-invariant: every rounded chain of
+        /// sub-one factors stays strictly below one, and all-one factors
+        /// answer exactly one in every association, so the fold through the
+        /// constants and factor lists changes nothing provable. Returns null
+        /// after recording a refusal when either shape is a saturating sum or
+        /// difference, whose exact-one predicate is not
+        /// multiplication-invariant. The refusal names the mode property,
+        /// exactly like the lilToon fold.
+        /// </summary>
+        private static ScalarSemanticValue MultiplyAlphaValues(
+            ScalarSemanticValue baseChain,
+            ScalarSemanticValue maskFactor,
+            List<PoiyomiSemanticDiagnostic> diagnostics)
+        {
+            if (baseChain.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                baseChain.Kind ==
+                    ScalarSemanticValueKind.SaturatingDifference ||
+                maskFactor.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                maskFactor.Kind ==
+                    ScalarSemanticValueKind.SaturatingDifference)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    MainAlphaMaskModeProperty);
+                return null;
+            }
+
+            var samples = new List<TextureSample>();
+            var channels = new List<TextureChannel>();
+            var multiplier = 1f;
+            multiplier = CollectProductFactors(
+                baseChain, samples, channels, multiplier);
+            multiplier = CollectProductFactors(
+                maskFactor, samples, channels, multiplier);
+
+            if (samples.Count == 0)
+            {
+                return ScalarSemanticValue.Constant(multiplier);
+            }
+
+            if (samples.Count == 1)
+            {
+                return ScalarSemanticValue.TextureTimesConstant(
+                    samples[0], channels[0], multiplier);
+            }
+
+            return ScalarSemanticValue.ProductChain(
+                samples, channels, multiplier);
+        }
+
+        private static float CollectProductFactors(
+            ScalarSemanticValue value,
+            List<TextureSample> samples,
+            List<TextureChannel> channels,
+            float multiplier)
+        {
+            switch (value.Kind)
+            {
+                case ScalarSemanticValueKind.Constant:
+                    return multiplier * value.GetConstantValue();
+                case ScalarSemanticValueKind.TextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier;
+                case ScalarSemanticValueKind.TextureSampleTimesConstant:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind
+                    .ProductChainOfTextureSamples:
+                    for (var index = 0;
+                         index < value.GetChainFactorCount();
+                         index++)
+                    {
+                        samples.Add(value.GetChainSample(index));
+                        channels.Add(value.GetChainChannel(index));
+                    }
+
+                    return multiplier * value.GetProductMultiplier();
+                default:
+                    throw new InvalidOperationException(
+                        "A saturating shape reached product factor " +
+                        "collection, which the caller must refuse first.");
+            }
         }
 
         /// <summary>
