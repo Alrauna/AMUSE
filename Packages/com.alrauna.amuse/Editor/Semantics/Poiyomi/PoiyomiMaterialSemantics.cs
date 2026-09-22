@@ -71,6 +71,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaMaskBlendStrength";
         private const string AlphaMaskValueProperty = "_AlphaMaskValue";
         private const string AlphaMaskInvertProperty = "_AlphaMaskInvert";
+        private const string AlphaMaskUvProperty = "_AlphaMaskUV";
+        private const string AlphaMaskPanProperty = "_AlphaMaskPan";
         private const string PoiParallaxProperty = "_PoiParallax";
 
         // Names the whole mask sum rather than one input: an overflow is a
@@ -199,7 +201,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // Enabled writers/masks that add to or replace the non-forced alpha
         // term. The alpha mask mode is deliberately absent: it is interpreted by
         // TryInterpretAlphaMask rather than gated, because its Replace mode is
-        // provable when no mask texture is bound.
+        // provable with no mask bound and, for the admitted strength-value
+        // pairs, through the bound mask's red field.
         //
         // _AlphaPremultiply is deliberately absent. The vendor premultiply
         // scales the base color by saturate(alpha) in three passes at vendor
@@ -652,14 +655,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// Proves the normalized alpha term. Coverage/clip mechanisms must be
         /// off on every path. A forced-opaque material is a constant one.
         /// Otherwise the alpha mask mode is interpreted: Replace with no bound
-        /// mask is a proven constant, while any other mode or a bound mask stays
-        /// Unknown. With the mask off, alpha is <c>_Color.a</c>, optionally
-        /// multiplying the alpha channel of a single supported <c>_MainTex</c>
-        /// sample; that texture-backed form additionally requires parallax to be
-        /// proven off, because it alone depends on the sampling coordinate. Any
-        /// enabled alpha writer, non-binary flag, or unprovable sample keeps the
-        /// output Unknown with one diagnostic. Alpha is a raw scalar, so no
-        /// color-import evidence is required.
+        /// mask is a proven constant, and a bound Replace mask proves through
+        /// its red field exactly under the admitted strength-value pairs,
+        /// while any other mode or pair stays Unknown. With the mask off,
+        /// alpha is <c>_Color.a</c>, optionally multiplying the alpha channel
+        /// of a single supported <c>_MainTex</c> sample; that texture-backed
+        /// form additionally requires parallax to be proven off, because it
+        /// alone depends on the sampling coordinate. Any enabled alpha writer,
+        /// non-binary flag, or unprovable sample keeps the output Unknown with
+        /// one diagnostic. Alpha is a raw scalar, so no color-import evidence
+        /// is required.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
@@ -758,7 +763,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (!TryInterpretAlphaMask(
                     evidence,
                     diagnostics,
-                    out var maskReplacesAlpha,
                     out var maskReplacement))
             {
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -766,10 +770,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             // Replace discards the base term outright, so _MainIgnoreTexAlpha,
             // _Color.a and _MainTex cannot reach the result and are not read.
-            if (maskReplacesAlpha)
+            if (maskReplacement != null)
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(maskReplacement));
+                    maskReplacement);
             }
 
             if (!TryReadBinary(
@@ -902,27 +906,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;   // Replace
         /// </code>
         /// Mode 0 never samples the mask and leaves the alpha term to the
-        /// caller. Mode 1 replaces it, which is provable only when no mask
-        /// texture is bound: the pinned source declares the <c>"white"</c>
-        /// default, so <c>mask.r</c> is exactly one and the expression collapses
-        /// to a constant. An assigned mask needs a red-channel texture field
-        /// AMUSE does not produce, and the Multiply, Add and Subtract modes each
-        /// combine a mask term the closed scalar vocabulary cannot express.
-        /// Every refusal records one scoped diagnostic naming the property that
-        /// could not be proven.
+        /// caller. Mode 1 replaces it. With no mask bound, the pinned source
+        /// declares the <c>"white"</c> default, so <c>mask.r</c> is exactly one
+        /// and the expression collapses to a constant. A bound mask proves
+        /// through its red channel exactly under the pairs whose binary32
+        /// arithmetic needs no texel threshold: (1, 0), where the term is the
+        /// sampled red alone or its one-minus form under invert, and
+        /// (1, value &gt;= 1), where the term saturates to exactly one for both
+        /// invert states. The mask coordinate is <c>uv[_AlphaMaskUV]</c> under
+        /// the mask's own plain affine with zero pan, and the sample rides the
+        /// main sampler. The Multiply, Add and Subtract modes keep refusing,
+        /// and so does every other strength-value pair, because proving the
+        /// saturate of <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c>
+        /// needs a per-texel threshold envelope. Every refusal records one
+        /// scoped diagnostic naming the property that could not be proven.
         /// </summary>
-        /// <param name="replacesAlpha">
-        /// True only when the mask proved a constant that supersedes the base
-        /// alpha term; false on mode 0, where the caller continues.
+        /// <param name="replacement">
+        /// The proven replace value, or null on mode 0, where the caller
+        /// continues with the base alpha term.
         /// </param>
         private static bool TryInterpretAlphaMask(
             CapturedMaterialEvidence evidence,
             List<PoiyomiSemanticDiagnostic> diagnostics,
-            out bool replacesAlpha,
-            out float replacement)
+            out ScalarSemanticValue replacement)
         {
-            replacesAlpha = false;
-            replacement = 0f;
+            replacement = null;
 
             if (!evidence.TryGetScalar(
                     MainAlphaMaskModeProperty, out var mode) ||
@@ -952,17 +960,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                     MainAlphaMaskModeProperty);
-                return false;
-            }
-
-            if (!evidence.TryGetTexture(AlphaMaskProperty, out var mask) ||
-                mask.IsAssigned)
-            {
-                AddDiagnostic(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskProperty);
                 return false;
             }
 
@@ -1001,26 +998,199 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            // The unbound mask samples exactly one, so `mask.r * blendStrength`
-            // is exactly blendStrength and the shader's fused multiply-add
-            // cannot round differently from this addition. That argument is
-            // unavailable for a sampled mask, which is why it stays refused.
-            var sum = blendStrength + (invert ? -value : value);
-            var raw = Mathf.Clamp01(sum);
-            var alpha = invert ? 1f - raw : raw;
-            if (!IsFinite(sum) || !IsFinite(alpha))
+            if (!evidence.TryGetTexture(AlphaMaskProperty, out var mask))
             {
                 AddDiagnostic(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskExpressionDetail);
+                    AlphaMaskProperty);
                 return false;
             }
 
-            replacesAlpha = true;
-            replacement = alpha;
-            return true;
+            if (!mask.IsAssigned)
+            {
+                // The unbound mask samples exactly one, so `mask.r * blendStrength`
+                // is exactly blendStrength and the shader's fused multiply-add
+                // cannot round differently from this addition.
+                var sum = blendStrength + (invert ? -value : value);
+                var raw = Mathf.Clamp01(sum);
+                var alpha = invert ? 1f - raw : raw;
+                if (!IsFinite(sum) || !IsFinite(alpha))
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskExpressionDetail);
+                    return false;
+                }
+
+                replacement = ScalarSemanticValue.Constant(alpha);
+                return true;
+            }
+
+            // --- Bound mask: the red field route ---------------------------
+
+            // The coordinate selector must name a mesh UV set the proof
+            // carries. A fractional or out-of-range selector cannot be read
+            // as an exact channel.
+            if (!evidence.TryGetScalar(
+                    AlphaMaskUvProperty, out var rawChannel) ||
+                !IsFinite(rawChannel))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskUvProperty);
+                return false;
+            }
+
+            var channel = Mathf.RoundToInt(rawChannel);
+            if (channel < 0 || channel > 3 || channel != rawChannel)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskUvProperty);
+                return false;
+            }
+
+            // The vendor pans the coordinate over time by _AlphaMaskPan.xy.
+            // A nonzero or non-finite pan makes the coordinate drift, so
+            // only the exact zero vector proves.
+            if (!evidence.TryGetVector(
+                    AlphaMaskPanProperty, out var pan) ||
+                !IsFinite(pan) ||
+                pan.x != 0f || pan.y != 0f || pan.z != 0f || pan.w != 0f)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskPanProperty);
+                return false;
+            }
+
+            // The mask coordinate is the selected UV set under the mask's
+            // own scale and offset. That transform is a plain affine, so a
+            // non-identity mask ST proves, exactly like the lilToon mask
+            // rule this route mirrors. No identity demand applies.
+            if (!mask.HasScaleOffset ||
+                !IsFinite(mask.Scale) ||
+                !IsFinite(mask.Offset))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskProperty);
+                return false;
+            }
+
+            // The field route resolves the sample against the mask's stable
+            // project identity. A scene-only or otherwise unidentifiable
+            // mask carries no resolvable field.
+            if (mask.Texture == null || !mask.Texture.HasSourceIdentity)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnstableTextureIdentity,
+                    AlphaMaskProperty);
+                return false;
+            }
+
+            var mapping = new UvMapping(channel, mask.Scale, mask.Offset);
+
+            // The pair (1, 0). The vendor term with invert off is
+            // saturate(r * 1 + 0). Binary32 multiplies r by one exactly and
+            // adds zero exactly, and a normalized red sample sits in [0, 1],
+            // so the saturate is inert and the term is the sampled red
+            // itself. With invert on the vendor writes
+            // 1 - saturate(r * 1 - 0). The multiply and the subtract are
+            // exact by the same argument, the saturate is inert, and the
+            // term is the single subtraction 1 - r, which stays in [0, 1].
+            // The shape saturate(1 - r) below carries that value with an
+            // inert clamp.
+            if (blendStrength == 1f && value == 0f)
+            {
+                // The sample rides the main sampler, so the mask's own import
+                // state is irrelevant and the main texture's captured
+                // sampling is the fact. An unassigned main texture binds the
+                // engine default sampler, whose state is not a captured fact
+                // here, so the route fails closed.
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
+                        MainTextureProperty);
+                    return false;
+                }
+
+                // The value now depends on the sampling coordinate, so the
+                // parallax gate runs here, like every texture-backed alpha
+                // claim. applyParallax overwrites the UV set before the
+                // sample, which would make the coordinate view-dependent.
+                var samplingGate = FirstFailedZeroGate(
+                    evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                    return false;
+                }
+
+                var maskSample = new TextureSample(
+                    mask.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                var red = ScalarSemanticValue.Texture(
+                    maskSample, TextureChannel.Red);
+                replacement = invert
+                    ? ScalarSemanticValue.SaturatingDifference(
+                        ScalarSemanticValue.Constant(1f), red)
+                    : red;
+                return true;
+            }
+
+            // The provably saturated pair (1, value >= 1). Invert off: in
+            // exact arithmetic r * 1 + value >= value >= 1 for every red
+            // sample r >= 0, and binary32 rounding is monotone, so the
+            // fused or unfused sum stays at or above one and the saturate
+            // yields exactly one. Invert on: r * 1 - value <= 1 - value <= 0
+            // for r in [0, 1], so the saturate yields exactly zero and
+            // 1 - 0 is exactly one. Both invert states replace the alpha
+            // with the constant one and consult no texel of the mask.
+            if (blendStrength == 1f && value >= 1f)
+            {
+                replacement = ScalarSemanticValue.Constant(1f);
+                return true;
+            }
+
+            // Every other pair needs the deferred threshold-envelope
+            // contract: proving saturate(r * s + v) at one needs a per-texel
+            // predicate whose rounding argument is future work. The refusal
+            // names the first culprit, the strength when it leaves one and
+            // the value alone when the strength is exactly one.
+            AddDiagnostic(
+                diagnostics,
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                blendStrength != 1f
+                    ? AlphaMaskBlendStrengthProperty
+                    : AlphaMaskValueProperty);
+            return false;
         }
 
         /// <summary>
@@ -1643,6 +1813,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 AlphaMaskBlendStrengthProperty,
                 AlphaMaskValueProperty,
                 AlphaMaskInvertProperty,
+                AlphaMaskUvProperty,
                 SrcBlendProperty,
                 DstBlendProperty,
                 BlendOpProperty,
@@ -1665,7 +1836,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
                 colorProperties: new[] { ColorProperty },
-                vectorProperties: new[] { MainTexPanProperty },
+                vectorProperties: new[] { MainTexPanProperty, AlphaMaskPanProperty },
                 textureProperties: new[]
                 {
                     new TexturePropertyEvidenceRequest(
@@ -1675,12 +1846,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         TextureEvidenceKinds.Sampling |
                         TextureEvidenceKinds.AlphaChannel),
 
-                    // Assignment only. The Replace equation is provable exactly
-                    // when no mask is bound, so the mask is never sampled and
-                    // no further texture fact is consumed. Requesting more would
-                    // be unused evidence and would widen animation relevance.
+                    // The bound Replace mask proves through its red channel, so
+                    // the request gathers exactly what the red-field route reads:
+                    // the mask's own scale and offset for the plain affine, the
+                    // stable project identity, and the red field itself. The
+                    // sampling is never asked of the mask: the vendor mask block
+                    // samples the mask through the main sampler, whose state the
+                    // main-texture request above already carries.
                     new TexturePropertyEvidenceRequest(
-                        AlphaMaskProperty, TextureEvidenceKinds.None),
+                        AlphaMaskProperty,
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.RedChannel),
                 });
         }
 

@@ -239,11 +239,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void AlphaMaskIsRequestedForAssignmentOnly()
+        public void AlphaMaskIsRequestedForTheRedFieldRoute()
         {
-            // The Replace-mode interpretation needs only "is a mask bound"; it
-            // never samples the mask. Requesting any further texture fact would
-            // be unused evidence and would widen animation relevance.
+            // The bound Replace mask proves through its red channel, so the
+            // request gathers exactly the three facts that route reads: the
+            // mask's own scale and offset, its stable identity, and the red
+            // field. The mask's own sampling is never asked for, because the
+            // vendor mask block samples through the main sampler.
             var poiyomi = PoiyomiMaterialSemantics.AlphaEvidenceRequest;
 
             var mask = poiyomi.TextureProperties.FirstOrDefault(
@@ -253,7 +255,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo("_AlphaMask"),
                 "the Poiyomi alpha request must include _AlphaMask");
             Assert.That(
-                mask.Evidence, Is.EqualTo(TextureEvidenceKinds.None));
+                mask.Evidence,
+                Is.EqualTo(
+                    TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.RedChannel));
         }
 
         [Test]
