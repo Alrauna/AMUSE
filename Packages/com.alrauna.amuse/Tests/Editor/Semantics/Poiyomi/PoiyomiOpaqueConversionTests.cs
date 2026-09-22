@@ -532,6 +532,36 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
         }
 
+        // --- Falsifier 2: additive blend coverage ---------------------------
+        //
+        // The conversion blend gates still cover the additive factors. The
+        // existing ForwardAdd blend tests in this class own that coverage and
+        // pass unchanged in both runs of this task. The test below is the
+        // transitional premultiply gate guard.
+
+        /// <summary>
+        /// Transitional contract guard. It expires when a later parity slice
+        /// admits premultiply in the conversion. Until then the conversion
+        /// keeps refusing a premultiply material even though the alpha
+        /// equation admits the feature. Premultiply changes how RGB is
+        /// produced, so the opaque conversion premise stays closed until that
+        /// slice rewrites it.
+        /// </summary>
+        [Test]
+        public void Premultiply_ConversionStillRefusesUntilSlice7()
+        {
+            // No-op guard: the same material without the feature converts.
+            // The refusal below comes from the premultiply gate.
+            AssertConvertible(EvaluateFor(ConvertibleFade()));
+
+            var material = ConvertibleFade();
+            material.SetFloat("_AlphaPremultiply", 1f);
+
+            AssertRefusal(
+                EvaluateFor(material),
+                PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
+        }
+
         [Test]
         public void AlphaToCoverage_Refuses()
         {
