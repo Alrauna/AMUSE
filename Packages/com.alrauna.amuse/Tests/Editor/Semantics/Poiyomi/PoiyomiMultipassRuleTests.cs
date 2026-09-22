@@ -26,7 +26,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             {
                 new MaterialEvidenceCaptureInput(
                     material,
-                    PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                    PoiyomiMaterialSemantics.AlphaPredicateRequestFor(
+                        material, false)),
             };
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
             return PoiyomiMaterialSemantics.InterpretVerifiedAlpha(

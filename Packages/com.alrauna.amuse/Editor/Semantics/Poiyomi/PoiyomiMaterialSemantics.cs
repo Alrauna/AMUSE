@@ -60,9 +60,26 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
+
+        // The Two Pass second family reads this tint's alpha where the plain
+        // base reads _Color.a (note 4.1, vendor line 29785).
+        private const string TwoPassColorProperty = "_TwoPassColor";
         private const string MainTexUvProperty = "_MainTexUV";
         private const string MainTexPanProperty = "_MainTexPan";
         private const string AlphaForceOpaqueProperty = "_AlphaForceOpaque";
+
+        // The Two Pass shader declares a separate force-opaque flag for its
+        // second family (note 4.4, Two Pass source line 862).
+        private const string AlphaForceOpaque2Property = "_AlphaForceOpaque2";
+
+        // The _Mode preset selector of the pinned source, and the second
+        // family's own selector on the Two Pass shader (note 4.4, Two Pass
+        // source line 68110). The vendor branches on these values per pass:
+        // the cutout value forces the family's alpha to 1 after the shared
+        // clip (note 4.5), so the cutout preset is what admits the split
+        // route for that family's claim.
+        private const string ModeProperty = "_Mode";
+        private const string TwoPassModeProperty = "_ModeTwoPass";
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
         private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
         private const string AlphaMaskProperty = "_AlphaMask";
@@ -71,6 +88,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaMaskBlendStrength";
         private const string AlphaMaskValueProperty = "_AlphaMaskValue";
         private const string AlphaMaskInvertProperty = "_AlphaMaskInvert";
+        private const string AlphaMaskUvProperty = "_AlphaMaskUV";
+        private const string AlphaMaskPanProperty = "_AlphaMaskPan";
         private const string PoiParallaxProperty = "_PoiParallax";
 
         // Names the whole mask sum rather than one input: an overflow is a
@@ -186,12 +205,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaDithering",
             "_EnableDissolve",
             "_EnableUDIMDiscardOptions",
+
+            // The Beat Saber module toggle of the pinned source (note 4.7).
+            // When it is on, the pass writes alpha after the clip as
+            // alpha = alpha * emission.z and rewrites the alpha blend pair.
+            // An enabled module must never sit inside a claimed exactly-one
+            // alpha. The coverage gate run precedes the _AlphaForceOpaque
+            // short-circuit, so this entry keeps the forced path protected.
+            "_BSSEnabled",
         };
 
         // Enabled writers/masks that add to or replace the non-forced alpha
         // term. The alpha mask mode is deliberately absent: it is interpreted by
-        // TryInterpretAlphaMask rather than gated, because its Replace mode is
-        // provable when no mask texture is bound.
+        // TryInterpretAlphaMask rather than gated, because Replace is provable
+        // with no mask bound and, for the admitted strength-value pairs,
+        // through the bound mask's red field, and Multiply is provable for the
+        // declared default shape and for the same admitted pairs through the
+        // exact product fold.
+        //
+        // _AlphaPremultiply is deliberately absent. The vendor premultiply
+        // scales the base color by saturate(alpha) in three passes at vendor
+        // lines 30216, 47274, 58331 and never writes the alpha value (note
+        // 4.3). The proof only moves triangles whose alpha is exactly 1, so
+        // the factor is exactly 1 there and the feature is an identity on the
+        // proven domain. The base-color gate list keeps the entry because the
+        // color equation genuinely changes per pixel.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
@@ -201,7 +239,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaAudioLinkEnabled",
             "_EnableAudioLink",
             "_AlphaGlobalMask",
-            "_AlphaPremultiply",
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
             "_DecalEnabled",
@@ -229,7 +266,41 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         };
 
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
-            CreateAlphaEvidenceRequest();
+            CreateAlphaEvidenceRequest(declareCutoutCutoff: true);
+
+        /// <summary>
+        /// The plain-clip predicate variant of the alpha request: the same
+        /// schema, including the <c>_Mode</c> and <c>_Cutoff</c> scalars, but
+        /// with no cutoff declared on the main texture request. It is the
+        /// capture predicate for every non-cutout preset: a preset whose pass
+        /// renders the chain value keeps the exact-255 field, so the
+        /// exact-one rule reads unbinarized bytes. It never feeds a claim on
+        /// its own; the interpretation of a cutout preset requires the
+        /// declared cutoff, whose binarized field is the split route.
+        /// </summary>
+        internal static MaterialEvidenceRequest PlainAlphaEvidenceRequest { get; } =
+            CreateAlphaEvidenceRequest(declareCutoutCutoff: false);
+
+        /// <summary>
+        /// The Two Pass family's own alpha request: the plain request plus
+        /// exactly the second family's tint, its force-opaque flag, and its
+        /// own preset selector. The plain Toon request stays without them, so
+        /// a plain material keeps capturing without any second-family scalar.
+        /// The interpreter reads the second-family scalars only through the
+        /// Two Pass entry points, which only this request feeds.
+        /// </summary>
+        internal static MaterialEvidenceRequest TwoPassAlphaEvidenceRequest { get; } =
+            CreateTwoPassAlphaEvidenceRequest(AlphaEvidenceRequest);
+
+        /// <summary>
+        /// The Two Pass family's plain-clip predicate variant: the same
+        /// schema with no cutoff declared on the main texture request. It is
+        /// the capture predicate for Two Pass materials where neither family
+        /// runs the cutout preset.
+        /// </summary>
+        internal static MaterialEvidenceRequest
+            PlainTwoPassAlphaEvidenceRequest { get; } =
+            CreateTwoPassAlphaEvidenceRequest(PlainAlphaEvidenceRequest);
 
         private static MaterialEvidenceRequest FullMaterialEvidenceRequest { get; } =
             MaterialEvidenceRequest.Combine(
@@ -303,7 +374,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
                 new MaterialEvidenceCaptureInput(
-                    material, FullMaterialEvidenceRequest),
+                    material,
+                    FullMaterialEvidenceRequest,
+                    AlphaPredicateRequestFor(material, false)),
             })[0];
             var evidence = GatherSourceEvidence(
                 material.shader, captured, RequiredSchemaProperties);
@@ -315,7 +388,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return InterpretVerifiedMaterial(
                 material,
                 QualitySettings.activeColorSpace,
-                captured);
+                captured,
+                false);
         }
 
         /// <summary>
@@ -333,16 +407,61 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
-                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    AlphaEvidenceRequest,
+                    AlphaPredicateRequestFor(material, false)),
             })[0];
             return InterpretVerifiedMaterial(
-                material, activeColorSpace, captured);
+                material, activeColorSpace, captured, false);
+        }
+
+        /// <summary>
+        /// Narrow friend-test seam for the Two Pass family. Captures with the
+        /// Two Pass request, so the second-family scalars are gathered, and
+        /// interprets the alpha output the way the Two Pass family dispatch
+        /// does. The other outputs read the material directly and do not
+        /// depend on the request.
+        /// </summary>
+        internal static PoiyomiSemanticResult InterpretVerifiedTwoPassMaterial(
+            Material material,
+            ColorSpace activeColorSpace)
+        {
+            RequireAnalyzableMaterial(material);
+
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    TwoPassAlphaEvidenceRequest,
+                    AlphaPredicateRequestFor(material, true)),
+            })[0];
+            return InterpretVerifiedMaterial(
+                material, activeColorSpace, captured, true);
+        }
+
+        /// <summary>
+        /// Narrow friend-test seam over an already captured evidence: the
+        /// caller owns the capture and its capture predicate, so the
+        /// interpretation and its diagnostics answer exactly the evidence
+        /// the caller hands in. The Two Pass family keeps its own entry
+        /// point; this one always interprets the plain family.
+        /// </summary>
+        internal static PoiyomiSemanticResult InterpretVerifiedMaterial(
+            Material material,
+            ColorSpace activeColorSpace,
+            CapturedMaterialEvidence captured)
+        {
+            RequireAnalyzableMaterial(material);
+            return InterpretVerifiedMaterial(
+                material, activeColorSpace, captured, false);
         }
 
         private static PoiyomiSemanticResult InterpretVerifiedMaterial(
             Material material,
             ColorSpace activeColorSpace,
-            CapturedMaterialEvidence captured)
+            CapturedMaterialEvidence captured,
+            bool interpretSecondAlphaFamily)
         {
             // A verified material is a supported material; each output is proven
             // independently and stays Unknown, with a diagnostic, when its
@@ -351,7 +470,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var baseColor = InterpretBaseColor(
                 material, activeColorSpace, diagnostics);
-            var alpha = InterpretAlpha(captured, diagnostics);
+            var alpha = InterpretAlpha(
+                captured, interpretSecondAlphaFamily, diagnostics);
             var emission = InterpretEmission(
                 material, activeColorSpace, diagnostics);
             var normal = InterpretNormal(material, diagnostics);
@@ -634,17 +754,90 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // --- Alpha equation (Task 4) ----------------------------------------
 
         /// <summary>
+        /// Whether the material's own family runs the cutout preset on either
+        /// family. The first family branches on <c>_Mode</c>, the second on
+        /// <c>_ModeTwoPass</c> (note 4.4, Two Pass source line 68110). A
+        /// missing or non-finite selector answers false: the material keeps
+        /// the plain-clip rules, and the field-predicate agreement gate keeps
+        /// a cutoff-binarized field unprovable, so an unknown preset never
+        /// widens a claim. This read decides the capture predicate; the
+        /// interpretation re-reads the captured scalars, so the two sides
+        /// agree by construction.
+        /// </summary>
+        internal static bool DeclaresCutoutPreset(Material material)
+        {
+            return ReadsCutoutPreset(material, ModeProperty) ||
+                ReadsCutoutPreset(material, TwoPassModeProperty);
+        }
+
+        private static bool ReadsCutoutPreset(
+            Material material,
+            string modeProperty)
+        {
+            if (material == null || !material.HasProperty(modeProperty))
+            {
+                return false;
+            }
+
+            var mode = material.GetFloat(modeProperty);
+            return IsFinite(mode) && mode == 1f;
+        }
+
+        /// <summary>
+        /// The capture predicate one Poiyomi material's own alpha capture
+        /// runs under. A cutout preset selects the declaring request, whose
+        /// main texture entry binarizes the alpha field by the _Cutoff value:
+        /// that binarized field is the split route. Every other preset
+        /// selects the plain-clip variant, which keeps the exact-255 field
+        /// the exact-one rule reads. Both variants carry one schema, so the
+        /// closed batch's union stays single and the choice is a per-material
+        /// capture fact, never a second family schema.
+        /// </summary>
+        internal static MaterialEvidenceRequest AlphaPredicateRequestFor(
+            Material material,
+            bool secondAlphaFamily)
+        {
+            var cutout = DeclaresCutoutPreset(material);
+            if (secondAlphaFamily)
+            {
+                return cutout
+                    ? TwoPassAlphaEvidenceRequest
+                    : PlainTwoPassAlphaEvidenceRequest;
+            }
+
+            return cutout
+                ? AlphaEvidenceRequest
+                : PlainAlphaEvidenceRequest;
+        }
+
+        /// <summary>
         /// Proves the normalized alpha term. Coverage/clip mechanisms must be
-        /// off on every path. A forced-opaque material is a constant one.
-        /// Otherwise the alpha mask mode is interpreted: Replace with no bound
-        /// mask is a proven constant, while any other mode or a bound mask stays
-        /// Unknown. With the mask off, alpha is <c>_Color.a</c>, optionally
-        /// multiplying the alpha channel of a single supported <c>_MainTex</c>
-        /// sample; that texture-backed form additionally requires parallax to be
-        /// proven off, because it alone depends on the sampling coordinate. Any
-        /// enabled alpha writer, non-binary flag, or unprovable sample keeps the
-        /// output Unknown with one diagnostic. Alpha is a raw scalar, so no
-        /// color-import evidence is required.
+        /// off on every path. A captured cutoff above one, or a non-finite
+        /// one, refuses naming <c>_Cutoff</c>, because the vendor clips with
+        /// <c>clip(alpha - _Cutoff)</c> in every pass without condition
+        /// (note 4.5) and even the forced path clips after it forces alpha
+        /// to one. A forced-opaque material is a constant one. Otherwise the
+        /// family's preset selector decides the field route: the cutout
+        /// value forces alpha to one above the cutoff, so the binarized
+        /// field's above-cutoff verdicts are exactly the rendered-opaque
+        /// set, and a missing cutoff on a cutout preset refuses naming
+        /// <c>_Cutoff</c>. Every other preset keeps the exact-one rule over
+        /// the exact field. The alpha mask mode is interpreted by
+        /// TryInterpretAlphaMask: Replace with no bound mask is a proven
+        /// constant, and a bound Replace mask proves through its red field
+        /// exactly under the admitted strength-value pairs. Multiply is the
+        /// declared default mode: with no bound mask it admits only a mask
+        /// term of exactly one and leaves the running chain unchanged, and
+        /// with a bound mask it folds the admitted term into the running
+        /// chain through the exact product machinery. Any other mode or pair
+        /// stays Unknown. With the mask leaving no factor, alpha is
+        /// <c>_Color.a</c>, optionally multiplying the alpha channel of a
+        /// single supported <c>_MainTex</c> sample. That texture-backed form
+        /// additionally requires parallax to be proven off, because it alone
+        /// depends on the sampling coordinate. Any enabled alpha writer,
+        /// non-binary flag, or unprovable sample keeps the output Unknown
+        /// with one diagnostic. Alpha is a raw scalar, so no color-import
+        /// evidence is required.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
@@ -655,11 +848,30 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return InterpretAlpha(
-                evidence, new List<PoiyomiSemanticDiagnostic>());
+                evidence, false, new List<PoiyomiSemanticDiagnostic>());
+        }
+
+        /// <summary>
+        /// The Two Pass family's alpha entry point. The dispatched family
+        /// guarantees the Two Pass request, whose scalar set names
+        /// <c>_AlphaForceOpaque2</c>, so the second-family reads below are
+        /// evidence-backed rather than unrequested.
+        /// </summary>
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
+            CapturedMaterialEvidence evidence)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            return InterpretAlpha(
+                evidence, true, new List<PoiyomiSemanticDiagnostic>());
         }
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
             CapturedMaterialEvidence evidence,
+            bool interpretSecondAlphaFamily,
             List<PoiyomiSemanticDiagnostic> diagnostics)
         {
             var coverageGate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
@@ -714,20 +926,152 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     SrcBlend2Property);
             }
 
-            if (!TryReadBinary(
-                    evidence, AlphaForceOpaqueProperty, out var forceOpaque))
+            // The Two Pass shader draws two Base passes. The first family
+            // reads _Color.a and forces alpha to 1 through its own
+            // _AlphaForceOpaque flag (note 4.1 vendor line 29780, note 4.4
+            // vendor line 30366). The second family reads _TwoPassColor.a
+            // (note 4.1 vendor line 29785) and forces alpha to 1 through its
+            // own _AlphaForceOpaque2 flag (note 4.4 Two Pass source line
+            // 862), with the same chain otherwise. The rendered pixel keeps
+            // an exactly-one alpha only when every family the material draws
+            // proves exactly one, so a Two Pass claim completes only through
+            // the conjunction of the two single-family claims below. A
+            // family that completes with any other term refuses the whole
+            // claim and names its own tint, because that tint is where the
+            // family's alpha value is decided. A family whose chain cannot
+            // prove keeps its own recorded diagnostic.
+            //
+            // The clip gate: the vendor clips with clip(alpha - _Cutoff) in
+            // every pass without condition (note 4.5). A captured cutoff
+            // above one discards even unit alpha, so no triangle renders and
+            // no claim survives; a non-finite cutoff leaves the clip
+            // undefined. Both refuse naming _Cutoff before any family claim
+            // runs, because the forced path clips after it forces alpha to 1
+            // (note 4.4) and needs the same bound. A cutoff absent from the
+            // schema keeps the committed reading: the property always exists
+            // on the pinned source, so its absence means a stand-in whose
+            // own rendering carries no clip at all, and Unity answers the
+            // declared vendor default of one half for a declared property.
+            if (evidence.TryGetScalar(CutoffProperty, out var cutoff) &&
+                (!IsFinite(cutoff) || cutoff > 1f))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaForceOpaqueProperty);
+                    CutoffProperty);
+            }
+
+            var first = InterpretSingleFamilyAlpha(
+                evidence,
+                AlphaForceOpaqueProperty,
+                ColorProperty,
+                ModeProperty,
+                diagnostics);
+            if (!interpretSecondAlphaFamily)
+            {
+                return first;
+            }
+
+            if (!IsCompletedExactlyOne(first))
+            {
+                if (first.IsComplete)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        ColorProperty);
+                }
+
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            var second = InterpretSingleFamilyAlpha(
+                evidence,
+                AlphaForceOpaque2Property,
+                TwoPassColorProperty,
+                TwoPassModeProperty,
+                diagnostics);
+            if (!IsCompletedExactlyOne(second))
+            {
+                if (second.IsComplete)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        TwoPassColorProperty);
+                }
+
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Constant(1f));
+        }
+
+        /// <summary>
+        /// The claim one drawn family makes: the family's own force-opaque
+        /// flag read with the same exact-binary gate read as the plain path,
+        /// then the shared chain whose base tint is
+        /// <paramref name="baseColorProperty"/>. The family's preset
+        /// selector (<c>_Mode</c> for the first family, <c>_ModeTwoPass</c>
+        /// for the second) decides the field route: the cutout value admits
+        /// the split route, whose binarized field answers the vendor's
+        /// unconditional clip plus the cutout alpha forcing (note 4.5), and
+        /// every other value keeps the exact-one rule over the exact field.
+        /// The second Base pass reuses the first pass's alpha chain, so the
+        /// feature gates, the mask interpretation, and the texture term are
+        /// the vendor facts the plain path already proves, and nothing else
+        /// is parameterized.
+        /// </summary>
+        private static SemanticOutput<ScalarSemanticValue>
+            InterpretSingleFamilyAlpha(
+            CapturedMaterialEvidence evidence,
+            string forceOpaqueProperty,
+            string baseColorProperty,
+            string modeProperty,
+            List<PoiyomiSemanticDiagnostic> diagnostics)
+        {
+            if (!TryReadBinary(
+                    evidence, forceOpaqueProperty, out var forceOpaque))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    forceOpaqueProperty);
             }
 
             if (forceOpaque)
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f));
+            }
+
+            // Preset detection over the captured selector. A missing or
+            // non-finite value answers not-cutout: the split route never
+            // engages, and the field-predicate agreement gate below keeps a
+            // cutoff-binarized field unprovable, so an unknown preset never
+            // widens a claim.
+            var isCutout =
+                evidence.TryGetScalar(modeProperty, out var mode) &&
+                IsFinite(mode) &&
+                mode == 1f;
+
+            // The split route's premise is the declared cutoff: without it
+            // the capture stayed exact and no binarized field answers the
+            // clip, so a cutout preset would silently prove nothing-or-wrong.
+            // A present cutoff is already bounded by the shared clip gate.
+            if (isCutout &&
+                !evidence.TryGetScalar(CutoffProperty, out var cutoutCutoff))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    CutoffProperty);
             }
 
             var featureGate = FirstFailedZeroGate(evidence, AlphaFeatureGates);
@@ -743,18 +1087,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (!TryInterpretAlphaMask(
                     evidence,
                     diagnostics,
-                    out var maskReplacesAlpha,
-                    out var maskReplacement))
+                    out var maskReplacement,
+                    out var maskMultiplier))
             {
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
 
             // Replace discards the base term outright, so _MainIgnoreTexAlpha,
-            // _Color.a and _MainTex cannot reach the result and are not read.
-            if (maskReplacesAlpha)
+            // the tint alpha and _MainTex cannot reach the result and are not
+            // read.
+            if (maskReplacement != null)
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(maskReplacement));
+                    maskReplacement);
             }
 
             if (!TryReadBinary(
@@ -767,14 +1112,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     IgnoreMainTexAlphaProperty);
             }
 
-            if (!evidence.TryGetColor(ColorProperty, out var color) ||
+            if (!evidence.TryGetColor(baseColorProperty, out var color) ||
                 !IsFinite(color.a))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    ColorProperty);
+                    baseColorProperty);
             }
 
             var colorAlpha = color.a;
@@ -788,41 +1133,95 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     MainTextureProperty);
             }
 
+            ScalarSemanticValue baseChain;
             if (ignoreAlpha || !mainTexture.IsAssigned)
             {
+                baseChain = ScalarSemanticValue.Constant(colorAlpha);
+            }
+            else
+            {
+                // Field-predicate agreement (Task 6). A non-cutout preset
+                // claims the exact-one rule, and only an exact-255 field can
+                // answer it: a cutoff-binarized field's byte 255 means the
+                // texel satisfies the capture's cutoff test, so consuming it
+                // under the exact-one rule would call a chain between the
+                // cutoff and one opaque. The capture predicate selects the
+                // exact field for every non-cutout preset, so a binarized
+                // field under a non-cutout claim means the two sides
+                // disagree, and the claim refuses naming _Cutoff.
+                if (!isCutout &&
+                    mainTexture.Texture.CaptureThreshold < 1f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        CutoffProperty);
+                }
+
+                // Only a texture-backed claim depends on the sampling
+                // coordinate, so the parallax proof is required here and
+                // nowhere earlier.
+                var samplingGate =
+                    FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                }
+
+                if (!TryInterpretMainSample(
+                        evidence,
+                        PoiyomiSemanticOutput.Alpha,
+                        requireColorInterpretation: false,
+                        diagnostics,
+                        out var sample,
+                        out _))
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+
+                baseChain = colorAlpha == 1f
+                    ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
+                    : ScalarSemanticValue.TextureTimesConstant(
+                        sample, TextureChannel.Alpha, colorAlpha);
+            }
+
+            // Multiply folds the admitted mask term into the running chain
+            // through the exact product machinery, the same fold the lilToon
+            // term performs over its layered chain.
+            if (maskMultiplier != null)
+            {
+                var multiplied = MultiplyAlphaValues(
+                    baseChain, maskMultiplier, diagnostics);
+                if (multiplied == null)
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+
                 return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(colorAlpha));
+                    multiplied);
             }
 
-            // Only a texture-backed claim depends on the sampling coordinate, so
-            // the parallax proof is required here and nowhere earlier.
-            var samplingGate =
-                FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
-            if (samplingGate != null)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    samplingGate);
-            }
+            return SemanticOutput<ScalarSemanticValue>.Complete(baseChain);
+        }
 
-            if (!TryInterpretMainSample(
-                    evidence,
-                    PoiyomiSemanticOutput.Alpha,
-                    requireColorInterpretation: false,
-                    diagnostics,
-                    out var sample,
-                    out _))
-            {
-                return SemanticOutput<ScalarSemanticValue>.Unknown();
-            }
-
-            var value = colorAlpha == 1f
-                ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
-                : ScalarSemanticValue.TextureTimesConstant(
-                    sample, TextureChannel.Alpha, colorAlpha);
-            return SemanticOutput<ScalarSemanticValue>.Complete(value);
+        /// <summary>
+        /// True only when a family claim completed as the exact constant one,
+        /// the only value a two-family conjunction may compose into a
+        /// material claim. Any other completed term, and any unknown output,
+        /// keeps the whole claim refused.
+        /// </summary>
+        private static bool IsCompletedExactlyOne(
+            SemanticOutput<ScalarSemanticValue> output)
+        {
+            return output.IsComplete &&
+                output.GetCompleteValue().Kind ==
+                ScalarSemanticValueKind.Constant &&
+                output.GetCompleteValue().GetConstantValue() == 1f;
         }
 
         /// <summary>
@@ -884,30 +1283,55 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// alphaMask = saturate(mask.r * _AlphaMaskBlendStrength
         ///             + (_AlphaMaskInvert ? -_AlphaMaskValue : _AlphaMaskValue));
         /// if (_AlphaMaskInvert) alphaMask = 1 - alphaMask;
-        /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;   // Replace
+        /// if (_MainAlphaMaskMode == 1) alpha = alphaMask;          // Replace
+        /// if (_MainAlphaMaskMode == 2) alpha = alpha * alphaMask;  // Multiply
         /// </code>
         /// Mode 0 never samples the mask and leaves the alpha term to the
-        /// caller. Mode 1 replaces it, which is provable only when no mask
-        /// texture is bound: the pinned source declares the <c>"white"</c>
-        /// default, so <c>mask.r</c> is exactly one and the expression collapses
-        /// to a constant. An assigned mask needs a red-channel texture field
-        /// AMUSE does not produce, and the Multiply, Add and Subtract modes each
-        /// combine a mask term the closed scalar vocabulary cannot express.
-        /// Every refusal records one scoped diagnostic naming the property that
-        /// could not be proven.
+        /// caller. Mode 1 replaces it. Mode 2 is the vendor's declared default,
+        /// so a material that never touched the mask section carries it (note
+        /// 7.3). With no mask bound, the pinned source declares the
+        /// <c>"white"</c> default, so <c>mask.r</c> is exactly one and the
+        /// expression collapses to a constant. Under Replace that constant is
+        /// the alpha. Under Multiply the chain stands unchanged exactly when
+        /// the constant is one, which covers the declared default pair (1, 0)
+        /// with invert off, and any other sub-one constant refuses, the role
+        /// the lilToon term names <c>MainUnchanged</c> and its sub-one
+        /// refusal. A bound mask proves through its red channel exactly under
+        /// the pairs whose binary32 arithmetic needs no texel threshold:
+        /// (1, 0), where the term is the sampled red alone or its one-minus
+        /// form under invert, and (1, value &gt;= 1), where the term saturates
+        /// to exactly one for both invert states. Under Replace the term is
+        /// the alpha. Under Multiply the term folds into the running chain
+        /// through the exact product machinery: the saturated pairs are a
+        /// constant one, so the chain stands unchanged, and the invert-off
+        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term is
+        /// a saturating difference, and a product with a saturating factor has
+        /// no association-invariant exact-one predicate, so it refuses naming
+        /// the mode property, exactly like the lilToon fold. The mask
+        /// coordinate is <c>uv[_AlphaMaskUV]</c> under the mask's own plain
+        /// affine with zero pan, and the sample rides the main sampler. Add
+        /// and Subtract and every other mode keep refusing, and so does every
+        /// other strength-value pair, because proving the saturate of
+        /// <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c> needs a
+        /// per-texel threshold envelope. Every refusal records one scoped
+        /// diagnostic naming the property that could not be proven.
         /// </summary>
-        /// <param name="replacesAlpha">
-        /// True only when the mask proved a constant that supersedes the base
-        /// alpha term; false on mode 0, where the caller continues.
+        /// <param name="replacement">
+        /// The proven Replace value, or null when the caller continues with
+        /// the base alpha term.
+        /// </param>
+        /// <param name="multiplier">
+        /// The admitted Multiply factor for the running chain, or null when
+        /// the mode contributes no factor.
         /// </param>
         private static bool TryInterpretAlphaMask(
             CapturedMaterialEvidence evidence,
             List<PoiyomiSemanticDiagnostic> diagnostics,
-            out bool replacesAlpha,
-            out float replacement)
+            out ScalarSemanticValue replacement,
+            out ScalarSemanticValue multiplier)
         {
-            replacesAlpha = false;
-            replacement = 0f;
+            replacement = null;
+            multiplier = null;
 
             if (!evidence.TryGetScalar(
                     MainAlphaMaskModeProperty, out var mode) ||
@@ -928,9 +1352,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return true;
             }
 
-            // Replace is the only interpreted mode. Multiply, Add and Subtract
-            // all combine a mask term the closed vocabulary cannot express.
-            if (mode != 1f)
+            // Replace and Multiply are the interpreted modes. Add and Subtract
+            // saturate a sum or a difference, and every other value is outside
+            // the vendor's own mode map.
+            if (mode != 1f && mode != 2f)
             {
                 AddDiagnostic(
                     diagnostics,
@@ -940,16 +1365,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            if (!evidence.TryGetTexture(AlphaMaskProperty, out var mask) ||
-                mask.IsAssigned)
-            {
-                AddDiagnostic(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskProperty);
-                return false;
-            }
+            var replace = mode == 1f;
 
             if (!evidence.TryGetScalar(
                     AlphaMaskBlendStrengthProperty, out var blendStrength) ||
@@ -986,26 +1402,346 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            // The unbound mask samples exactly one, so `mask.r * blendStrength`
-            // is exactly blendStrength and the shader's fused multiply-add
-            // cannot round differently from this addition. That argument is
-            // unavailable for a sampled mask, which is why it stays refused.
-            var sum = blendStrength + (invert ? -value : value);
-            var raw = Mathf.Clamp01(sum);
-            var alpha = invert ? 1f - raw : raw;
-            if (!IsFinite(sum) || !IsFinite(alpha))
+            if (!evidence.TryGetTexture(AlphaMaskProperty, out var mask))
             {
                 AddDiagnostic(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaMaskExpressionDetail);
+                    AlphaMaskProperty);
                 return false;
             }
 
-            replacesAlpha = true;
-            replacement = alpha;
-            return true;
+            if (!mask.IsAssigned)
+            {
+                // The unbound mask samples exactly one, so `mask.r * blendStrength`
+                // is exactly blendStrength and the shader's fused multiply-add
+                // cannot round differently from this addition.
+                var sum = blendStrength + (invert ? -value : value);
+                var raw = Mathf.Clamp01(sum);
+                var alpha = invert ? 1f - raw : raw;
+                if (!IsFinite(sum) || !IsFinite(alpha))
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskExpressionDetail);
+                    return false;
+                }
+
+                if (replace)
+                {
+                    replacement = ScalarSemanticValue.Constant(alpha);
+                    return true;
+                }
+
+                // Multiply against the unbound mask. The declared default pair
+                // (1, 0) with invert off makes the constant above exactly one,
+                // so the product is the chain itself and the chain stands
+                // unchanged, the role the lilToon term names MainUnchanged. A
+                // sub-one constant would need a constant-factor fold the
+                // lilToon mirror refuses too, so it refuses and names the
+                // first culprit in the declared diagnostic order.
+                if (alpha == 1f)
+                {
+                    return true;
+                }
+
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    blendStrength != 1f
+                        ? AlphaMaskBlendStrengthProperty
+                        : value != 0f
+                            ? AlphaMaskValueProperty
+                            : AlphaMaskInvertProperty);
+                return false;
+            }
+
+            // --- Bound mask: the red field route ---------------------------
+
+            // The coordinate selector must name a mesh UV set the proof
+            // carries. A fractional or out-of-range selector cannot be read
+            // as an exact channel.
+            if (!evidence.TryGetScalar(
+                    AlphaMaskUvProperty, out var rawChannel) ||
+                !IsFinite(rawChannel))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskUvProperty);
+                return false;
+            }
+
+            var channel = Mathf.RoundToInt(rawChannel);
+            if (channel < 0 || channel > 3 || channel != rawChannel)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskUvProperty);
+                return false;
+            }
+
+            // The vendor pans the coordinate over time by _AlphaMaskPan.xy.
+            // A nonzero or non-finite pan makes the coordinate drift, so
+            // only the exact zero vector proves.
+            if (!evidence.TryGetVector(
+                    AlphaMaskPanProperty, out var pan) ||
+                !IsFinite(pan) ||
+                pan.x != 0f || pan.y != 0f || pan.z != 0f || pan.w != 0f)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedUv,
+                    AlphaMaskPanProperty);
+                return false;
+            }
+
+            // The mask coordinate is the selected UV set under the mask's
+            // own scale and offset. That transform is a plain affine, so a
+            // non-identity mask ST proves, exactly like the lilToon mask
+            // rule this route mirrors. No identity demand applies.
+            if (!mask.HasScaleOffset ||
+                !IsFinite(mask.Scale) ||
+                !IsFinite(mask.Offset))
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    AlphaMaskProperty);
+                return false;
+            }
+
+            // The field route resolves the sample against the mask's stable
+            // project identity. A scene-only or otherwise unidentifiable
+            // mask carries no resolvable field.
+            if (mask.Texture == null || !mask.Texture.HasSourceIdentity)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnstableTextureIdentity,
+                    AlphaMaskProperty);
+                return false;
+            }
+
+            var mapping = new UvMapping(channel, mask.Scale, mask.Offset);
+
+            // The pair (1, 0). The vendor term with invert off is
+            // saturate(r * 1 + 0). Binary32 multiplies r by one exactly and
+            // adds zero exactly, and a normalized red sample sits in [0, 1],
+            // so the saturate is inert and the term is the sampled red
+            // itself. With invert on the vendor writes
+            // 1 - saturate(r * 1 - 0). The multiply and the subtract are
+            // exact by the same argument, the saturate is inert, and the
+            // term is the single subtraction 1 - r, which stays in [0, 1].
+            // The shape saturate(1 - r) below carries that value with an
+            // inert clamp.
+            if (blendStrength == 1f && value == 0f)
+            {
+                // The sample rides the main sampler, so the mask's own import
+                // state is irrelevant and the main texture's captured
+                // sampling is the fact. An unassigned main texture binds the
+                // engine default sampler, whose state is not a captured fact
+                // here, so the route fails closed.
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
+                        MainTextureProperty);
+                    return false;
+                }
+
+                // The value now depends on the sampling coordinate, so the
+                // parallax gate runs here, like every texture-backed alpha
+                // claim. applyParallax overwrites the UV set before the
+                // sample, which would make the coordinate view-dependent.
+                var samplingGate = FirstFailedZeroGate(
+                    evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                    return false;
+                }
+
+                var maskSample = new TextureSample(
+                    mask.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                var red = ScalarSemanticValue.Texture(
+                    maskSample, TextureChannel.Red);
+
+                if (!replace && invert)
+                {
+                    // The Multiply term is saturate(1 - r), a saturating
+                    // difference. A product with a saturating factor has no
+                    // association-invariant exact-one predicate, so the exact
+                    // product machinery refuses it and names the mode
+                    // property, exactly like the lilToon fold.
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainAlphaMaskModeProperty);
+                    return false;
+                }
+
+                if (replace)
+                {
+                    replacement = invert
+                        ? ScalarSemanticValue.SaturatingDifference(
+                            ScalarSemanticValue.Constant(1f), red)
+                        : red;
+                }
+                else
+                {
+                    multiplier = red;
+                }
+
+                return true;
+            }
+
+            // The provably saturated pair (1, value >= 1). Invert off: in
+            // exact arithmetic r * 1 + value >= value >= 1 for every red
+            // sample r >= 0, and binary32 rounding is monotone, so the
+            // fused or unfused sum stays at or above one and the saturate
+            // yields exactly one. Invert on: r * 1 - value <= 1 - value <= 0
+            // for r in [0, 1], so the saturate yields exactly zero and
+            // 1 - 0 is exactly one. Both invert states make the mask term
+            // the constant one and consult no texel of the mask. Replace
+            // writes that constant. Multiply folds it as a constant, so the
+            // running chain stands unchanged.
+            if (blendStrength == 1f && value >= 1f)
+            {
+                if (replace)
+                {
+                    replacement = ScalarSemanticValue.Constant(1f);
+                }
+
+                return true;
+            }
+
+            // Every other pair needs the deferred threshold-envelope
+            // contract: proving saturate(r * s + v) at one needs a per-texel
+            // predicate whose rounding argument is future work. The refusal
+            // names the first culprit, the strength when it leaves one and
+            // the value alone when the strength is exactly one.
+            AddDiagnostic(
+                diagnostics,
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                blendStrength != 1f
+                    ? AlphaMaskBlendStrengthProperty
+                    : AlphaMaskValueProperty);
+            return false;
+        }
+
+        /// <summary>
+        /// The exact product fold the Multiply mask mode shares with the
+        /// lilToon term. The exact-one predicate of a product of values
+        /// bounded in [0, 1] is association-invariant: every rounded chain of
+        /// sub-one factors stays strictly below one, and all-one factors
+        /// answer exactly one in every association, so the fold through the
+        /// constants and factor lists changes nothing provable. Returns null
+        /// after recording a refusal when either shape is a saturating sum or
+        /// difference, whose exact-one predicate is not
+        /// multiplication-invariant. The refusal names the mode property,
+        /// exactly like the lilToon fold.
+        /// </summary>
+        private static ScalarSemanticValue MultiplyAlphaValues(
+            ScalarSemanticValue baseChain,
+            ScalarSemanticValue maskFactor,
+            List<PoiyomiSemanticDiagnostic> diagnostics)
+        {
+            if (baseChain.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                baseChain.Kind ==
+                    ScalarSemanticValueKind.SaturatingDifference ||
+                maskFactor.Kind == ScalarSemanticValueKind.SaturatingSum ||
+                maskFactor.Kind ==
+                    ScalarSemanticValueKind.SaturatingDifference)
+            {
+                AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    MainAlphaMaskModeProperty);
+                return null;
+            }
+
+            var samples = new List<TextureSample>();
+            var channels = new List<TextureChannel>();
+            var multiplier = 1f;
+            multiplier = CollectProductFactors(
+                baseChain, samples, channels, multiplier);
+            multiplier = CollectProductFactors(
+                maskFactor, samples, channels, multiplier);
+
+            if (samples.Count == 0)
+            {
+                return ScalarSemanticValue.Constant(multiplier);
+            }
+
+            if (samples.Count == 1)
+            {
+                return ScalarSemanticValue.TextureTimesConstant(
+                    samples[0], channels[0], multiplier);
+            }
+
+            return ScalarSemanticValue.ProductChain(
+                samples, channels, multiplier);
+        }
+
+        private static float CollectProductFactors(
+            ScalarSemanticValue value,
+            List<TextureSample> samples,
+            List<TextureChannel> channels,
+            float multiplier)
+        {
+            switch (value.Kind)
+            {
+                case ScalarSemanticValueKind.Constant:
+                    return multiplier * value.GetConstantValue();
+                case ScalarSemanticValueKind.TextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier;
+                case ScalarSemanticValueKind.TextureSampleTimesConstant:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind
+                    .ProductChainOfTextureSamples:
+                    for (var index = 0;
+                         index < value.GetChainFactorCount();
+                         index++)
+                    {
+                        samples.Add(value.GetChainSample(index));
+                        channels.Add(value.GetChainChannel(index));
+                    }
+
+                    return multiplier * value.GetProductMultiplier();
+                default:
+                    throw new InvalidOperationException(
+                        "A saturating shape reached product factor " +
+                        "collection, which the caller must refuse first.");
+            }
         }
 
         /// <summary>
@@ -1616,7 +2352,35 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        private static MaterialEvidenceRequest CreateAlphaEvidenceRequest()
+        /// <summary>
+        /// The second family's own scalars and tint. The first family reads
+        /// none of them, so the plain Toon request combines without them. The
+        /// cutoff declaration rides the base request's main texture entry, so
+        /// the declaring and plain-clip bases carry the split choice and the
+        /// extras never carry one.
+        /// </summary>
+        private static MaterialEvidenceRequest CreateTwoPassAlphaEvidenceRequest(
+            MaterialEvidenceRequest baseRequest)
+        {
+            return MaterialEvidenceRequest.Combine(
+                baseRequest,
+                new MaterialEvidenceRequest(
+                    shaderName: false,
+                    activeColorSpace: false,
+                    presenceProperties: Array.Empty<string>(),
+                    scalarProperties: new[]
+                    {
+                        AlphaForceOpaque2Property,
+                        TwoPassModeProperty,
+                    },
+                    colorProperties: new[] { TwoPassColorProperty },
+                    vectorProperties: Array.Empty<string>(),
+                    textureProperties:
+                        Array.Empty<TexturePropertyEvidenceRequest>()));
+        }
+
+        private static MaterialEvidenceRequest CreateAlphaEvidenceRequest(
+            bool declareCutoutCutoff)
         {
             var scalars = new HashSet<string>(StringComparer.Ordinal)
             {
@@ -1628,6 +2392,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 AlphaMaskBlendStrengthProperty,
                 AlphaMaskValueProperty,
                 AlphaMaskInvertProperty,
+                AlphaMaskUvProperty,
+
+                // The preset selector and the clip threshold of the pinned
+                // source (note 4.5, note 4.6). The interpretation branches on
+                // the preset: the cutout value admits the split route, every
+                // other value keeps the exact-one rules. Both scalars are
+                // captured unconditionally, so one request serves every
+                // preset and the branch reads captured facts only.
+                ModeProperty,
+                CutoffProperty,
                 SrcBlendProperty,
                 DstBlendProperty,
                 BlendOpProperty,
@@ -1650,22 +2424,37 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
                 colorProperties: new[] { ColorProperty },
-                vectorProperties: new[] { MainTexPanProperty },
+                vectorProperties: new[] { MainTexPanProperty, AlphaMaskPanProperty },
                 textureProperties: new[]
                 {
+                    // The cutout split's capture declaration: when the
+                    // material's own predicate declares the cutoff, the
+                    // capture binarizes the alpha field by the _Cutoff value,
+                    // so byte 255 means the texel survives the vendor's
+                    // unconditional clip (note 4.5). The declaration is the
+                    // lilToon cutout pattern. The per-material predicate
+                    // decides whether it applies: a non-cutout preset keeps
+                    // the exact-255 field the exact-one rule reads.
                     new TexturePropertyEvidenceRequest(
                         MainTextureProperty,
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel),
+                        TextureEvidenceKinds.AlphaChannel,
+                        declareCutoutCutoff ? CutoffProperty : null),
 
-                    // Assignment only. The Replace equation is provable exactly
-                    // when no mask is bound, so the mask is never sampled and
-                    // no further texture fact is consumed. Requesting more would
-                    // be unused evidence and would widen animation relevance.
+                    // The bound Replace mask proves through its red channel, so
+                    // the request gathers exactly what the red-field route reads:
+                    // the mask's own scale and offset for the plain affine, the
+                    // stable project identity, and the red field itself. The
+                    // sampling is never asked of the mask: the vendor mask block
+                    // samples the mask through the main sampler, whose state the
+                    // main-texture request above already carries.
                     new TexturePropertyEvidenceRequest(
-                        AlphaMaskProperty, TextureEvidenceKinds.None),
+                        AlphaMaskProperty,
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.RedChannel),
                 });
         }
 

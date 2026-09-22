@@ -414,6 +414,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaDithering",
             "_EnableDissolve",
             "_EnableUDIMDiscardOptions",
+            "_BSSEnabled",
         };
 
         // Enabled writers/masks that modify the non-forced alpha term.
@@ -429,7 +430,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaAudioLinkEnabled",
             "_EnableAudioLink",
             "_AlphaGlobalMask",
-            "_AlphaPremultiply",
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
             "_DecalEnabled",
@@ -659,6 +659,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 property);
         }
 
+        // --- Falsifier 1: enabled module over an exactly-one domain ---------
+
+        /// <summary>
+        /// The Beat Saber module toggle turns on a post-clip alpha writer: the
+        /// pass rewrites alpha as alpha = alpha * emission.z and rewrites the
+        /// alpha blend pair. The color alpha here is exactly one on the whole
+        /// domain, so a wrong implementation that ignores the module proves
+        /// the base chain on every triangle. The alpha output must stay
+        /// unknown and name the module property.
+        /// </summary>
+        [Test]
+        public void BeatSaberModuleEnabled_KeepsAlphaUnknownNamingTheProperty()
+        {
+            // No-op guard: with the module off the same exactly-one domain
+            // proves, so the refusal below comes from the module gate.
+            AssertOutputComplete(
+                Interpret(NonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
+
+            var material = NonForcedMaterial();
+            material.SetFloat("_BSSEnabled", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_BSSEnabled");
+        }
+
+        // --- Falsifier 2: enabled module under force-opaque -----------------
+
+        /// <summary>
+        /// The coverage gate run precedes the forced-opaque short-circuit, so
+        /// an enabled module refuses the forced path too. A wrong
+        /// implementation that gates only the non-forced path proves the
+        /// forced material as a constant one.
+        /// </summary>
+        [Test]
+        public void BeatSaberModuleEnabled_WithForcedOpaque_StillRefuses()
+        {
+            // No-op guard: without the module the forced material proves the
+            // constant, so the refusal below comes from the module gate.
+            AssertOutputComplete(
+                Interpret(NewFixtureMaterial()), PoiyomiSemanticOutput.Alpha);
+
+            var material = NewFixtureMaterial();
+            material.SetFloat("_BSSEnabled", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_BSSEnabled");
+        }
+
         [Test]
         public void AlphaFeatureGateEnabled_IsUnsupportedFeature(
             [ValueSource(nameof(AlphaFeatureGates))] string property)
@@ -671,6 +725,129 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 property);
+        }
+
+        // --- Premultiply admission -----------------------------------------
+
+        /// <summary>
+        /// The vendor premultiply feature scales the base color by
+        /// saturate(alpha) in three passes and never writes the alpha value
+        /// (note 4.3, vendor lines 30216, 47274, 58331). The proof only moves
+        /// triangles whose alpha is exactly 1, so the factor is exactly 1 on
+        /// the whole proven domain and the feature is an identity there. The
+        /// alpha output must complete and carry no premultiply diagnostic. A
+        /// wrong implementation that keeps the committed alpha gate refuses
+        /// by name.
+        /// </summary>
+        [Test]
+        public void Premultiply_On_WithProvenExactlyOneDomain_CompletesAlpha()
+        {
+            // No-op guard: without the feature the same exactly-one domain
+            // proves. A refusal below can only come from the premultiply
+            // gate.
+            AssertOutputComplete(
+                Interpret(NonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
+
+            var material = NonForcedMaterial();
+            material.SetFloat("_AlphaPremultiply", 1f);
+
+            var result = Interpret(material);
+
+            AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
+            var value = result.Semantics.Alpha.GetCompleteValue();
+            Assert.That(
+                value.Kind, Is.EqualTo(ScalarSemanticValueKind.Constant));
+            Assert.That(value.GetConstantValue(), Is.EqualTo(1f));
+        }
+
+        // --- Falsifier 1: sub-one domain under premultiply ------------------
+
+        /// <summary>
+        /// Admission rests on the exactly-one premise. A material with
+        /// premultiply on and a sub-one color alpha must prove no triangle.
+        /// The vendor factor saturate(alpha) is below 1 there, so the alpha
+        /// value itself stays sub-one. A wrong implementation that lets a
+        /// sub-one region prove by editing the alpha value instead of only
+        /// the gate list fails here at the classification seam.
+        /// </summary>
+        [Test]
+        public void Premultiply_On_SubOneDomain_NeverProvesATriangle()
+        {
+            // No-op guard: without the feature the same sub-one domain stays
+            // unproven. The answer below comes from the alpha value alone.
+            var ungated = NonForcedMaterial();
+            ungated.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            Assert.That(
+                ClassifyAlphaTriangle(ungated),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            var material = NonForcedMaterial();
+            material.SetFloat("_AlphaPremultiply", 1f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+
+            Assert.That(
+                ClassifyAlphaTriangle(material),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        /// <summary>
+        /// Admission removes the premultiply entry from the alpha gate list
+        /// only. The vendor premultiply scales the color per pixel, so the
+        /// base-color equation genuinely changes and its gate stays closed.
+        /// A wrong implementation that drops the entry from both arrays lets
+        /// the base-color output complete for a premultiply material.
+        /// </summary>
+        [Test]
+        public void Premultiply_StillGatesBaseColor()
+        {
+            // No-op guard: without the feature the base-color output
+            // completes. The refusal below comes from the premultiply gate.
+            AssertOutputComplete(
+                Interpret(NonForcedMaterial()),
+                PoiyomiSemanticOutput.BaseColor);
+
+            var material = NonForcedMaterial();
+            material.SetFloat("_AlphaPremultiply", 1f);
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.BaseColor,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                "_AlphaPremultiply");
+        }
+
+        // Resolves one material's proven alpha through the classification
+        // seam the fixture machinery already exposes.
+        private static TriangleAlphaOutcome ClassifyAlphaTriangle(
+            Material material)
+        {
+            var result = Interpret(material);
+            AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
+
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    result.Semantics.Alpha.GetCompleteValue()),
+                RefusingFieldProvider,
+                0);
+            Assert.That(resolution.IsResolved, Is.True);
+            return resolution.Classify(TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.05f, 0.15f),
+                new Vector2(0.1f, 0.15f),
+                new Vector2(0.05f, 0.2f)));
+        }
+
+        // A constant alpha never consults the field provider. A call would
+        // mean the proven value is not the expected constant, so refuse.
+        private static bool RefusingFieldProvider(
+            TextureSourceId source,
+            TextureChannel channel,
+            out AlphaMipChain chain)
+        {
+            chain = default;
+            return false;
         }
 
         // --- Binary-value and sample failures ------------------------------

@@ -460,6 +460,17 @@ namespace Alrauna.Amuse.Editor.Build
                 "Turn off Allow Depth Test Change on Moved Triangles to " +
                 "keep materials with a special depth rule on their " +
                 "original material.",
+            ["amuse.slotSeparation.PremultiplyNormalization"] =
+                "AMUSE separated material slot {0} of renderer '{1}'.",
+            ["amuse.slotSeparation.PremultiplyNormalization:description"] =
+                "AMUSE moved the proven-opaque triangles of material " +
+                "slot {0} of renderer '{1}' onto an opaque material. " +
+                "The source material scaled its color by alpha. " +
+                "The proof moves only triangles whose alpha is exactly " +
+                "one. The opaque material reproduces those colors exactly.",
+            ["amuse.slotSeparation.PremultiplyNormalization:hint"] =
+                "No action is needed. The moved triangles keep their " +
+                "colors exactly.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
@@ -615,6 +626,17 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string SlotSeparationDivergenceKey
         {
             get { return Prefix + "slotSeparation.DepthTestDivergence"; }
+        }
+
+        /// <summary>
+        /// The report key for one prepared slot whose conversion used
+        /// the revised premultiply premise. The report names the slot,
+        /// the renderer, and its own fixed sentence that states the
+        /// normalization fact. The depth sentence stays depth-only.
+        /// </summary>
+        internal static string SlotSeparationPremultiplyNormalizationKey
+        {
+            get { return Prefix + "slotSeparation.PremultiplyNormalization"; }
         }
     }
 }

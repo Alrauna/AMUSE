@@ -1,12 +1,14 @@
 // Original AMUSE test fixture. It reproduces only the Poiyomi 9.3.64 property
 // NAMES, types, and defaults that the verified interpreter reads, so tests can
-// build a schema-complete material without installing Poiyomi. It deliberately
-// contains none of Poiyomi's shading equations; the SubShader is a trivial
-// unlit pass whose only job is to compile so a Material can exist. This shader
-// never passes source attestation (its source hash is not the pinned hash); it
-// is exercised through the InterpretVerifiedMaterial seam and the extraction
-// helpers directly.
-Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
+// build a schema-complete material without installing Poiyomi. This variant
+// stands in for the Two Pass generated shader: it adds the second family's
+// tint and force-opaque flag beside the shared first-family properties. It
+// deliberately contains none of Poiyomi's shading equations; the SubShader is
+// a trivial unlit pass whose only job is to compile so a Material can exist.
+// This shader never passes source attestation (its source hash is not the
+// pinned hash); it is exercised through the InterpretVerifiedTwoPassMaterial
+// seam, the verified-fixture build seams, and the extraction helpers directly.
+Shader "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest"
 {
     Properties
     {
@@ -30,8 +32,13 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _BumpMapStochastic ("Normal Stochastic", Float) = 0
         _BumpScale ("Normal Scale", Float) = 1
 
-        // Alpha.
+        // Alpha. The second family reads _TwoPassColor.a where the first
+        // family reads _Color.a, and carries its own force-opaque flag. The
+        // first family's properties stay shared with the plain fixture, so
+        // the alpha equation rows carry over unchanged.
         _AlphaForceOpaque ("Force Opaque", Float) = 1
+        _AlphaForceOpaque2 ("Force Opaque Two Pass", Float) = 1
+        _TwoPassColor ("Two Pass Color", Color) = (1,1,1,1)
         _AlphaMod ("Alpha Mod", Float) = 0
         _MainAlphaMaskMode ("Alpha Mask Mode", Float) = 2
         _AlphaMask ("Alpha Mask", 2D) = "white" {}
@@ -136,6 +143,12 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         // here, and the range must stay vendor-faithful.
         [Enum(Opaque,0,Cutout,1,Fade,2,Transparent,3)] _Mode ("Rendering Mode", Float) = 0
         _Cutoff ("Alpha Cutoff", Range(0, 1.001)) = 0.5
+
+        // The second family's own preset selector (Two Pass source line
+        // 68110). The cutout value forces the second family's alpha to 1
+        // after the shared clip, so the interpretation reads it beside
+        // _Mode with the same fail-closed treatment.
+        _ModeTwoPass ("Two Pass Rendering Mode", Float) = 0
 
         // Base pass blend state.
         _BlendOp ("RGB Blend Op", Int) = 0

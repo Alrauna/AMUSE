@@ -85,7 +85,7 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 - `Packages/manifest.json` and `Packages/vpm-manifest.json` — Unity and VPM dependencies
 - `Packages/.gitignore` — the whitelist that decides which embedded packages are tracked
 - `Tools/Bootstrap-NdmfStandalone.ps1` — materializes NDMF `Dependencies~` into `Dependencies/`, pinned to NDMF 1.14.4
-- `.omp/RULES.md` — sticky session rules: no absolute paths, no private identifiers, ASD-STE100 style
+- `.omp/RULES.md` — sticky session rules: no absolute paths, no private identifiers, simple-english
 
 ## Runtime/Tooling Preferences
 
