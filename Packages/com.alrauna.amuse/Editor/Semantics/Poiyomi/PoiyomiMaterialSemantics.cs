@@ -60,9 +60,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
+
+        // The Two Pass second family reads this tint's alpha where the plain
+        // base reads _Color.a (note 4.1, vendor line 29785).
+        private const string TwoPassColorProperty = "_TwoPassColor";
         private const string MainTexUvProperty = "_MainTexUV";
         private const string MainTexPanProperty = "_MainTexPan";
         private const string AlphaForceOpaqueProperty = "_AlphaForceOpaque";
+
+        // The Two Pass shader declares a separate force-opaque flag for its
+        // second family (note 4.4, Two Pass source line 862).
+        private const string AlphaForceOpaque2Property = "_AlphaForceOpaque2";
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
         private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
         private const string AlphaMaskProperty = "_AlphaMask";
@@ -251,6 +259,27 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
             CreateAlphaEvidenceRequest();
 
+        /// <summary>
+        /// The Two Pass family's own alpha request: the plain request plus
+        /// exactly the second family's tint and its force-opaque flag. The
+        /// plain Toon request stays without them, so a plain material keeps
+        /// capturing without any second-family scalar. The interpreter reads
+        /// the second-family scalars only through the Two Pass entry points,
+        /// which only this request feeds.
+        /// </summary>
+        internal static MaterialEvidenceRequest TwoPassAlphaEvidenceRequest { get; } =
+            MaterialEvidenceRequest.Combine(
+                AlphaEvidenceRequest,
+                new MaterialEvidenceRequest(
+                    shaderName: false,
+                    activeColorSpace: false,
+                    presenceProperties: Array.Empty<string>(),
+                    scalarProperties: new[] { AlphaForceOpaque2Property },
+                    colorProperties: new[] { TwoPassColorProperty },
+                    vectorProperties: Array.Empty<string>(),
+                    textureProperties:
+                        Array.Empty<TexturePropertyEvidenceRequest>()));
+
         private static MaterialEvidenceRequest FullMaterialEvidenceRequest { get; } =
             MaterialEvidenceRequest.Combine(
                 AlphaEvidenceRequest,
@@ -335,7 +364,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return InterpretVerifiedMaterial(
                 material,
                 QualitySettings.activeColorSpace,
-                captured);
+                captured,
+                false);
         }
 
         /// <summary>
@@ -356,13 +386,36 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
             })[0];
             return InterpretVerifiedMaterial(
-                material, activeColorSpace, captured);
+                material, activeColorSpace, captured, false);
+        }
+
+        /// <summary>
+        /// Narrow friend-test seam for the Two Pass family. Captures with the
+        /// Two Pass request, so the second-family scalars are gathered, and
+        /// interprets the alpha output the way the Two Pass family dispatch
+        /// does. The other outputs read the material directly and do not
+        /// depend on the request.
+        /// </summary>
+        internal static PoiyomiSemanticResult InterpretVerifiedTwoPassMaterial(
+            Material material,
+            ColorSpace activeColorSpace)
+        {
+            RequireAnalyzableMaterial(material);
+
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material, TwoPassAlphaEvidenceRequest),
+            })[0];
+            return InterpretVerifiedMaterial(
+                material, activeColorSpace, captured, true);
         }
 
         private static PoiyomiSemanticResult InterpretVerifiedMaterial(
             Material material,
             ColorSpace activeColorSpace,
-            CapturedMaterialEvidence captured)
+            CapturedMaterialEvidence captured,
+            bool interpretSecondAlphaFamily)
         {
             // A verified material is a supported material; each output is proven
             // independently and stays Unknown, with a diagnostic, when its
@@ -371,7 +424,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var baseColor = InterpretBaseColor(
                 material, activeColorSpace, diagnostics);
-            var alpha = InterpretAlpha(captured, diagnostics);
+            var alpha = InterpretAlpha(
+                captured, interpretSecondAlphaFamily, diagnostics);
             var emission = InterpretEmission(
                 material, activeColorSpace, diagnostics);
             var normal = InterpretNormal(material, diagnostics);
@@ -681,11 +735,30 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return InterpretAlpha(
-                evidence, new List<PoiyomiSemanticDiagnostic>());
+                evidence, false, new List<PoiyomiSemanticDiagnostic>());
+        }
+
+        /// <summary>
+        /// The Two Pass family's alpha entry point. The dispatched family
+        /// guarantees the Two Pass request, whose scalar set names
+        /// <c>_AlphaForceOpaque2</c>, so the second-family reads below are
+        /// evidence-backed rather than unrequested.
+        /// </summary>
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
+            CapturedMaterialEvidence evidence)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            return InterpretAlpha(
+                evidence, true, new List<PoiyomiSemanticDiagnostic>());
         }
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
             CapturedMaterialEvidence evidence,
+            bool interpretSecondAlphaFamily,
             List<PoiyomiSemanticDiagnostic> diagnostics)
         {
             var coverageGate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
@@ -740,14 +813,91 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     SrcBlend2Property);
             }
 
+            // The Two Pass shader draws two Base passes. The first family
+            // reads _Color.a and forces alpha to 1 through its own
+            // _AlphaForceOpaque flag (note 4.1 vendor line 29780, note 4.4
+            // vendor line 30366). The second family reads _TwoPassColor.a
+            // (note 4.1 vendor line 29785) and forces alpha to 1 through its
+            // own _AlphaForceOpaque2 flag (note 4.4 Two Pass source line
+            // 862), with the same chain otherwise. The rendered pixel keeps
+            // an exactly-one alpha only when every family the material draws
+            // proves exactly one, so a Two Pass claim completes only through
+            // the conjunction of the two single-family claims below. A
+            // family that completes with any other term refuses the whole
+            // claim and names its own tint, because that tint is where the
+            // family's alpha value is decided. A family whose chain cannot
+            // prove keeps its own recorded diagnostic.
+            var first = InterpretSingleFamilyAlpha(
+                evidence,
+                AlphaForceOpaqueProperty,
+                ColorProperty,
+                diagnostics);
+            if (!interpretSecondAlphaFamily)
+            {
+                return first;
+            }
+
+            if (!IsCompletedExactlyOne(first))
+            {
+                if (first.IsComplete)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        ColorProperty);
+                }
+
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            var second = InterpretSingleFamilyAlpha(
+                evidence,
+                AlphaForceOpaque2Property,
+                TwoPassColorProperty,
+                diagnostics);
+            if (!IsCompletedExactlyOne(second))
+            {
+                if (second.IsComplete)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        TwoPassColorProperty);
+                }
+
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Constant(1f));
+        }
+
+        /// <summary>
+        /// The claim one drawn family makes: the family's own force-opaque
+        /// flag read with the same exact-binary gate read as the plain path,
+        /// then the shared chain whose base tint is
+        /// <paramref name="baseColorProperty"/>. The second Base pass reuses
+        /// the first pass's alpha chain, so the feature gates, the mask
+        /// interpretation, and the texture term are the vendor facts the
+        /// plain path already proves, and nothing else is parameterized.
+        /// </summary>
+        private static SemanticOutput<ScalarSemanticValue>
+            InterpretSingleFamilyAlpha(
+            CapturedMaterialEvidence evidence,
+            string forceOpaqueProperty,
+            string baseColorProperty,
+            List<PoiyomiSemanticDiagnostic> diagnostics)
+        {
             if (!TryReadBinary(
-                    evidence, AlphaForceOpaqueProperty, out var forceOpaque))
+                    evidence, forceOpaqueProperty, out var forceOpaque))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    AlphaForceOpaqueProperty);
+                    forceOpaqueProperty);
             }
 
             if (forceOpaque)
@@ -776,7 +926,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             // Replace discards the base term outright, so _MainIgnoreTexAlpha,
-            // _Color.a and _MainTex cannot reach the result and are not read.
+            // the tint alpha and _MainTex cannot reach the result and are not
+            // read.
             if (maskReplacement != null)
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
@@ -793,14 +944,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     IgnoreMainTexAlphaProperty);
             }
 
-            if (!evidence.TryGetColor(ColorProperty, out var color) ||
+            if (!evidence.TryGetColor(baseColorProperty, out var color) ||
                 !IsFinite(color.a))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    ColorProperty);
+                    baseColorProperty);
             }
 
             var colorAlpha = color.a;
@@ -869,6 +1020,21 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return SemanticOutput<ScalarSemanticValue>.Complete(baseChain);
+        }
+
+        /// <summary>
+        /// True only when a family claim completed as the exact constant one,
+        /// the only value a two-family conjunction may compose into a
+        /// material claim. Any other completed term, and any unknown output,
+        /// keeps the whole claim refused.
+        /// </summary>
+        private static bool IsCompletedExactlyOne(
+            SemanticOutput<ScalarSemanticValue> output)
+        {
+            return output.IsComplete &&
+                output.GetCompleteValue().Kind ==
+                ScalarSemanticValueKind.Constant &&
+                output.GetCompleteValue().GetConstantValue() == 1f;
         }
 
         /// <summary>

@@ -39,8 +39,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <c>LilToonTransparent</c>, each with the combined
         /// alpha/conversion capture schema. Both opaque stand-ins select
         /// ordinary <c>LilToon</c> with its alpha-only request. The Poiyomi
-        /// stand-in delegates to the existing Poiyomi seam; anything else
-        /// selects nothing.
+        /// stand-in delegates to the existing Poiyomi seam, and the Two Pass
+        /// stand-in selects the Two Pass family with the Two Pass request,
+        /// whose capture schema is the alpha request alone because
+        /// conversion never admits the family. Anything else selects
+        /// nothing.
         /// </summary>
         internal static bool SelectVerifiedFixtureRequest(
             Material material,
@@ -91,6 +94,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     out captureSchema);
             }
 
+            if (UsesFixtureShader(
+                    material, PoiyomiFixtureShaderNames.TwoPassFixture))
+            {
+                family = CapturedAlphaMaterialFamily.PoiyomiTwoPass;
+                alphaRelevance =
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest;
+                captureSchema =
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest;
+                return true;
+            }
+
             family = CapturedAlphaMaterialFamily.Unsupported;
             alphaRelevance = null;
             captureSchema = null;
@@ -136,6 +150,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .GatherAlphaSourceEvidence(
                                 shaders[index], evidence[index]);
                         break;
+                    case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                        // Both Poiyomi identities verify through one
+                        // conjunction, so the gather is the same function
+                        // the plain family uses.
+                        poiyomi = PoiyomiMaterialSemantics
+                            .GatherAlphaSourceEvidence(
+                                shaders[index], evidence[index]);
+                        break;
                     case CapturedAlphaMaterialFamily.LilToon:
                         lilToon = LilToonSourceAttestation.GatherSourceEvidence(
                             shaders[index], evidence[index]);
@@ -174,6 +196,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     return new MaterialSemantics(
                         SemanticOutput<ColorSemanticValue>.Unknown(),
                         PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                            material.Evidence),
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown());
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    return new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        PoiyomiMaterialSemantics.InterpretVerifiedTwoPassAlpha(
                             material.Evidence),
                         SemanticOutput<ColorSemanticValue>.Unknown(),
                         SemanticOutput<NormalSemanticValue>.Unknown());
@@ -334,6 +363,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private sealed class PoiyomiFixtureShaderNames : PoiyomiFixtureTestBase
         {
             internal const string Fixture = FixtureShaderName;
+            internal const string TwoPassFixture = TwoPassFixtureShaderName;
         }
     }
 }

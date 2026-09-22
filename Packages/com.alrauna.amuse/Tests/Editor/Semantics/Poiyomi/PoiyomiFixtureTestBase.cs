@@ -22,6 +22,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     {
         protected const string FixtureShaderName =
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
+        protected const string TwoPassFixtureShaderName =
+            "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest";
         protected const string TempFolder = "Assets/AmuseTests_Temp";
 
         private readonly List<UnityEngine.Object> _transient =
@@ -74,6 +76,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 shader,
                 Is.Not.Null,
                 $"Test fixture shader '{FixtureShaderName}' must import.");
+            return new Material(shader);
+        }
+
+        protected Material NewTwoPassFixtureMaterial()
+        {
+            return Track(CreateTwoPassVerifiedMaterial());
+        }
+
+        /// <summary>
+        /// A material of the Two Pass stand-in shader: the plain fixture's
+        /// property set plus the second family's tint and force-opaque flag.
+        /// </summary>
+        internal static Material CreateTwoPassVerifiedMaterial()
+        {
+            var shader = Shader.Find(TwoPassFixtureShaderName);
+            Assert.That(
+                shader,
+                Is.Not.Null,
+                $"Test fixture shader '{TwoPassFixtureShaderName}' must import.");
             return new Material(shader);
         }
 
