@@ -420,7 +420,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // Enabled writers/masks that modify the non-forced alpha term.
         // _MainAlphaMaskMode is deliberately absent: it is no longer an
         // exact-off gate but an interpreted mode, so PoiyomiAlphaMaskTests owns
-        // its supported and refused cases.
+        // its supported and refused cases. The four decal slots are absent:
+        // PoiyomiDecalSlotAlphaTests owns their per-slot inert proof.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
@@ -432,10 +433,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaGlobalMask",
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
-            "_DecalEnabled",
-            "_DecalEnabled1",
-            "_DecalEnabled2",
-            "_DecalEnabled3",
             "_EnableFlipbook",
             "_EnableRimLighting",
             "_EnableRim2Lighting",

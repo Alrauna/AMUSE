@@ -102,6 +102,11 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest"
         _DecalEnabled1 ("Decal 1", Float) = 0
         _DecalEnabled2 ("Decal 2", Float) = 0
         _DecalEnabled3 ("Decal 3", Float) = 0
+        _DecalOverrideAlpha ("Decal 0 Alpha Blend Mode", Float) = 0
+        _DecalOverrideAlpha1 ("Decal 1 Alpha Blend Mode", Float) = 0
+        _DecalOverrideAlpha2 ("Decal 2 Alpha Blend Mode", Float) = 0
+        _DecalOverrideAlpha3 ("Decal 3 Alpha Blend Mode", Float) = 0
+        _ALDecalControlsAlpha ("AL Decal Controls Alpha", Float) = 0
         _EnableAniso ("Anisotropic", Float) = 0
         _MatcapEnable ("Matcap 1", Float) = 0
         _Matcap2Enable ("Matcap 2", Float) = 0
