@@ -189,6 +189,125 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "selection must hand back the family's existing request");
         }
 
+        [Test]
+        public void TwoPassUnlockedName_RoutesToPoiyomiFamily()
+        {
+            // The Two Pass identity is attested but was unrouted: the
+            // committed selection answered unsupported for the unlocked
+            // clone's name. The routed member carries its own request, and
+            // the capture schema is that request alone, because conversion
+            // never admits this family so there is no conversion request to
+            // union.
+            var material = NewMaterial(
+                "selected-two-pass.shader",
+                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
+                PoiyomiTwoPassProperties());
+
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out var family, out var request, out var captureSchema);
+
+            Assert.That(selected, Is.True,
+                "the Two Pass name must select, not classify unsupported");
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.PoiyomiTwoPass));
+            Assert.That(
+                request,
+                Is.SameAs(
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest),
+                "selection must hand back the Two Pass family's own request");
+            Assert.That(
+                captureSchema,
+                Is.SameAs(
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest),
+                "conversion never admits this family, so the capture " +
+                "schema is the alpha request alone");
+
+            // The Two Pass request is the plain request plus exactly the two
+            // second-family scalars: the second tint and the second
+            // force-opaque flag.
+            Assert.That(
+                PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest
+                    .ScalarProperties,
+                Has.Member("_AlphaForceOpaque2"));
+            Assert.That(
+                PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest
+                    .ColorProperties,
+                Has.Member("_TwoPassColor"));
+            foreach (var scalar in PoiyomiMaterialSemantics
+                         .AlphaEvidenceRequest.ScalarProperties)
+            {
+                Assert.That(
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest
+                        .ScalarProperties,
+                    Has.Member(scalar),
+                    "the Two Pass request must keep every plain scalar: " +
+                    scalar);
+            }
+
+            foreach (var color in PoiyomiMaterialSemantics
+                         .AlphaEvidenceRequest.ColorProperties)
+            {
+                Assert.That(
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest
+                        .ColorProperties,
+                    Has.Member(color),
+                    "the Two Pass request must keep every plain color: " +
+                    color);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 2: plain capture unchanged ---
+        /// A plain Toon material captures without the second-family scalars,
+        /// byte for byte the committed request shape. A shared request that
+        /// demanded second-family scalars from every Poiyomi material would
+        /// fail the unrequested-name throws and the request membership pins.
+        /// </summary>
+        [Test]
+        public void PlainToon_StillCapturesWithoutSecondFamilyScalars()
+        {
+            var material = NewMaterial(
+                "plain-capture-guard.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { material });
+
+            Assert.That(captured.Count, Is.EqualTo(1));
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+
+            // The plain request never names the second-family scalars, so a
+            // plain capture never gathers them and any read is the
+            // unrequested-name defect, exactly like a foreign property name.
+            Assert.Throws<ArgumentException>(() =>
+                captured[0].Evidence.TryGetScalar("_AlphaForceOpaque2", out _));
+            Assert.Throws<ArgumentException>(() =>
+                captured[0].Evidence.TryGetColor("_TwoPassColor", out _));
+
+            // And the committed request vocabulary itself stays free of the
+            // second family.
+            Assert.That(
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest
+                    .ScalarProperties,
+                Has.No.Member("_AlphaForceOpaque2"));
+            Assert.That(
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest
+                    .ColorProperties,
+                Has.No.Member("_TwoPassColor"));
+
+            // The family map still hands back the committed static, so the
+            // capture shape cannot drift for the plain Toon name.
+            var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                material, out _, out var alphaRelevance, out _);
+            Assert.That(selected, Is.True);
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+        }
+
         /// <summary>
         /// The one-pass and two-pass transparent shaders and their outline
         /// wrappers are admitted identities of the transparent family (S9):
@@ -1037,6 +1156,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _MainTexPan (""Pan"", Vector) = (0,0,0,0)
         _MainPixelMode (""Pixel"", Float) = 0
         _MainTexStochastic (""Stochastic"", Float) = 0";
+        }
+
+        /// <summary>
+        /// The Two Pass stand-in property block: the plain block plus the
+        /// second family's tint and force-opaque flag, so the routed Two
+        /// Pass request finds both scalars on the material.
+        /// </summary>
+        private static string PoiyomiTwoPassProperties()
+        {
+            return PoiyomiProperties() + @"
+        _AlphaForceOpaque2 (""Force Opaque Two Pass"", Float) = 1
+        _TwoPassColor (""Two Pass Color"", Color) = (1,1,1,1)";
         }
     }
 }

@@ -954,6 +954,99 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Task 5: the Two Pass family conversion boundary ---------------
+
+        [Test]
+        public void TwoPass_ConversionRefusesByName()
+        {
+            // The plain conversion recipe was derived from the plain
+            // shader's own preset metadata, so running it on a Two Pass
+            // material would rest on a premise nobody derived. The family
+            // keeps refusing through the existing unsupported-family name,
+            // and the verified-fixture conversion seam must never be
+            // invoked, which is the no-op guard against a plain-recipe run
+            // on a Two Pass material.
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE two pass conversion refused");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            var conversionInvocations = 0;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                material = PoiyomiFixtureTestBase.CreateTwoPassVerifiedMaterial();
+                material.SetFloat("_AlphaForceOpaque", 1f);
+                material.SetFloat("_AlphaForceOpaque2", 1f);
+                AddSingleTriangleRenderer(root, material, out mesh);
+
+                VerifiedPoiyomiConversion conversion =
+                    (Material live, CapturedMaterialEvidence derived,
+                     bool allowDepthTestChange,
+                     Material preparedOpaque,
+                     out Material opaque,
+                     out PoiyomiOpaqueConversionRefusal refusal,
+                     out bool depthTestDivergence) =>
+                    {
+                        conversionInvocations++;
+                        return VerifiedPoiyomiTestSeams.VerifiedConversion(
+                            live, derived, allowDepthTestChange,
+                            preparedOpaque, out opaque, out refusal,
+                            out depthTestDivergence);
+                    };
+
+                amuse = RunBarrier(root, poiyomiConversion: conversion);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the slot must be an opaque " +
+                    "candidate, or the conversion refusal proves nothing");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionUnsupportedFamily),
+                    Is.EqualTo(1),
+                    "the Two Pass family must refuse conversion through " +
+                    "the existing unsupported-family name");
+                Assert.That(
+                    conversionInvocations, Is.Zero,
+                    "the plain recipe must never run on a Two Pass " +
+                    "material");
+                Assert.That(amuse.Separation, Is.Null,
+                    "the only candidate slot was refused, so nothing is " +
+                    "retained");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None ||
+                        reason == AlphaSeparationSlotRefusal
+                            .OpaqueConversionUnsupportedFamily)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(reason), Is.Zero,
+                        "no other reason may be recorded: " + reason);
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null) UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+
         // --- Defect B regression: overwrite refusal precedes conversion -----
 
         [Test]

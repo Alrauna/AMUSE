@@ -13,6 +13,16 @@ namespace Alrauna.Amuse.Editor.Semantics
     {
         Unsupported,
         Poiyomi,
+
+        /// <summary>
+        /// The Two Pass generated shader of the pinned Poiyomi frontend. It
+        /// routes through the Poiyomi interpreter with its own request, whose
+        /// second-family scalars the plain request never names. Opaque
+        /// conversion refuses for this family through the existing
+        /// unsupported-family default, because the plain conversion recipe
+        /// was derived from the plain shader's own preset metadata.
+        /// </summary>
+        PoiyomiTwoPass,
         LilToon,
         LilToonCutout,
         LilToonTransparent,
@@ -317,6 +327,12 @@ namespace Alrauna.Amuse.Editor.Semantics
                     alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
                         captured.Evidence);
                     break;
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    // The same struct guarantee holds, and the consent
+                    // covers the identity risk for both Poiyomi identities.
+                    alpha = PoiyomiMaterialSemantics
+                        .InterpretVerifiedTwoPassAlpha(captured.Evidence);
+                    break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null)
                     {
@@ -411,8 +427,12 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 var poiyomi = default(PoiyomiSourceEvidence);
                 LilToonSourceEvidence lilToon = null;
-                if (families[index] == CapturedAlphaMaterialFamily.Poiyomi)
+                if (families[index] == CapturedAlphaMaterialFamily.Poiyomi ||
+                    families[index] ==
+                    CapturedAlphaMaterialFamily.PoiyomiTwoPass)
                 {
+                    // Both admitted Poiyomi identities verify through one
+                    // conjunction, so the gather is the same function.
                     poiyomi = PoiyomiMaterialSemantics.GatherAlphaSourceEvidence(
                         shaders[index], evidence[index]);
                 }
@@ -449,8 +469,11 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// supported lilToon material" could only drift away from the
         /// first. Every supported name is exact, the transparent normal
         /// one and the three S8 outline wrappers included; other near-miss
-        /// vendor names (the transparent one-pass and two-pass among them)
-        /// stay Unsupported and are refused downstream.
+        /// vendor names stay Unsupported and are refused downstream. The
+        /// Two Pass generated shader is a second admitted identity of the
+        /// Poiyomi frontend, and it routes to its own family member with
+        /// its own request, whose second-family scalars the plain request
+        /// never names.
         /// </summary>
         private static (
             CapturedAlphaMaterialFamily family,
@@ -465,6 +488,16 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return (
                     CapturedAlphaMaterialFamily.Poiyomi,
                     PoiyomiMaterialSemantics.AlphaEvidenceRequest);
+            }
+
+            if (string.Equals(
+                    shaderName,
+                    PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.PoiyomiTwoPass,
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest);
             }
 
             if (string.Equals(
@@ -570,6 +603,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     return PoiyomiMaterialSemantics.AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    return PoiyomiMaterialSemantics
+                        .TwoPassAlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToon:
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
@@ -590,7 +626,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// same way: one capture serves both the family's alpha proof and
         /// the lilToon conversion. Opaque lilToon has no
         /// opaque-conversion request, so its schema is its alpha request
-        /// and nothing widens it.
+        /// and nothing widens it. The Two Pass schema is its alpha request
+        /// alone: conversion never admits that family, so there is no
+        /// conversion request to union.
         /// </summary>
         private static readonly MaterialEvidenceRequest PoiyomiCaptureRequest =
             MaterialEvidenceRequest.Combine(
@@ -616,6 +654,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     return PoiyomiCaptureRequest;
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    return PoiyomiMaterialSemantics
+                        .TwoPassAlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToon:
                     return LilToonMaterialSemantics.AlphaEvidenceRequest;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
@@ -633,6 +674,12 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (material.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                        material.PoiyomiEvidence, out _);
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    // The conjunction attests each Poiyomi identity against
+                    // its own pinned GUID and digest, so the Two Pass
+                    // original verifies through the same call.
                     return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                         material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.LilToon:
@@ -674,6 +721,16 @@ namespace Alrauna.Amuse.Editor.Semantics
 
                     alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
                         captured.Evidence);
+                    break;
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                            captured.PoiyomiEvidence, out _))
+                    {
+                        return AllUnknown();
+                    }
+
+                    alpha = PoiyomiMaterialSemantics
+                        .InterpretVerifiedTwoPassAlpha(captured.Evidence);
                     break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null ||
