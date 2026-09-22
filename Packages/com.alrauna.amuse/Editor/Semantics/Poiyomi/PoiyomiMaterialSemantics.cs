@@ -71,6 +71,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // The Two Pass shader declares a separate force-opaque flag for its
         // second family (note 4.4, Two Pass source line 862).
         private const string AlphaForceOpaque2Property = "_AlphaForceOpaque2";
+
+        // The _Mode preset selector of the pinned source, and the second
+        // family's own selector on the Two Pass shader (note 4.4, Two Pass
+        // source line 68110). The vendor branches on these values per pass:
+        // the cutout value forces the family's alpha to 1 after the shared
+        // clip (note 4.5), so the cutout preset is what admits the split
+        // route for that family's claim.
+        private const string ModeProperty = "_Mode";
+        private const string TwoPassModeProperty = "_ModeTwoPass";
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
         private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
         private const string AlphaMaskProperty = "_AlphaMask";
@@ -257,28 +266,41 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         };
 
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
-            CreateAlphaEvidenceRequest();
+            CreateAlphaEvidenceRequest(declareCutoutCutoff: true);
+
+        /// <summary>
+        /// The plain-clip predicate variant of the alpha request: the same
+        /// schema, including the <c>_Mode</c> and <c>_Cutoff</c> scalars, but
+        /// with no cutoff declared on the main texture request. It is the
+        /// capture predicate for every non-cutout preset: a preset whose pass
+        /// renders the chain value keeps the exact-255 field, so the
+        /// exact-one rule reads unbinarized bytes. It never feeds a claim on
+        /// its own; the interpretation of a cutout preset requires the
+        /// declared cutoff, whose binarized field is the split route.
+        /// </summary>
+        internal static MaterialEvidenceRequest PlainAlphaEvidenceRequest { get; } =
+            CreateAlphaEvidenceRequest(declareCutoutCutoff: false);
 
         /// <summary>
         /// The Two Pass family's own alpha request: the plain request plus
-        /// exactly the second family's tint and its force-opaque flag. The
-        /// plain Toon request stays without them, so a plain material keeps
-        /// capturing without any second-family scalar. The interpreter reads
-        /// the second-family scalars only through the Two Pass entry points,
-        /// which only this request feeds.
+        /// exactly the second family's tint, its force-opaque flag, and its
+        /// own preset selector. The plain Toon request stays without them, so
+        /// a plain material keeps capturing without any second-family scalar.
+        /// The interpreter reads the second-family scalars only through the
+        /// Two Pass entry points, which only this request feeds.
         /// </summary>
         internal static MaterialEvidenceRequest TwoPassAlphaEvidenceRequest { get; } =
-            MaterialEvidenceRequest.Combine(
-                AlphaEvidenceRequest,
-                new MaterialEvidenceRequest(
-                    shaderName: false,
-                    activeColorSpace: false,
-                    presenceProperties: Array.Empty<string>(),
-                    scalarProperties: new[] { AlphaForceOpaque2Property },
-                    colorProperties: new[] { TwoPassColorProperty },
-                    vectorProperties: Array.Empty<string>(),
-                    textureProperties:
-                        Array.Empty<TexturePropertyEvidenceRequest>()));
+            CreateTwoPassAlphaEvidenceRequest(AlphaEvidenceRequest);
+
+        /// <summary>
+        /// The Two Pass family's plain-clip predicate variant: the same
+        /// schema with no cutoff declared on the main texture request. It is
+        /// the capture predicate for Two Pass materials where neither family
+        /// runs the cutout preset.
+        /// </summary>
+        internal static MaterialEvidenceRequest
+            PlainTwoPassAlphaEvidenceRequest { get; } =
+            CreateTwoPassAlphaEvidenceRequest(PlainAlphaEvidenceRequest);
 
         private static MaterialEvidenceRequest FullMaterialEvidenceRequest { get; } =
             MaterialEvidenceRequest.Combine(
@@ -352,7 +374,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
                 new MaterialEvidenceCaptureInput(
-                    material, FullMaterialEvidenceRequest),
+                    material,
+                    FullMaterialEvidenceRequest,
+                    AlphaPredicateRequestFor(material, false)),
             })[0];
             var evidence = GatherSourceEvidence(
                 material.shader, captured, RequiredSchemaProperties);
@@ -383,7 +407,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
-                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    AlphaEvidenceRequest,
+                    AlphaPredicateRequestFor(material, false)),
             })[0];
             return InterpretVerifiedMaterial(
                 material, activeColorSpace, captured, false);
@@ -405,10 +432,29 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
                 new MaterialEvidenceCaptureInput(
-                    material, TwoPassAlphaEvidenceRequest),
+                    material,
+                    TwoPassAlphaEvidenceRequest,
+                    AlphaPredicateRequestFor(material, true)),
             })[0];
             return InterpretVerifiedMaterial(
                 material, activeColorSpace, captured, true);
+        }
+
+        /// <summary>
+        /// Narrow friend-test seam over an already captured evidence: the
+        /// caller owns the capture and its capture predicate, so the
+        /// interpretation and its diagnostics answer exactly the evidence
+        /// the caller hands in. The Two Pass family keeps its own entry
+        /// point; this one always interprets the plain family.
+        /// </summary>
+        internal static PoiyomiSemanticResult InterpretVerifiedMaterial(
+            Material material,
+            ColorSpace activeColorSpace,
+            CapturedMaterialEvidence captured)
+        {
+            RequireAnalyzableMaterial(material);
+            return InterpretVerifiedMaterial(
+                material, activeColorSpace, captured, false);
         }
 
         private static PoiyomiSemanticResult InterpretVerifiedMaterial(
@@ -708,23 +754,90 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // --- Alpha equation (Task 4) ----------------------------------------
 
         /// <summary>
+        /// Whether the material's own family runs the cutout preset on either
+        /// family. The first family branches on <c>_Mode</c>, the second on
+        /// <c>_ModeTwoPass</c> (note 4.4, Two Pass source line 68110). A
+        /// missing or non-finite selector answers false: the material keeps
+        /// the plain-clip rules, and the field-predicate agreement gate keeps
+        /// a cutoff-binarized field unprovable, so an unknown preset never
+        /// widens a claim. This read decides the capture predicate; the
+        /// interpretation re-reads the captured scalars, so the two sides
+        /// agree by construction.
+        /// </summary>
+        internal static bool DeclaresCutoutPreset(Material material)
+        {
+            return ReadsCutoutPreset(material, ModeProperty) ||
+                ReadsCutoutPreset(material, TwoPassModeProperty);
+        }
+
+        private static bool ReadsCutoutPreset(
+            Material material,
+            string modeProperty)
+        {
+            if (material == null || !material.HasProperty(modeProperty))
+            {
+                return false;
+            }
+
+            var mode = material.GetFloat(modeProperty);
+            return IsFinite(mode) && mode == 1f;
+        }
+
+        /// <summary>
+        /// The capture predicate one Poiyomi material's own alpha capture
+        /// runs under. A cutout preset selects the declaring request, whose
+        /// main texture entry binarizes the alpha field by the _Cutoff value:
+        /// that binarized field is the split route. Every other preset
+        /// selects the plain-clip variant, which keeps the exact-255 field
+        /// the exact-one rule reads. Both variants carry one schema, so the
+        /// closed batch's union stays single and the choice is a per-material
+        /// capture fact, never a second family schema.
+        /// </summary>
+        internal static MaterialEvidenceRequest AlphaPredicateRequestFor(
+            Material material,
+            bool secondAlphaFamily)
+        {
+            var cutout = DeclaresCutoutPreset(material);
+            if (secondAlphaFamily)
+            {
+                return cutout
+                    ? TwoPassAlphaEvidenceRequest
+                    : PlainTwoPassAlphaEvidenceRequest;
+            }
+
+            return cutout
+                ? AlphaEvidenceRequest
+                : PlainAlphaEvidenceRequest;
+        }
+
+        /// <summary>
         /// Proves the normalized alpha term. Coverage/clip mechanisms must be
-        /// off on every path. A forced-opaque material is a constant one.
-        /// Otherwise the alpha mask mode is interpreted: Replace with no bound
-        /// mask is a proven constant, and a bound Replace mask proves through
-        /// its red field exactly under the admitted strength-value pairs.
-        /// Multiply is the declared default mode: with no bound mask it admits
-        /// only a mask term of exactly one and leaves the running chain
-        /// unchanged, and with a bound mask it folds the admitted term into
-        /// the running chain through the exact product machinery. Any other
-        /// mode or pair stays Unknown. With the mask leaving no factor, alpha
-        /// is <c>_Color.a</c>, optionally multiplying the alpha channel of a
+        /// off on every path. A captured cutoff above one, or a non-finite
+        /// one, refuses naming <c>_Cutoff</c>, because the vendor clips with
+        /// <c>clip(alpha - _Cutoff)</c> in every pass without condition
+        /// (note 4.5) and even the forced path clips after it forces alpha
+        /// to one. A forced-opaque material is a constant one. Otherwise the
+        /// family's preset selector decides the field route: the cutout
+        /// value forces alpha to one above the cutoff, so the binarized
+        /// field's above-cutoff verdicts are exactly the rendered-opaque
+        /// set, and a missing cutoff on a cutout preset refuses naming
+        /// <c>_Cutoff</c>. Every other preset keeps the exact-one rule over
+        /// the exact field. The alpha mask mode is interpreted by
+        /// TryInterpretAlphaMask: Replace with no bound mask is a proven
+        /// constant, and a bound Replace mask proves through its red field
+        /// exactly under the admitted strength-value pairs. Multiply is the
+        /// declared default mode: with no bound mask it admits only a mask
+        /// term of exactly one and leaves the running chain unchanged, and
+        /// with a bound mask it folds the admitted term into the running
+        /// chain through the exact product machinery. Any other mode or pair
+        /// stays Unknown. With the mask leaving no factor, alpha is
+        /// <c>_Color.a</c>, optionally multiplying the alpha channel of a
         /// single supported <c>_MainTex</c> sample. That texture-backed form
         /// additionally requires parallax to be proven off, because it alone
         /// depends on the sampling coordinate. Any enabled alpha writer,
-        /// non-binary flag, or unprovable sample keeps the output Unknown with
-        /// one diagnostic. Alpha is a raw scalar, so no color-import evidence
-        /// is required.
+        /// non-binary flag, or unprovable sample keeps the output Unknown
+        /// with one diagnostic. Alpha is a raw scalar, so no color-import
+        /// evidence is required.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
@@ -827,10 +940,33 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // claim and names its own tint, because that tint is where the
             // family's alpha value is decided. A family whose chain cannot
             // prove keeps its own recorded diagnostic.
+            //
+            // The clip gate: the vendor clips with clip(alpha - _Cutoff) in
+            // every pass without condition (note 4.5). A captured cutoff
+            // above one discards even unit alpha, so no triangle renders and
+            // no claim survives; a non-finite cutoff leaves the clip
+            // undefined. Both refuse naming _Cutoff before any family claim
+            // runs, because the forced path clips after it forces alpha to 1
+            // (note 4.4) and needs the same bound. A cutoff absent from the
+            // schema keeps the committed reading: the property always exists
+            // on the pinned source, so its absence means a stand-in whose
+            // own rendering carries no clip at all, and Unity answers the
+            // declared vendor default of one half for a declared property.
+            if (evidence.TryGetScalar(CutoffProperty, out var cutoff) &&
+                (!IsFinite(cutoff) || cutoff > 1f))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    CutoffProperty);
+            }
+
             var first = InterpretSingleFamilyAlpha(
                 evidence,
                 AlphaForceOpaqueProperty,
                 ColorProperty,
+                ModeProperty,
                 diagnostics);
             if (!interpretSecondAlphaFamily)
             {
@@ -855,6 +991,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 evidence,
                 AlphaForceOpaque2Property,
                 TwoPassColorProperty,
+                TwoPassModeProperty,
                 diagnostics);
             if (!IsCompletedExactlyOne(second))
             {
@@ -878,16 +1015,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// The claim one drawn family makes: the family's own force-opaque
         /// flag read with the same exact-binary gate read as the plain path,
         /// then the shared chain whose base tint is
-        /// <paramref name="baseColorProperty"/>. The second Base pass reuses
-        /// the first pass's alpha chain, so the feature gates, the mask
-        /// interpretation, and the texture term are the vendor facts the
-        /// plain path already proves, and nothing else is parameterized.
+        /// <paramref name="baseColorProperty"/>. The family's preset
+        /// selector (<c>_Mode</c> for the first family, <c>_ModeTwoPass</c>
+        /// for the second) decides the field route: the cutout value admits
+        /// the split route, whose binarized field answers the vendor's
+        /// unconditional clip plus the cutout alpha forcing (note 4.5), and
+        /// every other value keeps the exact-one rule over the exact field.
+        /// The second Base pass reuses the first pass's alpha chain, so the
+        /// feature gates, the mask interpretation, and the texture term are
+        /// the vendor facts the plain path already proves, and nothing else
+        /// is parameterized.
         /// </summary>
         private static SemanticOutput<ScalarSemanticValue>
             InterpretSingleFamilyAlpha(
             CapturedMaterialEvidence evidence,
             string forceOpaqueProperty,
             string baseColorProperty,
+            string modeProperty,
             List<PoiyomiSemanticDiagnostic> diagnostics)
         {
             if (!TryReadBinary(
@@ -904,6 +1048,30 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             {
                 return SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f));
+            }
+
+            // Preset detection over the captured selector. A missing or
+            // non-finite value answers not-cutout: the split route never
+            // engages, and the field-predicate agreement gate below keeps a
+            // cutoff-binarized field unprovable, so an unknown preset never
+            // widens a claim.
+            var isCutout =
+                evidence.TryGetScalar(modeProperty, out var mode) &&
+                IsFinite(mode) &&
+                mode == 1f;
+
+            // The split route's premise is the declared cutoff: without it
+            // the capture stayed exact and no binarized field answers the
+            // clip, so a cutout preset would silently prove nothing-or-wrong.
+            // A present cutoff is already bounded by the shared clip gate.
+            if (isCutout &&
+                !evidence.TryGetScalar(CutoffProperty, out var cutoutCutoff))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    CutoffProperty);
             }
 
             var featureGate = FirstFailedZeroGate(evidence, AlphaFeatureGates);
@@ -972,6 +1140,25 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
             else
             {
+                // Field-predicate agreement (Task 6). A non-cutout preset
+                // claims the exact-one rule, and only an exact-255 field can
+                // answer it: a cutoff-binarized field's byte 255 means the
+                // texel satisfies the capture's cutoff test, so consuming it
+                // under the exact-one rule would call a chain between the
+                // cutoff and one opaque. The capture predicate selects the
+                // exact field for every non-cutout preset, so a binarized
+                // field under a non-cutout claim means the two sides
+                // disagree, and the claim refuses naming _Cutoff.
+                if (!isCutout &&
+                    mainTexture.Texture.CaptureThreshold < 1f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        CutoffProperty);
+                }
+
                 // Only a texture-backed claim depends on the sampling
                 // coordinate, so the parallax proof is required here and
                 // nowhere earlier.
@@ -2165,7 +2352,35 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        private static MaterialEvidenceRequest CreateAlphaEvidenceRequest()
+        /// <summary>
+        /// The second family's own scalars and tint. The first family reads
+        /// none of them, so the plain Toon request combines without them. The
+        /// cutoff declaration rides the base request's main texture entry, so
+        /// the declaring and plain-clip bases carry the split choice and the
+        /// extras never carry one.
+        /// </summary>
+        private static MaterialEvidenceRequest CreateTwoPassAlphaEvidenceRequest(
+            MaterialEvidenceRequest baseRequest)
+        {
+            return MaterialEvidenceRequest.Combine(
+                baseRequest,
+                new MaterialEvidenceRequest(
+                    shaderName: false,
+                    activeColorSpace: false,
+                    presenceProperties: Array.Empty<string>(),
+                    scalarProperties: new[]
+                    {
+                        AlphaForceOpaque2Property,
+                        TwoPassModeProperty,
+                    },
+                    colorProperties: new[] { TwoPassColorProperty },
+                    vectorProperties: Array.Empty<string>(),
+                    textureProperties:
+                        Array.Empty<TexturePropertyEvidenceRequest>()));
+        }
+
+        private static MaterialEvidenceRequest CreateAlphaEvidenceRequest(
+            bool declareCutoutCutoff)
         {
             var scalars = new HashSet<string>(StringComparer.Ordinal)
             {
@@ -2178,6 +2393,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 AlphaMaskValueProperty,
                 AlphaMaskInvertProperty,
                 AlphaMaskUvProperty,
+
+                // The preset selector and the clip threshold of the pinned
+                // source (note 4.5, note 4.6). The interpretation branches on
+                // the preset: the cutout value admits the split route, every
+                // other value keeps the exact-one rules. Both scalars are
+                // captured unconditionally, so one request serves every
+                // preset and the branch reads captured facts only.
+                ModeProperty,
+                CutoffProperty,
                 SrcBlendProperty,
                 DstBlendProperty,
                 BlendOpProperty,
@@ -2203,12 +2427,21 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 vectorProperties: new[] { MainTexPanProperty, AlphaMaskPanProperty },
                 textureProperties: new[]
                 {
+                    // The cutout split's capture declaration: when the
+                    // material's own predicate declares the cutoff, the
+                    // capture binarizes the alpha field by the _Cutoff value,
+                    // so byte 255 means the texel survives the vendor's
+                    // unconditional clip (note 4.5). The declaration is the
+                    // lilToon cutout pattern. The per-material predicate
+                    // decides whether it applies: a non-cutout preset keeps
+                    // the exact-255 field the exact-one rule reads.
                     new TexturePropertyEvidenceRequest(
                         MainTextureProperty,
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel),
+                        TextureEvidenceKinds.AlphaChannel,
+                        declareCutoutCutoff ? CutoffProperty : null),
 
                     // The bound Replace mask proves through its red channel, so
                     // the request gathers exactly what the red-field route reads:

@@ -156,7 +156,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 }
 
                 inputs[index] = new MaterialEvidenceCaptureInput(
-                    material, request);
+                    material,
+                    request,
+                    AlphaPredicateRequestFor(material, families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
@@ -219,7 +221,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     request,
-                    AlphaRequestForFamily(families[index]));
+                    AlphaPredicateRequestFor(
+                        materials[index], families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -275,7 +278,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     request,
-                    AlphaRequestForFamily(families[index]));
+                    AlphaPredicateRequestFor(
+                        materials[index], families[index]));
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -616,6 +620,34 @@ namespace Alrauna.Amuse.Editor.Semantics
                         .AlphaEvidenceRequest;
                 default:
                     return null;
+            }
+        }
+
+        /// <summary>
+        /// The capture predicate one material's own alpha capture runs
+        /// under. For the Poiyomi families the material's preset decides:
+        /// a cutout preset selects the declaring request whose capture
+        /// binarizes the alpha field by the cutoff value (the split route),
+        /// and every other preset selects the plain-clip variant that keeps
+        /// the exact-255 field the exact-one rule reads. The predicate is
+        /// what keeps one material's cutout declaration from binarizing a
+        /// sibling's field inside one closed batch. Every other family
+        /// answers with its own alpha request unchanged.
+        /// </summary>
+        internal static MaterialEvidenceRequest AlphaPredicateRequestFor(
+            Material material,
+            CapturedAlphaMaterialFamily family)
+        {
+            switch (family)
+            {
+                case CapturedAlphaMaterialFamily.Poiyomi:
+                    return PoiyomiMaterialSemantics.AlphaPredicateRequestFor(
+                        material, false);
+                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                    return PoiyomiMaterialSemantics.AlphaPredicateRequestFor(
+                        material, true);
+                default:
+                    return AlphaRequestForFamily(family);
             }
         }
 

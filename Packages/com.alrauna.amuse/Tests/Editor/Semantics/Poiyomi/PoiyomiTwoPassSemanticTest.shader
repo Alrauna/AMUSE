@@ -144,6 +144,12 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest"
         [Enum(Opaque,0,Cutout,1,Fade,2,Transparent,3)] _Mode ("Rendering Mode", Float) = 0
         _Cutoff ("Alpha Cutoff", Range(0, 1.001)) = 0.5
 
+        // The second family's own preset selector (Two Pass source line
+        // 68110). The cutout value forces the second family's alpha to 1
+        // after the shared clip, so the interpretation reads it beside
+        // _Mode with the same fail-closed treatment.
+        _ModeTwoPass ("Two Pass Rendering Mode", Float) = 0
+
         // Base pass blend state.
         _BlendOp ("RGB Blend Op", Int) = 0
         _SrcBlend ("Src Blend", Float) = 1
