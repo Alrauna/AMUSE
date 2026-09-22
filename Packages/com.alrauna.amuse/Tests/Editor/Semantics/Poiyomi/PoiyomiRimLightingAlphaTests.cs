@@ -155,6 +155,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         [Test]
         public void
+            ReplaceMaskProof_WithRimEnabled_KeepsItsExactlyOneProof()
+        {
+            // Design case 8 no-op guard. The gate walk precedes mask
+            // interpretation, so an admitted rim must not disturb the
+            // mask proof.
+            var material = NewFixtureMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 1f);
+            material.SetFloat("_EnableRimLighting", 1f);
+            material.SetFloat("_RimApplyAlpha", 0f);
+
+            AssertOutputComplete(
+                Interpret(material), PoiyomiSemanticOutput.Alpha);
+        }
+
+        [Test]
+        public void
             TwoPass_RimSlot1_Enabled_WithZeroApplyAlpha_KeepsAlphaComplete()
         {
             // --- Falsifier 7: a plausible wrong implementation admits the
