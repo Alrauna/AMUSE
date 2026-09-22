@@ -323,9 +323,10 @@ production step. It is `saturate(alpha)`, and that value is exactly 1
 on the proof's premise. Closing Gap A for conversion therefore revises
 a declared conversion premise. Section 17 of the 2026-09-18
 investigation set the shape for this kind of change. It recorded a
-stated and disclosed divergence with a report sentence. This slice
-lands only after the owner accepts the revision. Until then the shipped
-behavior stays safe.
+stated and disclosed divergence with a report sentence. The owner made
+the decision on 2026-09-21. The owner accepted the premise revision, so
+this slice is cleared to land, with the disclosure. Until the slice
+lands, the shipped behavior stays safe.
 
 The smallest honest slice, after acceptance: admit premultiply in
 `PoiyomiOpaqueConversion` gate 5 under the policy. Carry the disclosure
@@ -453,15 +454,17 @@ implementation prompt with its own RED and GREEN obligations.
    Section 7.1.
 6. Cutout coverage split. It closes a coverage gap. The surface is
    larger. Section 6.6.
-7. Premultiply conversion admission. It waits for the owner's decision
-   about the declared gate premise. Section 6.2.
+7. Premultiply conversion admission. The owner accepted the premise
+   revision on 2026-09-21, so this slice is cleared. Section 6.2.
 
 ## 9. Open questions and stop-condition hits
 
-9.1 Stop-condition hit, bounded to slice 7. Closing the conversion gate
+9.1 Stop-condition hit, resolved. Closing the conversion gate
 5 revises its declared premise. The exact proof rule and the alpha
 policy stay untouched. This is the section 17 shape, not a proof rule
-change. The owner decides. Sections 4.3 and 6.2 preserve the evidence.
+change. The owner accepted the revision on 2026-09-21, so the stop
+condition is resolved in favor of slice 7. Sections 4.3 and 6.2
+preserve the evidence.
 
 9.2 Open question. The threshold-envelope contract for other
 strength-value pairs stays future work on both shader families. This
