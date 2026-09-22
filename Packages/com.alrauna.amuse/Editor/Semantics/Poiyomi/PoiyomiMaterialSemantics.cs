@@ -230,6 +230,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // the factor is exactly 1 there and the feature is an identity on the
         // proven domain. The base-color gate list keeps the entry because the
         // color equation genuinely changes per pixel.
+        //
+        // The four decal slots are deliberately absent: FirstNonInertDecalSlot
+        // interprets them per slot, because an enabled slot whose
+        // override-alpha mode is exactly zero writes no alpha (vendor lines
+        // 22958 to 22978).
+        //
+        // The audio link decal module writes the chain alpha through
+        // lerp(alpha, alpha * audioLinkValue, _ALDecalControlsAlpha)
+        // (investigation 2026-09-22, vendor line 24833), independently of
+        // the four decal slots. A zero weight is an identity, so it is
+        // proven exactly zero on every non-forced alpha path.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
@@ -241,10 +252,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_AlphaGlobalMask",
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
-            "_DecalEnabled",
-            "_DecalEnabled1",
-            "_DecalEnabled2",
-            "_DecalEnabled3",
+            "_ALDecalControlsAlpha",
             "_EnableFlipbook",
             "_EnableRimLighting",
             "_EnableRim2Lighting",
@@ -263,6 +271,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private static readonly string[] TextureBackedAlphaGates =
         {
             PoiParallaxProperty,
+        };
+
+        // The four decal slots. An enabled slot writes the chain alpha only
+        // inside its override-alpha block (pinned 9.3.64 source, vendor
+        // lines 22958 to 22978), so a slot with the override-alpha mode
+        // proven exactly zero composes color and emission and writes no
+        // alpha. The enable float decides whether the block exists for the
+        // slot, on the same float-as-evidence trust every other gate here
+        // uses. Both name sets ride the alpha evidence request, so the
+        // capture and the animation closure cover them.
+        private static readonly string[] AlphaDecalSlotEnables =
+        {
+            "_DecalEnabled",
+            "_DecalEnabled1",
+            "_DecalEnabled2",
+            "_DecalEnabled3",
+        };
+
+        private static readonly string[]
+            AlphaDecalSlotOverrideAlphaProperties =
+        {
+            "_DecalOverrideAlpha",
+            "_DecalOverrideAlpha1",
+            "_DecalOverrideAlpha2",
+            "_DecalOverrideAlpha3",
         };
 
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
@@ -1026,6 +1059,45 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// the vendor facts the plain path already proves, and nothing else
         /// is parameterized.
         /// </summary>
+        /// <summary>
+        /// The first decal slot the alpha equation cannot prove inert, or
+        /// null when every slot writes no alpha. A slot with its enable
+        /// float proven zero has no alpha effect. An enabled slot is an
+        /// alpha identity exactly when its override-alpha mode is exactly
+        /// zero (pinned 9.3.64 source, vendor lines 22958 to 22978). The
+        /// returned name is the vendor property the refusal reports.
+        /// </summary>
+        private static string FirstNonInertDecalSlot(
+            CapturedMaterialEvidence evidence)
+        {
+            for (var slot = 0; slot < AlphaDecalSlotEnables.Length; slot++)
+            {
+                var enable = AlphaDecalSlotEnables[slot];
+                if (!evidence.TryGetScalar(enable, out var enabled) ||
+                    !IsFinite(enabled))
+                {
+                    return enable;
+                }
+
+                if (enabled == 0f)
+                {
+                    continue;
+                }
+
+                var overrideAlpha =
+                    AlphaDecalSlotOverrideAlphaProperties[slot];
+                if (!evidence.TryGetScalar(
+                        overrideAlpha, out var mode) ||
+                    !IsFinite(mode) ||
+                    mode != 0f)
+                {
+                    return overrideAlpha;
+                }
+            }
+
+            return null;
+        }
+
         private static SemanticOutput<ScalarSemanticValue>
             InterpretSingleFamilyAlpha(
             CapturedMaterialEvidence evidence,
@@ -1082,6 +1154,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                     featureGate);
+            }
+
+            var nonInertDecalSlot = FirstNonInertDecalSlot(evidence);
+            if (nonInertDecalSlot != null)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    nonInertDecalSlot);
             }
 
             if (!TryInterpretAlphaMask(
@@ -2417,6 +2499,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             scalars.UnionWith(AlphaCoverageGates);
             scalars.UnionWith(AlphaFeatureGates);
             scalars.UnionWith(TextureBackedAlphaGates);
+            scalars.UnionWith(AlphaDecalSlotEnables);
+            scalars.UnionWith(AlphaDecalSlotOverrideAlphaProperties);
 
             return new MaterialEvidenceRequest(
                 shaderName: true,
