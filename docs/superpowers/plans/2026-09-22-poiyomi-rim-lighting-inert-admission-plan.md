@@ -22,12 +22,11 @@
 
 ---
 
-### Task 1: RED - stand-in schema, mirror update, and the failing tests
+### Task 1: RED - stand-in schema and the failing tests
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/Poiyomi/PoiyomiSemanticTest.shader` (property block, after `_EnableRim2Lighting`, line 111)
 - Modify: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/Poiyomi/PoiyomiTwoPassSemanticTest.shader` (same block, after `_EnableRim2Lighting`, line 117)
-- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs` (alpha mirror array and its comment only, lines 419 to 446)
 - Create: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/Poiyomi/PoiyomiRimLightingAlphaTests.cs` (+ the `.meta` Unity generates on refresh)
 
 **Interfaces:**
@@ -58,43 +57,7 @@ The same three context lines and the same insertion in `PoiyomiTwoPassSemanticTe
 
 The declared default zero matches the vendor default of `_RimApplyAlpha` (pinned 9.3.64 source, line 1663). The stand-ins do not need `_RimApplyAlphaBlend` or the style floats: the new contract reads `_RimApplyAlpha` only.
 
-- [ ] **Step 2: Swap the two rim enable entries for `_RimApplyAlpha` in the `AlphaFeatureGates` mirror of `PoiyomiBaseColorAlphaTests.cs`, and update the comment**
-
-Replace lines 419 to 446 (comment plus array) with:
-
-```csharp
-        // Enabled writers/masks that modify the non-forced alpha term.
-        // _MainAlphaMaskMode is deliberately absent: it is no longer an
-        // exact-off gate but an interpreted mode, so PoiyomiAlphaMaskTests owns
-        // its supported and refused cases. The four decal slots are absent:
-        // PoiyomiDecalSlotAlphaTests owns their per-slot inert proof. The two
-        // rim enable floats are absent: the rim family's alpha behavior is
-        // governed by _RimApplyAlpha alone, so PoiyomiRimLightingAlphaTests
-        // owns its contract. Depth rim and environmental rim stay gated.
-        private static readonly string[] AlphaFeatureGates =
-        {
-            "_AlphaMod",
-            "_AlphaDistanceFade",
-            "_AlphaFresnel",
-            "_AlphaAngular",
-            "_AlphaAudioLinkEnabled",
-            "_EnableAudioLink",
-            "_AlphaGlobalMask",
-            "_BackFaceEnabled",
-            "_RGBMaskEnabled",
-            "_EnableFlipbook",
-            "_RimApplyAlpha",
-            "_EnableDepthRimLighting",
-            "_EnableEnvironmentalRim",
-            "_VideoEffectsEnable",
-            "_EnableTouchGlow",
-            "_MainVertexColoringEnabled",
-        };
-```
-
-Leave the `BaseColorFeatureGates` mirror near line 25 unchanged: the base color output keeps refusing rim materials by name.
-
-- [ ] **Step 3: Write `PoiyomiRimLightingAlphaTests.cs`**
+- [ ] **Step 2: Write `PoiyomiRimLightingAlphaTests.cs`**
 
 ```csharp
 using Alrauna.Amuse.Editor.Semantics;
@@ -290,22 +253,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
 One recorded deviation from the design's case 6: the design asked for a material where `_RimApplyAlpha` is absent. Both stand-in shaders carry every gate property by design, so absence would need a third, partial fixture shader for one case. The non-finite case above covers the fail-closed direction through the same `FirstFailedZeroGate` branch (`TryGetScalar` false and a non-finite value take the same return), so the plan implements garbage-value coverage and leaves the absent-property branch to the shared machinery.
 
-- [ ] **Step 4: Refresh Unity and run the filtered test class**
+- [ ] **Step 3: Refresh Unity and run the filtered test class**
 
 Refresh assets, then `run_tests` (EditMode, filter `PoiyomiRimLightingAlphaTests`) in the pinned dev editor instance after its identity check. Expected: eight of the nine tests fail, and only the forced-opaque guard passes. Precisely: cases 1 and 2 fail refusing naming `_EnableRimLighting`; cases 3 and 4 fail refusing naming `_EnableRimLighting` instead of `_RimApplyAlpha`; case 5 fails because the code as of 2026-09-22 completes the material; case 6 fails for the same reason; both Two Pass cases fail like their plain twins. Record the observed failure count and names. A green run here means the plan's premise is wrong: stop and re-read the spec.
 
-- [ ] **Step 5: Run the touched neighbor classes**
+- [ ] **Step 4: Run the touched neighbor classes**
 
-`PoiyomiBaseColorAlphaTests`, `PoiyomiAlphaMaskTests`, `PoiyomiDecalSlotAlphaTests`. Expected: green. The mirror swap keeps the loop test consistent with the current production gate list, so no failure is expected yet.
+`PoiyomiBaseColorAlphaTests`, `PoiyomiAlphaMaskTests`, `PoiyomiDecalSlotAlphaTests`. Expected: green. The mirror still carries the two rim enable names, which the current production gate list also carries, so the loop test stays consistent and no failure is expected yet.
 
 ### Task 2: GREEN - the production change
 
 **Files:**
 - Modify: `Packages/com.alrauna.amuse/Editor/Semantics/Poiyomi/PoiyomiMaterialSemantics.cs` (the `AlphaFeatureGates` array only, lines 244 to 263)
+- Modify: `Packages/com.alrauna.amuse/Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs` (alpha mirror array and its comment only, lines 419 to 446)
 
 **Interfaces:**
 - Consumes: nothing new. The existing `FirstFailedZeroGate` machinery, the consult at line 1149, and the union at line 2500 stay untouched.
-- Produces: the alpha contract the new tests assert.
+- Produces: the alpha contract the Task 1 tests assert.
 
 - [ ] **Step 1: Edit the gate array**
 
@@ -346,11 +310,47 @@ Replace the two rim enable entries with `_RimApplyAlpha` and record why:
 
 The list keeps `_ALDecalControlsAlpha`, `_EnableDepthRimLighting`, and `_EnableEnvironmentalRim` exactly where they are; only the two enable names leave and `_RimApplyAlpha` joins.
 
-- [ ] **Step 2: Refresh Unity and run the filtered test class**
+- [ ] **Step 2: Swap the alpha mirror in `PoiyomiBaseColorAlphaTests.cs` to match**
+
+Replace lines 419 to 446 (comment plus array) with:
+
+```csharp
+        // Enabled writers/masks that modify the non-forced alpha term.
+        // _MainAlphaMaskMode is deliberately absent: it is no longer an
+        // exact-off gate but an interpreted mode, so PoiyomiAlphaMaskTests owns
+        // its supported and refused cases. The four decal slots are absent:
+        // PoiyomiDecalSlotAlphaTests owns their per-slot inert proof. The two
+        // rim enable floats are absent: the rim family's alpha behavior is
+        // governed by _RimApplyAlpha alone, so PoiyomiRimLightingAlphaTests
+        // owns its contract. Depth rim and environmental rim stay gated.
+        private static readonly string[] AlphaFeatureGates =
+        {
+            "_AlphaMod",
+            "_AlphaDistanceFade",
+            "_AlphaFresnel",
+            "_AlphaAngular",
+            "_AlphaAudioLinkEnabled",
+            "_EnableAudioLink",
+            "_AlphaGlobalMask",
+            "_BackFaceEnabled",
+            "_RGBMaskEnabled",
+            "_EnableFlipbook",
+            "_RimApplyAlpha",
+            "_EnableDepthRimLighting",
+            "_EnableEnvironmentalRim",
+            "_VideoEffectsEnable",
+            "_EnableTouchGlow",
+            "_MainVertexColoringEnabled",
+        };
+```
+
+Leave the `BaseColorFeatureGates` mirror near line 25 unchanged: the base color output keeps refusing rim materials by name. The swap lives in this task, in the same commit as the production edit, so the mirror never asserts a gate the production list does not carry.
+
+- [ ] **Step 3: Refresh Unity and run the filtered test class**
 
 `run_tests` (EditMode, filter `PoiyomiRimLightingAlphaTests`). Expected: all nine tests green. Record the observed count.
 
-- [ ] **Step 3: Run the touched neighbors again**
+- [ ] **Step 4: Run the touched neighbors again**
 
 `PoiyomiBaseColorAlphaTests`, `PoiyomiAlphaMaskTests`, `PoiyomiDecalSlotAlphaTests`, `PoiyomiTwoPassAlphaTests`, `PoiyomiMaterialSemanticsTests`, `PoiyomiAdversarialTests`. Expected: green.
 
@@ -383,6 +383,7 @@ git commit -m "docs: plan the poiyomi rim lighting inert admission"
 
 ## Self-review
 
-- Spec coverage: design sections 1 and 7 map to Task 1 steps 1 to 2 and Task 2 step 1 (the gate swap). Design section 5 (keyword independence) is case 5. Design section 8 (the narrowing) is case 5's RED obligation. Design section 9 cases 1 to 9 are the plan's nine tests; design case 6 (absent property) is the recorded deviation in Task 1 step 3, covered by the non-finite case through the same gate branch. Design section 10 (honest expectation) needs no task: it is a corpus judgment, not code.
+- Spec coverage: design sections 1 and 7 map to Task 1 steps 1 to 2 (schema, contract tests) and Task 2 steps 1 to 2 (gate swap, mirror swap). Design section 5 (keyword independence) is case 5. Design section 8 (the narrowing) is case 5's RED obligation. Design section 9 cases 1 to 9 are the plan's nine tests; design case 6 (absent property) is the recorded deviation in Task 1 step 2, covered by the non-finite case through the same gate branch. Design section 10 (honest expectation) needs no task: it is a corpus judgment, not code.
 - Placeholders: none; every code step carries its content.
-- Type consistency: `Interpret`, `NonForcedMaterial`, `NonForcedTwoPassMaterial`, and the `_RimApplyAlpha` property name appear identically across Task 1 steps 1 to 3 and Task 2 step 1. The mirror array name `AlphaFeatureGates` matches production.
+- Type consistency: `Interpret`, `NonForcedMaterial`, `NonForcedTwoPassMaterial`, and the `_RimApplyAlpha` property name appear identically across Task 1 steps 1 to 2 and Task 2 steps 1 to 2. The mirror array name `AlphaFeatureGates` matches production.
+- Preflight ruling: the alpha mirror swap lives in Task 2, in the same commit as the production edit. A swap staged in Task 1 would make the mirror loop test assert a gate the production list does not yet carry, contradicting Task 1's green-neighbor expectation. The decal plan's mirror drop was safe before production; a swap is not.
