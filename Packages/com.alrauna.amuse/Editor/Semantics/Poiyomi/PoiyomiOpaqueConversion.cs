@@ -42,7 +42,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // Effective render-state eligibility
         OutlinesEnabled,
-        PremultipliedAlphaEnabled,
         AlphaToCoverageEnabled,
         UnsupportedDepthComparison,
         UnsupportedBlendEquation,
@@ -64,14 +63,28 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         internal bool DepthTestDivergence { get; }
 
+        /// <summary>
+        /// True only when the source carries the vendor premultiply
+        /// feature. The vendor factor is saturate(alpha), and alpha is
+        /// exactly 1 on every triangle the proof moves, so the canonical
+        /// clone reproduces the source color exactly there. The clone
+        /// still normalizes the source by writing _AlphaPremultiply 0, so
+        /// a caller that prepares the material must report the
+        /// normalization. False on every refusal and on AlreadyOpaque:
+        /// neither outcome moves the material.
+        /// </summary>
+        internal bool PremultiplyNormalization { get; }
+
         private PoiyomiOpaqueConversionEligibility(
             PoiyomiOpaqueConversionOutcome outcome,
             PoiyomiOpaqueConversionRefusal refusal,
-            bool depthTestDivergence)
+            bool depthTestDivergence,
+            bool premultiplyNormalization)
         {
             Outcome = outcome;
             Refusal = refusal;
             DepthTestDivergence = depthTestDivergence;
+            PremultiplyNormalization = premultiplyNormalization;
         }
 
         internal static PoiyomiOpaqueConversionEligibility Refused(
@@ -84,7 +97,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return new PoiyomiOpaqueConversionEligibility(
-                PoiyomiOpaqueConversionOutcome.Refused, refusal, false);
+                PoiyomiOpaqueConversionOutcome.Refused, refusal, false,
+                false);
         }
 
         internal static PoiyomiOpaqueConversionEligibility AlreadyOpaque()
@@ -92,16 +106,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return new PoiyomiOpaqueConversionEligibility(
                 PoiyomiOpaqueConversionOutcome.AlreadyOpaque,
                 PoiyomiOpaqueConversionRefusal.None,
+                false,
                 false);
         }
 
         internal static PoiyomiOpaqueConversionEligibility Convertible(
-            bool depthTestDivergence = false)
+            bool depthTestDivergence = false,
+            bool premultiplyNormalization = false)
         {
             return new PoiyomiOpaqueConversionEligibility(
                 PoiyomiOpaqueConversionOutcome.Convertible,
                 PoiyomiOpaqueConversionRefusal.None,
-                depthTestDivergence);
+                depthTestDivergence,
+                premultiplyNormalization);
         }
     }
 
@@ -305,13 +322,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiOpaqueConversionRefusal.OutlinesEnabled);
             }
 
-            // 5. Premultiplication changes how RGB is PRODUCED, not how it is
-            //    combined, so the blend predicate cannot excuse it.
-            if (Read(values, "_AlphaPremultiply") != 0f)
-            {
-                return PoiyomiOpaqueConversionEligibility.Refused(
-                    PoiyomiOpaqueConversionRefusal.PremultipliedAlphaEnabled);
-            }
+            // 5. Premultiplication. The vendor premultiply feature scales
+            //    the color by saturate(alpha) in three passes and never
+            //    writes the alpha value (note 4.3). The proof moves only
+            //    triangles whose alpha is exactly 1, so the factor is
+            //    exactly 1 on the whole proven domain and the canonical
+            //    clone reproduces the source color exactly there. The
+            //    feature is therefore admitted. The normalization is a
+            //    stated, disclosed change: the caller learns it through
+            //    PremultiplyNormalization. The recipe still writes 0. The
+            //    scoping stays with the proven plan, which moves only the
+            //    proven triangles, so the disclosed premise never reaches
+            //    an unproven triangle.
+            var premultiplied = Read(values, "_AlphaPremultiply") != 0f;
 
             // 6. Coverage.
             if (Read(values, "_AlphaToCoverage") != 0f)
@@ -380,7 +403,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return PoiyomiOpaqueConversionEligibility.Convertible(
-                depthComparison == LessDepthComparison);
+                depthComparison == LessDepthComparison,
+                premultiplied);
         }
 
         // Unity blend enum: Zero=0, One=1, DstColor=2, SrcColor=3,
