@@ -116,6 +116,7 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest"
         _EnableFlipbook ("Flipbook", Float) = 0
         _EnableRimLighting ("Rim", Float) = 0
         _EnableRim2Lighting ("Rim 2", Float) = 0
+        _RimApplyAlpha ("Rim Apply to Alpha", Float) = 0
         _EnableDepthRimLighting ("Depth Rim", Float) = 0
         _EnableEnvironmentalRim ("Environmental Rim", Float) = 0
         _GlitterEnable ("Glitter", Float) = 0

@@ -421,7 +421,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // _MainAlphaMaskMode is deliberately absent: it is no longer an
         // exact-off gate but an interpreted mode, so PoiyomiAlphaMaskTests owns
         // its supported and refused cases. The four decal slots are absent:
-        // PoiyomiDecalSlotAlphaTests owns their per-slot inert proof.
+        // PoiyomiDecalSlotAlphaTests owns their per-slot inert proof. The two
+        // rim enable floats are absent: the rim family's alpha behavior is
+        // governed by _RimApplyAlpha alone, so PoiyomiRimLightingAlphaTests
+        // owns its contract. Depth rim and environmental rim stay gated.
         private static readonly string[] AlphaFeatureGates =
         {
             "_AlphaMod",
@@ -434,8 +437,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_BackFaceEnabled",
             "_RGBMaskEnabled",
             "_EnableFlipbook",
-            "_EnableRimLighting",
-            "_EnableRim2Lighting",
+            "_RimApplyAlpha",
             "_EnableDepthRimLighting",
             "_EnableEnvironmentalRim",
             "_VideoEffectsEnable",

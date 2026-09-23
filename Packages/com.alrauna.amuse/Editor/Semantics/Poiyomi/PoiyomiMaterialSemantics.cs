@@ -254,8 +254,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_RGBMaskEnabled",
             "_ALDecalControlsAlpha",
             "_EnableFlipbook",
-            "_EnableRimLighting",
-            "_EnableRim2Lighting",
+            // The rim family: the liltoon-style and UTS2-style arms never
+            // touch the chain alpha, and the poi-style arm writes it only
+            // through _RimApplyAlpha (design 2026-09-22; pinned 9.3.64
+            // source, vendor lines 25838 to 25843, both slots sharing the
+            // one scalar). At zero every compiled arm is an alpha identity,
+            // whatever the enable floats and keywords say, because the call
+            // sites guard on the keywords.
+            "_RimApplyAlpha",
             "_EnableDepthRimLighting",
             "_EnableEnvironmentalRim",
             "_VideoEffectsEnable",
