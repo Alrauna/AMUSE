@@ -233,8 +233,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// back to L, then every recorded binding on the committed clips
         /// back to L. The inverted name is the pair's unlocked clone. The
         /// order inside this method is slot arrays before curves, and
-        /// the caller destroys nothing until every pair has passed
-        /// through here.
+        /// the caller destroys this pair's clone only after this method
+        /// and the reassertion return.
         /// </summary>
         private static void InvertReferences(
             BuildContext context,

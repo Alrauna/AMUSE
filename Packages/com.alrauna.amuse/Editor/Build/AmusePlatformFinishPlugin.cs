@@ -620,7 +620,7 @@ namespace Alrauna.Amuse.Editor.Build
                 else
                 {
                     evidence = UnityAnimationEvidenceCapture
-                        .CaptureGraphForTests(
+                        .CaptureGraphThroughSeams(
                             rendererPath,
                             renderer.sharedMaterials,
                             graph,

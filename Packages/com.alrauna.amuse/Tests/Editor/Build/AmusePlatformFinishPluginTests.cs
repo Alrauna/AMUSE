@@ -4511,7 +4511,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The same path production derives, so this helper exercises the real
             // renderer-scoped capture rather than a stand-in path.
-            return UnityAnimationEvidenceCapture.CaptureGraphForTests(
+            return UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnimationUtility.CalculateTransformPath(
                     renderer.transform, root.transform),
                 renderer.sharedMaterials,

@@ -34,10 +34,11 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             // The census mirror is a snapshot, not a live view: it retains
             // retired AMUSE names so recorded census data keeps its category.
             // The effective-state design removed MaterialPropertyOverridesPresent
-            // from AMUSE on 2026-09-14, so the mirror contract is now
-            // one-directional: every AMUSE refusal keeps its same-named
-            // census mirror, and the snapshot may hold retired names beyond
-            // that set.
+            // from AMUSE on 2026-09-14. The vendor lock handover orphaned
+            // LockedPoiyomiThryUnattested on 2026-09-24, so the mirror
+            // contract is now one-directional: every AMUSE refusal keeps its
+            // same-named census mirror, and the snapshot may hold retired
+            // names beyond that set.
             var amuseNames = System.Enum.GetNames(
                 typeof(RendererAnalysisRefusal));
             var censusNames = System.Enum.GetNames(typeof(RendererRefusal));
@@ -50,6 +51,11 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
 
             Assert.That(
                 censusNames, Does.Contain("MaterialPropertyOverridesPresent"),
+                "The retired category stays in the snapshot so recorded " +
+                "census data keeps its category.");
+
+            Assert.That(
+                censusNames, Does.Contain("LockedPoiyomiThryUnattested"),
                 "The retired category stays in the snapshot so recorded " +
                 "census data keeps its category.");
         }

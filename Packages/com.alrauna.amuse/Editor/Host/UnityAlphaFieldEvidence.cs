@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
@@ -11,7 +9,7 @@ using UnityEngine.Rendering;
 namespace Alrauna.Amuse.Editor.Host
 {
     /// <summary>
-    /// The one Unity implementation of <see cref="AlphaFieldProvider"/>. It converts
+    /// The static Unity capture engine for alpha evidence. It converts
     /// supported Unity texture state into an immutable <see cref="AlphaMipChain"/>
     /// of the <see cref="AlphaTextureData"/> grids the exact triangle alpha
     /// classifier already consumes, and refuses everything it cannot prove.
@@ -73,73 +71,12 @@ namespace Alrauna.Amuse.Editor.Host
         internal const string RedShaderAssetPath =
             "Packages/com.alrauna.amuse/Editor/Host/Shaders/AmuseRedExactOne.shader";
 
-        private readonly Dictionary<
-            (TextureSourceId source, TextureChannel channel),
-            AlphaMipChain> _fieldsBySource;
-
-        /// <summary>
-        /// Resolves the supplied textures to their stable project identities through
-        /// the existing <see cref="UnityTextureEvidence.TryGetSourceId"/>, so the
-        /// identity rule can never disagree with the one the shader frontends used to
-        /// build the <see cref="TextureSample"/>. The opaque source-id format is
-        /// never parsed here.
-        /// <para>
-        /// Elements that are null, destroyed, not a <see cref="Texture2D"/>, or
-        /// without a resolvable identity are skipped rather than rejected: an
-        /// unassigned material slot yields a null texture and is an ordinary input,
-        /// not a caller error. A later lookup for such a texture simply refuses.
-        /// </para>
-        /// </summary>
-        internal UnityAlphaFieldEvidence(
-            IEnumerable<(Texture texture, TextureChannel channel)> requests)
-        {
-            if (requests == null)
-            {
-                throw new ArgumentNullException(nameof(requests));
-            }
-
-            _fieldsBySource = new Dictionary<
-                (TextureSourceId, TextureChannel), AlphaMipChain>();
-            foreach (var (texture, channel) in requests)
-            {
-                if (!TryCapture(texture, channel, out var source, out var chain))
-                {
-                    continue;
-                }
-
-                // Two textures resolving to one identity are the same asset, so the
-                // first wins and the duplicate is not an error. The channel is
-                // part of the key, so one asset can serve its alpha field as a
-                // main texture and its red field as a mask.
-                if (_fieldsBySource.ContainsKey((source, channel)))
-                {
-                    continue;
-                }
-
-                _fieldsBySource.Add((source, channel), chain);
-            }
-        }
-
-        /// <summary>
-        /// Captures the alpha field of each supplied texture. Kept for the
-        /// historical call shape, which never needed a second channel.
-        /// </summary>
-        internal UnityAlphaFieldEvidence(IEnumerable<Texture> textures)
-            : this(textures?.Select(WithAlphaChannel))
-        {
-        }
-
-        private static (Texture, TextureChannel) WithAlphaChannel(
-            Texture texture)
-        {
-            return (texture, TextureChannel.Alpha);
-        }
-
         /// <summary>
         /// Captures the complete immutable alpha field for one supported
-        /// texture. Kept for the historical call shape. It captures
-        /// under the inert bounds, which reproduce the base exact-255
-        /// contract.
+        /// texture. The friend test assemblies are its consumer, and the
+        /// full overload with explicit policy is the production route. It
+        /// captures under the inert bounds, which reproduce the base
+        /// exact-255 contract.
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
@@ -151,6 +88,12 @@ namespace Alrauna.Amuse.Editor.Host
                 out source, out chain, out _);
         }
 
+        /// <summary>
+        /// Captures the alpha channel under the caller's cutoff threshold
+        /// and bounds. The friend test assemblies are its consumer, and
+        /// the full overload with explicit policy is the production
+        /// route.
+        /// </summary>
         internal static bool TryCapture(
             Texture texture,
             float cutoffThreshold,
@@ -165,8 +108,9 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// Captures under the inert bounds, which reproduce the base
-        /// exact-255 contract. Callers that know the active policy pass
-        /// it to the full overload.
+        /// exact-255 contract. The friend test assemblies are its
+        /// consumer, and the full overload with explicit policy is the
+        /// production route.
         /// </summary>
         internal static bool TryCapture(
             Texture texture,
@@ -621,42 +565,6 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 RenderTexture.ReleaseTemporary(target);
             }
-        }
-
-        /// <summary>
-        /// Signature-compatible with <see cref="AlphaFieldProvider"/>; pass it as a
-        /// method group. Returns false, with no field, whenever the effective alpha
-        /// cannot be proven. A malformed argument throws instead, because silence
-        /// would hide a caller defect.
-        /// </summary>
-        internal bool TryGetAlphaField(
-            TextureSourceId source,
-            TextureChannel channel,
-            out AlphaMipChain chain)
-        {
-            chain = null;
-
-            if (string.IsNullOrWhiteSpace(source.Value))
-            {
-                throw new ArgumentException(
-                    "Texture source identity must be initialized.",
-                    nameof(source));
-            }
-
-            if (!Enum.IsDefined(typeof(TextureChannel), channel))
-            {
-                throw new ArgumentOutOfRangeException(nameof(channel));
-            }
-
-            // Alpha and Red have producers. The red predicate is decode-proof
-            // by the monotone-transfer argument (see TryCapture), so the same
-            // lookup serves both; any other channel still fails closed.
-            if (!_fieldsBySource.TryGetValue((source, channel), out chain))
-            {
-                return false;
-            }
-
-            return true;
         }
 
         /// <summary>The predicate target: one byte per texel.</summary>
