@@ -1317,99 +1317,179 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void LockedMaterialWithReadyOriginalRefusesWhenThryUnattested()
+        public void
+            APlayPathBuildAdmitsALockedMaterialAndOpensTheWindowWithoutAnyVendor()
         {
+            // The fixture disables asset saving like every sibling
+            // fixture here: nothing the build persists becomes asset
+            // content, so NDMF's own cleanup destroys no asset-backed
+            // content. The window's in-memory clone survives to the
+            // drive's close inside the build, which is the production
+            // shape. AAO is disabled for the fixture like every
+            // full-window build: its Optimizing passes rewrite
+            // serialized state on this test platform and would poison
+            // the fixtures after this one.
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE locked thry fixture");
+            var root = new GameObject("AMUSE play admission fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
-            AnimatorController controller = null;
             Material locked = null;
             var consentSubjects = new List<string>();
 
+            // Mid-window facts, recorded inside the drive before the
+            // close: the close destroys the clone, so the open-window
+            // shape cannot be read from the post-build state.
+            var midWindowConsentGranted = false;
+            var midWindowOpenPairCount = 0;
+            var midWindowPairHeldClone = false;
+            var midWindowSlotHeldClone = false;
+            var midWindowRestoreMismatchCount = -1;
+
             try
             {
-                controller = new AnimatorController { name = "locked-thry" };
-                controller.AddLayer("L0");
-                controller.layers[0].stateMachine.AddState("S0");
-                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+                TransientUnlockTestKnobs.DisableAaoForFixture();
                 fixture = AddAnalyzableRenderer(root);
-                locked = LockedMaterial();
-                locked.SetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
-                locked.SetOverrideTag(
-                    LockedMaterialIdentity.OriginalShaderTagName,
-                    ".poiyomi/Poiyomi Toon");
-                locked.SetOverrideTag(
-                    LockedMaterialIdentity.OriginalShaderGuidTagName,
-                    "ffffffffffffffffffffffffffffffff");
+                locked = TransientUnlockTestLifecycle
+                    .LockedMaterialWithOriginal(
+                        "PlayAdmissionCape",
+                        "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest");
                 fixture.Renderer.sharedMaterials = new[] { locked };
 
+                // The drive runs inside the probe plugin's active animator
+                // scope, which is the production shape the swap-in's
+                // animation index requires, and it completes that shape:
+                // after the barrier it runs the window close on the same
+                // context, the way the production close pass runs inside
+                // the same build. The injected original-shader
+                // attestation stands in for a machine whose original
+                // resolves and passes; no vendor readiness answer exists
+                // anywhere. The recording presenter proves the admitted
+                // window never asks for consent.
+                BarrierUnderActiveExtensionProbePlugin.Drive = context =>
+                {
+                    SeedRetainedHostBindings(context);
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(
+                            buildPath: AmuseBuildPath.ApplyOnPlay),
+                        VerifiedLilToonTestSeams
+                            .SelectVerifiedFixtureRequest,
+                        VerifiedLilToonTestSeams
+                            .CaptureVerifiedFixtureMaterials,
+                        VerifiedLilToonTestSeams.VerifiedAlphaOnly,
+                        consentPresenter: subjects =>
+                        {
+                            consentSubjects.AddRange(subjects);
+                            return true;
+                        },
+                        lockedOriginalAttestation: _ => true);
+
+                    // The production shape: the close runs on the same
+                    // build, after the barrier, so the clone never
+                    // survives ProcessAvatar into NDMF's cleanup.
+                    // The close destroys the clone, so the drive records
+                    // the open-window facts first.
+                    var window =
+                        context.GetState<TransientUnlockWindowState>();
+                    midWindowConsentGranted = window.ConsentGranted;
+                    midWindowOpenPairCount = window.OpenPairs.Count;
+                    midWindowPairHeldClone =
+                        midWindowOpenPairCount > 0 &&
+                        window.OpenPairs[0].UnlockedClone != null;
+                    midWindowSlotHeldClone =
+                        midWindowPairHeldClone &&
+                        fixture.Renderer != null &&
+                        fixture.Renderer.sharedMaterials.Length > 0 &&
+                        fixture.Renderer.sharedMaterials[0] ==
+                            window.OpenPairs[0].UnlockedClone;
+                    midWindowRestoreMismatchCount = context
+                        .GetState<AmusePlatformFinishState>()
+                        .SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .TransientUnlockRestoreMismatch);
+
+                    TransientUnlockWindowClose.Execute(context);
+                };
+
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestGenericPlatform.Instance);
-                SeedRetainedHostBindings(context);
-
-                // The injected original-shader attestation stands in for a
-                // machine whose original resolves and passes, which is the
-                // only state where the Thry precondition decides. This
-                // environment has no pinned Thry digest, so the vendor
-                // side is unready and the renderer refuses by name. The
-                // recording presenter proves the window never asked for
-                // consent while the vendor side is unready.
-                AmusePlatformFinishPass.Execute(
-                    context,
-                    SupportedFacts(),
-                    VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest,
-                    VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials,
-                    VerifiedLilToonTestSeams.VerifiedAlphaOnly,
-                    consentPresenter: subjects =>
-                    {
-                        consentSubjects.AddRange(subjects);
-                        return true;
-                    },
-                    lockedOriginalAttestation: _ => true);
-
+                    root, TestActiveExtensionPlatform.Instance);
+                var probe = context.GetState<ActiveExtensionBarrierProbe>();
                 var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(probe.Ran, Is.True, "the probe pass did not run");
+                Assert.That(probe.Failure, Is.Null,
+                    "the barrier threw: " + probe.Failure);
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
-                Assert.That(amuse.RendererRefusalCount(
-                        RendererAnalysisRefusal
-                            .LockedPoiyomiThryUnattested),
-                    Is.EqualTo(1),
-                    "a locked material with a ready original must refuse " +
-                    "by name when the lock tool does not attest, before " +
-                    "any clone exists");
+
+                // The play path admits the locked material: no vendor
+                // readiness is consulted anywhere, so the renderer
+                // analyzes on the swapped world.
                 Assert.That(amuse.RendererRefusalCount(
                         RendererAnalysisRefusal
                             .LockedPoiyomiOriginalShaderUnattested),
                     Is.Zero,
-                    "the Thry precondition answers only after the " +
-                    "original attests");
-                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
-                    "the renderer refused before capture ran");
+                    "the injected attestation stands in for a ready " +
+                    "original");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "the admitted renderer must analyze");
 
+                // The window opened and the locked material took its
+                // in-memory restore: one open pair whose clone held the
+                // slot, with no vendor call and no restore mismatch. The
+                // drive recorded these facts before the close, because
+                // the close destroys the clone.
                 var window =
                     context.GetState<TransientUnlockWindowState>();
-                Assert.That(window.ConsentGranted, Is.False,
-                    "an unready vendor side never asks for and never " +
-                    "receives the window consent");
-                Assert.That(window.OpenPairs, Is.Empty,
-                    "no clone exists for a refused renderer");
+                Assert.That(midWindowConsentGranted, Is.True,
+                    "the play path must grant the window without a " +
+                    "vendor");
+                Assert.That(midWindowOpenPairCount, Is.EqualTo(1),
+                    "the locked material must be admitted into the " +
+                    "window");
+                Assert.That(midWindowPairHeldClone, Is.True,
+                    "the admitted pair must hold its restored clone");
+                Assert.That(midWindowSlotHeldClone, Is.True,
+                    "the swapped slot must hold the restored clone");
+                Assert.That(midWindowRestoreMismatchCount, Is.Zero,
+                    "the in-memory restore must verify with no vendor");
+                Assert.That(
+                    Thry.ThryEditor.ShaderOptimizer.LockCallCount,
+                    Is.Zero,
+                    "no build path may lock through the vendor");
                 Assert.That(
                     consentSubjects,
                     Is.Empty,
-                    "an unready vendor side adds no consent subject of " +
+                    "an admitted play build adds no consent subject of " +
                     "any kind");
+
+                // The post-close shape: the close reverted the pair on
+                // the same build, so the window holds zero open pairs
+                // and the slot is back on the locked original.
+                Assert.That(window.OpenPairs, Is.Empty,
+                    "the drained window holds zero open pairs");
+                Assert.That(fixture.Renderer.sharedMaterials[0],
+                    Is.EqualTo(locked),
+                    "the close must return the slot to the locked " +
+                    "original");
             }
             finally
             {
+                BarrierUnderActiveExtensionProbePlugin.Drive = null;
+                TransientUnlockTestKnobs.RestoreAaoAfterFixture();
+                if (fixture.Renderer != null)
+                {
+                    // Detach the slot array first: the teardown destroys
+                    // scene and runtime objects only.
+                    fixture.Renderer.sharedMaterials =
+                        System.Array.Empty<Material>();
+                }
+
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
                 Object.DestroyImmediate(root);
                 if (locked != null) Object.DestroyImmediate(locked);
-                if (controller != null) DestroyControllerGraph(controller);
             }
         }
 
@@ -3264,11 +3344,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // not reliably attachable on Unity 2022.3.22f1, hence the existing
             // runtime-compatible Assembly-CSharp probe, attached through Unity's
             // real AddStateMachineBehaviour(Type). BehaviourIdentity's allowlist is
-            // empty, so any behaviour type refuses.
-            return state.AddStateMachineBehaviour(System.Type.GetType(
+            // empty, so any behaviour type refuses. The settle loop is the same
+            // hardening the renderer fixtures carry: a native AddComponent can
+            // return null once while the AssetDatabase settles, and the probe
+            // must attach or the fixture precondition proves nothing.
+            var probeType = System.Type.GetType(
                 "Alrauna.Amuse.TestFixtures.AMUSETask7StateMachineBehaviourProbe, " +
                 "Assembly-CSharp",
-                true));
+                true);
+            StateMachineBehaviour behaviour = null;
+            for (var attempt = 0; attempt < 25 && behaviour == null; attempt++)
+            {
+                behaviour = state.AddStateMachineBehaviour(probeType);
+                if (behaviour == null)
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+            }
+
+            return behaviour;
         }
 
         private struct AnalyzableRendererFixture
@@ -4663,6 +4757,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "AMUSE test barrier under active extension", Execute));
             }
 
+            /// <summary>
+            /// An optional per-test drive for fixtures that must run the
+            /// barrier with injected facts and seams inside the active
+            /// animator scope. Null runs the production entry, which is
+            /// what the placement fixture exercises.
+            /// </summary>
+            internal static System.Action<BuildContext> Drive;
+
             private static void Execute(BuildContext context)
             {
                 var probe = context.GetState<ActiveExtensionBarrierProbe>();
@@ -4673,7 +4775,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // abort the whole build, which is the intended production outcome.
                 try
                 {
-                    AmusePlatformFinishPass.Execute(context);
+                    if (Drive != null)
+                    {
+                        Drive(context);
+                    }
+                    else
+                    {
+                        AmusePlatformFinishPass.Execute(context);
+                    }
                 }
                 catch (System.Exception exception)
                 {

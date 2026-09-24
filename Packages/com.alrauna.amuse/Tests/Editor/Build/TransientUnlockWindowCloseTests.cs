@@ -9,11 +9,11 @@ using UnityEditor.Animations;
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
     /// <summary>
-    /// The window close pass: one batched re-lock, batch verification
-    /// after the call, and the per-pair fallback that inverts the whole
-    /// swap-in remap before any clone is destroyed. Every case drives the
-    /// real pass through the window test lifecycle with only the falsified
-    /// seam injected.
+    /// The window close pass: reference reversion as the only close
+    /// outcome on every build path, and the fallback discipline that
+    /// inverts the whole swap-in remap before the clone is destroyed.
+    /// Every case drives the real pass through the window test
+    /// lifecycle with only the falsified seam injected.
     /// </summary>
     public sealed class TransientUnlockWindowCloseTests
     {
@@ -167,19 +167,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// F10. The close pass re-locks every open pair through one batch
-        /// call and verifies the batch after it, so the pair ships
-        /// re-locked and the window ends empty.
+        /// The primary close outcome: every slot that
+        /// held the unlocked clone holds the locked original again, every
+        /// committed reference remapped to the clone names L, the clone is
+        /// destroyed, and the vendor lock is never called. The
+        /// plausible wrong implementation is the close this test
+        /// replaced: it submitted U to the vendor, re-locked the clone,
+        /// and shipped it, so the vendor-call and slot assertions both
+        /// failed before the close changed.
         /// </summary>
         [Test]
-        public void CloseRelocksEveryOpenPairAndShipsNoneUnlocked()
+        public void CloseRevertsEveryOpenPairToTheLockedOriginal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE close success fixture");
+            var root = BuildAvatarRoot("AMUSE close reversion fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
-                "RelockedCape"));
+                "RevertedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
             var renderer =
                 TransientUnlockTestLifecycle.AddRenderer(
@@ -187,45 +192,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
 
+            var cloneRef = default(Object);
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                cloneRef = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+            };
+
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
             var state = context.GetState<AmusePlatformFinishState>();
 
             Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.GreaterThanOrEqualTo(1),
-                "the close pass must call the vendor lock");
-            var shipped = renderer.sharedMaterials[0];
-            Assert.That(shipped, Is.Not.EqualTo(locked),
-                "the verified pair ships the re-locked clone, not L");
-            Assert.That(shipped.name, Is.EqualTo("RelockedCape"));
-            Assert.That(shipped.shader.name, Does.StartWith(
-                    LockedMaterialIdentity.LockedShaderNamePrefix),
-                "the shipped shader must be a locked form");
-            Assert.That(shipped.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(1f),
-                "the shipped clone must be locked again");
+                Thry.ThryEditor.ShaderOptimizer.LockCallCount, Is.Zero,
+                "the close pass must never lock through the vendor, for " +
+                "the unlocked clone or for anything else");
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "every slot that held the unlocked clone holds L after " +
+                "the close");
+            // Unity destroys the clone natively, so the captured wrapper
+            // is fake null: destroyed but not managed null.
+            Assert.That(cloneRef == null, Is.True,
+                "the close destroys U only after the inversion, and the " +
+                "reversion is the primary path");
+            var clip = CommittedClip(root);
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            var curveMaterials = CurveMaterials(clip);
+            Assert.That(curveMaterials, Is.Not.Empty,
+                "the material-swap curve must survive the reversion");
+            Assert.That(curveMaterials, Has.All.EqualTo(locked),
+                "every committed reference remapped to U names L again");
             Assert.That(
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty,
                 "a build that completes holds zero open pairs");
             Assert.That(state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
-                        .TransientUnlockRelockFailed),
+                        .TransientUnlockCloneRetained),
                 Is.Zero,
-                "a verified close records no fallback refusal");
+                "a provably inverted reversion retains nothing");
         }
 
         /// <summary>
-        /// The impostor half of F10. A pair that already looks locked on
-        /// its lock flag but carries an unlocked shader name must still go
-        /// through the batch call and the post-call verification. A close
-        /// pass that skips already-locked-looking pairs without
-        /// verification ships the impostor with an unlocked shader name,
-        /// and the locked-name assertion fails on exactly that.
+        /// The impostor half of the reversion. A pair whose unlocked
+        /// clone already looks locked on its lock flag but still carries
+        /// an unlocked shader name must not tempt the close into a vendor
+        /// call: the reversion is the primary path, the impostor reverts
+        /// to L, and no lock call runs. The wrong implementation this
+        /// replaced submitted the impostor to the vendor and shipped the
+        /// re-locked clone, so the vendor-call and slot assertions failed
+        /// before the close changed.
         /// </summary>
         [Test]
-        public void AnAlreadyLockedLookingPairStillTakesTheBatchCall()
+        public void AnAlreadyLockedLookingCloneStillRevertsToTheLockedOriginal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
@@ -248,37 +268,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     .GetState<TransientUnlockWindowState>()
                     .OpenPairs[0];
                 // The impostor: flag at one, shader still the unlocked
-                // original. Only the vendor lock can close this pair.
+                // original. The close must not relock it; it reverts.
                 pair.UnlockedClone.SetFloat(flagName, 1f);
             };
 
             AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
 
-            var shipped = renderer.sharedMaterials[0];
-            Assert.That(shipped, Is.Not.EqualTo(locked),
-                "a pair the vendor locked in the batch ships the clone");
-            Assert.That(shipped.shader.name, Does.StartWith(
-                    LockedMaterialIdentity.LockedShaderNamePrefix),
-                "a close pass that skipped the impostor on its flag " +
-                "alone would ship the unlocked shader name here");
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.LockCallCount, Is.Zero,
+                "the impostor clone must never reach the vendor");
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "the impostor pair reverts to the locked original, so " +
+                "no unlocked shader name can ship");
         }
 
         /// <summary>
-        /// F11. A forced re-lock failure inverts the whole swap-in remap,
-        /// slot arrays and every recorded closure reference, back to L,
-        /// and records the named refusal per affected slot. No surviving
-        /// reference to the clone remains, and no exception escapes.
+        /// The reversion inverts the whole swap-in remap through the
+        /// fallback machinery, which is the primary close path now: slot
+        /// arrays and every recorded closure reference back to L, and the
+        /// clone destroyed only after the inversion. No surviving
+        /// reference to the clone remains, no exception escapes, and no
+        /// refusal is recorded, because a reverting close needs no vendor.
         /// </summary>
         [Test]
-        public void ForcedRelockFailureInvertsTheRemapBackToL()
+        public void CloseInvertsTheRemapBackToL()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
 
-            var root = BuildAvatarRoot("AMUSE relock failure fixture");
+            var root = BuildAvatarRoot("AMUSE reversion fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "FallbackCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -304,7 +323,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
-                "the fallback puts the original locked material back in " +
+                "the reversion puts the original locked material back in " +
                 "the slot");
             // Unity destroys the clone natively, so the captured wrapper
             // is fake null: destroyed but not managed null. The Unity
@@ -312,40 +331,37 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // NUnit's Is.Null would demand a managed null no destroyed
             // Unity object can ever satisfy.
             Assert.That(cloneRef == null, Is.True,
-                "the fallback destroys the clone, the only destroyable " +
-                "side of the window, so no reference to U survives");
+                "the close destroys the clone only after every " +
+                "reference is back on L, so no reference to U survives");
             var curveMaterials = CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
-                "the material-swap curve must survive the fallback");
+                "the material-swap curve must survive the reversion");
             Assert.That(curveMaterials, Has.All.EqualTo(locked),
                 "no surviving curve reference may point at the clone");
             Assert.That(state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
-                        .TransientUnlockRelockFailed),
-                Is.EqualTo(1),
-                "the fallback records the named refusal per affected " +
-                "slot");
+                        .TransientUnlockCloneRetained),
+                Is.Zero,
+                "a provably inverted reversion retains nothing");
             Assert.That(
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
         }
 
         /// <summary>
-        /// The F11 family, blend-tree coverage. A material swap clip that
-        /// lives under a blend tree state is rewritten by the swap-in
+        /// The reversion family, blend-tree coverage. A material swap clip
+        /// that lives under a blend tree state is rewritten by the swap-in
         /// through the animation index like any other object curve, so the
-        /// fallback must invert it on the committed clips too: every
+        /// reversion must invert it on the committed clips too: every
         /// keyframe back to L, no surviving reference to the clone, and
         /// the clone destroyed only after the inversion.
         /// </summary>
         [Test]
-        public void ABlendTreeResidentSwapClipFallsBackToL()
+        public void ABlendTreeResidentSwapClipRevertsToL()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
 
-            var root = BuildAvatarRoot("AMUSE blend tree fallback fixture");
+            var root = BuildAvatarRoot("AMUSE blend tree reversion fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "TreeCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -365,67 +381,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
-            var state = context.GetState<AmusePlatformFinishState>();
             var clip = CommittedClip(root);
 
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
-                "the fallback puts the original locked material back in " +
+                "the reversion puts the original locked material back in " +
                 "the slot");
             Assert.That(cloneRef == null, Is.True,
-                "the fallback destroys the clone, but only after every " +
+                "the close destroys the clone, but only after every " +
                 "reference is back on L");
             var curveMaterials = CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the blend-tree-resident material-swap curve must " +
-                "survive the fallback");
+                "survive the reversion");
             Assert.That(curveMaterials, Has.All.EqualTo(locked),
                 "no surviving curve reference may point at the clone");
-            Assert.That(state.SlotRefusalCount(
-                    AlphaSeparationSlotRefusal
-                        .TransientUnlockRelockFailed),
-                Is.EqualTo(1),
-                "the fallback records the named refusal per affected " +
-                "slot");
             Assert.That(
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
-        }
-
-        /// <summary>
-        /// The exception half of F11. A vendor lock that throws is a named
-        /// vendor failure: the production delegate converts it, the
-        /// fallback fires, and the build never ships an unlocked clone.
-        /// </summary>
-        [Test]
-        public void AThrowingVendorRelockStillFallsBackToL()
-        {
-            using var assets = new OverrideTemporaryDirectoryScope(
-                TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.ThrowOnRelock;
-
-            var root = BuildAvatarRoot("AMUSE relock throw fixture");
-            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
-                "ThrownCape"));
-            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
-            var renderer =
-                TransientUnlockTestLifecycle.AddRenderer(
-                    root, mesh, locked);
-
-            var context = default(BuildContext);
-            Assert.DoesNotThrow(
-                () => context = AvatarProcessor.ProcessAvatar(
-                    root, TransientUnlockTestPlatform.Instance),
-                "a converted vendor failure must fall back, never abort " +
-                "the window");
-
-            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked));
-            var state = context.GetState<AmusePlatformFinishState>();
-            Assert.That(state.SlotRefusalCount(
-                    AlphaSeparationSlotRefusal
-                        .TransientUnlockRelockFailed),
-                Is.EqualTo(1));
         }
 
         /// <summary>
@@ -472,22 +445,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The third outcome of the close, named. A pair whose re-lock
-        /// failed and whose committed-curve inversion cannot be proven
-        /// complete keeps the unlocked clone alive, because a destroyed
-        /// material that a committed curve still references would
-        /// serialize as a missing reference. The named wrong
-        /// implementation is the close pass that retains the clone
-        /// silently: the slot reverts to L and no record names the
-        /// retained unlocked reference.
+        /// The third outcome of the close, named. A reverting pair whose
+        /// committed-curve inversion cannot be proven complete keeps the
+        /// unlocked clone alive, because a destroyed material that a
+        /// committed curve still references would serialize as a missing
+        /// reference. The named wrong implementation is the close pass
+        /// that retains the clone silently: the slot reverts to L and no
+        /// record names the retained unlocked reference.
         /// </summary>
         [Test]
-        public void ARelockFailureWithoutProvenInversionNamesTheRetainedClone()
+        public void AReversionWithoutProvenInversionNamesTheRetainedClone()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
 
             var root = BuildAvatarRoot("AMUSE retained clone fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
@@ -535,11 +505,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "alive");
             Assert.That(state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
-                        .TransientUnlockRelockFailed),
-                Is.EqualTo(1),
-                "the re-lock failure stays named");
-            Assert.That(state.SlotRefusalCount(
-                    AlphaSeparationSlotRefusal
                         .TransientUnlockCloneRetained),
                 Is.EqualTo(1),
                 "the retention of the unlocked clone must be named, " +
@@ -549,17 +514,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// F13. The fallback object is never destroyed; only references
+        /// F13. The locked original is never destroyed; only references
         /// drop, and the clone is the only destroyable side. The named
-        /// wrong implementation is a sweep that destroys the fallback.
+        /// wrong implementation is a sweep that destroys the original.
         /// </summary>
         [Test]
         public void TheFallbackNeverDestroysTheLockedOriginal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.FailRelock;
 
             var root = BuildAvatarRoot("AMUSE fallback survival fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
@@ -615,16 +578,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The behavior-neutral round trip, and a frozen regression: a
-        /// locked material goes in locked, comes out re-locked, with the
-        /// marker at one, a locked shader name, name parity per F12, its
-        /// suffixed clip binding still live, and every material that was
-        /// never locked untouched. Increment 3 flips the admission stance;
-        /// this test must still pass unchanged then, so it depends only on
-        /// build outcomes, never on where the swap-in sits in the pass
-        /// list.
+        /// locked material goes in locked and the user's own locked
+        /// original ships, with the marker at one, a locked shader name,
+        /// its suffixed clip binding still live, and every material that
+        /// was never locked untouched. Increment 3 flips the admission
+        /// stance; this test must still pass unchanged then, so it
+        /// depends only on build outcomes, never on where the swap-in
+        /// sits in the pass list.
         /// </summary>
         [Test]
-        public void LockedMaterialRoundTripsToReLockedEquivalent()
+        public void LockedMaterialShipsTheUntouchedLockedOriginal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
@@ -663,19 +626,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty,
                 "the window must drain");
 
-            // The swapped pair went in locked and comes out re-locked.
+            // The swapped pair went in locked and the locked original
+            // ships: the close reverts the pair, so the shipped material
+            // is L itself.
             var shipped = renderer.sharedMaterials[0];
-            Assert.That(shipped, Is.Not.EqualTo(locked),
-                "the cycle runs through the unlocked clone");
+            Assert.That(shipped, Is.EqualTo(locked),
+                "the close reverts the pair, so the locked original " +
+                "ships");
             Assert.That(shipped.name, Is.EqualTo("Cape"),
-                "name parity per F12: the clone keeps the exact name");
+                "the shipped original keeps its exact name");
             Assert.That(shipped.shader.name, Does.StartWith(
                     LockedMaterialIdentity.LockedShaderNamePrefix),
-                "the shader name is a locked form after the re-lock");
+                "the shipped shader is the locked form");
             Assert.That(shipped.GetFloat(
                     LockedMaterialIdentity.OptimizerEnabledPropertyName),
                 Is.EqualTo(1f),
-                "the lock marker equals one after the re-lock");
+                "the lock marker equals one on the shipped original");
 
             // The locked original came through untouched and alive.
             Assert.That(locked, Is.Not.Null);
@@ -698,9 +664,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(suffixed.keys[suffixed.keys.Length - 1].value,
                 Is.EqualTo(2f));
 
-            // The material-swap curve references the re-locked clone, so
-            // the animation the user authored keeps working. The non-empty
-            // guard keeps the all-equal constraint from passing vacuously.
+            // The material-swap curve references the locked original the
+            // build ships, so the animation the user authored keeps
+            // working. The non-empty guard keeps the all-equal
+            // constraint from passing vacuously.
             var curveMaterials = CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");

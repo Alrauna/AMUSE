@@ -13,11 +13,11 @@ namespace Alrauna.Amuse.Editor.Build
     /// Opens the transient unlock window. For every recognized locked
     /// material on the build avatar that passes every precondition of spec
     /// section 5, the service clones it, persists the clone through the
-    /// NDMF asset saver, restores the clone through the vendor delegate,
-    /// verifies the restore against the recorded serialization facts, and
-    /// then swaps the clone into the slot arrays, the animation-closure
-    /// curves, and NDMF's object registry. One unlocked clone exists per
-    /// locked material across the whole avatar.
+    /// NDMF asset saver, restores the clone through the in-memory
+    /// reconstruction, verifies the restore against the recorded
+    /// serialization facts, and then swaps the clone into the slot arrays,
+    /// the animation-closure curves, and NDMF's object registry. One
+    /// unlocked clone exists per locked material across the whole avatar.
     /// <para>
     /// The locked original L is never mutated and never destroyed. The
     /// clone U is AMUSE-owned container content and the only destroyable
@@ -32,55 +32,29 @@ namespace Alrauna.Amuse.Editor.Build
     internal static class TransientUnlockSwapIn
     {
         /// <summary>
-        /// The machine-side availability the swap-in consults: the vendor
-        /// readiness flag and the two delegates. Production builds it from
-        /// <see cref="TransientUnlockAvailability"/>. Tests inject
-        /// attested and unattested values through it, so the vendor never
-        /// has to be installed.
+        /// The machine-side availability the swap-in consults: the restore
+        /// delegate. Production builds it from <see
+        /// cref="TransientUnlockAvailability"/>. No vendor-shaped answer
+        /// exists on this gate.
         /// </summary>
         internal sealed class Availability
         {
-            /// <summary>
-            /// Whether the Thry side is ready on this machine: the source
-            /// digest attests and the seam resolves. When false, the
-            /// service opens nothing and creates no clone.
-            /// </summary>
-            internal bool ThryAttested { get; }
-
             internal TransientUnlockDelegate Restore { get; }
 
-            internal TransientRelockDelegate Relock { get; }
-
             /// <summary>
-            /// The production availability. The optional seam substitutes
-            /// only the machine-readiness answer for tests, exactly as the
-            /// original-shader attestation seam does; null keeps the
-            /// production <see cref="TransientUnlockAvailability.WindowVendorReady"/>.
+            /// The production availability. Production consults no vendor
+            /// answer: the restore reconstructs in memory, so the window
+            /// opens on the original-shader attestation gates alone.
             /// </summary>
-            internal static Availability FromProduction(
-                Func<bool> vendorReady = null)
+            internal static Availability FromProduction()
             {
-                var ready = vendorReady ??
-                    TransientUnlockAvailability.WindowVendorReady;
-                if (!ready())
-                {
-                    return new Availability(false, null, null);
-                }
-
                 return new Availability(
-                    true,
-                    TransientUnlockAvailability.CreateProductionRestore(),
-                    TransientUnlockAvailability.CreateProductionRelock());
+                    TransientUnlockAvailability.CreateProductionRestore());
             }
 
-            internal Availability(
-                bool thryAttested,
-                TransientUnlockDelegate restore,
-                TransientRelockDelegate relock)
+            internal Availability(TransientUnlockDelegate restore)
             {
-                ThryAttested = thryAttested;
                 Restore = restore;
-                Relock = relock;
             }
         }
 
@@ -139,12 +113,11 @@ namespace Alrauna.Amuse.Editor.Build
                 return summary;
             }
 
-            // The vendor-side precondition comes before any clone step by
-            // contract: an unattested tool refuses through the renderer
-            // pre-check and the service creates nothing at all.
-            if (!availability.ThryAttested ||
-                availability.Restore == null ||
-                availability.Relock == null)
+            // The machine-side gate comes before any clone step by
+            // contract: an availability without a restore delegate opens
+            // nothing at all. No vendor-shaped answer remains on this
+            // gate.
+            if (availability.Restore == null)
             {
                 return summary;
             }
@@ -337,8 +310,8 @@ namespace Alrauna.Amuse.Editor.Build
         {
             // Exact name parity is load-bearing: the rename-animated
             // property suffix derives from the material name, so a clone
-            // renamed for diagnostics would orphan every suffixed binding
-            // at the re-lock.
+            // renamed for diagnostics would orphan every suffixed
+            // binding at the reversion.
             var clone = UnityEngine.Object.Instantiate(locked);
             clone.name = locked.name;
             context.AssetSaver.SaveAsset(clone);
@@ -353,7 +326,7 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             UnityEngine.Object.DestroyImmediate(clone, true);
-            mismatchReason ??= "the vendor restore reported failure";
+            mismatchReason ??= "the restore reported failure";
             return null;
         }
 

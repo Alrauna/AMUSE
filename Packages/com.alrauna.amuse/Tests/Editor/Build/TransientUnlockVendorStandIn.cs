@@ -6,11 +6,15 @@ namespace Thry.ThryEditor
 {
     /// <summary>
     /// Stand-in for the vendor lock tool type. The declaring full name
-    /// matches the verified vendor type on purpose, so the production
-    /// reflection seam resolves this type and the real delegate path runs
-    /// in tests. The method signatures mirror the live-verified vendor
-    /// signatures: public static boolean, an IEnumerable of Material first.
-    /// No vendor source exists here; every behavior is a scripted stand-in.
+    /// matches the verified vendor type on purpose, so a reintroduced
+    /// reflection seam would resolve this type. No production path
+    /// resolves or calls this type since the 2026-09-24 vendor lock
+    /// handover. The suite asserts <c>LockCallCount</c> and
+    /// <c>UnlockCallCount</c> stay zero, and those counters are the
+    /// tripwire against any reintroduced vendor call. The method
+    /// signatures mirror the live-verified vendor signatures: public
+    /// static boolean, an IEnumerable of Material first. No vendor
+    /// source exists here; every behavior is a scripted stand-in.
     /// </summary>
     internal static class ShaderOptimizer
     {
@@ -22,7 +26,10 @@ namespace Thry.ThryEditor
         internal enum Mode
         {
             /// <summary>Restore rebinds the recorded locked shader's
-            /// original by tag, and the lock rebinds it. Flags follow.</summary>
+            /// original by tag, and the lock rebinds the recorded locked
+            /// shader for a restored clone or the locked stand-in shader
+            /// for a generated output the restore never saw. Flags
+            /// follow.</summary>
             Real,
 
             /// <summary>The restore reports success and changes nothing:
@@ -37,10 +44,6 @@ namespace Thry.ThryEditor
             /// path, exactly as the vendor filter does. An unpersisted
             /// clone restores as a no-op.</summary>
             SkipUnpersisted,
-
-            /// <summary>The re-lock returns success and changes nothing:
-            /// the silent re-lock failure of F11.</summary>
-            FailRelock,
 
             /// <summary>The re-lock throws, like the reproduced throwing
             /// vendor callback class. The production delegate converts the
@@ -80,11 +83,6 @@ namespace Thry.ThryEditor
         public static bool LockMaterials(IEnumerable<Material> materials)
         {
             LockCallCount++;
-            if (CurrentMode == Mode.FailRelock)
-            {
-                return true;
-            }
-
             if (CurrentMode == Mode.ThrowOnRelock)
             {
                 throw new System.InvalidOperationException(
@@ -102,7 +100,26 @@ namespace Thry.ThryEditor
                         material, out var lockedShader) &&
                     lockedShader != null)
                 {
+                    // A restored clone rebinds the recorded locked
+                    // shader, exactly as the vendor's own lock rebinds
+                    // the generated shader by tag.
                     material.shader = lockedShader;
+                }
+                else
+                {
+                    // A material the restore never recorded is a
+                    // generated output the transformation created after
+                    // the unlock; the vendor lock rebinds its locked
+                    // form the same way. A source clone the restore
+                    // skipped never reaches this call: its swap-in
+                    // verification removes the pair before the window
+                    // close, so an unrecorded batch member is never a
+                    // skipped source clone.
+                    var lockedForm = LockedFormShader();
+                    if (lockedForm != null)
+                    {
+                        material.shader = lockedForm;
+                    }
                 }
 
                 SetFlag(material, 1f);
@@ -168,6 +185,16 @@ namespace Thry.ThryEditor
             return string.IsNullOrEmpty(recordedName)
                 ? null
                 : Shader.Find(recordedName);
+        }
+
+        // The locked stand-in shader the fixtures recognize as the
+        // locked form, named by the one constant the locked-material
+        // fixtures also read.
+        private static Shader LockedFormShader()
+        {
+            return Shader.Find(
+                Alrauna.Amuse.Tests.Editor.Build
+                    .TransientUnlockTestLifecycle.LockedStandInShaderName);
         }
 
         private static void SetFlag(Material material, float value)

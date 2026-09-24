@@ -336,6 +336,8 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 var mapping = new Dictionary<Material, Material>();
+                var familyOfAdmitted = new Dictionary<
+                    Material, CapturedAlphaMaterialFamily>();
                 var pendingClones = new List<Material>();
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
                 var unconvertedCount = 0;
@@ -411,6 +413,10 @@ namespace Alrauna.Amuse.Editor.Build
                         }
                     }
                     mapping.Add(live, opaque);
+                    // The same successfully mapped admitted source feeds
+                    // both maps, so the family record can never name a
+                    // source the output map lacks, or the reverse.
+                    familyOfAdmitted.Add(live, captured.Family);
                     if (!ReferenceEquals(opaque, live) &&
                         !ReferenceEquals(opaque, preparedOpaque))
                     {
@@ -456,7 +462,8 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 candidateSlots.Add(new PreparedSlotSeparation(
-                    submesh, mapping, slotDivergence, slotPremultiply));
+                    submesh, mapping, familyOfAdmitted, slotDivergence,
+                    slotPremultiply));
 
                 // One Information entry per prepared slot whose
                 // conversion admitted a depth-test divergence, so the
