@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEngine;
@@ -118,22 +119,13 @@ namespace Alrauna.Amuse.Editor.Build
         /// per affected slot.</summary>
         TransientUnlockRestoreMismatch,
 
-        /// <summary>The window close could not verify this slot's swapped
-        /// clone as locked again, so the fallback inverted the swap-in
-        /// remap and the slot holds its original locked material again.
-        /// When the committed-curve inversion is provably complete the
-        /// clone is destroyed; otherwise the clone is retained and named
-        /// by <see cref="TransientUnlockCloneRetained"/>. One record per
-        /// affected slot.</summary>
-        TransientUnlockRelockFailed,
-
         /// <summary>The window close could not prove that every committed
-        /// animation curve was inverted for this slot's failed pair, so
-        /// the unlocked clone stays alive: a destroyed material that a
+        /// animation curve was inverted for this slot's pair, so the
+        /// unlocked clone stays alive: a destroyed material that a
         /// committed curve still references would serialize as a missing
-        /// reference. The slot holds its original locked material, and an
-        /// animation may still apply the unlocked clone. One record per
-        /// affected slot.</summary>
+        /// reference. The slot holds its original locked material, and
+        /// an animation may still apply the retained copy. One record
+        /// per affected slot.</summary>
         TransientUnlockCloneRetained,
     }
 
@@ -302,12 +294,16 @@ namespace Alrauna.Amuse.Editor.Build
         internal PreparedSlotSeparation(
             SubmeshSeparationPlan plan,
             IReadOnlyDictionary<Material, Material> opaqueOfAdmitted,
+            IReadOnlyDictionary<Material, CapturedAlphaMaterialFamily>
+                familyOfAdmitted,
             bool depthTestDivergence,
             bool premultiplyNormalization)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             OpaqueOfAdmitted = opaqueOfAdmitted
                 ?? throw new ArgumentNullException(nameof(opaqueOfAdmitted));
+            FamilyOfAdmitted = familyOfAdmitted
+                ?? throw new ArgumentNullException(nameof(familyOfAdmitted));
             DepthTestDivergence = depthTestDivergence;
             PremultiplyNormalization = premultiplyNormalization;
         }
@@ -338,6 +334,19 @@ namespace Alrauna.Amuse.Editor.Build
         /// <see cref="PreparedAlphaSeparation"/> documents.
         /// </summary>
         internal IReadOnlyDictionary<Material, Material> OpaqueOfAdmitted { get; }
+
+        /// <summary>
+        /// This slot's admitted source materials mapped to the shader family
+        /// the capture recorded for each, keyed by exactly the sources of
+        /// <see cref="OpaqueOfAdmitted"/>: both maps are populated from the
+        /// same successfully mapped admitted set. The transient unlock
+        /// window close reads it to tell which mapped outputs are generated
+        /// Poiyomi materials a play-mode build must re-lock. Uses the
+        /// default comparer for the reason
+        /// <see cref="PreparedAlphaSeparation"/> documents.
+        /// </summary>
+        internal IReadOnlyDictionary<Material, CapturedAlphaMaterialFamily>
+            FamilyOfAdmitted { get; }
     }
 
     /// <summary>

@@ -29,17 +29,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>Whether the window consent is granted for this build.</summary>
         internal static bool ConsentGranted = true;
 
-        /// <summary>Whether the injected availability reports the Thry
-        /// side ready.</summary>
-        internal static bool ThryAttested = true;
+        /// <summary>The build path the lifecycle facts report for this
+        /// build: the non-Play NDMF build by default, Apply on Play for
+        /// the play-mode window cases.</summary>
+        internal static AmuseBuildPath BuildPath =
+            AmuseBuildPath.NonPlayNdmfBuild;
 
         /// <summary>The injected original-shader attestation, or null for
         /// the always-attested stand-in.</summary>
         internal static Func<Material, bool> OriginalAttestation;
-
-        /// <summary>The injected re-lock delegate, or null for the real
-        /// production delegate over the stand-in vendor type.</summary>
-        internal static TransientRelockDelegate RelockOverride;
 
         /// <summary>False runs the swap-in pass; true skips it, for close
         /// tests that arm their pairs through the swap-in and then need a
@@ -54,6 +52,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// closes, for tests that must mutate build state between swap-in
         /// and close.</summary>
         internal static Action<BuildContext> BeforeClose;
+
+        /// <summary>
+        /// A callback between preparation and apply. Tests use it to model
+        /// another pass changing the build copy after analysis.
+        /// </summary>
+        internal static Action<BuildContext> BeforeApply;
 
         /// <summary>The window state the last pass run observed.</summary>
         internal static TransientUnlockWindowState Window;
@@ -102,12 +106,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static void Reset()
         {
             ConsentGranted = true;
-            ThryAttested = true;
+            BuildPath = AmuseBuildPath.NonPlayNdmfBuild;
             OriginalAttestation = null;
-            RelockOverride = null;
             SkipSwapIn = false;
             SkipClose = false;
             BeforeClose = null;
+            BeforeApply = null;
             Window = null;
             LastSwapSummary = null;
             LastSwapError = null;
@@ -132,10 +136,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
     /// <summary>
     /// The window test lifecycle: the real swap-in service and the real
-    /// window close pass, both under an active animator extension, with the
-    /// availability and re-lock seams injected through the knobs. The
-    /// production plugin never runs on this dedicated platform, so this
-    /// plugin is the whole PlatformFinish phase.
+    /// window close pass, both under an active animator extension, with
+    /// the availability seam injected through the knobs. The production
+    /// plugin never runs on this dedicated platform, so this plugin is
+    /// the whole PlatformFinish phase.
     /// </summary>
     [RunsOnPlatforms(TransientUnlockTestPlatform.QualifiedName)]
     public sealed class TransientUnlockWindowTestPlugin :
@@ -188,11 +192,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     TransientUnlockTestKnobs.ConsentGranted;
                 var availability =
                     new TransientUnlockSwapIn.Availability(
-                        TransientUnlockTestKnobs.ThryAttested,
                         TransientUnlockAvailability
-                            .CreateProductionRestore(),
-                        TransientUnlockAvailability
-                            .CreateProductionRelock());
+                            .CreateProductionRestore());
                 TransientUnlockTestKnobs.LastSwapSummary =
                     TransientUnlockSwapIn.SwapIn(
                         context,
@@ -221,11 +222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 TransientUnlockTestKnobs.BeforeClose?.Invoke(context);
-                TransientUnlockWindowClose.Execute(
-                    context,
-                    TransientUnlockTestKnobs.RelockOverride ??
-                        TransientUnlockAvailability
-                            .CreateProductionRelock());
+                TransientUnlockWindowClose.Execute(context);
                 TransientUnlockTestKnobs.Window = context
                     .GetState<TransientUnlockWindowState>();
             }
@@ -415,7 +412,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "3.10.4",
                 "3.10.4",
                 WellKnownPlatforms.VRChatAvatar30,
-                AmuseBuildPath.NonPlayNdmfBuild,
+                TransientUnlockTestKnobs.BuildPath,
                 hasAssetSaver: true,
                 hasAssetContainer: true,
                 hasObjectRegistry: true,
@@ -488,6 +485,55 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 LockedMaterialIdentity.AllLockedGuidsTagName,
                 "0123456789abcdef0123456789abcdef");
             return material;
+        }
+
+        /// <summary>
+        /// Locks an already configured fixture material. This preserves its
+        /// original shader properties for the unlock-window test.
+        /// </summary>
+        internal static Material LockConfiguredMaterial(
+            string materialName, Material configuredMaterial)
+        {
+            if (configuredMaterial == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(configuredMaterial));
+            }
+
+            var originalShader = configuredMaterial.shader;
+            if (originalShader == null)
+            {
+                throw new InvalidOperationException(
+                    "The configured fixture material must have a shader.");
+            }
+
+            var lockedShader = Shader.Find(LockedStandInShaderName);
+            if (lockedShader == null)
+            {
+                throw new InvalidOperationException(
+                    "The locked stand-in shader must import.");
+            }
+
+            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                    originalShader, out var guid, out long _))
+            {
+                throw new InvalidOperationException(
+                    "The original fixture shader must have a GUID.");
+            }
+
+            configuredMaterial.name = materialName;
+            configuredMaterial.shader = lockedShader;
+            configuredMaterial.SetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+            configuredMaterial.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                originalShader.name);
+            configuredMaterial.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName, guid);
+            configuredMaterial.SetOverrideTag(
+                LockedMaterialIdentity.AllLockedGuidsTagName,
+                "0123456789abcdef0123456789abcdef");
+            return configuredMaterial;
         }
 
         /// <summary>
