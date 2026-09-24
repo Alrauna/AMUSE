@@ -171,21 +171,6 @@ namespace Alrauna.Amuse.Editor.Build
                 "Check that the original shader of the material is " +
                 "installed at the version the lock recorded.",
 
-            // Retained for census vocabulary compatibility alongside the
-            // enum member: produced by no build path since 2026-09-24,
-            // when the vendor readiness answer was removed.
-            ["amuse.renderer.LockedPoiyomiThryUnattested"] =
-                "This renderer holds a locked material, and the play " +
-                "path cannot lock the build copy AMUSE generates.",
-            ["amuse.renderer.LockedPoiyomiThryUnattested:description"] =
-                "The material is locked. The play path needs the lock " +
-                "tool to lock the build copy AMUSE generates from it. " +
-                "The lock tool installed here is not the version AMUSE " +
-                "can verify. AMUSE changed nothing on this renderer.",
-            ["amuse.renderer.LockedPoiyomiThryUnattested:hint"] =
-                "Install the supported lock tool version, then run the " +
-                "build again.",
-
             // --- Avatar-scoped animation refusals ---
             ["amuse.avatar.UnsupportedAnimatorControllerForm"] =
                 "This avatar has an animator controller AMUSE cannot read.",

@@ -912,15 +912,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         false),
                 });
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureGraphForTests(
-                AnalyzedRendererPath,
-                new[] { initial },
-                graph,
-                new StubBindings(specialClip),
-                AlphaPolicyBounds.Inert,
-                SelectFixtureRequest,
-                CaptureFixtureMaterials,
-                out _);
+            var evidence = UnityAnimationEvidenceCapture
+                .CaptureGraphThroughSeams(
+                    AnalyzedRendererPath,
+                    new[] { initial },
+                    graph,
+                    new StubBindings(specialClip),
+                    AlphaPolicyBounds.Inert,
+                    SelectFixtureRequest,
+                    CaptureFixtureMaterials,
+                    out _);
 
             Assert.That(evidence.Clips, Has.Count.EqualTo(2));
             Assert.That(evidence.Clips[0].Name, Is.EqualTo("graph swap"));

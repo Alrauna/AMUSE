@@ -169,9 +169,7 @@ namespace Alrauna.Amuse.Editor.Host
                 observedMaterialMapper);
         }
         // Public-project vendor fixtures exercise verified frontend equations but
-        // intentionally do not publish vendor source assets. This seam exists only
-        // for the package's friend test assembly to test closure mechanics; product
-        // integration must call the graph entry point above.
+        // intentionally do not publish vendor source assets.
         internal static CapturedAnimationEvidence CaptureObservedForTests(
             string rendererPath,
             IReadOnlyList<LiveClipObservation> observations,
@@ -223,7 +221,10 @@ namespace Alrauna.Amuse.Editor.Host
                 rendererTypeName);
         }
 
-        internal static CapturedAnimationEvidence CaptureGraphForTests(
+        // The seam-parameterized graph capture. The barrier's fixture
+        // route uses it when a selector seam is injected and no animation
+        // index is active. The friend test assembly uses it the same way.
+        internal static CapturedAnimationEvidence CaptureGraphThroughSeams(
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,

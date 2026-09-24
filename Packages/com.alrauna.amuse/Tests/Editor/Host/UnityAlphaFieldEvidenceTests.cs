@@ -177,7 +177,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             TextureChannel channel,
             out AlphaMipChain chain)
         {
-            var evidence = new UnityAlphaFieldEvidence(new[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new[] { texture });
             Assert.That(
                 UnityTextureEvidence.TryGetSourceId(texture, out var sourceId),
                 Is.True,
@@ -489,7 +489,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "A RenderTexture asset still has a project identity; the refusal must "
                 + "come from it not being a Texture2D.");
 
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { renderTexture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { renderTexture });
 
             Assert.That(
                 evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var field),
@@ -504,7 +504,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var absent = ImportAsymmetric("absent");
 
             Assert.That(UnityTextureEvidence.TryGetSourceId(absent, out var absentSource), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { supplied });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { supplied });
 
             Assert.That(
                 evidence.TryGetAlphaField(absentSource, TextureChannel.Alpha, out var field),
@@ -537,7 +537,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var texture = ImportAsymmetric("withnull");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
 
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { null, texture, null });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { null, texture, null });
 
             Assert.That(
                 evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var field),
@@ -552,7 +552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var texture = ImportAsymmetric("duplicate");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
 
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture, texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture, texture });
 
             Assert.That(
                 evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var field),
@@ -565,7 +565,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var texture = ImportAsymmetric("destroyed-after-capture");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var before), Is.True);
 
             AssetDatabase.DeleteAsset(TempFolder + "/destroyed-after-capture.png");
@@ -587,7 +587,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var texture = ImportAsymmetric("mutated-after-capture");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var before), Is.True);
 
             texture.SetPixels32(UniformPixels(texture.width, texture.height, 17));
@@ -605,7 +605,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void NullTextureCollection_Throws()
         {
             Assert.That(
-                () => new UnityAlphaFieldEvidence(
+                () => new CapturedAlphaFieldBag(
                     (System.Collections.Generic.IEnumerable<Texture>)null),
                 Throws.TypeOf<ArgumentNullException>());
         }
@@ -613,7 +613,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void UninitializedSourceIdentity_Throws()
         {
-            var evidence = new UnityAlphaFieldEvidence(Array.Empty<Texture>());
+            var evidence = new CapturedAlphaFieldBag(Array.Empty<Texture>());
 
             Assert.That(
                 () => evidence.TryGetAlphaField(default, TextureChannel.Alpha, out _),
@@ -625,7 +625,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var texture = ImportAsymmetric("badchannel");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
 
             Assert.That(
                 () => evidence.TryGetAlphaField(source, (TextureChannel)99, out _),
@@ -743,7 +743,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var texture = ImportAsymmetric("determinism");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
 
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var first), Is.True);
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var second), Is.True);
@@ -756,7 +756,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var texture = ImportAsymmetric("independence");
             Assert.That(UnityTextureEvidence.TryGetSourceId(texture, out var source), Is.True);
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
 
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var first), Is.True);
             Assert.That(evidence.TryGetAlphaField(source, TextureChannel.Alpha, out var second), Is.True);
