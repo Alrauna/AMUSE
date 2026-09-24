@@ -39,7 +39,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// </summary>
         internal sealed class Availability
         {
-            internal TransientUnlockDelegate Restore { get; }
+            internal TransientUnlockRestoreDelegate Restore { get; }
 
             /// <summary>
             /// The production availability. Production consults no vendor
@@ -52,7 +52,7 @@ namespace Alrauna.Amuse.Editor.Build
                     TransientUnlockAvailability.CreateProductionRestore());
             }
 
-            internal Availability(TransientUnlockDelegate restore)
+            internal Availability(TransientUnlockRestoreDelegate restore)
             {
                 Restore = restore;
             }
@@ -318,7 +318,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             var outcome = availability.Restore(clone);
             mismatchReason = RestoreMismatchReason(locked, clone, attests);
-            if (outcome == TransientUnlockVendorOutcome.Succeeded &&
+            if (outcome == TransientUnlockRestoreOutcome.Succeeded &&
                 mismatchReason == null)
             {
                 mismatchReason = null;
