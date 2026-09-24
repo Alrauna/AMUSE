@@ -10,9 +10,9 @@ namespace Alrauna.Amuse.Editor.Host
     /// The closed set of facts that make a whole renderer unanalyzable. Each
     /// member is a renderer- or mesh-scoped condition; everything a single
     /// material or triangle can fail at is scoped narrower and never reaches
-    /// this enum. Declaration order is mirrored by the research census
-    /// vocabulary. Runtime refusal precedence is defined by the analysis
-    /// pipeline, not this enum.
+    /// this enum. The research census mirror holds a snapshot of these names
+    /// and may retain names the product has retired. Runtime refusal
+    /// precedence is defined by the analysis pipeline, not this enum.
     /// </summary>
     internal enum RendererAnalysisRefusal
     {
@@ -84,18 +84,6 @@ namespace Alrauna.Amuse.Editor.Host
         /// equation, so the slot has no attested alpha semantics to classify.
         /// </summary>
         AdmittedMaterialSemanticsUnknown,
-
-        /// <summary>
-        /// Retained for census vocabulary compatibility: the research
-        /// census vocabulary maps this member, so the member cannot be
-        /// deleted without a research package release. It is produced by
-        /// no build path since 2026-09-24, when the vendor lock handover
-        /// removed the vendor readiness answer this refusal named: no
-        /// build path consults whether the lock tool attests, so no
-        /// renderer can be refused for it. Its report strings are
-        /// retained with it.
-        /// </summary>
-        LockedPoiyomiThryUnattested,
 
         /// <summary>
         /// This renderer holds a material whose serialization carries the
@@ -206,8 +194,10 @@ namespace Alrauna.Amuse.Editor.Host
     internal delegate MaterialSemantics CapturedAlphaMaterialSemanticsResolver(
         CapturedAlphaMaterial material);
 
-    // Kept temporarily for the separately packaged census collector. New proof
-    // paths use CapturedAlphaMaterialSemanticsResolver exclusively.
+    // The research census collector's test seam. The research
+    // RendererObservationBuilder overload and the census tests consume it.
+    // New product proof paths use CapturedAlphaMaterialSemanticsResolver
+    // exclusively.
     internal delegate MaterialSemantics BaseMaterialSemanticsProvider(
         Material material);
 

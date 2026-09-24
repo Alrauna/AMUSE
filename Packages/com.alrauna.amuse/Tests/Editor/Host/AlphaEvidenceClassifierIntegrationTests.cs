@@ -107,7 +107,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var alpha = SemanticOutput<ScalarSemanticValue>.Complete(
                 ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
 
-            var evidence = new UnityAlphaFieldEvidence(new Texture[] { texture });
+            var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
             return AlphaSemanticsResolver.Resolve(
                 alpha, evidence.TryGetAlphaField, 0);
         }
