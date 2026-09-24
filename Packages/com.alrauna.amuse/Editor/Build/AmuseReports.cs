@@ -59,6 +59,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// renderer name, and — when the refusal names one — the offending
         /// material, plus the proven mapping's keys when provided, so a
         /// report distinguishes an admission gap from an identity mismatch.
+        /// Optional detail replaces the cause text and names a copy by
+        /// role only.
         /// A <see cref="AlphaSeparationSlotRefusal.None"/> is not a
         /// refusal, so it throws.
         /// </summary>
@@ -69,7 +71,8 @@ namespace Alrauna.Amuse.Editor.Build
             string rendererName = null,
             Material offendingMaterial = null,
             System.Collections.Generic.IReadOnlyDictionary<Material, Material>
-                provenMapping = null)
+                provenMapping = null,
+            string detail = null)
         {
             if (cause == AlphaSeparationSlotRefusal.None)
             {
@@ -93,7 +96,9 @@ namespace Alrauna.Amuse.Editor.Build
                     ErrorSeverity.Information,
                     AmuseReportStrings.SlotSeparationKey(cause),
                     slotIndex,
-                    cause.ToString(),
+                    string.IsNullOrEmpty(detail)
+                        ? cause.ToString()
+                        : detail,
                     rendererName,
                     offendingMaterial,
                     names);

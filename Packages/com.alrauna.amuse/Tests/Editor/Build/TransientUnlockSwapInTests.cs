@@ -94,24 +94,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// F1. A restore that reports success and changes nothing is a
-        /// no-op restore. The wrong implementation is a verifier that
-        /// trusts the delegate's outcome: it swaps an unlocked clone into
-        /// the slot and ships it. The verification contract must catch the
-        /// no-op on facts, refuse the slot by name, and never swap in.
+        /// F1. A restore that fails its verification is caught on facts.
+        /// The wrong implementation is a verifier that trusts the
+        /// delegate's outcome: it swaps an unlocked clone into the slot
+        /// and ships it. The verification contract must catch the
+        /// failure on facts, refuse the slot by name, and never swap
+        /// in. The restore is the in-memory reconstruction, so the
+        /// failure is injected through an unresolvable recorded GUID.
         /// </summary>
         [Test]
         public void NoOpRestoreIsCaughtByTheVerificationContract()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.NoOpRestore;
             TransientUnlockTestKnobs.SkipClose = true;
 
             var root = BuildAvatarRoot("AMUSE no-op restore fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "NoOpCape"));
+            // The scripted vendor restore mode is superseded: the restore
+            // is the in-memory reconstruction, so this member fails for
+            // real through an unresolvable recorded GUID.
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
             TransientUnlockTestLifecycle.AddRenderer(root, mesh, locked);
 
@@ -144,23 +150,28 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// F2. A partial restore rebinds the shader but leaves the lock
-        /// flag at one. It shares the no-op detection machinery: the named
-        /// refusal fires, the slot keeps L, and nothing throws, so the
-        /// failure never becomes a closure failure.
+        /// F2. A partial restore failure shares the no-op detection
+        /// machinery: the named refusal fires, the slot keeps L, and
+        /// nothing throws, so the failure never becomes a closure
+        /// failure. The restore is the in-memory reconstruction, so the
+        /// failure is injected through an unresolvable recorded GUID.
         /// </summary>
         [Test]
         public void PartialRestoreProducesTheNamedRefusal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.PartialRestore;
             TransientUnlockTestKnobs.SkipClose = true;
 
             var root = BuildAvatarRoot("AMUSE partial restore fixture");
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "PartialCape"));
+            // The scripted vendor restore mode is superseded: the restore
+            // is the in-memory reconstruction, so this member fails for
+            // real through an unresolvable recorded GUID.
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
             var renderer =
                 TransientUnlockTestLifecycle.AddRenderer(
@@ -258,10 +269,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the generated locked shader asset is byte-identical " +
                 "after the whole cycle");
 
-            // The shipped slot holds the re-locked clone, not L, which is
-            // exactly why L had to stay untouched: it is the fallback.
+            // The shipped slot holds the locked original L: the close
+            // reverts the pair, which is exactly why L had to stay
+            // untouched.
             var shipped = renderer.sharedMaterials[0];
-            Assert.That(shipped, Is.Not.EqualTo(locked));
+            Assert.That(shipped, Is.EqualTo(locked));
         }
 
         /// <summary>
@@ -299,37 +311,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// F8, the ordering half. An unattested tool refuses before any
-        /// clone step. The named wrong implementation checks availability
-        /// after the clone, which leaves a clone behind for a window that
-        /// must never open.
+        /// The availability resolution succeeds with no vendor seam
+        /// present, on the play path like on every path: the restore
+        /// reconstructs in memory, so the machine-side gate carries no
+        /// vendor-shaped answer and nothing can shut the window for a
+        /// vendor's absence. The named wrong implementation is the
+        /// production factory consulting a vendor readiness answer,
+        /// which answered unattested on a machine without the vendor
+        /// and shut the window on every path.
         /// </summary>
         [Test]
-        public void UnattestedToolCreatesNoClone()
+        public void TheAvailabilityResolvesWithoutAnyVendorSeamPresent()
         {
-            using var assets = new OverrideTemporaryDirectoryScope(
-                TransientUnlockTestLifecycle.TempFolder);
-            TransientUnlockTestKnobs.ThryAttested = false;
-            TransientUnlockTestKnobs.SkipClose = true;
+            // The play path label, which once decided the answer, must
+            // no longer change it: resolution is vendor-free on every
+            // path.
+            TransientUnlockTestKnobs.BuildPath =
+                AmuseBuildPath.ApplyOnPlay;
 
-            var root = BuildAvatarRoot("AMUSE unattested tool fixture");
-            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
-                "UnattestedCape"));
-            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
-            var renderer =
-                TransientUnlockTestLifecycle.AddRenderer(
-                    root, mesh, locked);
+            var availability =
+                TransientUnlockSwapIn.Availability.FromProduction();
 
-            AvatarProcessor.ProcessAvatar(
-                root, TransientUnlockTestPlatform.Instance);
-
-            Assert.That(
-                TransientUnlockTestKnobs.LastSwapSummary.ClonesCreated,
-                Is.Zero,
-                "an unattested tool must refuse before any clone exists");
-            Assert.That(
-                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
-            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked));
+            Assert.That(availability.Restore, Is.Not.Null,
+                "the resolved availability must carry the in-memory " +
+                "restore, with no vendor-shaped gate left to refuse it");
         }
 
         /// <summary>
@@ -372,7 +377,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// F12. The clone keeps L's exact name. Name parity is
         /// load-bearing: the rename-animated property suffix derives from
         /// the material name, so a clone renamed for diagnostics orphans
-        /// every suffixed binding at the re-lock.
+        /// every suffixed binding at the reversion.
         /// </summary>
         [Test]
         public void CloneKeepsTheExactNameOfTheOriginal()
@@ -419,7 +424,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var second = TransientUnlockTestLifecycle.AddRenderer(
                 root, secondMesh, locked);
 
-            var context = AvatarProcessor.ProcessAvatar(
+            AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
 
             Assert.That(
@@ -432,28 +437,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "every slot holding the locked material swaps to the " +
                 "same clone");
             // A completed build holds zero open pairs: the close pass
-            // re-locked and closed the one pair the swap-in opened.
+            // reverted and closed the one pair the swap-in opened.
             Assert.That(
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
 
-            // Every slot ships the re-locked clone, and all three slots
-            // hold one and the same clone.
+            // Every slot ships the locked original L, and all three
+            // slots hold one and the same material.
             var shipped = first.sharedMaterials[0];
-            Assert.That(shipped, Is.Not.EqualTo(locked),
-                "the cycle runs through the unlocked clone");
+            Assert.That(shipped, Is.EqualTo(locked),
+                "the close reverts the pair, so the locked original " +
+                "ships");
             Assert.That(shipped.name, Is.EqualTo("SharedCape"),
-                "the clone keeps the exact material name");
+                "the shipped original keeps its exact material name");
             Assert.That(shipped.shader.name, Does.StartWith(
                     LockedMaterialIdentity.LockedShaderNamePrefix),
                 "the shipped shader must be a locked form");
             Assert.That(first.sharedMaterials[1], Is.EqualTo(shipped));
             Assert.That(second.sharedMaterials[0], Is.EqualTo(shipped));
-            Assert.That(context.GetState<AmusePlatformFinishState>()
-                    .SlotRefusalCount(
-                        AlphaSeparationSlotRefusal
-                            .TransientUnlockRelockFailed),
-                Is.Zero,
-                "the verified cycle records no fallback refusal");
         }
 
         /// <summary>

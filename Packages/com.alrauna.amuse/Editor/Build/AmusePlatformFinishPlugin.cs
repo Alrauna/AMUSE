@@ -220,10 +220,11 @@ namespace Alrauna.Amuse.Editor.Build
             // commit's controller assignment makes the editor animator
             // rebind, which applies the pre-commit animation state over
             // the renderer material arrays. Running the close here makes
-            // its reference writes the final word: it re-asserts the
-            // re-locked clone for verified pairs, re-asserts L and inverts
-            // the committed clips for failed pairs, and destroys clones
-            // only after every reference is back on L.
+            // its reference writes the final word: it reverts every open
+            // pair to its locked original, re-asserts apply's recorded
+            // write for the slots apply transformed, and destroys the
+            // clone only after every reference is back on L. No build
+            // path calls the vendor.
             sequence.Run(
                 TransientUnlockWindowClose.PassName,
                 ctx => TransientUnlockWindowClose.Execute(ctx));
@@ -239,7 +240,6 @@ namespace Alrauna.Amuse.Editor.Build
                 context,
                 state,
                 HostLifecycleCapability.CaptureAndEvaluate(context),
-                null,
                 null,
                 null,
                 null,
@@ -269,7 +269,6 @@ namespace Alrauna.Amuse.Editor.Build
                 null,
                 null,
                 consentPresenter,
-                null,
                 null);
         }
 
@@ -298,8 +297,7 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion = null,
             VerifiedLilToonConversion lilToonConversion = null,
             VersionConsentPresenter consentPresenter = null,
-            Func<Material, bool> lockedOriginalAttestation = null,
-            Func<bool> windowVendorReady = null)
+            Func<Material, bool> lockedOriginalAttestation = null)
         {
             if (facts == null) throw new ArgumentNullException(nameof(facts));
             if (selectRequest == null)
@@ -322,8 +320,7 @@ namespace Alrauna.Amuse.Editor.Build
                 poiyomiConversion,
                 lilToonConversion,
                 consentPresenter,
-                lockedOriginalAttestation,
-                windowVendorReady);
+                lockedOriginalAttestation);
         }
 
         /// <summary>
@@ -385,8 +382,7 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             VersionConsentPresenter consentPresenter,
-            Func<Material, bool> lockedOriginalAttestation,
-            Func<bool> windowVendorReady)
+            Func<Material, bool> lockedOriginalAttestation)
         {
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
@@ -425,15 +421,14 @@ namespace Alrauna.Amuse.Editor.Build
             // The unlock window no longer carries its own per-build
             // consent subject. V2 and V4 passed live observation on
             // 2026-09-21, so per spec section 12 the gate moved to the
-            // D8 pattern: an eligible build on a machine where the vendor
-            // side is ready opens the window without asking. An unready
-            // vendor side never grants, and the renderer pre-check
-            // refuses by name before any clone exists.
+            // D8 pattern: an eligible build opens the window without
+            // asking. Eligibility is the attestation gate alone: a
+            // recognized locked material whose original shader attests.
+            // No build path consults a vendor answer.
             var windowEligible = TransientUnlockAvailability
                 .WindowEligibleForConsent(
                     AllAssignedMaterials(context),
-                    lockedOriginalAttestation,
-                    windowVendorReady);
+                    lockedOriginalAttestation);
 
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
@@ -497,14 +492,12 @@ namespace Alrauna.Amuse.Editor.Build
             // Every avatar-scope gate has passed: the unlock window opens
             // here, before capture, so the whole pipeline below reads the
             // swapped world. The swap-in holds its own consent gate and
-            // vendor precondition, so an ineligible build reaches it as a
-            // counted no-op, and an unattested machine never clones, so
-            // the pre-check below still refuses before any clone exists.
+            // attestation gate, so an ineligible build reaches it as a
+            // counted no-op.
             TransientUnlockSwapIn.SwapIn(
                 context,
                 context.GetState<TransientUnlockWindowState>(),
-                TransientUnlockSwapIn.Availability.FromProduction(
-                    windowVendorReady),
+                TransientUnlockSwapIn.Availability.FromProduction(),
                 lockedOriginalAttestation);
 
             // From here the run is reported, so the apply pass may
@@ -556,24 +549,6 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     state.RecordRendererRefusal(refusal);
                     AmuseReports.RendererRefusal(renderer, refusal);
-                    continue;
-                }
-
-                // The Thry precondition refuses a renderer holding an
-                // eligible locked material on a machine whose lock tool
-                // does not attest. The swap-in above consults the same
-                // readiness and opens nothing on such a machine, so this
-                // refusal still lands before any clone exists, and before
-                // capture reads the renderer.
-                var lockedToolRefusal =
-                    TransientUnlockAvailability.RendererPreCheckRefusal(
-                        renderer, lockedOriginalAttestation,
-                        windowVendorReady);
-                if (lockedToolRefusal != RendererAnalysisRefusal.None)
-                {
-                    state.RecordRendererRefusal(lockedToolRefusal);
-                    AmuseReports.RendererRefusal(
-                        renderer, lockedToolRefusal);
                     continue;
                 }
 
