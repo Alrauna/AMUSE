@@ -11,10 +11,12 @@ namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
     /// Closes the transient unlock window: the fourth and last
-    /// PlatformFinish pass, ordered after the apply pass. It re-locks every
-    /// open swapped pair through one batched vendor call, verifies the
-    /// batch against the serialization facts after the call, and takes the
-    /// per-pair fallback for every pair that did not lock.
+    /// PlatformFinish pass, ordered after the apply pass. The close
+    /// outcome is reference reversion on every build path: every open
+    /// pair returns from its unlocked clone U to its untouched locked
+    /// original L through the fallback machinery, and U is destroyed
+    /// only after the inversion completes. No build path calls the
+    /// vendor.
     /// <para>
     /// The pass runs after every <see cref="nadena.dev.ndmf.animator.AnimatorServicesContext"/>
     /// scope has closed, extension-free. NDMF commits the virtual animator
@@ -22,21 +24,22 @@ namespace Alrauna.Amuse.Editor.Build
     /// assignment makes the editor animator rebind, which applies the
     /// pre-commit animation state over the renderer material arrays. The
     /// close pass is therefore the last writer of the shipped references:
-    /// it re-asserts the re-locked clone into every verified pair's slots,
-    /// and on the fallback it re-asserts L explicitly and inverts the
-    /// committed clips directly through <see cref="AnimationUtility"/>. It
-    /// never depends on a deactivation side effect to produce the shipped
-    /// state.
+    /// it reverts every untransformed slot to L, re-asserts apply's
+    /// recorded canonical write for the slots apply transformed, and
+    /// inverts the committed clips directly through
+    /// <see cref="AnimationUtility"/>. It never depends on a deactivation
+    /// side effect to produce the shipped state.
     /// </para>
     /// <para>
-    /// The fallback inverts the whole swap-in remap, slot arrays first and
-    /// then every recorded animation-closure binding, before any clone is
-    /// destroyed, because a destroyed clone still referenced by a
-    /// rewritten curve would serialize as a missing reference. Only the
-    /// fallback destroys clones, and it destroys only the clones: the
-    /// locked originals are never destroyed by anything. When the
-    /// fallback cannot prove the committed-curve inversion complete, it
-    /// keeps the unlocked clone alive and records the named
+    /// The reversion inverts the whole swap-in remap, slot arrays first
+    /// and then every recorded animation-closure binding, before any
+    /// copy is destroyed, because a destroyed material still referenced
+    /// by a rewritten curve would serialize as a missing reference. Only
+    /// the close destroys copies, and it destroys only AMUSE-owned ones:
+    /// the locked originals and every output AMUSE did not create are
+    /// never destroyed by anything. When the close cannot prove the
+    /// committed-curve inversion complete, it keeps the unlocked copies
+    /// alive and records the named
     /// <see cref="AlphaSeparationSlotRefusal.TransientUnlockCloneRetained"/>
     /// refusal for every slot of the pair, so the retention never passes
     /// silently. A build that completes holds zero open pairs, and no
@@ -47,20 +50,13 @@ namespace Alrauna.Amuse.Editor.Build
     {
         internal const string PassName = "AMUSE transient unlock window close";
 
-        /// <summary>The production entry: re-lock through the vendor seam.</summary>
-        internal static void Execute(BuildContext context)
-        {
-            Execute(context, TransientUnlockAvailability.CreateProductionRelock());
-        }
-
         /// <summary>
-        /// The seam entry. A null re-lock delegate means the vendor seam
-        /// stopped resolving, so every pair takes the fallback: the
-        /// shipped state degrades to the locked originals, never to
-        /// unlocked clones.
+        /// The production entry and the only close. The close never
+        /// submits any material to the vendor on any path: every pair
+        /// reverts to its locked original through the fallback
+        /// machinery.
         /// </summary>
-        internal static void Execute(
-            BuildContext context, TransientRelockDelegate relock)
+        internal static void Execute(BuildContext context)
         {
             if (context == null)
             {
@@ -88,158 +84,83 @@ namespace Alrauna.Amuse.Editor.Build
                     "never allows.");
             }
 
-            // One batched re-lock covers every open pair. The call runs
-            // once; per-pair truth comes only from the verification after
-            // it, so an already-locked-looking pair is never skipped on
-            // its pre-call appearance.
-            var clones = window.OpenPairs
-                .Select(pair => pair.UnlockedClone)
-                .ToList();
-            if (relock != null)
-            {
-                relock(clones);
-            }
-
-            // Batch verification, every pair, no skips: the lock flag
-            // equals one and the shader name is a locked form.
-            var verified = new List<TransientUnlockWindowState.SwappedPair>();
-            var failed = new List<TransientUnlockWindowState.SwappedPair>();
-            foreach (var pair in window.OpenPairs)
-            {
-                if (PairRelocked(pair.UnlockedClone))
-                {
-                    verified.Add(pair);
-                }
-                else
-                {
-                    failed.Add(pair);
-                }
-            }
-
-            // The shipped references are written here, after every
-            // extension deactivation, so no later commit or rebind can
-            // overwrite them. Verified pairs ship the re-locked clone;
-            // failed pairs revert to the locked original. For a pair
-            // whose slots apply transformed, the recorded finalization
-            // write wins: the phase-end animator rebind re-applies the
-            // authored clip's stale t=0 value over apply's slot write,
-            // and re-asserting the clone there would clobber the
-            // canonical material apply derived from the unlocked clone.
+            // The close outcome: every pair reverts to
+            // its locked original through the same fallback machinery —
+            // slot arrays first, then every recorded closure binding —
+            // and only then is the clone destroyed. The shipped
+            // references are written here, after every extension
+            // deactivation, so no later commit or rebind can overwrite
+            // them. For a slot apply transformed, apply's recorded
+            // finalization write still wins: the phase-end animator
+            // rebind re-applies the authored clip's stale t=0 value over
+            // apply's slot write, and re-asserting the clone there would
+            // clobber the canonical material apply derived from the
+            // unlocked clone.
             var recorded = finishState.AppliedFinalization;
-            foreach (var pair in verified)
-            {
-                ReassertShippedSlots(pair, recorded);
-            }
-
-            foreach (var pair in failed)
+            foreach (var pair in window.OpenPairs.ToList())
             {
                 InvertReferences(context, pair);
-            }
 
-            foreach (var pair in failed)
+                ReassertShippedSlots(pair, recorded);
+
+                DestroyPairCopiesOrNameRetention(context, finishState, pair);
+
+                window.Remove(pair);
+            }
+        }
+
+        /// <summary>
+        /// Destroys the pair's unlocked clone, but only after the caller
+        /// inverted every reference: the committed graph was enumerated,
+        /// so no rewritten curve can name a destroyed material. A curve
+        /// the close cannot enumerate keeps the clone alive, and every
+        /// affected slot gets the named retained-copy refusal, because a
+        /// destroyed material still referenced by a curve would serialize
+        /// as a missing reference.
+        /// </summary>
+        private static void DestroyPairCopiesOrNameRetention(
+            BuildContext context,
+            AmusePlatformFinishState finishState,
+            TransientUnlockWindowState.SwappedPair pair)
+        {
+            if (CurveInversionWasComplete(context, pair))
+            {
+                UnityEngine.Object.DestroyImmediate(
+                    pair.UnlockedClone, true);
+                pair.UnlockedClone = null;
+            }
+            else
             {
                 foreach (var slot in pair.Slots)
                 {
                     finishState.RecordSlotRefusal(
                         AlphaSeparationSlotRefusal
-                            .TransientUnlockRelockFailed);
+                            .TransientUnlockCloneRetained);
                     AmuseReports.SlotSeparationRefusal(
                         slot.Renderer,
                         slot.SlotIndex,
                         AlphaSeparationSlotRefusal
-                            .TransientUnlockRelockFailed,
+                            .TransientUnlockCloneRetained,
                         slot.Renderer != null
                             ? slot.Renderer.gameObject.name
                             : null);
                 }
-
-                // The clone is the only destroyable side of the window,
-                // and only this path destroys it, only after every
-                // reference is back on L. It is AMUSE-owned container
-                // content, so the asset flag is required. A committed
-                // curve the fallback could not enumerate keeps the clone
-                // alive instead: a destroyed but still referenced clone
-                // would serialize as a missing reference. That retention
-                // is a named outcome, never a silent one: every slot of
-                // the pair records that the unlocked clone stays alive
-                // and that an animation may still apply it.
-                if (CurveInversionWasComplete(context, pair))
-                {
-                    UnityEngine.Object.DestroyImmediate(
-                        pair.UnlockedClone, true);
-                    pair.UnlockedClone = null;
-                }
-                else
-                {
-                    foreach (var slot in pair.Slots)
-                    {
-                        finishState.RecordSlotRefusal(
-                            AlphaSeparationSlotRefusal
-                                .TransientUnlockCloneRetained);
-                        AmuseReports.SlotSeparationRefusal(
-                            slot.Renderer,
-                            slot.SlotIndex,
-                            AlphaSeparationSlotRefusal
-                                .TransientUnlockCloneRetained,
-                            slot.Renderer != null
-                                ? slot.Renderer.gameObject.name
-                                : null);
-                    }
-                }
-
-                window.Remove(pair);
-            }
-
-            foreach (var pair in window.OpenPairs.ToList())
-            {
-                // A verified pair is closed: the re-locked clone ships in
-                // the slot, and the untouched original stays alive and
-                // unreferenced, exactly as the window contract requires.
-                window.Remove(pair);
             }
         }
 
         /// <summary>
-        /// The closed-pair facts, after the batch call: the lock flag
-        /// equals one and the shader name is a locked form. Both, never
-        /// either.
-        /// </summary>
-        private static bool PairRelocked(Material clone)
-        {
-            if (clone == null || clone.shader == null)
-            {
-                return false;
-            }
-
-            return clone.shader.name.StartsWith(
-                       LockedMaterialIdentity.LockedShaderNamePrefix,
-                       StringComparison.Ordinal) &&
-                   clone.HasProperty(
-                       LockedMaterialIdentity
-                           .OptimizerEnabledPropertyName) &&
-                   clone.GetFloat(
-                       LockedMaterialIdentity
-                           .OptimizerEnabledPropertyName) == 1f;
-        }
-
-        /// <summary>
-        /// Restores every recorded slot of a verified pair to what the
-        /// build intends it to hold, value-level on a fresh live read.
-        /// For a slot the apply pass transformed, the recorded
-        /// finalization write is the intent and is re-asserted, because
-        /// the phase-end animator rebind may have overwritten it with the
-        /// authored clip's stale t=0 value. For any other slot holding L,
-        /// the re-locked clone is re-asserted, because the rebind leaves L
-        /// where the swap-in put the clone. A slot holding the clone, and
-        /// a slot a foreign pass filled with anything else, are never
-        /// stomped: the window reverts or re-asserts exactly its own
-        /// substitution.
+        /// Re-asserts apply's recorded finalization write for the slots
+        /// apply transformed, value-level on a fresh live read, because
+        /// the phase-end animator rebind may have overwritten such a slot
+        /// with the authored clip's stale t=0 value. The reversion has
+        /// already put L in every slot the clone held, and a slot a
+        /// foreign pass filled with anything else is never stomped: the
+        /// window reverts or re-asserts exactly its own substitution.
         /// </summary>
         private static void ReassertShippedSlots(
             TransientUnlockWindowState.SwappedPair pair,
             AlphaSeparationFinalization recorded)
         {
-            var clone = pair.UnlockedClone;
             foreach (var slot in pair.Slots)
             {
                 var renderer = slot.Renderer;
@@ -255,13 +176,6 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 var current = live[slot.SlotIndex];
-                var holdsClone = ReferenceEquals(current, clone) ||
-                    (current is Material cloneMaterial && cloneMaterial == clone);
-                if (holdsClone)
-                {
-                    continue;
-                }
-
                 var holdsLocked = ReferenceEquals(current, pair.LockedOriginal) ||
                     (current is Material lockedMaterial &&
                         lockedMaterial == pair.LockedOriginal);
@@ -270,9 +184,16 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                live[slot.SlotIndex] =
-                    RecordedWriteMaterial(recorded, renderer, slot.SlotIndex)
-                    ?? clone;
+                var write = RecordedWriteMaterial(
+                    recorded, renderer, slot.SlotIndex);
+                if (write == null || write == pair.UnlockedClone)
+                {
+                    // No recorded write, or the write is the clone the
+                    // reversion just removed: L is the shipped state.
+                    continue;
+                }
+
+                live[slot.SlotIndex] = write;
                 renderer.sharedMaterials = live;
             }
         }
@@ -308,14 +229,16 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Inverts the swap-in remap for one failed pair: every recorded
-        /// slot back to L, then every recorded binding on the committed
-        /// clips back to L. The order inside this method is slot arrays
-        /// before curves, and the caller destroys nothing until every
-        /// pair has passed through here.
+        /// Inverts the swap-in remap for one pair: every recorded slot
+        /// back to L, then every recorded binding on the committed clips
+        /// back to L. The inverted name is the pair's unlocked clone. The
+        /// order inside this method is slot arrays before curves, and
+        /// the caller destroys nothing until every pair has passed
+        /// through here.
         /// </summary>
         private static void InvertReferences(
-            BuildContext context, TransientUnlockWindowState.SwappedPair pair)
+            BuildContext context,
+            TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
             var locked = pair.LockedOriginal;
@@ -332,9 +255,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var changed = false;
                 for (var index = 0; index < live.Length; index++)
                 {
-                    if (ReferenceEquals(live[index], clone) ||
-                        (live[index] is Material slotMaterial &&
-                         slotMaterial == clone))
+                    if (NamesSwappedCopy(live[index], clone))
                     {
                         live[index] = locked;
                         changed = true;
@@ -351,24 +272,48 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Inverts every recorded binding on the committed clips: walks
-        /// the committed controller graph through the host bindings the
-        /// capture pass retained, matches recorded binding identity by
-        /// transform path, property name, and renderer type, and rewrites
-        /// every keyframe that references the clone back to L through
-        /// <see cref="AnimationUtility"/>. The graph is committed by the
-        /// time this pass runs, so these writes are final.
+        /// Whether one slot or keyframe value names the copy the
+        /// reversion must invert: the pair's unlocked clone. Unity
+        /// equality, not managed identity: values can come back as a
+        /// second managed wrapper of the same native material.
+        /// </summary>
+        private static bool NamesSwappedCopy(
+            UnityEngine.Object candidate, Material clone)
+        {
+            var candidateMaterial = candidate as Material;
+            return candidateMaterial == clone;
+        }
+
+        /// <summary>
+        /// Inverts committed material-slot curves on the recorded transform
+        /// paths and compatible renderer types. This includes appended
+        /// bindings that the split apply creates. The pass rewrites every
+        /// keyframe that references the pair's unlocked clone back to L.
+        /// The graph is committed by this pass, so these writes are final.
         /// </summary>
         private static void InvertCommittedCurves(
-            BuildContext context, TransientUnlockWindowState.SwappedPair pair)
+            BuildContext context,
+            TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
             var locked = pair.LockedOriginal;
 
-            var recorded = new HashSet<(string, string)>();
+            var rendererTypesByPath =
+                new Dictionary<string, List<string>>(StringComparer.Ordinal);
             foreach (var rewritten in pair.Bindings)
             {
-                recorded.Add((rewritten.Path, rewritten.PropertyName));
+                if (!rendererTypesByPath.TryGetValue(
+                        rewritten.Path, out var rendererTypes))
+                {
+                    rendererTypes = new List<string>();
+                    rendererTypesByPath.Add(
+                        rewritten.Path, rendererTypes);
+                }
+
+                if (!rendererTypes.Contains(rewritten.TypeName))
+                {
+                    rendererTypes.Add(rewritten.TypeName);
+                }
             }
 
             foreach (var clip in CommittedClips(context))
@@ -376,15 +321,28 @@ namespace Alrauna.Amuse.Editor.Build
                 foreach (var binding in AnimationUtility
                              .GetObjectReferenceCurveBindings(clip))
                 {
-                    if (!recorded.Contains(
-                            (binding.path, binding.propertyName)) ||
+                    if (!rendererTypesByPath.TryGetValue(
+                            binding.path, out var rendererTypes) ||
                         !LiveAnimationObservation
                             .TryParseMaterialSlotBinding(
-                                binding.propertyName, out var slotIndex) ||
-                        !UnityAnimationEvidenceCapture
+                                binding.propertyName, out _))
+                    {
+                        continue;
+                    }
+
+                    var compatibleRenderer = false;
+                    foreach (var rendererType in rendererTypes)
+                    {
+                        if (UnityAnimationEvidenceCapture
                             .IsCompatibleRendererType(
-                                binding.type.FullName,
-                                RecordedTypeName(pair, slotIndex)))
+                                binding.type.FullName, rendererType))
+                        {
+                            compatibleRenderer = true;
+                            break;
+                        }
+                    }
+
+                    if (!compatibleRenderer)
                     {
                         continue;
                     }
@@ -396,59 +354,47 @@ namespace Alrauna.Amuse.Editor.Build
                         continue;
                     }
 
-                    var mapped = new ObjectReferenceKeyframe[curve.Length];
                     var changed = false;
                     for (var index = 0; index < curve.Length; index++)
                     {
-                        // Unity equality, not managed identity: keyframe
-                        // values can come back as a second managed wrapper
-                        // of the same native material.
-                        if (ReferenceEquals(curve[index].value, clone) ||
-                            (curve[index].value is Material keyframeMaterial &&
-                             keyframeMaterial == clone))
+                        if (NamesSwappedCopy(curve[index].value, clone))
                         {
-                            mapped[index] = new ObjectReferenceKeyframe
+                            changed = true;
+                            break;
+                        }
+                    }
+
+                    if (!changed)
+                    {
+                        continue;
+                    }
+
+                    var mapped = new ObjectReferenceKeyframe[curve.Length];
+                    for (var index = 0; index < curve.Length; index++)
+                    {
+                        mapped[index] = NamesSwappedCopy(
+                                curve[index].value, clone)
+                            ? new ObjectReferenceKeyframe
                             {
                                 time = curve[index].time,
                                 value = locked,
-                            };
-                            changed = true;
-                        }
-                        else
-                        {
-                            mapped[index] = curve[index];
-                        }
+                            }
+                            : curve[index];
                     }
 
-                    if (changed)
-                    {
-                        AnimationUtility.SetObjectReferenceCurve(
-                            clip, binding, mapped);
-                    }
+                    AnimationUtility.SetObjectReferenceCurve(
+                        clip, binding, mapped);
                 }
             }
-        }
-
-        private static string RecordedTypeName(
-            TransientUnlockWindowState.SwappedPair pair, int slotIndex)
-        {
-            foreach (var rewritten in pair.Bindings)
-            {
-                if (rewritten.SlotIndex == slotIndex)
-                {
-                    return rewritten.TypeName;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>
         /// Whether the fallback could enumerate and invert the committed
         /// graph for this pair. The retained host bindings must exist and
         /// the graph must enumerate cleanly; anything else means a
-        /// committed curve may still reference the clone, and the caller
-        /// must keep the clone alive instead of destroying it.
+        /// committed curve may still reference the pair's unlocked clone,
+        /// and the caller must keep the clone alive instead of destroying
+        /// it.
         /// </summary>
         private static bool CurveInversionWasComplete(
             BuildContext context, TransientUnlockWindowState.SwappedPair pair)

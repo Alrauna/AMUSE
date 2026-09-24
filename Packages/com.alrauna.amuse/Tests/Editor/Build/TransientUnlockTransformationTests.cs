@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
@@ -23,9 +24,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// sequence on an apply-capable platform, with the swap-in placed
     /// before capture. Every case drives the real barrier, the real apply
     /// pass, and the real window close, substituting only the verified
-    /// fixture seams, the consent presenter, and the vendor readiness
-    /// seam. The vendor never installs; the stand-in vendor type scripts
-    /// each outcome.
+    /// fixture seams and the consent presenter. No build path consults
+    /// or calls the vendor.
     /// </summary>
     public sealed class TransientUnlockTransformationTests
     {
@@ -170,11 +170,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// mutation sequence on the unlocked world. First observed green
         /// only after the capture carried the swapped view; against the
         /// pre-increment capture it refused the renderer by name, which
-        /// the report records with the probe evidence.
+        /// the report records with the probe evidence. The build path
+        /// parameter proves the same reversion contract on both paths:
+        /// no build path locks through the vendor, and the canonical
+        /// output ships in its unlocked form on both.
         /// </summary>
-        [Test]
-        public void UnlockedSlotRunsTheWholePipelineInsideTheWindow()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void UnlockedSlotRunsTheWholePipelineInsideTheWindow(
+            bool applyOnPlay)
         {
+            TransientUnlockTestKnobs.BuildPath = applyOnPlay
+                ? AmuseBuildPath.ApplyOnPlay
+                : AmuseBuildPath.NonPlayNdmfBuild;
+
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
@@ -220,12 +229,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestKnobs.LastCloseError);
             Assert.That(
                 Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(1),
-                "the window must restore exactly one clone");
+                Is.EqualTo(0),
+                "the window must restore through the in-memory " +
+                "reconstruction with no vendor call");
             Assert.That(
                 Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.GreaterThanOrEqualTo(1),
-                "the window must close over the swapped pair");
+                Is.EqualTo(0),
+                "no build path calls the vendor: both paths run the " +
+                "same reversion close");
             Assert.That(unlockedClone, Is.Not.Null,
                 "the swapped pair must hold its unlocked clone at close");
             Assert.That(
@@ -281,9 +292,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the transformed slot does not ship the unlocked clone");
             Assert.That(TransientUnlockTestKnobs.Window.OpenPairs,
                 Is.Empty, "a completed build holds zero open pairs");
-            Assert.That(state.SlotRefusalCount(
-                    AlphaSeparationSlotRefusal.TransientUnlockRelockFailed),
-                Is.Zero, "a verified close records no fallback refusal");
+
+            // The canonical output's lock state at the end of the build
+            // is the same on every path: the close ships the canonical
+            // output in its unlocked form, and the lock tool's own SDK
+            // preprocess stage is what locks it after NDMF.
+            var flagName =
+                LockedMaterialIdentity.OptimizerEnabledPropertyName;
+            Assert.That(canonical.shader.name, Does.Not.StartWith(
+                    LockedMaterialIdentity.LockedShaderNamePrefix),
+                "the close must leave the Poiyomi canonical output in " +
+                "its unlocked form on every path");
+            Assert.That(canonical.GetFloat(flagName),
+                Is.EqualTo(0f),
+                "the close must leave the canonical lock flag at the " +
+                "unlocked zero");
 
             // The material-swap animation follows the transformation: the
             // committed curve references the canonical material derived
@@ -296,8 +319,117 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(canonical),
-                "the curve maps L to U and then U to the canonical " +
+                "curve maps L to U and then U to the canonical " +
                 "through the existing rewrite machinery");
+        }
+
+        /// <summary>
+        /// A build admits a locked material and opens the window with no
+        /// vendor presence anywhere: the gate consults no vendor answer,
+        /// and the restore runs the in-memory reconstruction. Falsified
+        /// by any wiring that consults a vendor readiness answer before
+        /// the window opens, which shut the window on a machine without
+        /// the vendor.
+        /// </summary>
+        [Test]
+        public void
+            NonPlayPathAdmitsLockedMaterialAndOpensTheWindowWithoutVendor()
+        {
+            TransientUnlockTestKnobs.BuildPath =
+                AmuseBuildPath.NonPlayNdmfBuild;
+
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE vendorless non-play fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                    "VendorlessCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            var lockedShaderBefore = locked.shader;
+            var lockedFlagBefore = locked.GetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName);
+            TransientUnlockWindowState windowAtApply = null;
+            var openPairsAtApply = 0;
+            var slottedShaderAtApply = "";
+            var slottedFlagAtApply = 1f;
+            TransientUnlockTestKnobs.BeforeApply = context =>
+            {
+                windowAtApply = context
+                    .GetState<TransientUnlockWindowState>();
+                // Values, not live references: the apply pass writes the
+                // canonical into the slot and the close pass drains the
+                // window, so only this pre-apply snapshot proves the
+                // open window's shape right after the swap-in.
+                openPairsAtApply = windowAtApply.OpenPairs.Count;
+                var slotted = renderer.sharedMaterials[0];
+                slottedShaderAtApply = slotted.shader.name;
+                slottedFlagAtApply = slotted.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName);
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root,
+                TransientUnlockTransformationTestPlugin.PlatformInstance);
+
+            // No-op guards: the barrier and the close must have run.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+
+            // The window opened without any vendor presence: the gate
+            // never consulted the unresolvable seam, and the restore
+            // ran no vendor call.
+            Assert.That(windowAtApply, Is.Not.Null,
+                "the pre-apply hook must observe the window state");
+            Assert.That(windowAtApply.ConsentGranted, Is.True,
+                "the non-play path must grant the window without a " +
+                "vendor");
+            Assert.That(openPairsAtApply, Is.EqualTo(1),
+                "the locked material must be admitted and the window " +
+                "must open");
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
+                Is.EqualTo(0),
+                "the non-play window must restore without any vendor " +
+                "call");
+
+            // The slot took the reconstructed clone while the window was
+            // open, and the locked original stayed untouched.
+            Assert.That(slottedShaderAtApply,
+                Is.EqualTo("Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"),
+                "the reconstruction must rebind the recorded original " +
+                "shader");
+            Assert.That(slottedFlagAtApply, Is.EqualTo(0f),
+                "the reconstruction must clear the optimizer flag");
+            Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
+                "the locked original keeps its locked stand-in shader");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(lockedFlagBefore),
+                "the locked original keeps its lock flag at the locked " +
+                "stand-in form");
+
+            // The renderer pre-check admitted the renderer, and the
+            // whole cycle ran without any vendor presence.
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
+                Is.EqualTo(0),
+                "no build path may lock through the vendor");
         }
 
         /// <summary>
@@ -312,12 +444,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.NoOpRestore;
 
             var root = BuildAvatarRoot("AMUSE mixed closed set fixture");
             var failing = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("MismatchCape"));
+            // The scripted vendor restore mode is superseded: the restore
+            // is the in-memory reconstruction, so this member fails for
+            // real through an unresolvable recorded GUID.
+            failing.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
             var sibling = Track(VerifiedOpaqueFixtureMaterial());
             var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
             var renderer =
@@ -332,9 +468,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // No-op guards.
             Assert.That(
                 Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(1),
-                "the clone step must run; the verification is what " +
-                "refuses the failing member");
+                Is.EqualTo(0),
+                "the in-memory restore must run and refuse the " +
+                "failing member; it calls no vendor");
             Assert.That(
                 state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
@@ -365,12 +501,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// F5. Suffixed clip bindings survive swap-in, transformation, and
-        /// re-lock as live. The named wrong implementation renames the
-        /// clone for diagnostics, which orphans every suffixed binding at
-        /// the re-lock; the name parity assertion kills it.
+        /// the reversion as live. The named wrong implementation renames
+        /// a build copy for diagnostics, which orphans every suffixed
+        /// binding; the committed float and material-swap assertions kill
+        /// it. The close ships the user's own locked original, so every
+        /// committed reference resolves against L again.
         /// </summary>
         [Test]
-        public void SuffixedBindingsSurviveSwapInTransformationAndRelock()
+        public void SuffixedBindingsSurviveSwapInTransformationAndReversion()
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
@@ -393,31 +531,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTransformationTestPlugin.PlatformInstance);
             var state = context.GetState<AmusePlatformFinishState>();
 
-            // No-op guards: the transformation and the re-lock ran.
+            // No-op guards: the transformation ran and the non-play
+            // close called no vendor.
             Assert.That(
                 Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.GreaterThanOrEqualTo(1),
-                "the window must close over the swapped pair");
+                Is.EqualTo(0),
+                "the non-play close reverts the pair with no vendor " +
+                "call");
             Assert.That(state.AppliedRendererCount, Is.EqualTo(1),
                 "the sibling slot must still optimize");
             Assert.That(renderer.sharedMaterials[1],
                 Is.EqualTo(state.Separation.OpaqueBySource[sibling]),
                 "the sibling slot must carry its canonical result");
 
-            // Name parity per F12: the clone keeps the exact name, so the
-            // suffixed binding resolves again after the re-lock.
+            // The close reverts the pair, so the locked original ships
+            // under its own exact name.
             var shipped = renderer.sharedMaterials[0];
+            Assert.That(shipped, Is.EqualTo(locked),
+                "the close reverts the pair, so the locked original " +
+                "ships");
             Assert.That(shipped.name, Is.EqualTo("ParityCape"),
-                "name parity holds: the clone keeps the exact name");
-            Assert.That(shipped, Is.Not.EqualTo(locked),
-                "the cycle runs through the unlocked clone");
-            Assert.That(shipped.shader.name, Does.StartWith(
-                    LockedMaterialIdentity.LockedShaderNamePrefix),
-                "the shipped shader must be a locked form");
-            Assert.That(shipped.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(1f),
-                "the shipped clone must be locked again");
+                "the shipped original keeps its exact name");
 
             // The suffixed binding survives the whole cycle: same
             // property, same constant value.
@@ -437,8 +571,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(suffixed.keys[suffixed.keys.Length - 1].value,
                 Is.EqualTo(2f));
 
-            // The material-swap curve references the re-locked clone, so
-            // the animation stays live against the shipped material.
+            // The material-swap curve references the locked original the
+            // build ships, so the animation stays live against the
+            // shipped material.
             var curveMaterials = CurveMaterials(committed);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
@@ -459,12 +594,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
-            Thry.ThryEditor.ShaderOptimizer.CurrentMode =
-                Thry.ThryEditor.ShaderOptimizer.Mode.NoOpRestore;
 
             var root = BuildAvatarRoot("AMUSE slot scoped refusal fixture");
             var failing = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("OwnSlotCape"));
+            // The scripted vendor restore mode is superseded: the restore
+            // is the in-memory reconstruction, so this member fails for
+            // real through an unresolvable recorded GUID.
+            failing.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
             var sibling = Track(VerifiedOpaqueFixtureMaterial());
             var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
             var renderer =
@@ -582,8 +721,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // No-op guards: two locked materials, exactly two clones.
             Assert.That(
                 Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(2),
-                "one clone per locked material across slots and closure");
+                Is.EqualTo(0),
+                "one clone per locked material across slots and " +
+                "closure, restored with no vendor call");
             Assert.That(slotClone, Is.Not.Null,
                 "the slot-held locked material gets its clone");
             Assert.That(clipClone, Is.Not.Null,
@@ -623,6 +763,350 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "recorded write");
         }
 
+        /// <summary>
+        /// Apply sweeps an output when no surviving slot uses it. The
+        /// swept output must not touch the pair: the close reverts the
+        /// untransformed pair to L through the primary reversion, with
+        /// no vendor anywhere.
+        /// </summary>
+        [Test]
+        public void ASweptCanonicalOutputStillRevertsThePairToL()
+        {
+            TransientUnlockTestKnobs.BuildPath =
+                AmuseBuildPath.ApplyOnPlay;
+
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot(
+                "AMUSE swept output fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                    "SweptOutputCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var sourceMesh = Track(
+                TransientUnlockTestLifecycle.OneSlotMesh());
+            var replacementMesh = Track(
+                TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer = Track(
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, sourceMesh, locked));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+            var lockedShaderBefore = locked.shader;
+
+            Material unlockedClone = null;
+            Material canonicalOutput = null;
+            var outputPrepared = false;
+            TransientUnlockTestKnobs.BeforeApply = context =>
+            {
+                unlockedClone = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+                var state = context
+                    .GetState<AmusePlatformFinishState>();
+                canonicalOutput =
+                    state.Separation.OpaqueBySource[unlockedClone];
+                outputPrepared = canonicalOutput != null &&
+                    canonicalOutput != unlockedClone;
+                renderer.sharedMesh = replacementMesh;
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root,
+                TransientUnlockTransformationTestPlugin.PlatformInstance);
+            var finishState = context.GetState<AmusePlatformFinishState>();
+
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(outputPrepared, Is.True,
+                "preparation must create C before the mesh changes");
+            Assert.That(finishState.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .RendererChangedSincePreparation),
+                Is.EqualTo(1),
+                "apply must refuse the changed renderer");
+            Assert.That(finishState.AppliedRendererCount, Is.Zero,
+                "apply must not write a renderer after that refusal");
+            Assert.That(canonicalOutput == null, Is.True,
+                "the unreferenced output C must be swept before close");
+            Assert.That(renderer.sharedMesh == replacementMesh, Is.True,
+                "close must preserve the mesh that replaced the prepared mesh");
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "the untransformed pair reverts to the locked original");
+            var clip = CommittedClip(root);
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            Assert.That(CurveMaterials(clip), Has.All.EqualTo(locked),
+                "the committed references return to L after the " +
+                "reversion");
+            Assert.That(unlockedClone == null, Is.True,
+                "the reverted pair's clone is destroyed after the " +
+                "inversion");
+            Assert.That(finishState.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.Zero,
+                "a swept output must not name a retention");
+            Assert.That(TransientUnlockTestKnobs.Window.OpenPairs,
+                Is.Empty);
+            Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore));
+        }
+
+        /// <summary>
+        /// The retention case on an Apply on Play build. The committed
+        /// graph is unavailable to the close pass, so the close cannot
+        /// prove the committed-curve inversion complete. The
+        /// transformation's shipped state survives: the slot keeps the
+        /// canonical write, the clone stays alive because the committed
+        /// curve may still name it, and the retention is named once for
+        /// the affected slot. The named wrong implementation is the
+        /// close that destroys the clone anyway: a destroyed material
+        /// that a committed curve still references would serialize as a
+        /// missing reference.
+        /// </summary>
+        [Test]
+        public void
+            APlayPathCloseThatCannotProveTheCurveInversionRetainsTheClone()
+        {
+            TransientUnlockTestKnobs.BuildPath =
+                AmuseBuildPath.ApplyOnPlay;
+
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot(
+                "AMUSE retained copies fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                    "RetainedCopiesCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+            var lockedShaderBefore = locked.shader;
+
+            Material unlockedClone = null;
+            Material canonicalOutput = null;
+            var canonicalDistinct = false;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                unlockedClone = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+                canonicalOutput = context
+                    .GetState<AmusePlatformFinishState>()
+                    .Separation.OpaqueBySource[unlockedClone];
+                canonicalDistinct = canonicalOutput != null &&
+                    canonicalOutput != unlockedClone;
+                // The committed graph is unavailable to the close pass:
+                // no host bindings were retained, so no curve inversion
+                // can be proven complete.
+                context.GetState<AmusePlatformFinishState>()
+                    .AnimatorBindings = null;
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root,
+                TransientUnlockTransformationTestPlugin.PlatformInstance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier, the real transformation, and the real close, or
+            // the assertions below prove nothing.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
+                Is.EqualTo(0),
+                "the swap-in must restore exactly one locked material " +
+                "with no vendor call");
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
+                Is.EqualTo(0),
+                "no build path calls the vendor");
+            Assert.That(unlockedClone, Is.Not.Null,
+                "the swapped pair must hold its unlocked clone at " +
+                "close");
+            Assert.That(canonicalDistinct, Is.True,
+                "the fixture must produce a distinct generated output " +
+                "separate from U");
+            Assert.That(state.Separation, Is.Not.Null,
+                "the unlocked slot must be prepared");
+            Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                "the renderer must analyze on the swapped world");
+            Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                "a swapped renderer carries no renderer refusal");
+            Assert.That(state.AppliedRendererCount, Is.EqualTo(1),
+                "apply must perform its single mutation sequence and " +
+                "write the canonical into the slot");
+
+            // The transformation's shipped state survives the close even
+            // though the committed graph could not be enumerated: the
+            // reversion inverts exactly its own substitution, and the
+            // slot holds apply's canonical write, not the clone.
+            Assert.That(renderer.sharedMaterials[0],
+                Is.EqualTo(canonicalOutput),
+                "the transformed slot keeps apply's recorded write " +
+                "even when the committed graph cannot be enumerated");
+
+            // The committed curve was never proven invertible, so the
+            // close cannot know what it names. It names the shipped
+            // canonical, and the clone stays alive only because the
+            // close cannot prove otherwise.
+            var clip = CommittedClip(root);
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            var curveMaterials = CurveMaterials(clip);
+            Assert.That(curveMaterials, Is.Not.Empty,
+                "the committed animator must carry the material swap");
+            Assert.That(curveMaterials, Has.All.EqualTo(canonicalOutput),
+                "the unproven committed curve still names the shipped " +
+                "canonical output");
+
+            // The clone stays alive with Unity equality: a destroyed
+            // but referenced material would serialize as a missing
+            // reference.
+            Assert.That(unlockedClone == null, Is.False,
+                "the close must keep the clone alive when the committed " +
+                "graph cannot be enumerated");
+
+            // The named outcome: the retention named once, and a
+            // drained window.
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(1),
+                "the retention of the clone is named once for the " +
+                "affected slot, never silent");
+            Assert.That(TransientUnlockTestKnobs.Window.OpenPairs,
+                Is.Empty, "a completed build holds zero open pairs");
+            Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
+                "the locked original keeps its locked stand-in shader");
+        }
+
+        /// <summary>
+        /// The play path close is the reversion close and nothing else:
+        /// the vendor is never called, the transformation's shipped state
+        /// survives the close untouched, and the window drains. The named
+        /// wrong implementation is the superseded close that submitted
+        /// the generated output to a re-lock batch on this path.
+        /// </summary>
+        [Test]
+        public void APlayPathCloseNeverCallsTheVendorAndLeavesTheShippedStateAlone()
+        {
+            TransientUnlockTestKnobs.BuildPath =
+                AmuseBuildPath.ApplyOnPlay;
+
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE play close purity fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                    "PurityCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            Material unlockedClone = null;
+            Material canonicalOutput = null;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                unlockedClone = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+                canonicalOutput = context
+                    .GetState<AmusePlatformFinishState>()
+                    .Separation.OpaqueBySource[unlockedClone];
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root,
+                TransientUnlockTransformationTestPlugin.PlatformInstance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier, the real transformation, and the real close.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(unlockedClone, Is.Not.Null,
+                "the swapped pair must hold its unlocked clone at close");
+            Assert.That(canonicalOutput, Is.Not.Null,
+                "the fixture must produce a generated canonical output");
+            Assert.That(canonicalOutput, Is.Not.EqualTo(unlockedClone),
+                "the fixture's canonical output must be distinct from U");
+
+            // The close never touches the vendor on any path.
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
+                Is.Zero,
+                "the play path close must run the reversion only, with " +
+                "no vendor lock call");
+            Assert.That(
+                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
+                Is.Zero,
+                "the restore must run in memory with no vendor call");
+
+            // The transformation's shipped state survives the close: the
+            // slot and the committed curve keep the canonical write, and
+            // the pair's clone is destroyed after the reversion.
+            Assert.That(renderer.sharedMaterials[0],
+                Is.EqualTo(canonicalOutput),
+                "the transformed slot keeps apply's recorded write");
+            var clip = CommittedClip(root);
+            Assert.That(clip, Is.Not.Null,
+                "the committed animator must hold a clip");
+            var curveMaterials = CurveMaterials(clip);
+            Assert.That(curveMaterials, Is.Not.Empty,
+                "the committed animator must carry the material swap");
+            Assert.That(curveMaterials, Has.All.EqualTo(canonicalOutput),
+                "the committed curve keeps the canonical write");
+            Assert.That(unlockedClone == null, Is.True,
+                "the reverted pair's clone is destroyed after the " +
+                "reversion");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty,
+                "a completed build holds zero open pairs");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.Zero,
+                "a provably inverted reversion retains nothing");
+        }
+
+
         // --- Test-local platform and plugin --------------------------------
 
         internal const string TransformationPlatformName =
@@ -651,8 +1135,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// animator scope over the bindings capture, the real barrier
         /// (whose swap-in now opens before capture), and the real apply,
         /// then the extension-free window close ordered last. The seams
-        /// substitute the verified fixture family, the consent dialog, the
-        /// original-shader attestation, and the vendor readiness answer.
+        /// substitute the verified fixture family, the consent dialog,
+        /// and the original-shader attestation.
         /// </summary>
         [RunsOnPlatforms(TransformationPlatformName)]
         public sealed class TransientUnlockTransformationTestPlugin :
@@ -723,8 +1207,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             return true;
                         },
                         TransientUnlockTestKnobs.OriginalAttestation ??
-                            (_ => true),
-                        () => TransientUnlockTestKnobs.ThryAttested);
+                            (_ => true));
+                    TransientUnlockTestKnobs.BeforeApply?.Invoke(context);
                 }
                 catch (Exception exception)
                 {
@@ -738,11 +1222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 try
                 {
                     TransientUnlockTestKnobs.BeforeClose?.Invoke(context);
-                    TransientUnlockWindowClose.Execute(
-                        context,
-                        TransientUnlockTestKnobs.RelockOverride ??
-                            TransientUnlockAvailability
-                                .CreateProductionRelock());
+                    TransientUnlockWindowClose.Execute(context);
                     TransientUnlockTestKnobs.Window = context
                         .GetState<TransientUnlockWindowState>();
                 }

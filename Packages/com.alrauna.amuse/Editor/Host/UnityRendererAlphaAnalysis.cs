@@ -86,12 +86,14 @@ namespace Alrauna.Amuse.Editor.Host
         AdmittedMaterialSemanticsUnknown,
 
         /// <summary>
-        /// The installed Thry <c>ShaderOptimizer</c> source is not the
-        /// attested pin, so a recognized locked material cannot be restored
-        /// by it. This increment declares the member with its report strings
-        /// and its census row. No code path emits it yet: the Thry
-        /// source-digest attestation that decides it arrives with the unlock
-        /// window.
+        /// Retained for census vocabulary compatibility: the research
+        /// census vocabulary maps this member, so the member cannot be
+        /// deleted without a research package release. It is produced by
+        /// no build path since 2026-09-24, when the vendor lock handover
+        /// removed the vendor readiness answer this refusal named: no
+        /// build path consults whether the lock tool attests, so no
+        /// renderer can be refused for it. Its report strings are
+        /// retained with it.
         /// </summary>
         LockedPoiyomiThryUnattested,
 
