@@ -364,7 +364,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE analyzed {0} renderers and moved {1} triangles to " +
                 "opaque materials. {2} renderers kept everything original.",
             ["amuse.summary.Title:hint"] =
-                "Open this component to see the same status.",
+                "This status shows in every AMUSE Avatar Optimizer " +
+                "inspector in this editor session.",
             ["amuse.summary.PolicyActive:description"] =
                 "AMUSE moved triangles while the alpha policy was " +
                 "active, so some moved triangles rest on your alpha " +

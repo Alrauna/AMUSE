@@ -128,28 +128,28 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     public sealed class AmuseBuildStatusStoreTests
     {
         [Test]
-        public void RecordedStatusIsReadableByAvatarInstance()
+        public void RecordedStatusIsReadableWithoutAKey()
         {
-            var id = 90210;
             try
             {
-                AmuseBuildStatusStore.Record(id, "analyzed 3 renderers");
+                AmuseBuildStatusStore.Record("analyzed 3 renderers");
                 Assert.That(
-                    AmuseBuildStatusStore.TryGet(id, out var summary),
+                    AmuseBuildStatusStore.TryGet(out var summary),
                     Is.True);
                 Assert.That(summary, Is.EqualTo("analyzed 3 renderers"));
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(id);
+                AmuseBuildStatusStore.Forget();
             }
         }
 
         [Test]
-        public void UnknownAvatarHasNoStatus()
+        public void EmptySlotHasNoStatus()
         {
+            AmuseBuildStatusStore.Forget();
             Assert.That(
-                AmuseBuildStatusStore.TryGet(13371337, out _), Is.False);
+                AmuseBuildStatusStore.TryGet(out _), Is.False);
         }
     }
 }

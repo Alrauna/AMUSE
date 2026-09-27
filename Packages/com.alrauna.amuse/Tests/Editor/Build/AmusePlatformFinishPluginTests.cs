@@ -436,61 +436,49 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void AvatarSummaryNamesTheRunKind()
+        public void LatestBuildRecord_ReplacesThePreviousBuildStatus()
         {
-            var root = new GameObject("AMUSE summary label fixture");
+            var root = new GameObject("AMUSE latest build fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
-                AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var uploadStatus);
-                StringAssert.StartsWith(
-                    "Last upload: ", uploadStatus);
-
+                AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
                     root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var playStatus);
-                StringAssert.StartsWith(
-                    "Last play mode run: ", playStatus);
+                AmuseReports.AvatarSummary(
+                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false);
+
+                // Falsifier: a keyed-per-path leftover would still return
+                // the play text. The store describes the session's most
+                // recent AMUSE build.
+                Assert.That(AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                Assert.That(status, Does.Contain("Last upload"));
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
                 Object.DestroyImmediate(root);
             }
         }
 
         [Test]
-        public void SummaryNamesPolicyOnlyWhileAlphaPolicyIsActive()
+        public void Forget_ClearsTheStatusSlot()
         {
-            var root = new GameObject("AMUSE summary policy fixture");
+            var root = new GameObject("AMUSE forget status fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
                 AmuseReports.AvatarSummary(
                     root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var inertStatus);
-                Assert.That(
-                    inertStatus.Contains("alpha policy"),
-                    Is.False);
+                AmuseBuildStatusStore.Forget();
 
-                AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var activeStatus);
-                Assert.That(
-                    activeStatus.Contains("alpha policy"),
-                    Is.True);
+                Assert.That(AmuseBuildStatusStore.TryGet(out _), Is.False);
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
                 Object.DestroyImmediate(root);
             }
         }
@@ -661,13 +649,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero);
                 Assert.That(
-                    AmuseBuildStatusStore.TryGet(root.GetInstanceID(), out var summary),
+                    AmuseBuildStatusStore.TryGet(out var summary),
                     Is.True);
                 StringAssert.Contains("moved 0 triangles", summary);
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
                 DisposeAnalyzableRenderer(fixture);
                 Object.DestroyImmediate(root);
             }
