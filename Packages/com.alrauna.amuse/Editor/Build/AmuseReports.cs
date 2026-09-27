@@ -250,7 +250,11 @@ namespace Alrauna.Amuse.Editor.Build
                     AmuseReportStrings.TextureCaptureKey(refusal.Reason),
                     slotIndex,
                     refusal.PropertyName,
-                    refusal.Channel.ToString());
+                    refusal.Channel.ToString(),
+                    refusal.Reason.ToString(),
+                    refusal.HasSourceIdentity
+                        ? "has a source identity"
+                        : "has no source identity");
             }
         }
         /// <summary>

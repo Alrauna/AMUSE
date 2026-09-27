@@ -94,6 +94,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void TextureCaptureRefusal_StatesReasonAndMissingIdentity()
+        {
+            var refusal = new TextureCaptureRefusal(
+                "_MainTex",
+                false,
+                default,
+                TextureChannel.Alpha,
+                TextureCaptureRefusalReason.UnavailableCapture);
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.TextureCaptureRefusal(_renderer, 3, refusal));
+
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("UnavailableCapture"),
+                "the report must name the exact refusal reason family");
+            Assert.That(message, Does.Contain("has no source identity"),
+                "the report must state the identity fact");
+        }
+
+        [Test]
+        public void TextureCaptureRefusal_StatesReasonAndPresentIdentity()
+        {
+            var refusal = new TextureCaptureRefusal(
+                "_MainTex",
+                true,
+                default,
+                TextureChannel.Alpha,
+                TextureCaptureRefusalReason.NonResidentMips);
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.TextureCaptureRefusal(_renderer, 1, refusal));
+
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("NonResidentMips"),
+                "the report must name the exact refusal reason family");
+            Assert.That(message, Does.Contain("has a source identity"),
+                "the report must state the identity fact");
+        }
+
+        [Test]
         public void SlotSeparationRefusalReportsRendererAndMaterial()
         {
             var material = NewFixtureMaterial("AMUSE reported material");
