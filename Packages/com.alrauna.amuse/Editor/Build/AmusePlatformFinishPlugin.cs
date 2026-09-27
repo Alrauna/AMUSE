@@ -664,7 +664,9 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer,
                         slotIndex,
                         resolved.SlotResults[slotIndex].Refusal,
-                        renderer.gameObject.name);
+                        renderer.gameObject.name,
+                        resolved.SlotResults[slotIndex].Offender,
+                        resolved.SlotResults[slotIndex].UnknownReason);
                 }
                 var opaqueCandidateTriangleCount = 0;
                 if (refusal == RendererAnalysisRefusal.None)
@@ -1163,11 +1165,18 @@ namespace Alrauna.Amuse.Editor.Build
             // Nothing resolved, so there is no partial result to preserve and
             // the renderer keeps exactly its previous refusal, reason and
             // accounting. The first refusal is the reported one, which is the
-            // same one the earlier return-on-first-failure produced.
+            // same one the earlier return-on-first-failure produced. The
+            // per-slot results ride along: the pass reports every refused
+            // slot's own exact reason even when the first refusal names the
+            // renderer, so a single-slot avatar still reads which material
+            // and which shader fact stopped its proof.
             if (firstSlotRefusal != RendererAnalysisRefusal.None &&
                 !anySlotResolved)
             {
-                return Refused(firstSlotRefusal);
+                return new ResolvedRuntimeStates(
+                    firstSlotRefusal,
+                    Array.Empty<CapturedAlphaMaterial>(),
+                    slotResults);
             }
 
             var currentMaterials =

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.localization;
 using UnityEngine;
@@ -26,6 +27,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// One Information entry per refused material slot, so a build
         /// names the exact slot and the exact rule that stopped its proof.
+        /// The report names the offending material by its project path
+        /// when the capture recorded one, and the exact shader fact that
+        /// stopped the alpha proof when the frontend recorded one.
         /// A <see cref="RendererAnalysisRefusal.None"/> is not a refusal,
         /// so it throws.
         /// </summary>
@@ -33,7 +37,9 @@ namespace Alrauna.Amuse.Editor.Build
             Renderer renderer,
             int slotIndex,
             RendererAnalysisRefusal cause,
-            string rendererName = null)
+            string rendererName = null,
+            CapturedAlphaMaterial offender = null,
+            AlphaUnknownReason unknownReason = null)
         {
             if (cause == RendererAnalysisRefusal.None)
             {
@@ -49,7 +55,79 @@ namespace Alrauna.Amuse.Editor.Build
                     AmuseReportStrings.SlotAnalysisKey(cause),
                     slotIndex,
                     cause.ToString(),
-                    rendererName);
+                    rendererName,
+                    MaterialDescription(offender),
+                    FeatureSentence(unknownReason));
+            }
+        }
+
+        /// <summary>
+        /// The refused slot's material, named path-first: the project asset
+        /// path when the capture recorded one, else the material name, else
+        /// a plain word. A path names exactly one asset, so the author can
+        /// find the material without searching by display name.
+        /// </summary>
+        private static string MaterialDescription(
+            CapturedAlphaMaterial offender)
+        {
+            if (offender == null)
+            {
+                return "an unknown material";
+            }
+
+            if (!string.IsNullOrEmpty(offender.MaterialPath))
+            {
+                return "'" + offender.MaterialPath + "'";
+            }
+
+            if (!string.IsNullOrEmpty(offender.MaterialName))
+            {
+                return "'" + offender.MaterialName + "'";
+            }
+
+            return "an unnamed material";
+        }
+
+        /// <summary>
+        /// One short sentence naming the exact shader fact that stopped the
+        /// alpha proof, or an empty string when no reason was recorded. The
+        /// slot-refusal report embeds it, so the reader sees the cause, not
+        /// only the refused rule's name.
+        /// </summary>
+        private static string FeatureSentence(AlphaUnknownReason reason)
+        {
+            if (reason == null)
+            {
+                return "";
+            }
+
+            switch (reason.Kind)
+            {
+                case AlphaUnknownKind.UnsupportedFeature:
+                    var feature = reason.Feature != null
+                        ? "the " + reason.Feature + " feature"
+                        : "a shader feature";
+                    var property = reason.Property != null
+                        ? " (property " + reason.Property + ")"
+                        : "";
+                    return "AMUSE has no proven rule for " + feature +
+                        property + ", so it cannot prove alpha.";
+                case AlphaUnknownKind.UnsupportedShader:
+                    return reason.ShaderName != null
+                        ? "The shader '" + reason.ShaderName +
+                          "' is not one AMUSE supports."
+                        : "The shader is not one AMUSE supports.";
+                case AlphaUnknownKind.UnattestedShader:
+                    return reason.ShaderName != null
+                        ? "The shader '" + reason.ShaderName +
+                          "' names a supported family, but AMUSE cannot " +
+                          "verify its source."
+                        : "The material names a supported shader family, " +
+                          "but AMUSE cannot verify its source.";
+                default:
+                    throw new InvalidOperationException(
+                        "AlphaUnknownKind has an unhandled value. " +
+                        "Every value needs its own report sentence.");
             }
         }
 
