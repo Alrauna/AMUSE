@@ -614,7 +614,8 @@ namespace Alrauna.Amuse.Editor.Build
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
-                            swappedView);
+                            swappedView,
+                            RegisteredSourceIdentity.Resolve);
                 }
                 else if (selectRequest == null)
                 {
@@ -630,7 +631,8 @@ namespace Alrauna.Amuse.Editor.Build
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
                         LockedMaterialIdentity.PreCheckRefusal,
-                        swappedView);
+                        swappedView,
+                        RegisteredSourceIdentity.Resolve);
                 }
                 else
                 {
@@ -648,7 +650,8 @@ namespace Alrauna.Amuse.Editor.Build
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
-                            swappedView);
+                            swappedView,
+                            RegisteredSourceIdentity.Resolve);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
