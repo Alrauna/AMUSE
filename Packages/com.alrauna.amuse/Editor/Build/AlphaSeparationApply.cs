@@ -86,7 +86,7 @@ namespace Alrauna.Amuse.Editor.Build
                     context.AvatarRootObject,
                     state.AnalyzedRendererCount,
                     state.AppliedOpaqueTriangleCount,
-                    state.SemanticallyRefusedRendererCount,
+                    state.UntouchedRendererCount,
                     lifecycle.BuildPath,
                     state.AlphaPolicyActive);
             }

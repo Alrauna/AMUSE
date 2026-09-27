@@ -45,6 +45,20 @@ namespace Alrauna.Amuse.Editor.Build
         /// by applied writes.</summary>
         internal int AppliedOpaqueTriangleCount { get; set; }
 
+        /// <summary>
+        /// How many processed renderers kept everything original.
+        /// Analyzed plus renderer-refused renderers split exactly into
+        /// applied and untouched, so the summary's renderer numbers
+        /// cannot hide a refused renderer. The assumption is that
+        /// AppliedRendererCount counts only renderers that
+        /// AnalyzedRendererCount also counts; the pass structure
+        /// guarantees that today, and a future pass reorder must
+        /// re-read this comment.
+        /// </summary>
+        internal int UntouchedRendererCount =>
+            AnalyzedRendererCount + SemanticallyRefusedRendererCount
+            - AppliedRendererCount;
+
         // Private setter, unlike the counters above: this total must stay in
         // lockstep with the per-reason buckets, so RecordRendererRefusal is its
         // only writer.
