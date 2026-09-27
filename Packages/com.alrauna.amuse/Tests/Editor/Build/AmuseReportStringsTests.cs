@@ -123,6 +123,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReportStrings.Has("amuse.summary.Title:description"),
                 Is.True);
         }
+
+        [Test]
+        public void UnavailableCaptureHint_NamesTheUpstreamReplacement()
+        {
+            var hint = AmuseReportStrings.Get(
+                "amuse.texture.UnavailableCapture:hint");
+
+            Assert.That(hint, Does.Contain(
+                "replaced the material texture with an in-memory copy"));
+            Assert.That(hint, Does.Contain("Trace and Optimize"));
+        }
+
+        [Test]
+        public void UnavailableCaptureHint_DropsTheFalseImportAdvice()
+        {
+            var hint = AmuseReportStrings.Get(
+                "amuse.texture.UnavailableCapture:hint");
+
+            // Falsifier: the old advice sent readers hunting for an
+            // import problem that does not exist for a texture an
+            // upstream build step created.
+            Assert.That(hint, Does.Not.Contain(
+                "Check that the texture is a real imported asset"));
+        }
     }
 
     public sealed class AmuseBuildStatusStoreTests
