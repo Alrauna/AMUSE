@@ -226,28 +226,14 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
-        /// The five-argument capture seam. It exists so the host pipeline's
-        /// <see cref="Host.ClosedAlphaMaterialCapturer"/> bindings and every
-        /// existing call keep compiling unchanged; the lookup rides on the
-        /// overload below.
-        /// </summary>
-        internal static bool TryCaptureClosedAlphaMaterials(
-            IReadOnlyList<Material> materials,
-            IReadOnlyList<CapturedAlphaMaterialFamily> families,
-            MaterialEvidenceRequest request,
-            AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
-        {
-            return TryCaptureClosedAlphaMaterials(
-                materials, families, request, bounds, out captured, null);
-        }
-
-        /// <summary>
         /// The closed capture with registered-source naming. When a producer
         /// registered a material's replacement, the capture records the
         /// registered source's path and name; <paramref name="resolveRegisteredSource"/>
         /// answers null when nothing registered the material, and the
-        /// material keeps its own identity.
+        /// material keeps its own identity. There is deliberately no
+        /// overload without the lookup: a capture that could silently skip
+        /// registered-source naming would put build-copy identity into the
+        /// reports.
         /// </summary>
         internal static bool TryCaptureClosedAlphaMaterials(
             IReadOnlyList<Material> materials,
@@ -296,24 +282,6 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             captured = result;
             return true;
-        }
-
-        /// <summary>
-        /// The six-argument transferred seam. It exists so every existing
-        /// call keeps compiling unchanged; the lookup rides on the overload
-        /// below.
-        /// </summary>
-        internal static bool TryCaptureClosedAlphaMaterialsTransferred(
-            IReadOnlyList<Material> materials,
-            IReadOnlyList<CapturedAlphaMaterialFamily> families,
-            MaterialEvidenceRequest request,
-            AlphaPolicyBounds bounds,
-            IReadOnlyCollection<string> grantedShaderNames,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
-        {
-            return TryCaptureClosedAlphaMaterialsTransferred(
-                materials, families, request, bounds, grantedShaderNames,
-                out captured, null);
         }
 
         /// <summary>

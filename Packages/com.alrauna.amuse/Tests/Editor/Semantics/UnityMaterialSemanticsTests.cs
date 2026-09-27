@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -924,7 +925,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { CapturedAlphaMaterialFamily.LilToon },
                 LilToonMaterialSemantics.AlphaEvidenceRequest,
                 AlphaPolicyBounds.Inert,
-                out var captured);
+                out var captured,
+                RegisteredSourceIdentity.Resolve);
 
             Assert.That(success, Is.False);
             Assert.That(captured, Is.Null);
@@ -943,7 +945,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { CapturedAlphaMaterialFamily.Poiyomi },
                 PoiyomiMaterialSemantics.AlphaEvidenceRequest,
                 AlphaPolicyBounds.Inert,
-                out var captured);
+                out var captured,
+                RegisteredSourceIdentity.Resolve);
 
             Assert.That(success, Is.False);
             Assert.That(captured, Is.Null);
@@ -1018,6 +1021,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
                 Assert.That(captured.MaterialPath, Is.Null.Or.Empty);
                 Assert.That(captured.MaterialName, Is.EqualTo(clone.name));
+            }
+            finally
+            {
+                ObjectRegistry.ActiveRegistry = previous;
+                UnityEngine.Object.DestroyImmediate(clone);
+            }
+        }
+
+        [Test]
+        public void RegisteredCloneMaterial_UnattestedSentinelNamesTheSource()
+        {
+            var source = NewFixtureMaterialAssetWithBrokenAlpha();
+            var clone = new Material(source.shader)
+            {
+                name = source.name + " build copy",
+            };
+            // The locked-identity route constructs its sentinel from the
+            // live build copy; the registry is the only witness that names
+            // the authoring asset.
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+
+                var captured = UnityMaterialSemantics.UnattestedMaterial(
+                    RendererAnalysisRefusal.None,
+                    clone,
+                    RegisteredSourceIdentity.Resolve);
+
+                Assert.That(
+                    captured.MaterialPath,
+                    Is.EqualTo(AssetDatabase.GetAssetPath(source)));
+                Assert.That(
+                    captured.MaterialName, Is.EqualTo(source.name));
             }
             finally
             {

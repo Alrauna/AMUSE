@@ -152,8 +152,19 @@ namespace Alrauna.Amuse.Editor.Host
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
-            Func<Material, Material> observedMaterialMapper = null)
+            Func<Material, Material> observedMaterialMapper = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
+            ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
+                ((IReadOnlyList<Material> batchMaterials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                    MaterialEvidenceRequest batchRequest,
+                    AlphaPolicyBounds batchBounds,
+                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        batchMaterials, batchFamilies, batchRequest,
+                        batchBounds, out batchCaptured,
+                        resolveRegisteredSource));
             return CaptureGraph(
                 rendererPath,
                 currentSlots,
@@ -161,12 +172,13 @@ namespace Alrauna.Amuse.Editor.Host
                 bindings,
                 bounds,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                effectiveCapturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
                 lockedRefusalCheck,
-                observedMaterialMapper);
+                observedMaterialMapper,
+                resolveRegisteredSource);
         }
         // Public-project vendor fixtures exercise verified frontend equations but
         // intentionally do not publish vendor source assets.
@@ -179,7 +191,8 @@ namespace Alrauna.Amuse.Editor.Host
             ClosedAlphaMaterialCapturer capturer,
             out IReadOnlyList<Material> admittedLiveMaterials,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             // The closure-mechanics seam stays policy-free: it captures
             // under the inert bounds, which reproduce the base exact-255
@@ -194,7 +207,10 @@ namespace Alrauna.Amuse.Editor.Host
                 capturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck: null,
+                observedMaterialMapper: null,
+                resolveRegisteredSource: resolveRegisteredSource);
         }
 
         internal static CapturedAnimationEvidence CaptureObservedForTests(
@@ -203,8 +219,20 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph,
             bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null)
+            string rendererTypeName = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
+            ClosedAlphaMaterialCapturer defaultCapturer =
+                (IReadOnlyList<Material> batchMaterials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                    MaterialEvidenceRequest batchRequest,
+                    AlphaPolicyBounds batchBounds,
+                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        batchMaterials, batchFamilies, batchRequest,
+                        batchBounds, out batchCaptured,
+                        resolveRegisteredSource);
+
             // The closure-mechanics seam stays policy-free: it captures
             // under the inert bounds, which reproduce the base exact-255
             // contract. Policy enters at the production entries.
@@ -215,10 +243,13 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 AlphaPolicyBounds.Inert,
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                defaultCapturer,
                 out _,
                 ignoreOutOfRangeSlots,
-                rendererTypeName);
+                rendererTypeName,
+                lockedRefusalCheck: null,
+                observedMaterialMapper: null,
+                resolveRegisteredSource: resolveRegisteredSource);
         }
 
         // The seam-parameterized graph capture. The barrier's fixture
@@ -236,7 +267,8 @@ namespace Alrauna.Amuse.Editor.Host
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
-            Func<Material, Material> observedMaterialMapper = null)
+            Func<Material, Material> observedMaterialMapper = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             return CaptureGraph(
                 rendererPath,
@@ -250,7 +282,8 @@ namespace Alrauna.Amuse.Editor.Host
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
                 lockedRefusalCheck,
-                observedMaterialMapper);
+                observedMaterialMapper,
+                resolveRegisteredSource);
         }
 
         /// <summary>
@@ -280,7 +313,8 @@ namespace Alrauna.Amuse.Editor.Host
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
-            Func<Material, Material> observedMaterialMapper = null)
+            Func<Material, Material> observedMaterialMapper = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -315,6 +349,17 @@ namespace Alrauna.Amuse.Editor.Host
                     virtualClip, virtualClip.IsMarkerClip));
             }
 
+            ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
+                ((IReadOnlyList<Material> batchMaterials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                    MaterialEvidenceRequest batchRequest,
+                    AlphaPolicyBounds batchBounds,
+                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        batchMaterials, batchFamilies, batchRequest,
+                        batchBounds, out batchCaptured,
+                        resolveRegisteredSource));
+
             return CaptureObserved(
                 rendererPath,
                 observations,
@@ -322,12 +367,13 @@ namespace Alrauna.Amuse.Editor.Host
                 graph,
                 bounds,
                 selectRequest ?? UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                capturer ?? UnityMaterialSemantics.TryCaptureClosedAlphaMaterials,
+                effectiveCapturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
                 lockedRefusalCheck,
-                observedMaterialMapper);
+                observedMaterialMapper,
+                resolveRegisteredSource);
         }
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
@@ -341,7 +387,8 @@ namespace Alrauna.Amuse.Editor.Host
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
-            Func<Material, Material> observedMaterialMapper = null)
+            Func<Material, Material> observedMaterialMapper = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -377,7 +424,8 @@ namespace Alrauna.Amuse.Editor.Host
                 ignoreOutOfRangeSlots,
                 rendererTypeName,
                 lockedRefusalCheck,
-                observedMaterialMapper);
+                observedMaterialMapper,
+                resolveRegisteredSource);
         }
         private static CapturedAnimationEvidence CaptureObserved(
             string rendererPath,
@@ -391,7 +439,8 @@ namespace Alrauna.Amuse.Editor.Host
             bool ignoreOutOfRangeSlots = false,
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
-            Func<Material, Material> observedMaterialMapper = null)
+            Func<Material, Material> observedMaterialMapper = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             // Assigned once here so that EVERY closure-failure return below hands
             // back an empty list rather than a partial one. The real pairing is
@@ -561,7 +610,7 @@ namespace Alrauna.Amuse.Editor.Host
                         UnityMaterialSemantics.UnattestedMaterial(
                             lockedRefusal,
                             admitted[index],
-                            Build.RegisteredSourceIdentity.Resolve);
+                            resolveRegisteredSource);
                     continue;
                 }
 

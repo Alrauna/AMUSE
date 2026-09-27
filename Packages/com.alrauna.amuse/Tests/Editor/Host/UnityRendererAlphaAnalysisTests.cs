@@ -139,7 +139,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ObjectRegistry.RegisterReplacedObject(source, clone);
 
                 var renderer = NewSkinned(Quad(), clone);
-                var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+                var extraction = UnityRendererAlphaAnalysis.Capture(
+                    renderer, RegisteredSourceIdentity.Resolve);
 
                 Assert.That(
                     extraction.Refusal,
