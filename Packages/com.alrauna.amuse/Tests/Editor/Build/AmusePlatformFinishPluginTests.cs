@@ -769,6 +769,102 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void LockedRegisteredBuildCopy_NamesTheAuthoringAssetInItsSentinelReport()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked sentinel fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+
+            const string fixtureFolder = "Assets/AmuseTests_LockedSource";
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                if (!AssetDatabase.IsValidFolder(fixtureFolder))
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", "AmuseTests_LockedSource");
+                }
+
+                var shaderPath = fixtureFolder + "/locked.shader";
+                File.WriteAllText(
+                    shaderPath,
+                    "Shader \"Hidden/Locked/AmuseTestLocked\"\n" +
+                    "{\n    Properties\n    {\n" +
+                    "        _ShaderOptimizerEnabled (\"\", Float) = 0\n" +
+                    "    }\n    SubShader { Pass {} }\n}\n");
+                AssetDatabase.ImportAsset(
+                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
+                var lockedShader =
+                    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+                Assert.That(lockedShader, Is.Not.Null, shaderPath);
+
+                // The authoring asset carries the project path. The live
+                // build copy stays in memory, so its own project path is
+                // empty, and the registry is the only witness that names
+                // the authoring asset. The lock flag and tags make the
+                // production pre-check refuse the material, which is the
+                // locked-identity route that constructs the sentinel.
+                var source = new Material(lockedShader);
+                var sourcePath =
+                    fixtureFolder + "/registered-lock-source.asset";
+                AssetDatabase.CreateAsset(source, sourcePath);
+                var clone = new Material(lockedShader)
+                {
+                    name = source.name + " build copy",
+                };
+                clone.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName,
+                    1f);
+                clone.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    "Amuse/Unattested/Original");
+                clone.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    "deadbeefdeadbeefdeadbeefdeadbeef");
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+
+                fixture = AddAnalyzableRenderer(root);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = clone;
+                fixture.Renderer.sharedMaterials = new[] { clone };
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root,
+                        AlphaSeparationApplyTests.ApplyTestPlatform.Instance));
+                Assert.That(context, Is.Not.Null,
+                    "fixture precondition: the build must run");
+                Assert.That(reports, Is.Not.Empty,
+                    "fixture precondition: the locked slot must emit its " +
+                    "own refusal line");
+
+                var joined = string.Join(
+                    "\n",
+                    reports.Select(report => report.TheError.ToMessage()));
+                StringAssert.Contains(sourcePath, joined);
+                StringAssert.DoesNotContain(clone.name, joined);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                DisposeAnalyzableRenderer(fixture);
+                ObjectRegistry.ActiveRegistry = previous;
+                if (AssetDatabase.IsValidFolder(fixtureFolder))
+                {
+                    AssetDatabase.DeleteAsset(fixtureFolder);
+                }
+
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void UntouchedRendererCount_CountsFullySlotRefusedRenderersAsOriginal()
         {
             var state = new AmusePlatformFinishState();
