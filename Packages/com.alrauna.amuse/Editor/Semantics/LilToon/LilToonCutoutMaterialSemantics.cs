@@ -397,6 +397,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // Texture-backed arm (B2 basis). An unassigned _MainTex takes
             // the declared-default arm first; an assigned texture keeps
             // every captured-fact gate below, in the same order as before.
+            // The cutout source executes a runtime rotation path even at
+            // zero scroll/rotate, so C4 keeps non-identity ST at this
+            // family boundary rather than delegating it to the
+            // family-blind affine resolver.
             var hasMainSampler = false;
             ScalarSemanticValue alphaChain;
             if (!evidence.TryGetTexture(
