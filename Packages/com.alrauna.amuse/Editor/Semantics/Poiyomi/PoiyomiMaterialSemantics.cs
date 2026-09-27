@@ -881,13 +881,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
         {
+            return InterpretVerifiedAlpha(evidence, out _);
+        }
+
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
+            CapturedMaterialEvidence evidence,
+            out AlphaUnknownReason unknownReason)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            return InterpretAlpha(
-                evidence, false, new List<PoiyomiSemanticDiagnostic>());
+            var diagnostics = new List<PoiyomiSemanticDiagnostic>();
+            var alpha = InterpretAlpha(evidence, false, diagnostics);
+            unknownReason = AlphaUnknownReasonFor(diagnostics);
+            return alpha;
         }
 
         /// <summary>
@@ -899,14 +908,86 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
             CapturedMaterialEvidence evidence)
         {
+            return InterpretVerifiedTwoPassAlpha(evidence, out _);
+        }
+
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
+            CapturedMaterialEvidence evidence,
+            out AlphaUnknownReason unknownReason)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            return InterpretAlpha(
-                evidence, true, new List<PoiyomiSemanticDiagnostic>());
+            var diagnostics = new List<PoiyomiSemanticDiagnostic>();
+            var alpha = InterpretAlpha(evidence, true, diagnostics);
+            unknownReason = AlphaUnknownReasonFor(diagnostics);
+            return alpha;
         }
+
+        /// <summary>
+        /// The first Alpha-scoped diagnostic of one interpretation, as the
+        /// reason the alpha answer is Unknown. The first failure is the
+        /// reported one. Null when the alpha answer is complete or no Alpha
+        /// diagnostic was recorded.
+        /// </summary>
+        internal static AlphaUnknownReason AlphaUnknownReasonFor(
+            IReadOnlyList<PoiyomiSemanticDiagnostic> diagnostics)
+        {
+            if (diagnostics == null)
+            {
+                return null;
+            }
+
+            foreach (var diagnostic in diagnostics)
+            {
+                if (diagnostic.Output != PoiyomiSemanticOutput.Alpha)
+                {
+                    continue;
+                }
+
+                return AlphaUnknownReason.UnsupportedFeature(
+                    FeatureLabelFor(diagnostic.Detail), diagnostic.Detail);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The plain-words name of the shader feature one property carries,
+        /// for the slot-refusal report. Keys are the exact property names
+        /// the alpha gates record. A property without an entry reports its
+        /// own name alone, which stays exact; the label is only wording.
+        /// </summary>
+        internal static string FeatureLabelFor(string property)
+        {
+            if (property == null)
+            {
+                return null;
+            }
+
+            return FeatureLabels.TryGetValue(property, out var label)
+                ? label
+                : null;
+        }
+
+        private static readonly Dictionary<string, string> FeatureLabels =
+            new(StringComparer.Ordinal)
+            {
+                ["_Cutoff"] = "Cutoff",
+                ["_SrcBlend"] = "Source blend mode",
+                ["_SrcBlend2"] = "Second pass source blend mode",
+                ["_MainIgnoreTexAlpha"] = "Ignore main texture alpha",
+                ["_MainTex"] = "Main texture",
+                ["_Color"] = "Base color",
+                ["_TwoPassColor"] = "Second pass base color",
+                ["_PoiParallax"] = "Parallax",
+                ["_AlphaForceOpaque"] = "Force opaque",
+                ["_AlphaForceOpaque2"] = "Second pass force opaque",
+                ["_Mode"] = "Rendering mode preset",
+                ["_ModeTwoPass"] = "Second pass rendering mode preset",
+            };
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
             CapturedMaterialEvidence evidence,

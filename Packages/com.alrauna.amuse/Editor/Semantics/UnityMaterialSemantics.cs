@@ -5,6 +5,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Semantics
@@ -45,13 +46,28 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// </summary>
         internal RendererAnalysisRefusal LockedIdentityRefusal { get; }
 
+        /// <summary>
+        /// The material's project asset path, name, and live shader name,
+        /// read once at capture time where the live material is still in
+        /// hand. Immutable strings, never live references: the evidence
+        /// discipline holds. All three are null for a material built by a
+        /// path that had no live material, and the path is empty for an
+        /// in-memory material, so the report falls back name-first.
+        /// </summary>
+        internal string MaterialPath { get; }
+        internal string MaterialName { get; }
+        internal string ShaderName { get; }
+
         internal CapturedAlphaMaterial(
             CapturedAlphaMaterialFamily family,
             CapturedMaterialEvidence evidence,
             PoiyomiSourceEvidence poiyomiEvidence,
             LilToonSourceEvidence lilToonEvidence,
             RendererAnalysisRefusal lockedIdentityRefusal =
-                RendererAnalysisRefusal.None)
+                RendererAnalysisRefusal.None,
+            string materialPath = null,
+            string materialName = null,
+            string shaderName = null)
         {
             if (!Enum.IsDefined(typeof(CapturedAlphaMaterialFamily), family))
             {
@@ -72,6 +88,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             PoiyomiEvidence = poiyomiEvidence;
             LilToonEvidence = lilToonEvidence;
             LockedIdentityRefusal = lockedIdentityRefusal;
+            MaterialPath = materialPath;
+            MaterialName = materialName;
+            ShaderName = shaderName;
         }
     }
 
@@ -314,7 +333,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// missing family-specific evidence still answers all-Unknown, which
         /// keeps the fail-closed direction inside the transferred mode.
         /// </summary>
-        internal static MaterialSemantics AnalyzeAlphaMaterialTransferred(
+        internal static CapturedAlphaSemantics AnalyzeAlphaMaterialTransferred(
             CapturedAlphaMaterial captured)
         {
             if (captured == null)
@@ -323,56 +342,86 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             SemanticOutput<ScalarSemanticValue> alpha;
+            AlphaUnknownReason unknownReason;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     // PoiyomiSourceEvidence is a struct: the gather always
                     // produced one. The consent covers the identity risk.
                     alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence);
+                        captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
                     // The same struct guarantee holds, and the consent
                     // covers the identity risk for both Poiyomi identities.
                     alpha = PoiyomiMaterialSemantics
-                        .InterpretVerifiedTwoPassAlpha(captured.Evidence);
+                        .InterpretVerifiedTwoPassAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null)
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence);
+                        captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     if (captured.LilToonEvidence == null)
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonCutoutMaterialSemantics
-                        .InterpretVerifiedCutoutAlpha(captured.Evidence);
+                        .InterpretVerifiedCutoutAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     if (captured.LilToonEvidence == null)
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonTransparentMaterialSemantics
-                        .InterpretVerifiedTransparentAlpha(captured.Evidence);
+                        .InterpretVerifiedTransparentAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 default:
-                    return AllUnknown();
+                    return UnknownWithShaderReason(
+                        AlphaUnknownKind.UnsupportedShader,
+                        captured.ShaderName);
             }
 
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                alpha,
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    alpha,
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                unknownReason);
+        }
+
+        /// <summary>
+        /// The all-Unknown answer for a shader-level refusal, carrying the
+        /// shader name the capture read while the live material was still
+        /// in hand. The name is report wording only; the answer stays
+        /// all-Unknown either way.
+        /// </summary>
+        private static CapturedAlphaSemantics UnknownWithShaderReason(
+            AlphaUnknownKind kind, string shaderName)
+        {
+            return new CapturedAlphaSemantics(
+                AllUnknown(),
+                kind == AlphaUnknownKind.UnattestedShader
+                    ? AlphaUnknownReason.UnattestedShader(shaderName)
+                    : AlphaUnknownReason.UnsupportedShader(shaderName));
         }
 
         /// <summary>
@@ -460,8 +509,16 @@ namespace Alrauna.Amuse.Editor.Semantics
                             shaders[index], evidence[index]);
                 }
 
+                var source = materials[index];
                 results[index] = new CapturedAlphaMaterial(
-                    families[index], evidence[index], poiyomi, lilToon);
+                    families[index], evidence[index], poiyomi, lilToon,
+                    materialPath: source != null
+                        ? AssetDatabase.GetAssetPath(source)
+                        : null,
+                    materialName: source != null ? source.name : null,
+                    shaderName: source != null && source.shader != null
+                        ? source.shader.name
+                        : null);
             }
 
             return new ReadOnlyCollection<CapturedAlphaMaterial>(results);
@@ -737,7 +794,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
-        internal static MaterialSemantics AnalyzeAlphaMaterial(
+        internal static CapturedAlphaSemantics AnalyzeAlphaMaterial(
             CapturedAlphaMaterial captured)
         {
             if (captured == null)
@@ -746,38 +803,46 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             SemanticOutput<ScalarSemanticValue> alpha;
+            AlphaUnknownReason unknownReason;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
                     if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence);
+                        captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
                     if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = PoiyomiMaterialSemantics
-                        .InterpretVerifiedTwoPassAlpha(captured.Evidence);
+                        .InterpretVerifiedTwoPassAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null ||
                         !LilToonSourceAttestation.TryVerifyLilToonIdentity(
                             captured.LilToonEvidence, out _))
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence);
+                        captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     if (captured.LilToonEvidence == null ||
@@ -785,11 +850,14 @@ namespace Alrauna.Amuse.Editor.Semantics
                             .TryVerifyLilToonCutoutIdentity(
                                 captured.LilToonEvidence, out _))
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonCutoutMaterialSemantics
-                        .InterpretVerifiedCutoutAlpha(captured.Evidence);
+                        .InterpretVerifiedCutoutAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     if (captured.LilToonEvidence == null ||
@@ -797,21 +865,28 @@ namespace Alrauna.Amuse.Editor.Semantics
                             .TryVerifyLilToonTransparentIdentity(
                                 captured.LilToonEvidence, out _))
                     {
-                        return AllUnknown();
+                        return UnknownWithShaderReason(
+                            AlphaUnknownKind.UnattestedShader,
+                            captured.ShaderName);
                     }
 
                     alpha = LilToonTransparentMaterialSemantics
-                        .InterpretVerifiedTransparentAlpha(captured.Evidence);
+                        .InterpretVerifiedTransparentAlpha(
+                            captured.Evidence, out unknownReason);
                     break;
                 default:
-                    return AllUnknown();
+                    return UnknownWithShaderReason(
+                        AlphaUnknownKind.UnsupportedShader,
+                        captured.ShaderName);
             }
 
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                alpha,
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    alpha,
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                unknownReason);
         }
 
         /// <summary>
@@ -833,7 +908,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// </summary>
         internal static CapturedAlphaMaterial UnattestedMaterial(
             RendererAnalysisRefusal lockedIdentityRefusal =
-                RendererAnalysisRefusal.None)
+                RendererAnalysisRefusal.None,
+            Material sourceMaterial = null)
         {
             return new CapturedAlphaMaterial(
                 CapturedAlphaMaterialFamily.Unsupported,
@@ -847,7 +923,17 @@ namespace Alrauna.Amuse.Editor.Semantics
                     Array.Empty<CapturedTextureEvidence>()),
                 default(PoiyomiSourceEvidence),
                 null,
-                lockedIdentityRefusal);
+                lockedIdentityRefusal,
+                materialPath: sourceMaterial != null
+                    ? AssetDatabase.GetAssetPath(sourceMaterial)
+                    : null,
+                materialName: sourceMaterial != null
+                    ? sourceMaterial.name
+                    : null,
+                shaderName: sourceMaterial != null &&
+                    sourceMaterial.shader != null
+                    ? sourceMaterial.shader.name
+                    : null);
         }
 
         internal static MaterialSemantics AllUnknown()

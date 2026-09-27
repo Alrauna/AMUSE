@@ -295,13 +295,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return UnityRendererAlphaAnalysis.Analyze(
                 extraction.Snapshot,
                 material => supported.Contains(material)
-                    ? new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<ScalarSemanticValue>.Complete(
-                            ScalarSemanticValue.Constant(1f)),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown())
-                    : UnityMaterialSemantics.AllUnknown());
+                    ? new CapturedAlphaSemantics(
+                        new MaterialSemantics(
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<ScalarSemanticValue>.Complete(
+                                ScalarSemanticValue.Constant(1f)),
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                        null)
+                    : CapturedAlphaSemantics.AllUnknown());
         }
 
         /// <summary>Two submeshes: one triangle, then two triangles.</summary>

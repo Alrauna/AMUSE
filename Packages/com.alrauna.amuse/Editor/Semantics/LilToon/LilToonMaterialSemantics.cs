@@ -521,14 +521,115 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence)
         {
+            return InterpretVerifiedAlpha(evidence, out _);
+        }
+
+        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
+            CapturedMaterialEvidence evidence,
+            out AlphaUnknownReason unknownReason)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            return InterpretAlpha(
-                evidence, new List<LilToonSemanticDiagnostic>());
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var alpha = InterpretAlpha(evidence, diagnostics);
+            unknownReason = AlphaUnknownReasonFor(diagnostics);
+            return alpha;
         }
+
+        /// <summary>
+        /// The first Alpha-scoped diagnostic of one interpretation, as the
+        /// reason the alpha answer is Unknown. The first failure is the
+        /// reported one: the gates refuse at the first fact they cannot
+        /// prove, so later diagnostics describe consequences, not causes.
+        /// Null when the alpha answer is complete or no Alpha diagnostic
+        /// was recorded.
+        /// </summary>
+        internal static AlphaUnknownReason AlphaUnknownReasonFor(
+            IReadOnlyList<LilToonSemanticDiagnostic> diagnostics)
+        {
+            if (diagnostics == null)
+            {
+                return null;
+            }
+
+            foreach (var diagnostic in diagnostics)
+            {
+                if (diagnostic.Output != LilToonSemanticOutput.Alpha)
+                {
+                    continue;
+                }
+
+                return AlphaUnknownReason.UnsupportedFeature(
+                    FeatureLabelFor(diagnostic.Detail), diagnostic.Detail);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The plain-words name of the shader feature one property carries,
+        /// for the slot-refusal report. Keys are the exact property names
+        /// the alpha gates record. A property without an entry reports its
+        /// own name alone, which stays exact; the label is only wording.
+        /// </summary>
+        internal static string FeatureLabelFor(string property)
+        {
+            if (property == null)
+            {
+                return null;
+            }
+
+            if (property.StartsWith("_IDMask", StringComparison.Ordinal))
+            {
+                return "ID mask";
+            }
+
+            return FeatureLabels.TryGetValue(property, out var label)
+                ? label
+                : null;
+        }
+
+        private static readonly Dictionary<string, string> FeatureLabels =
+            new(StringComparer.Ordinal)
+            {
+                ["_Invisible"] = "Invisible mode",
+                ["_UDIMDiscardCompile"] = "UDIM discard",
+                ["_UDIMDiscardMode"] = "UDIM discard",
+                ["_ShiftBackfaceUV"] = "Backface UV shift",
+                ["_UseParallax"] = "Parallax",
+                ["_UseDither"] = "Dither",
+                ["_IDMaskControlsDissolve"] = "ID mask dissolve control",
+                ["_DissolveParams"] = "Dissolve",
+                ["_MainTex_ScrollRotate"] = "UV scroll or rotate",
+                ["_Main2ndTex_ScrollRotate"] =
+                    "Second layer UV scroll or rotate",
+                ["_Main3rdTex_ScrollRotate"] =
+                    "Third layer UV scroll or rotate",
+                ["_UseMain2ndTex"] = "Second layer",
+                ["_UseMain3rdTex"] = "Third layer",
+                ["_Main2ndDistanceFade"] = "Second layer distance fade",
+                ["_Main3rdDistanceFade"] = "Third layer distance fade",
+                ["_DistanceFade"] = "Distance fade",
+                ["_Main2ndDissolveParams"] = "Second layer dissolve",
+                ["_Main3rdDissolveParams"] = "Third layer dissolve",
+                ["_AudioLink2Main2nd"] = "Audio Link on the second layer",
+                ["_AudioLink2Main3rd"] = "Audio Link on the third layer",
+                ["_Main2ndTexIsMSDF"] = "Second layer MSDF",
+                ["_Main3rdTexIsMSDF"] = "Third layer MSDF",
+                ["_Main2ndTexAngle"] = "Second layer angle",
+                ["_Main3rdTexAngle"] = "Third layer angle",
+                ["_AlphaMaskMode"] = "Alpha mask",
+                ["_AlphaMaskValue"] = "Alpha mask",
+                ["_AlphaMaskScale"] = "Alpha mask",
+                ["_Cutoff"] = "Cutoff",
+                ["_AlphaBoostFA"] = "Alpha boost",
+                ["_SubpassCutoff"] = "Subpass cutoff",
+                ["_MainTex_ST"] = "Main texture scale or offset",
+                ["_MainTex"] = "Main texture",
+            };
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
             CapturedMaterialEvidence evidence,

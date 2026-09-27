@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -19,6 +20,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -585,12 +587,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     {
                         if (captured.Family == CapturedAlphaMaterialFamily.Unsupported)
                         {
-                            return new MaterialSemantics(
-                                SemanticOutput<ColorSemanticValue>.Unknown(),
-                                SemanticOutput<ScalarSemanticValue>.Complete(
-                                    ScalarSemanticValue.Constant(1f)),
-                                SemanticOutput<ColorSemanticValue>.Unknown(),
-                                SemanticOutput<NormalSemanticValue>.Unknown());
+                            return new CapturedAlphaSemantics(
+                                new MaterialSemantics(
+                                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                                    SemanticOutput<ScalarSemanticValue>.Complete(
+                                        ScalarSemanticValue.Constant(1f)),
+                                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                                null);
                         }
 
                         return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
@@ -2524,6 +2528,239 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixtures.BaseTearDown();
                 UnityEngine.Object.DestroyImmediate(renderTexture);
             }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a slot refusal that names only the slot index, the
+        /// cause enum, and the renderer name cannot be acted on. The report
+        /// must name the refused material by its project path and the exact
+        /// shader feature that stopped the proof. A plausible wrong
+        /// implementation keeps the old argument list and fails this test.
+        /// </summary>
+        [Test]
+        public void DissolveRefusalReportNamesMaterialPathAndFeature()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            const string reportFolder = "Assets/AmuseTests_AlphaSlotReports";
+            if (!AssetDatabase.IsValidFolder(reportFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "AmuseTests_AlphaSlotReports");
+            }
+
+            var fixtures = new LilToonCutoutConversionFixtures();
+            var arm = default(CutoutArmFixture);
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "dissolve_report_main");
+                var materialPath = reportFolder + "/DissolveReportMaterial.mat";
+
+                arm = CutoutArmFixture.Create(
+                    texture,
+                    "AMUSE dissolve report",
+                    material =>
+                    {
+                        material.SetVector(
+                            "_DissolveParams",
+                            new Vector4(1f, 0f, 0f, 0f));
+                        AssetDatabase.CreateAsset(material, materialPath);
+                        Assert.That(
+                            AssetDatabase.GetAssetPath(material),
+                            Is.EqualTo(materialPath),
+                            "fixture precondition: the refused material " +
+                            "must live at a project asset path");
+                    },
+                    null,
+                    null);
+
+                AmusePlatformFinishState amuse = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = arm.Run());
+
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "fixture precondition: an active dissolve path must " +
+                    "refuse at alpha resolution");
+
+                var refusalLines = reports
+                    .Select(report => report.TheError.ToMessage())
+                    .Where(message =>
+                        message.Contains(
+                            "AdmittedMaterialSemanticsUnknown"))
+                    .ToList();
+                Assert.That(
+                    refusalLines,
+                    Is.Not.Empty,
+                    "fixture precondition: the refusing slot must emit " +
+                    "its own refusal line; captured reports:\n" +
+                    string.Join(
+                        "\n---\n",
+                        reports.Select(report =>
+                            report.TheError.ToMessage())));
+                Assert.That(
+                    refusalLines,
+                    Has.Some.Contains(materialPath),
+                    "the refusal line must name the refused material by " +
+                    "its project path");
+                Assert.That(
+                    refusalLines,
+                    Has.Some.Contains("_DissolveParams"),
+                    "the refusal line must name the exact shader " +
+                    "property that stopped the proof");
+                Assert.That(
+                    refusalLines,
+                    Has.Some.Contains("Dissolve"),
+                    "the refusal line must name the shader feature in " +
+                    "plain words");
+            }
+            finally
+            {
+                // The refused material is a project asset while the arm is
+                // alive. The asset dies first, so the arm's dispose never
+                // calls DestroyImmediate on an asset.
+                if (AssetDatabase.IsValidFolder(reportFolder))
+                {
+                    AssetDatabase.DeleteAsset(reportFolder);
+                }
+                arm?.Dispose();
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: an unattested shader has no modeled feature, so
+        /// the only useful refusal line names the material by its project
+        /// path and the shader that no frontend attests. A plausible wrong
+        /// implementation reports only the cause enum and fails this test.
+        /// </summary>
+        [Test]
+        public void UnsupportedShaderRefusalReportNamesMaterialPathAndShader()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            const string reportFolder = "Assets/AmuseTests_AlphaSlotReports";
+            // The installed lilToon package's asset postprocessor migrates
+            // every created material asset; for this fixture's near-miss
+            // shader name its property walk throws inside Unity and Unity
+            // logs the exception. That is vendor-package noise around
+            // CreateAsset, not AMUSE behavior, so the test expects it only
+            // when lilToon is installed and filters it from the
+            // pipeline-log guard below.
+            var lilToonPostprocessorInstalled =
+                AssetDatabase.IsValidFolder("Packages/jp.lilxyzw.liltoon");
+            if (lilToonPostprocessorInstalled)
+            {
+                LogAssert.Expect(
+                    LogType.Exception,
+                    new Regex("propertyIndex"));
+            }
+            var loggedExceptions = new List<string>();
+            void OnLog(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Exception)
+                {
+                    loggedExceptions.Add(condition + "\n" + stackTrace);
+                }
+            }
+            Application.logMessageReceivedThreaded += OnLog;
+            if (!AssetDatabase.IsValidFolder(reportFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "AmuseTests_AlphaSlotReports");
+            }
+
+            try
+            {
+                var shader = ImportUnsupportedFamilyShader();
+                var material = new Material(shader)
+                {
+                    name = "AMUSE unsupported report",
+                };
+                var materialPath = reportFolder +
+                                   "/UnsupportedReportMaterial.mat";
+                AssetDatabase.CreateAsset(material, materialPath);
+                Assert.That(
+                    AssetDatabase.GetAssetPath(material),
+                    Is.EqualTo(materialPath),
+                    "fixture precondition: the refused material must " +
+                    "live at a project asset path");
+
+                var root = new GameObject("AMUSE unsupported report root");
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                AddSingleTriangleRenderer(root, material, out var mesh);
+                try
+                {
+                    AmusePlatformFinishState amuse = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+
+                    Assert.That(
+                        amuse.RendererRefusalCount(
+                            RendererAnalysisRefusal
+                                .AdmittedMaterialSemanticsUnknown),
+                        Is.EqualTo(1),
+                        "fixture precondition: an unattested shader must " +
+                        "refuse as unknown semantics");
+
+                    var refusalLines = reports
+                        .Select(report => report.TheError.ToMessage())
+                        .Where(message =>
+                            message.Contains(
+                                "AdmittedMaterialSemanticsUnknown"))
+                        .ToList();
+                    Assert.That(
+                        refusalLines,
+                        Is.Not.Empty,
+                        "fixture precondition: the refusing slot must " +
+                        "emit its own refusal line; captured reports:\n" +
+                        string.Join(
+                            "\n---\n",
+                            reports.Select(report =>
+                                report.TheError.ToMessage())));
+                    Assert.That(
+                        refusalLines,
+                        Has.Some.Contains(materialPath),
+                        "the refusal line must name the refused material " +
+                        "by its project path");
+                    Assert.That(
+                        refusalLines,
+                        Has.Some.Contains(UnsupportedFamilyShaderName),
+                        "the refusal line must name the shader that no " +
+                        "frontend attests");
+                }
+                finally
+                {
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh);
+                    }
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+            }
+            finally
+            {
+                Application.logMessageReceivedThreaded -= OnLog;
+                if (AssetDatabase.IsValidFolder(reportFolder))
+                {
+                    AssetDatabase.DeleteAsset(reportFolder);
+                }
+                if (AssetDatabase.IsValidFolder(UnsupportedFamilyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(UnsupportedFamilyTempFolder);
+                }
+            }
+            loggedExceptions.RemoveAll(entry =>
+                entry.Contains("lilStartup.MigrateMaterial"));
+            Assert.That(
+                loggedExceptions,
+                Is.Empty,
+                "the test pipeline must not log exceptions for an " +
+                "unsupported shader:\n" +
+                string.Join("\n---\n", loggedExceptions));
         }
 
         /// <summary>
@@ -6867,18 +7104,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 material, out family, out alphaRelevance, out captureSchema);
         }
 
-        private static MaterialSemantics ResolveMixedFamilySemantics(
+        private static CapturedAlphaSemantics ResolveMixedFamilySemantics(
             CapturedAlphaMaterial captured)
         {
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.LilToon:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                            captured.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    return new CapturedAlphaSemantics(
+                        new MaterialSemantics(
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            LilToonMaterialSemantics.InterpretVerifiedAlpha(
+                                captured.Evidence),
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                        null);
                 default:
                     return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
             }

@@ -815,13 +815,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     .InterpretVerifiedCutoutAlpha(material.Evidence);
 
                 Assert.That(
-                    routed.Alpha.IsComplete &&
-                        routed.Alpha.GetCompleteValue().Kind ==
+                    routed.Semantics.Alpha.IsComplete &&
+                        routed.Semantics.Alpha.GetCompleteValue().Kind ==
                         ScalarSemanticValueKind.Constant,
                     Is.False,
                     "routed cutout alpha must never complete as a constant");
                 Assert.That(
-                    routed.Alpha,
+                    routed.Semantics.Alpha,
                     Is.EqualTo(cutout),
                     "the routed alpha must be the cutout interpreter's " +
                     "verdict on the same evidence");
@@ -959,7 +959,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 captured[0].Family,
                 Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
             AssertAllUnknown(
-                UnityMaterialSemantics.AnalyzeAlphaMaterial(captured[0]));
+                UnityMaterialSemantics.AnalyzeAlphaMaterial(captured[0])
+                    .Semantics);
         }
 
         private Material NewMaterial(

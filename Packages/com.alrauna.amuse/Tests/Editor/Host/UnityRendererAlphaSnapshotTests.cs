@@ -56,19 +56,21 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var freshExtraction = UnityRendererAlphaAnalysis.Capture(renderer);
             var replacementCapturedMaterial =
                 freshExtraction.Snapshot.Materials[0];
-            MaterialSemantics Resolve(CapturedAlphaMaterial material)
+            CapturedAlphaSemantics Resolve(CapturedAlphaMaterial material)
             {
                 if (ReferenceEquals(material, originalCapturedMaterial))
                 {
-                    return ConstantAlpha(1f);
+                    return new CapturedAlphaSemantics(
+                        ConstantAlpha(1f), null);
                 }
 
                 if (ReferenceEquals(material, replacementCapturedMaterial))
                 {
-                    return ConstantAlpha(0f);
+                    return new CapturedAlphaSemantics(
+                        ConstantAlpha(0f), null);
                 }
 
-                return UnityMaterialSemantics.AllUnknown();
+                return CapturedAlphaSemantics.AllUnknown();
             }
 
             var captured = UnityRendererAlphaAnalysis.Analyze(

@@ -3,6 +3,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
@@ -117,26 +118,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var result = new CapturedAlphaMaterial[materials.Count];
             for (var index = 0; index < result.Length; index++)
             {
+                var source = materials[index];
                 result[index] = new CapturedAlphaMaterial(
                     families[index],
                     evidence[index],
                     default(PoiyomiSourceEvidence),
-                    null);
+                    null,
+                    materialPath: source != null
+                        ? AssetDatabase.GetAssetPath(source)
+                        : null,
+                    materialName: source != null ? source.name : null,
+                    shaderName: source != null && source.shader != null
+                        ? source.shader.name
+                        : null);
             }
 
             captured = result;
             return true;
         }
 
-        internal static MaterialSemantics VerifiedAlphaOnly(
+        internal static CapturedAlphaSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                    material.Evidence),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                        material.Evidence),
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                null);
         }
     }
 }

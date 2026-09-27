@@ -6,6 +6,7 @@ using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
@@ -177,8 +178,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         break;
                 }
 
+                var source = materials[index];
                 result[index] = new CapturedAlphaMaterial(
-                    families[index], evidence[index], poiyomi, lilToon);
+                    families[index], evidence[index], poiyomi, lilToon,
+                    materialPath: source != null
+                        ? AssetDatabase.GetAssetPath(source)
+                        : null,
+                    materialName: source != null ? source.name : null,
+                    shaderName: source != null && source.shader != null
+                        ? source.shader.name
+                        : null);
             }
 
             captured = result;
@@ -190,50 +199,53 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// interpreters; a material no fixture family attests is
         /// all-Unknown, the conservative answer.
         /// </summary>
-        internal static MaterialSemantics VerifiedAlphaOnly(
+        internal static CapturedAlphaSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
+            AlphaUnknownReason unknownReason;
+            SemanticOutput<ScalarSemanticValue> alpha;
             switch (material.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                            material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                        material.Evidence, out unknownReason);
+                    break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        PoiyomiMaterialSemantics.InterpretVerifiedTwoPassAlpha(
-                            material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    alpha = PoiyomiMaterialSemantics
+                        .InterpretVerifiedTwoPassAlpha(
+                            material.Evidence, out unknownReason);
+                    break;
                 case CapturedAlphaMaterialFamily.LilToon:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                            material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
+                        material.Evidence, out unknownReason);
+                    break;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        LilToonCutoutMaterialSemantics
-                            .InterpretVerifiedCutoutAlpha(material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    alpha = LilToonCutoutMaterialSemantics
+                        .InterpretVerifiedCutoutAlpha(
+                            material.Evidence, out unknownReason);
+                    break;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
-                    return new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        LilToonTransparentMaterialSemantics
-                            .InterpretVerifiedTransparentAlpha(
-                                material.Evidence),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown());
+                    alpha = LilToonTransparentMaterialSemantics
+                        .InterpretVerifiedTransparentAlpha(
+                            material.Evidence, out unknownReason);
+                    break;
                 default:
-                    return UnityMaterialSemantics.AllUnknown();
+                    // Production parity: a material no family selects is
+                    // all-Unknown, and the report names the shader the
+                    // capture recorded.
+                    return new CapturedAlphaSemantics(
+                        UnityMaterialSemantics.AllUnknown(),
+                        AlphaUnknownReason.UnsupportedShader(
+                            material.ShaderName));
             }
+
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    alpha,
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                unknownReason);
         }
 
         /// <summary>
