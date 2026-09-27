@@ -1420,40 +1420,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void UnassignedMainTex_IsRefusedAndNeverBecomesAConstant()
-        {
-            var material = NewCutoutFixtureMaterial();
-
-            var captured = CaptureCutoutEvidence(material);
-            Assert.That(
-                captured.TryGetTexture(MainTextureProperty, out var assignment),
-                Is.True);
-            Assert.That(
-                assignment.IsAssigned,
-                Is.False,
-                "the stand-in default leaves _MainTex unassigned");
-
-            var result =
-                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
-                    material, ColorSpace.Linear, AllFeatures);
-
-            // Falsifies: the Poiyomi constant-fallback for an unassigned
-            // _MainTex — the cutout pass samples _MainTex unconditionally, so
-            // absence is unsupported, never a constant alpha.
-            // Written for GREEN behavior; on the scaffold this is RED for
-            // the scaffold's own reason (see the trilinear note above).
-            Assert.That(
-                result.Semantics.Alpha.IsComplete,
-                Is.False,
-                "an unassigned main texture must never complete");
-            Assert.That(
-                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
-                    .Any(d => d.Detail.Contains(MainTextureProperty)),
-                Is.True,
-                "expected an alpha diagnostic naming _MainTex");
-        }
-
-        [Test]
         public void
             TextureWithoutResolvableSourceIdentity_IsRefusedAndNeverBecomesAConstant()
         {
@@ -1531,6 +1497,86 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 withGamma,
                 Is.EqualTo(withAllFeatures),
                 "color space must not change the cutout alpha output");
+        }
+
+        // --- declared-default arm: the unassigned Main Texture -------------
+
+        [Test]
+        public void UnassignedMainTex_AtUnitTint_ProvesTheCornerTriangleOpaque()
+        {
+            var material = NewCutoutFixtureMaterial();
+
+            var resolution = ResolveThroughUnassignedCutout(material);
+
+            // Falsifies: consulting any texel for an unassigned _MainTex.
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void UnassignedMainTex_BelowCutoff_IsUniformMustRemainTransparent()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.25f));
+
+            var resolution = ResolveThroughUnassignedCutout(material);
+
+            // Falsifies: treating the declared-default constant as opaque
+            // regardless of the cutout comparison.
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void UnassignedMainTex_WithSampledAlphaMask_RefusesSampling()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetTexture("_AlphaMask", ImportTexture("mask_unassigned"));
+
+            // Falsifier 1: a sampled mask borrows _MainTex's captured
+            // sampler, so the declared-default arm must refuse it with the
+            // sampling code, not prove through borrowed facts. Before the
+            // arm exists this fails with UnsupportedFeature instead.
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            Assert.That(
+                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
+                    .Any(d =>
+                        d.Code == LilToonSemanticDiagnosticCode
+                            .UnsupportedSampling &&
+                        d.Detail.Contains("_MainTex")),
+                Is.True,
+                "expected UnsupportedSampling naming _MainTex");
+        }
+
+        private AlphaResolution ResolveThroughUnassignedCutout(
+            Material material)
+        {
+            var captured = CaptureCutoutEvidence(material);
+            var alpha =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
+                    captured);
+            return AlphaSemanticsResolver.Resolve(
+                alpha, UnusedProvider(), 0);
+        }
+
+        private static AlphaFieldProvider UnusedProvider()
+        {
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                result = null;
+                throw new InvalidOperationException(
+                    "the declared-default collapse must not consult a texel");
+            };
         }
     }
 }

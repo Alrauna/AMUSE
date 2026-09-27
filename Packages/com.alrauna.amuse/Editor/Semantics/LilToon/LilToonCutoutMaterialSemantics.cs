@@ -394,113 +394,127 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     ScalarSemanticValue.Constant(maskTerm.Constant));
             }
 
-            // Texture-backed arm (B2 basis): the cutout alpha is the plain
-            // _MainTex alpha sample at UV0, built from the captured ScaleOffset,
-            // composed with the mask term when one runs. The cutout source
-            // executes a runtime rotation path even at zero scroll/rotate, so
-            // C4 keeps non-identity ST at this family boundary rather than
-            // delegating it to the family-blind resolver. The boundary binds
-            // the mask too: uvMain feeds the mask coordinate, and the mask
-            // rides _MainTex's sampler.
+            // Texture-backed arm (B2 basis). An unassigned _MainTex takes
+            // the declared-default arm first; an assigned texture keeps
+            // every captured-fact gate below, in the same order as before.
+            var hasMainSampler = false;
+            ScalarSemanticValue alphaChain;
             if (!evidence.TryGetTexture(
                     MainTextureProperty, out var assignment) ||
                 !assignment.IsAssigned)
             {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
-            }
-
-            if (!assignment.Texture.HasSampling)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                    MainTextureProperty);
-            }
-
-            if (!assignment.HasScaleOffset)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
-            }
-
-            // Identity is tested exactly, per binary32 component. Unity's
-            // Vector2 ==/!= is deliberately not used here: it is epsilon-based
-            // (equal when the difference magnitude is under 1e-5), so it would
-            // let near-identity ST past this C4 boundary and into the
-            // family-blind affine resolver, whose own identity test is exact.
-            // -0.0f stays admitted: -0.0f != 0f is false, and +-0 are
-            // equivalent for this coordinate model.
-            if (assignment.Scale.x != 1f ||
-                assignment.Scale.y != 1f ||
-                assignment.Offset.x != 0f ||
-                assignment.Offset.y != 0f)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedUv,
-                    MainTexStProperty);
-            }
-
-            // uvMain is UV0 under the identity gates above. The mask
-            // coordinate is UV0 under the mask's own plain affine, and the
-            // mask sample borrows _MainTex's captured sampler facts.
-            var identityMapping =
-                new UvMapping(0, assignment.Scale, assignment.Offset);
-            var sharedSampling = assignment.Texture.Sampling;
-
-            // The shader composes, in order: main alpha, second layer, third
-            // layer, alpha mask, dissolve, clip. The base below is the main
-            // alpha; the layers compose onto it; the mask term composes last.
-            // The cutout clip by _Cutoff applies after everything and is the
-            // classifier's declared cutoff, so it composes nowhere here.
-            ScalarSemanticValue alphaChain;
-            if (assignment.Texture.SampledAlphaIsProvenOne)
-            {
-                // The importer theorem: a source without an alpha channel and
-                // an import that writes none samples alpha exactly one at
-                // every texel of every level, so the main sample collapses to
-                // its constant and no main field is read.
+                // Declared-default arm (design 2026-09-26): every attested
+                // lilToon source declares _MainTex = "white" {}, and the
+                // canonical digests pin that Properties block. Playback
+                // binds the declared default when a material assigns no
+                // texture, so the sample is exactly one at every texel and
+                // coordinate-independent: the main sample collapses to its
+                // constant exactly as the importer theorem does for the
+                // assigned case. The digest is the enforcement: a vendor
+                // change to the default breaks attestation before this arm
+                // can run.
                 alphaChain = ScalarSemanticValue.Constant(colorAlpha);
             }
             else
             {
-                if (!assignment.Texture.HasSourceIdentity)
+                if (!assignment.Texture.HasSampling)
                 {
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode
-                            .UnstableTextureIdentity,
+                        LilToonSemanticDiagnosticCode.UnsupportedSampling,
                         MainTextureProperty);
                 }
 
-                var mainSample = new TextureSample(
-                    assignment.Texture.SourceIdentity,
-                    identityMapping,
-                    sharedSampling);
-                alphaChain = colorAlpha == 1f
-                    ? ScalarSemanticValue.Texture(
-                        mainSample, TextureChannel.Alpha)
-                    : ScalarSemanticValue.TextureTimesConstant(
-                        mainSample, TextureChannel.Alpha, colorAlpha);
+                if (!assignment.HasScaleOffset)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        MainTextureProperty);
+                }
+
+                // Identity is tested exactly, per binary32 component. Unity's
+                // Vector2 ==/!= is deliberately not used here: it is epsilon-based
+                // (equal when the difference magnitude is under 1e-5), so it would
+                // let near-identity ST past this C4 boundary and into the
+                // family-blind affine resolver, whose own identity test is exact.
+                // -0.0f stays admitted: -0.0f != 0f is false, and +-0 are
+                // equivalent for this coordinate model.
+                if (assignment.Scale.x != 1f ||
+                    assignment.Scale.y != 1f ||
+                    assignment.Offset.x != 0f ||
+                    assignment.Offset.y != 0f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedUv,
+                        MainTexStProperty);
+                }
+
+                hasMainSampler = true;
+
+                // The shader composes, in order: main alpha, second layer,
+                // third layer, alpha mask, dissolve, clip. The base below is
+                // the main alpha; the layers compose onto it; the mask term
+                // composes last. The cutout clip by _Cutoff applies after
+                // everything and is the classifier's declared cutoff, so it
+                // composes nowhere here.
+                if (assignment.Texture.SampledAlphaIsProvenOne)
+                {
+                    // The importer theorem: a source without an alpha channel
+                    // and an import that writes none samples alpha exactly one
+                    // at every texel of every level, so the main sample
+                    // collapses to its constant and no main field is read.
+                    alphaChain = ScalarSemanticValue.Constant(colorAlpha);
+                }
+                else
+                {
+                    if (!assignment.Texture.HasSourceIdentity)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            LilToonSemanticOutput.Alpha,
+                            LilToonSemanticDiagnosticCode
+                                .UnstableTextureIdentity,
+                            MainTextureProperty);
+                    }
+
+                    // uvMain is UV0 under the identity gates above.
+                    var mainSample = new TextureSample(
+                        assignment.Texture.SourceIdentity,
+                        new UvMapping(0, assignment.Scale, assignment.Offset),
+                        assignment.Texture.Sampling);
+                    alphaChain = colorAlpha == 1f
+                        ? ScalarSemanticValue.Texture(
+                            mainSample, TextureChannel.Alpha)
+                        : ScalarSemanticValue.TextureTimesConstant(
+                            mainSample, TextureChannel.Alpha, colorAlpha);
+                }
             }
 
             TextureSample maskSample = null;
             if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
             {
+                // The mask borrows _MainTex's captured sampler facts. An
+                // unassigned main has none, so a sampled mask refuses by
+                // name instead of proving through borrowed facts. A later
+                // design can attest the default sampler; this one refuses.
+                if (!hasMainSampler)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedSampling,
+                        MainTextureProperty);
+                }
+
                 maskSample = new TextureSample(
                     maskTerm.Source,
                     maskTerm.Mapping,
-                    sharedSampling);
+                    assignment.Texture.Sampling);
 
                 // A replace mask runs after the layers, so the mask term is
                 // the whole alpha: neither _MainTex's texels nor _Color.a nor
