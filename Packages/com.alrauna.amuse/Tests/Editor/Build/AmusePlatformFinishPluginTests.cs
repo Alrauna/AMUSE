@@ -698,6 +698,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
+            Mesh slotRefusedMesh = null;
+            Material slotRefusedMaterial = null;
 
             try
             {
@@ -707,20 +709,61 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixture.Material = Alrauna.Amuse.Tests.Editor.Semantics
                     .LilToon.LilToonFixtureTestBase.CreateVerifiedMaterial();
                 fixture.Renderer.sharedMaterials = new[] { fixture.Material };
+                // Two renderers stay untouched beside the applied one: one
+                // the barrier refuses at renderer scope, one whose slots
+                // refuse as semantics-unknown. The recorded summary text
+                // must count both, so a call-site revert to a narrower
+                // counter cannot pass unnoticed.
+                root.AddComponent<LineRenderer>();
+                slotRefusedMesh = new Mesh();
+                slotRefusedMesh.vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                };
+                slotRefusedMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                slotRefusedMaterial =
+                    new Material(Shader.Find("Unlit/Color"));
+                var refusedFilter = root.AddComponent<MeshFilter>();
+                refusedFilter.sharedMesh = slotRefusedMesh;
+                var refusedRenderer = root.AddComponent<MeshRenderer>();
+                refusedRenderer.sharedMaterials =
+                    new[] { slotRefusedMaterial };
                 var context = AvatarProcessor.ProcessAvatar(
                     root, AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
                 var state = context.GetState<AmusePlatformFinishState>();
 
-                Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero);
+                Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero,
+                    "applied triangles");
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "analyzed renderers");
+                Assert.That(
+                    state.SemanticallyRefusedRendererCount, Is.EqualTo(2),
+                    "renderer-scope refusals");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0),
+                    "applied renderers");
                 Assert.That(
                     AmuseBuildStatusStore.TryGet(out var summary),
                     Is.True);
                 StringAssert.Contains("moved 0 triangles", summary);
+                StringAssert.Contains(
+                    "3 renderers kept everything original", summary);
             }
             finally
             {
                 AmuseBuildStatusStore.Forget();
                 DisposeAnalyzableRenderer(fixture);
+                if (slotRefusedMesh != null)
+                {
+                    Object.DestroyImmediate(slotRefusedMesh);
+                }
+
+                if (slotRefusedMaterial != null)
+                {
+                    Object.DestroyImmediate(slotRefusedMaterial);
+                }
+
                 Object.DestroyImmediate(root);
             }
         }

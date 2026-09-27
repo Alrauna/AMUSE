@@ -171,7 +171,13 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 foreach (var key in provenMapping.Keys)
                 {
-                    names.Add(key != null ? key.name : "<null>");
+                    // The mapping's keys are live build copies; the
+                    // diagnostic names the authoring asset when a producer
+                    // registered the copy's replacement, matching the
+                    // offender naming above.
+                    var namedKey =
+                        RegisteredSourceIdentity.Resolve(key) ?? key;
+                    names.Add(namedKey != null ? namedKey.name : "<null>");
                 }
             }
 

@@ -768,7 +768,16 @@ namespace Alrauna.Amuse.Editor.Build
                 Renderer renderer,
                 ClosedAlphaMaterialCapturer inner)
         {
-            inner ??= UnityMaterialSemantics.TryCaptureClosedAlphaMaterials;
+            inner ??= (
+                IReadOnlyList<Material> batchMaterials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                MaterialEvidenceRequest batchRequest,
+                AlphaPolicyBounds batchBounds,
+                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                    batchMaterials, batchFamilies, batchRequest,
+                    batchBounds, out batchCaptured,
+                    RegisteredSourceIdentity.Resolve);
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,

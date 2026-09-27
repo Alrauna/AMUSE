@@ -231,7 +231,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { family },
                     captureRequest,
                     AlphaPolicyBounds.Inert,
-                    out var capturedList);
+                    out var capturedList,
+                    RegisteredSourceIdentity.Resolve);
             Assert.That(
                 attested,
                 Is.True,
