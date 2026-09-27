@@ -160,7 +160,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         internal static IReadOnlyList<CapturedAlphaMaterial> CaptureAlphaMaterials(
-            IReadOnlyList<Material> materials)
+            IReadOnlyList<Material> materials,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             if (materials == null)
             {
@@ -191,7 +192,8 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
             return BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence);
+                materials, families, shaders, evidence,
+                resolveRegisteredSource);
         }
 
         /// <summary>
@@ -980,7 +982,23 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// resolution then refuses by that name instead of the generic
         /// destination.
         /// </para>
+        /// <para>
+        /// When a producer registered a material's replacement, the record
+        /// names the registered source's project path and name instead of
+        /// the build copy's. The resolution goes through the read-only
+        /// <c>create:false</c> registry lookup — never the creating static
+        /// one, which would fabricate an entry and block a later
+        /// RegisterReplacedObject for that object — and the record stores
+        /// only the resolved path and name strings, so the evidence never
+        /// holds live Unity objects.
+        /// </para>
         /// </summary>
+        /// <param name="resolveRegisteredSource">
+        /// Maps the live material to the source object a producer
+        /// registered as its replacement. It answers null when nothing
+        /// registered the material, and the material keeps its own
+        /// identity.
+        /// </param>
         internal static CapturedAlphaMaterial UnattestedMaterial(
             RendererAnalysisRefusal lockedIdentityRefusal =
                 RendererAnalysisRefusal.None,

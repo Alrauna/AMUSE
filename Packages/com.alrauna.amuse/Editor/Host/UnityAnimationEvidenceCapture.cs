@@ -559,7 +559,9 @@ namespace Alrauna.Amuse.Editor.Host
                         ?? RendererAnalysisRefusal.None;
                     capturedByIndex[index] =
                         UnityMaterialSemantics.UnattestedMaterial(
-                            lockedRefusal, admitted[index]);
+                            lockedRefusal,
+                            admitted[index],
+                            Build.RegisteredSourceIdentity.Resolve);
                     continue;
                 }
 

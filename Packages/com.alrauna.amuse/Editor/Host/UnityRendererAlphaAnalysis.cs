@@ -441,7 +441,9 @@ namespace Alrauna.Amuse.Editor.Host
                 try
                 {
                     var captured =
-                        UnityMaterialSemantics.CaptureAlphaMaterials(effective);
+                        UnityMaterialSemantics.CaptureAlphaMaterials(
+                            effective,
+                            Build.RegisteredSourceIdentity.Resolve);
                     for (var index = 0; index < captured.Count; index++)
                     {
                         capturedSlots[index] = effective[index] == null

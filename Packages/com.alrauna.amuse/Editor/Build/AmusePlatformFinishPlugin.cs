@@ -590,7 +590,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 request,
                                 bounds,
                                 granted,
-                                out transferred);
+                                out transferred,
+                                RegisteredSourceIdentity.Resolve);
                 }
 
                 var hasIndex = TryGetAnimationIndex(
