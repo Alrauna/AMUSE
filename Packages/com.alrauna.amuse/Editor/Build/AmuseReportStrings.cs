@@ -356,16 +356,18 @@ namespace Alrauna.Amuse.Editor.Build
             // --- Slot-scoped analysis refusals. One key per vocabulary,
             // not per cause: the renderer-level report already carries the
             // per-cause text, and the slot report names the exact cause.
+            // {3} is the refused slot's material, path-first; {4} is the
+            // exact shader fact that stopped the alpha proof, or empty.
             ["amuse.slotAnalysis.Refusal"] =
                 "AMUSE proved nothing for material slot {0} of renderer " +
-                "'{2}'.",
+                "'{2}'. The slot holds {3}.",
             ["amuse.slotAnalysis.Refusal:description"] =
                 "Runtime state resolution refused material slot {0} of " +
-                "renderer '{2}'. Reason: {1}. The slot keeps its original " +
-                "material.",
+                "renderer '{2}'. Reason: {1}. {4} The slot keeps its " +
+                "original material.",
             ["amuse.slotAnalysis.Refusal:hint"] =
-                "The reason names the exact rule that stopped the proof " +
-                "for this slot.",
+                "The material, the reason, and the named shader fact tell " +
+                "you which rule stopped the proof for this slot.",
 
             // --- Slot-scoped separation refusals ---
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =

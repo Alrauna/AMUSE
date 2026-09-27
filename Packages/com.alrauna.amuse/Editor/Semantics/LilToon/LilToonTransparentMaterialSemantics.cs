@@ -252,13 +252,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             InterpretVerifiedTransparentAlpha(
                 CapturedMaterialEvidence evidence)
         {
+            return InterpretVerifiedTransparentAlpha(evidence, out _);
+        }
+
+        internal static SemanticOutput<ScalarSemanticValue>
+            InterpretVerifiedTransparentAlpha(
+                CapturedMaterialEvidence evidence,
+                out AlphaUnknownReason unknownReason)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            return InterpretTransparentAlpha(
-                evidence, new List<LilToonSemanticDiagnostic>());
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var alpha = InterpretTransparentAlpha(evidence, diagnostics);
+            unknownReason = LilToonMaterialSemantics
+                .AlphaUnknownReasonFor(diagnostics);
+            return alpha;
         }
 
         /// <summary>

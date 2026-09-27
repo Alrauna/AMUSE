@@ -29,19 +29,39 @@ namespace Alrauna.Amuse.Editor.Analysis
     {
         private SlotResolutionResult(
             RendererAnalysisRefusal refusal,
-            IReadOnlyList<AlphaResolution> resolutions)
+            IReadOnlyList<AlphaResolution> resolutions,
+            CapturedAlphaMaterial offender,
+            AlphaUnknownReason unknownReason)
         {
             IsResolved = refusal == RendererAnalysisRefusal.None;
             Refusal = refusal;
             Resolutions = resolutions;
+            Offender = offender;
+            UnknownReason = unknownReason;
         }
 
         internal bool IsResolved { get; }
         internal RendererAnalysisRefusal Refusal { get; }
         internal IReadOnlyList<AlphaResolution> Resolutions { get; }
 
+        /// <summary>
+        /// The admitted material whose own fact refused the slot, or null
+        /// when the refusal names no single material. Report evidence only:
+        /// the classification outcome is the refusal itself, never the
+        /// offender.
+        /// </summary>
+        internal CapturedAlphaMaterial Offender { get; }
+
+        /// <summary>
+        /// The frontend's reason the alpha answer is Unknown, or null when
+        /// the refusal has no frontend reason. Report evidence only.
+        /// </summary>
+        internal AlphaUnknownReason UnknownReason { get; }
+
         internal static SlotResolutionResult Refused(
-            RendererAnalysisRefusal refusal)
+            RendererAnalysisRefusal refusal,
+            CapturedAlphaMaterial offender = null,
+            AlphaUnknownReason unknownReason = null)
         {
             if (refusal == RendererAnalysisRefusal.None)
             {
@@ -50,7 +70,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return new SlotResolutionResult(
-                refusal, Array.Empty<AlphaResolution>());
+                refusal, Array.Empty<AlphaResolution>(), offender,
+                unknownReason);
         }
 
         internal static SlotResolutionResult Resolved(
@@ -66,7 +87,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return new SlotResolutionResult(
-                RendererAnalysisRefusal.None, Array.AsReadOnly(copy));
+                RendererAnalysisRefusal.None, Array.AsReadOnly(copy),
+                null, null);
         }
     }
 
@@ -236,7 +258,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     // No partial prefix: resolutions gathered for earlier
                     // admitted materials authorize nothing once the slot
                     // is refused.
-                    return SlotResolutionResult.Refused(refusal);
+                    return SlotResolutionResult.Refused(
+                        refusal, material, null);
                 }
 
                 var admitted = ReferenceEquals(evidence, material.Evidence)
@@ -246,9 +269,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                         evidence,
                         material.PoiyomiEvidence,
                         material.LilToonEvidence,
-                        material.LockedIdentityRefusal);
-                var semantics = resolveSemantics(admitted)
-                    ?? UnityMaterialSemantics.AllUnknown();
+                        material.LockedIdentityRefusal,
+                        material.MaterialPath,
+                        material.MaterialName,
+                        material.ShaderName);
+                var capturedSemantics = resolveSemantics(admitted)
+                    ?? CapturedAlphaSemantics.AllUnknown();
                 // Field lookups are scoped to this admitted material's own
                 // captured predicates, so a shared texture captured under a
                 // sibling slot's shader cutoff answers nothing here. The
@@ -271,7 +297,9 @@ namespace Alrauna.Amuse.Editor.Analysis
                             out chain);
                 var resolution =
                     AlphaSemanticsResolver.Resolve(
-                        semantics.Alpha, materialFields, maxNoiseTexelPercent);
+                        capturedSemantics.Semantics.Alpha,
+                        materialFields,
+                        maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
                     // A recognized locked material refuses by its own name
@@ -286,7 +314,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                             ? material.LockedIdentityRefusal
                             : RendererAnalysisRefusal
                                 .AdmittedMaterialSemanticsUnknown;
-                    return SlotResolutionResult.Refused(slotRefusal);
+                    return SlotResolutionResult.Refused(
+                        slotRefusal,
+                        material,
+                        capturedSemantics.AlphaUnknownReason);
                 }
 
                 resolutions.Add(resolution);

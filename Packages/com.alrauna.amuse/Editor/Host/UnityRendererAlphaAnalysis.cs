@@ -191,8 +191,9 @@ namespace Alrauna.Amuse.Editor.Host
         }
     }
 
-    internal delegate MaterialSemantics CapturedAlphaMaterialSemanticsResolver(
-        CapturedAlphaMaterial material);
+    internal delegate CapturedAlphaSemantics
+        CapturedAlphaMaterialSemanticsResolver(
+            CapturedAlphaMaterial material);
 
     // The research census collector's test seam. The research
     // RendererObservationBuilder overload and the census tests consume it.
@@ -253,8 +254,8 @@ namespace Alrauna.Amuse.Editor.Host
                     extraction.Snapshot,
                     material => capturedSemantics.TryGetValue(
                         material, out var semantics)
-                            ? semantics
-                            : UnityMaterialSemantics.AllUnknown())
+                            ? new CapturedAlphaSemantics(semantics, null)
+                            : CapturedAlphaSemantics.AllUnknown())
                 : RendererAlphaAnalysis.Refused(extraction.Refusal);
         }
 
@@ -629,8 +630,9 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             var semantics = material == null
-                ? UnityMaterialSemantics.AllUnknown()
-                : resolveSemantics(material) ?? UnityMaterialSemantics.AllUnknown();
+                ? CapturedAlphaSemantics.AllUnknown()
+                : resolveSemantics(material)
+                    ?? CapturedAlphaSemantics.AllUnknown();
             // The field lookup is scoped to this material's own captured
             // predicates: a shared source captured under a sibling's cutoff
             // answers nothing here. The family's own alpha request decides
@@ -656,7 +658,8 @@ namespace Alrauna.Amuse.Editor.Host
                             out chain);
                 };
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Alpha, materialFields, maxNoiseTexelPercent);
+                semantics.Semantics.Alpha, materialFields,
+                maxNoiseTexelPercent);
 
             if (material != null)
             {

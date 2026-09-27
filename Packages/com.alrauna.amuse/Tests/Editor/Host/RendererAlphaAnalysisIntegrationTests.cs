@@ -313,13 +313,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 return UnityRendererAlphaAnalysis.Analyze(
                     snapshot,
                     material => verified.Contains(material)
-                        ? new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                                material.Evidence),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown())
-                        : UnityMaterialSemantics.AllUnknown());
+                        ? new CapturedAlphaSemantics(
+                            new MaterialSemantics(
+                                SemanticOutput<ColorSemanticValue>.Unknown(),
+                                PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                                    material.Evidence),
+                                SemanticOutput<ColorSemanticValue>.Unknown(),
+                                SemanticOutput<NormalSemanticValue>.Unknown()),
+                            null)
+                        : CapturedAlphaSemantics.AllUnknown());
             }
             finally
             {
