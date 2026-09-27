@@ -158,6 +158,14 @@ namespace Alrauna.Amuse.Editor.Build
                     "AlphaSeparationSlotRefusal.None is not a refusal.");
             }
 
+            // The offending material arrives as the live build copy; the
+            // report names the authoring asset when a producer registered
+            // the copy's replacement. One resolve here covers every apply
+            // and preparation call site that passes a live material.
+            offendingMaterial = (Material)(
+                RegisteredSourceIdentity.Resolve(offendingMaterial)
+                ?? offendingMaterial);
+
             var names = new List<string>();
             if (provenMapping != null)
             {
