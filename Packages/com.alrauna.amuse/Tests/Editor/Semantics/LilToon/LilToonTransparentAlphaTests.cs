@@ -1931,5 +1931,92 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 withGamma.GetCompleteValue(),
                 Is.EqualTo(withAll.GetCompleteValue()));
         }
+
+        // --- declared-default arm: the unassigned Main Texture -------------
+
+        [Test]
+        public void UnassignedMainTex_AtUnitTint_ProvesTheCornerTriangleOpaque()
+        {
+            var material = NewTransparentFixtureMaterial();
+
+            var resolution = ResolveThroughUnassignedTransparent(material);
+
+            // Falsifies: consulting any texel for an unassigned _MainTex.
+            // The transparent theorem has no clip, so exactly one proves
+            // opaque outright.
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void UnassignedMainTex_SubUnitTint_IsUniformMustRemainTransparent()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.8f));
+
+            var resolution = ResolveThroughUnassignedTransparent(material);
+
+            // Falsifies: ignoring _Color.a, as the tint-multiplier row does
+            // for the assigned arm.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void UnassignedMainTex_WithSampledAlphaMask_RefusesSampling()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetTexture("_AlphaMask", ImportTexture("t_mask_unassigned"));
+
+            // Falsifier 2: the transparent mask borrows the main sampler
+            // exactly as the cutout mask does.
+            var result = InterpretTransparent(material);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            Assert.That(
+                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
+                    .Any(d =>
+                        d.Code == LilToonSemanticDiagnosticCode
+                            .UnsupportedSampling &&
+                        d.Detail.Contains("_MainTex")),
+                Is.True,
+                "expected UnsupportedSampling naming _MainTex");
+        }
+
+        private AlphaResolution ResolveThroughUnassignedTransparent(
+            Material material)
+        {
+            var captured = CaptureTransparentEvidence(material);
+
+            // Fixture guard: this helper proves only the unassigned main.
+            // If the fixture ever drifts to an assigned main, these asserts
+            // fail here instead of letting the tests pass through the
+            // assigned importer-theorem collapse.
+            Assert.That(
+                captured.TryGetTexture(
+                    MainTextureProperty, out var assignment),
+                Is.True);
+            Assert.That(assignment.IsAssigned, Is.False);
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            return AlphaSemanticsResolver.Resolve(
+                alpha, UnusedProvider(), 0);
+        }
+
+        private static AlphaFieldProvider UnusedProvider()
+        {
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                result = null;
+                throw new InvalidOperationException(
+                    "the declared-default collapse must not consult a texel");
+            };
+        }
     }
 }
