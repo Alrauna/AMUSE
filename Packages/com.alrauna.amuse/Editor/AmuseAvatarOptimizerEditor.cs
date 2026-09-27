@@ -50,8 +50,7 @@ namespace Alrauna.Amuse.Editor
             DrawAlphaSeparator();
             DrawAdvancedSettings();
 
-            if (AmuseBuildStatusStore.TryGet(
-                    component.gameObject.GetInstanceID(), out var status))
+            if (AmuseBuildStatusStore.TryGet(out var status))
             {
                 EditorGUILayout.HelpBox(status, MessageType.None);
             }
