@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -961,6 +963,113 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssertAllUnknown(
                 UnityMaterialSemantics.AnalyzeAlphaMaterial(captured[0])
                     .Semantics);
+        }
+
+        [Test]
+        public void RegisteredCloneMaterial_ReportsTheSourceAssetPath()
+        {
+            var source = NewFixtureMaterialAssetWithBrokenAlpha();
+            var clone = new Material(source.shader)
+            {
+                name = source.name + " build copy",
+            };
+            // The clone stays in memory, so its own project path is
+            // empty. Only the registry can name the authoring asset.
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+
+                var captured = RunExistingCaptureEntry(
+                    clone,
+                    RegisteredSourceIdentity.Resolve);
+
+                Assert.That(
+                    captured.MaterialPath,
+                    Is.EqualTo(AssetDatabase.GetAssetPath(source)));
+            }
+            finally
+            {
+                ObjectRegistry.ActiveRegistry = previous;
+                UnityEngine.Object.DestroyImmediate(clone);
+            }
+        }
+
+        [Test]
+        public void UnregisteredCloneMaterial_KeepsItsOwnIdentity()
+        {
+            var source = NewFixtureMaterialAssetWithBrokenAlpha();
+            var clone = new Material(source.shader)
+            {
+                name = source.name + " build copy",
+            };
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                // Falsifier: an implementation that resolves through
+                // the creating static lookup, or copies identity from
+                // names, reports the source's path for a clone nothing
+                // registered.
+                var captured = RunExistingCaptureEntry(
+                    clone,
+                    RegisteredSourceIdentity.Resolve);
+
+                Assert.That(captured.MaterialPath, Is.Null.Or.Empty);
+                Assert.That(captured.MaterialName, Is.EqualTo(clone.name));
+            }
+            finally
+            {
+                ObjectRegistry.ActiveRegistry = previous;
+                UnityEngine.Object.DestroyImmediate(clone);
+            }
+        }
+
+        /// <summary>
+        /// The registered-source fixture: the same unattested lilToon
+        /// stand-in the closed-capture tests build, persisted with
+        /// AssetDatabase.CreateAsset so its project path exists. The
+        /// material leaves the batch list first, because the shared
+        /// teardown's DestroyImmediate refuses persistent assets, and the
+        /// shared teardown's folder delete removes the asset.
+        /// </summary>
+        private Material NewFixtureMaterialAssetWithBrokenAlpha()
+        {
+            var material = NewMaterial(
+                "registered-source-fixture.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+            AssetDatabase.CreateAsset(
+                material, TempFolder + "/registered-source-fixture.asset");
+            _batchMaterials.Remove(material);
+            return material;
+        }
+
+        /// <summary>
+        /// Runs the file's closed capture entry with the registered-source
+        /// lookup on the existing call. The transferred entry carries the
+        /// lookup for production builds, where the granted transfer capture
+        /// is what runs over registered build copies; the granted set names
+        /// exactly the fixture's own shader, so the capture returns the
+        /// record without touching source attestation.
+        /// </summary>
+        private CapturedAlphaMaterial RunExistingCaptureEntry(
+            Material material,
+            RegisteredSourceLookup resolveRegisteredSource)
+        {
+            var success = UnityMaterialSemantics
+                .TryCaptureClosedAlphaMaterialsTransferred(
+                    new[] { material },
+                    new[] { CapturedAlphaMaterialFamily.LilToon },
+                    LilToonMaterialSemantics.AlphaEvidenceRequest,
+                    AlphaPolicyBounds.Inert,
+                    new[] { LilToonSourceAttestation.SupportedShaderName },
+                    out var captured,
+                    resolveRegisteredSource);
+
+            Assert.That(success, Is.True, "the granted fixture must capture");
+            return captured[0];
         }
 
         private Material NewMaterial(
