@@ -2245,7 +2245,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     SupportedFacts(),
                     SelectVerifiedFixtureRequest,
                     CaptureVerifiedFixtureMaterials,
-                    _ => UnityMaterialSemantics.AllUnknown());
+                    _ => CapturedAlphaSemantics.AllUnknown());
                 var amuse = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
@@ -4152,13 +4152,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// own AnalyzeAlphaMaterial does: family first, all-Unknown for
         /// Unsupported.
         /// </summary>
-        private static MaterialSemantics ResolvingVerifiedAlphaOnly(
+        private static CapturedAlphaSemantics ResolvingVerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
             if (material.Family ==
                     CapturedAlphaMaterialFamily.Unsupported)
             {
-                return UnityMaterialSemantics.AllUnknown();
+                return CapturedAlphaSemantics.AllUnknown();
             }
 
             return VerifiedAlphaOnly(material);
@@ -4550,7 +4550,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 materials, families, request, bounds, out captured);
         }
 
-        private static MaterialSemantics VerifiedAlphaOnly(
+        private static CapturedAlphaSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
             return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(material);

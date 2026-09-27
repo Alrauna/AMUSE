@@ -333,15 +333,17 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static readonly AlphaFieldSet NoAlphaFields =
             new(new Dictionary<AlphaFieldKey, AlphaMipChain>());
 
-        private static MaterialSemantics VerifiedAlphaOnly(
+        private static CapturedAlphaSemantics VerifiedAlphaOnly(
             CapturedAlphaMaterial material)
         {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                    material.Evidence),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
+                        material.Evidence),
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                null);
         }
 
         private Material NewFixtureMaterial()
@@ -726,11 +728,14 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 0,
                 material => ReferenceEquals(material.Evidence, withProperty.Evidence)
                     ? VerifiedAlphaOnly(material)
-                    : new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<ScalarSemanticValue>.Complete(ScalarSemanticValue.Constant(1f)),
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown()));
+                    : new CapturedAlphaSemantics(
+                        new MaterialSemantics(
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<ScalarSemanticValue>.Complete(
+                                ScalarSemanticValue.Constant(1f)),
+                            SemanticOutput<ColorSemanticValue>.Unknown(),
+                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                        null));
 
             Assert.That(result.IsResolved, Is.True);
             Assert.That(result.Resolutions, Has.Count.EqualTo(2));
@@ -775,7 +780,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 0,
                 material => ReferenceEquals(material, admitted[0])
                     ? VerifiedAlphaOnly(material)
-                    : UnityMaterialSemantics.AllUnknown());
+                    : CapturedAlphaSemantics.AllUnknown());
 
             Assert.That(result.IsResolved, Is.False);
             Assert.That(result.Refusal,

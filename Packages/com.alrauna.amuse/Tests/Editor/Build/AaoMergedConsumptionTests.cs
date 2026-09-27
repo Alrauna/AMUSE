@@ -241,11 +241,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var semantics =
                 UnityMaterialSemantics.AnalyzeAlphaMaterial(capturedList[0]);
             Assert.That(
-                semantics.Alpha.IsComplete,
+                semantics.Semantics.Alpha.IsComplete,
                 Is.True,
                 "alpha analysis did not resolve for the fixture material;"
                 + " family=" + family
-                + " alphaKind=" + semantics.Alpha.GetCompleteValue().Kind);
+                + " alphaKind=" + semantics.Semantics.Alpha.GetCompleteValue().Kind);
         }
 
         /// <summary>
@@ -319,15 +319,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     channel,
                     out chain);
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Alpha, provider, 0);
+                semantics.Semantics.Alpha, provider, 0);
             Assert.That(
                 resolution.Failure,
                 Is.EqualTo(AlphaResolutionFailure.None),
                 "the in-build resolution pipeline failed: fields="
                 + fields.Count
-                + " alphaComplete=" + semantics.Alpha.IsComplete
-                + " alphaKind=" + (semantics.Alpha.IsComplete
-                    ? semantics.Alpha.GetCompleteValue().Kind.ToString()
+                + " alphaComplete=" + semantics.Semantics.Alpha.IsComplete
+                + " alphaKind=" + (semantics.Semantics.Alpha.IsComplete
+                    ? semantics.Semantics.Alpha.GetCompleteValue().Kind.ToString()
                     : "<unknown>"));
         }
 

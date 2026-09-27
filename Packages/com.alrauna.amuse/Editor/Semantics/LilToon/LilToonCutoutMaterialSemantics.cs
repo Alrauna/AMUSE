@@ -220,13 +220,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal static SemanticOutput<ScalarSemanticValue>
             InterpretVerifiedCutoutAlpha(CapturedMaterialEvidence evidence)
         {
+            return InterpretVerifiedCutoutAlpha(evidence, out _);
+        }
+
+        internal static SemanticOutput<ScalarSemanticValue>
+            InterpretVerifiedCutoutAlpha(
+                CapturedMaterialEvidence evidence,
+                out AlphaUnknownReason unknownReason)
+        {
             if (evidence == null)
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            return InterpretCutoutAlpha(
-                evidence, new List<LilToonSemanticDiagnostic>());
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var alpha = InterpretCutoutAlpha(evidence, diagnostics);
+            unknownReason = LilToonMaterialSemantics
+                .AlphaUnknownReasonFor(diagnostics);
+            return alpha;
         }
 
         /// <summary>
