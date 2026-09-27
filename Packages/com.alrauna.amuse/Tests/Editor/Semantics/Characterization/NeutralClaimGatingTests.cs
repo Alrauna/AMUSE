@@ -246,7 +246,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         // _AlphaMaskMode is deliberately absent too: modes 1 and 2 are
         // interpreted mask composition, and mode 1 with the unassigned
         // white default provably claims constant alpha one. The refusing
-        // mask configurations keep their own frontend tests.
+        // mask configurations keep their own frontend tests. _UseMain2ndTex
+        // and _UseMain3rdTex are deliberately absent too: the layers compose
+        // onto the declared-default constant of the unassigned white main
+        // texture under the 2026-09-26 design, and a bare toggle stays
+        // alpha-neutral while no writer runs.
         private static readonly string[] AlphaCoverageGates =
         {
             "_Invisible",
@@ -254,8 +258,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_UDIMDiscardMode",
             "_ShiftBackfaceUV",
             "_UseParallax",
-            "_UseMain2ndTex",
-            "_UseMain3rdTex",
             "_IDMask1", "_IDMask2", "_IDMask3", "_IDMask4",
             "_IDMask5", "_IDMask6", "_IDMask7", "_IDMask8",
             "_IDMaskControlsDissolve",
@@ -277,6 +279,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                 Is.False,
                 gate + ": an enabled coverage writer must block the claim " +
                 "even with no _MainTex assigned");
+        }
+
+        [Test]
+        public void Alpha_NoMainTex_LayerToggle_ComposesTheDeclaredDefault()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetFloat("_UseMain2ndTex", 1f);
+
+            var result = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            // The layers compose onto the declared-default constant of the
+            // unassigned white main texture (design 2026-09-26), so the
+            // alpha claims instead of refusing. The bare toggle is not the
+            // refusing feature.
+            Assert.That(
+                result.Semantics.Alpha.IsComplete,
+                Is.True,
+                "an enabled layer composes onto the declared-default " +
+                "constant instead of refusing");
         }
     }
 }

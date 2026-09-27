@@ -301,20 +301,31 @@ namespace Alrauna.Amuse.Editor.Build
                 "The capture of texture property {1} (channel {2}) on " +
                 "material slot {0} refused, so AMUSE has no proof for " +
                 "the triangles that sample it. Those triangles stay on " +
-                "the original material.",
+                "the original material. The refusal reason is {3}, and " +
+                "the texture {4}.",
             ["amuse.texture.UnavailableCapture:hint"] =
                 "Check that the texture is a real imported asset and that " +
-                "the project supports texture capture.",
+                "the project supports texture capture. When the report " +
+                "says the texture has no source identity, the build saw a " +
+                "texture that no project asset backs. When it says the " +
+                "texture has a source identity, the capture route refused " +
+                "a real imported asset.",
             ["amuse.texture.NonResidentMips"] =
                 "A material texture on slot {0} is missing mipmap levels.",
             ["amuse.texture.NonResidentMips:description"] =
                 "Texture property {1} (channel {2}) on material slot {0} " +
                 "has a mipmap limit that removes levels the proof must " +
                 "read, so AMUSE has no proof for the triangles that " +
-                "sample it. Those triangles stay on the original material.",
+                "sample it. Those triangles stay on the original " +
+                "material. The refusal reason is {3}, and the texture " +
+                "{4}.",
             ["amuse.texture.NonResidentMips:hint"] =
                 "Lower the project's texture mipmap limit, or remove the " +
-                "texture's own limit.",
+                "texture's own limit. When the report says the texture " +
+                "has no source identity, the build saw a texture that no " +
+                "project asset backs. When it says the texture has a " +
+                "source identity, the capture route refused a real " +
+                "imported asset.",
             ["amuse.texture.UnsupportedFormat"] =
                 "A material texture on slot {0} uses a format AMUSE " +
                 "cannot read.",
@@ -322,10 +333,16 @@ namespace Alrauna.Amuse.Editor.Build
                 "Texture property {1} (channel {2}) on material slot {0} " +
                 "uses a storage format outside the formats AMUSE can " +
                 "prove, so AMUSE has no proof for the triangles that " +
-                "sample it. Those triangles stay on the original material.",
+                "sample it. Those triangles stay on the original " +
+                "material. The refusal reason is {3}, and the texture " +
+                "{4}.",
             ["amuse.texture.UnsupportedFormat:hint"] =
                 "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
-                "DXT5, or BC7.",
+                "DXT5, or BC7. When the report says the texture has no " +
+                "source identity, the build saw a texture that no project " +
+                "asset backs. When it says the texture has a source " +
+                "identity, the capture route refused a real imported " +
+                "asset.",
             ["amuse.texture.NoAlphaChannel"] =
                 "A material texture on slot {0} has no alpha channel.",
             ["amuse.texture.NoAlphaChannel:description"] =
