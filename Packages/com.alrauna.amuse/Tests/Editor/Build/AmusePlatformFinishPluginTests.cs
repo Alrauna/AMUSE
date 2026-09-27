@@ -483,6 +483,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void LatestPlayRecord_StartsWithThePlayModePrefix()
+        {
+            var root = new GameObject("AMUSE play prefix fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.StartsWith(
+                    "Last play mode run: ", status);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void PolicySentence_RidesInTheStatusOnlyWhileAlphaPolicyIsActive()
+        {
+            var root = new GameObject("AMUSE status policy fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var activeStatus),
+                    Is.True);
+                StringAssert.StartsWith(
+                    "Last upload: ", activeStatus);
+                StringAssert.Contains(
+                    "alpha policy", activeStatus);
+
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var inertStatus),
+                    Is.True);
+                StringAssert.StartsWith(
+                    "Last upload: ", inertStatus);
+                Assert.That(
+                    inertStatus.Contains("alpha policy"),
+                    Is.False);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
         /// <summary>
         /// The mappers are the component boundary of the alpha policy, so a
         /// missing component must read as the inert defaults: opaque
@@ -638,6 +701,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
+                AmuseBuildStatusStore.Forget();
                 fixture = AddAnalyzableRenderer(root);
                 Object.DestroyImmediate(fixture.Material);
                 fixture.Material = Alrauna.Amuse.Tests.Editor.Semantics
