@@ -674,6 +674,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void UntouchedRendererCount_CountsFullySlotRefusedRenderersAsOriginal()
+        {
+            var state = new AmusePlatformFinishState();
+            state.AnalyzedRendererCount = 2;
+            state.AppliedRendererCount = 1;
+
+            // The second analyzed renderer kept everything original
+            // through slot-level refusals, which never reach
+            // RecordRendererRefusal. The summary must still count it.
+            Assert.That(state.UntouchedRendererCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void UntouchedRendererCount_IncludesRendererScopeRefusals()
+        {
+            var state = new AmusePlatformFinishState();
+            state.AnalyzedRendererCount = 2;
+            state.AppliedRendererCount = 1;
+            state.RecordRendererRefusal(
+                RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton);
+
+            // Falsifier: an implementation that computes only
+            // analyzed minus applied reads 1 here and hides the
+            // renderer-scoped refusal from the summary.
+            Assert.That(state.UntouchedRendererCount, Is.EqualTo(2));
+        }
+
+        [Test]
         public void CapturePassRetainsTheHostsExactAnimatorBindings()
         {
             using var armed = SyntheticPluginScope.Arm();
