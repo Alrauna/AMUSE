@@ -580,12 +580,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             TextureSample maskSample = null;
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
+            AffineAlphaMap? maskMap = null;
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample ||
+                maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
             {
                 // The mask borrows _MainTex's captured sampler facts. An
-                // unassigned main has none, so a sampled mask refuses by
-                // name instead of proving through borrowed facts. A later
-                // design can attest the default sampler; this one refuses.
+                // unassigned main has none, so a sampled or mapped mask
+                // refuses by name instead of proving through borrowed facts.
                 if (!hasMainSampler)
                 {
                     return RecordUnknown<ScalarSemanticValue>(
@@ -599,6 +600,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     maskTerm.Source,
                     maskTerm.Mapping,
                     assignment.Texture.Sampling);
+                if (maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
+                {
+                    maskMap = AffineAlphaMap.FromBinary32(
+                        maskTerm.Scale, maskTerm.Value);
+                }
 
                 // A replace mask runs after the layers, so the mask term is
                 // the whole alpha: neither _MainTex's texels nor _Color.a nor
@@ -606,8 +612,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 if (maskTerm.ReplacesMainAlpha)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.Texture(
-                            maskSample, TextureChannel.Red));
+                        maskMap == null
+                            ? ScalarSemanticValue.Texture(
+                                maskSample, TextureChannel.Red)
+                            : ScalarSemanticValue.MappedTexture(
+                                maskSample, TextureChannel.Red, maskMap));
                 }
             }
 
@@ -631,12 +640,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // Multiply mode: the term composes over the layered value.
                 // The multiply cannot fold into a saturating sum or
                 // difference below it, so those shapes refuse.
+                var maskFactor = maskMap == null
+                    ? ScalarSemanticValue.TextureTimesConstant(
+                        maskSample, TextureChannel.Red, 1f)
+                    : ScalarSemanticValue.MappedTexture(
+                        maskSample, TextureChannel.Red, maskMap);
                 var multiplied = Multiply(
-                    alphaChain,
-                    ScalarSemanticValue.TextureTimesConstant(
-                        maskSample, TextureChannel.Red, 1f),
-                    AlphaMaskModeProperty,
-                    diagnostics);
+                    alphaChain, maskFactor, AlphaMaskModeProperty, diagnostics);
                 if (multiplied == null)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -733,29 +743,46 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var samples = new List<TextureSample>();
             var channels = new List<TextureChannel>();
+            var maps = new List<AffineAlphaMap?>();
             var multiplier = 1f;
-            multiplier = CollectFactors(baseValue, samples, channels, multiplier);
-            multiplier = CollectFactors(factor, samples, channels, multiplier);
+            multiplier = CollectFactors(
+                baseValue, samples, channels, maps, multiplier);
+            multiplier = CollectFactors(
+                factor, samples, channels, maps, multiplier);
 
             if (samples.Count == 0)
             {
                 return ScalarSemanticValue.Constant(multiplier);
             }
 
-            if (samples.Count == 1)
+            if (samples.Count == 1 && !HasAnyMap(maps))
             {
                 return ScalarSemanticValue.TextureTimesConstant(
                     samples[0], channels[0], multiplier);
             }
 
             return ScalarSemanticValue.ProductChain(
-                samples, channels, multiplier);
+                samples, channels, multiplier, maps);
+        }
+
+        private static bool HasAnyMap(List<AffineAlphaMap?> maps)
+        {
+            for (var index = 0; index < maps.Count; index++)
+            {
+                if (maps[index] != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static float CollectFactors(
             ScalarSemanticValue value,
             List<TextureSample> samples,
             List<TextureChannel> channels,
+            List<AffineAlphaMap?> maps,
             float multiplier)
         {
             switch (value.Kind)
@@ -765,11 +792,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 case ScalarSemanticValueKind.TextureSample:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
+                    maps.Add(null);
                     return multiplier;
                 case ScalarSemanticValueKind.TextureSampleTimesConstant:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
+                    maps.Add(null);
                     return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind.MappedTextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    maps.Add(value.GetMap());
+                    return multiplier;
                 case ScalarSemanticValueKind
                     .ProductChainOfTextureSamples:
                     for (var index = 0;
@@ -778,6 +812,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     {
                         samples.Add(value.GetChainSample(index));
                         channels.Add(value.GetChainChannel(index));
+                        maps.Add(value.GetChainMap(index));
                     }
 
                     return multiplier * value.GetProductMultiplier();

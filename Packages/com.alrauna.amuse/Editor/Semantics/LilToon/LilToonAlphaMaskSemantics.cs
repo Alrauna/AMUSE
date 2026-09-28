@@ -32,6 +32,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         Sample,
 
+        /// <summary>
+        /// Modes 1 and 2 over a general finite pair: the term is the exact
+        /// affine map of the sampled red.
+        /// </summary>
+        MappedSample,
+
         /// <summary>One diagnostic names the offending property.</summary>
         Refused,
     }
@@ -53,13 +59,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// <para>
     /// Modes 3 and 4 saturate a sum or difference and always refuse. The
     /// admitted (scale, value) pairs are exactly the ones whose binary32
-    /// arithmetic is decided without a texel threshold: the vendor default
-    /// (1, 0), where the term is the sampled red alone; the provably
+    /// arithmetic carries a proof without a texel threshold: the vendor
+    /// default (1, 0), where the term is the sampled red alone; the provably
     /// saturated (1, value &gt;= 1), where r·1 + v rounds to at least one for
-    /// every r &gt;= 0 under fused and unfused rounding alike; and the
-    /// unassigned mask, whose declared "white" default samples exactly one
-    /// so the term is the constant saturate(scale + value). Every other
-    /// (scale, value) needs the deferred threshold-envelope contract.
+    /// every r &gt;= 0 under fused and unfused rounding alike; the unassigned
+    /// mask, whose declared "white" default samples exactly one so the term
+    /// is the constant saturate(scale + value); the zero scale (0, value),
+    /// where 0·s rounds to exactly zero and zero + value rounds to exactly
+    /// value under both orders, so the term is the constant
+    /// saturate(value); and every other finite pair, whose term is monotone
+    /// nondecreasing in the sampled red because round-to-nearest-half-even
+    /// and saturate are monotone, so <c>AffineAlphaMap</c> bounds it on any
+    /// red interval by the map's endpoint evaluations with no texel
+    /// threshold.
     /// </para>
     /// <para>
     /// The mask coordinate is <c>uvMain</c> transformed by the mask's own
@@ -80,6 +92,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal float Constant { get; }
         internal TextureSourceId Source { get; }
         internal UvMapping Mapping { get; }
+        internal float Scale { get; }
+        internal float Value { get; }
         internal bool ReplacesMainAlpha { get; }
         internal LilToonSemanticDiagnosticCode RefusalCode { get; }
         internal string RefusalDetail { get; }
@@ -89,6 +103,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             float constant,
             TextureSourceId source,
             UvMapping mapping,
+            float scale,
+            float value,
             bool replacesMainAlpha,
             LilToonSemanticDiagnosticCode refusalCode,
             string refusalDetail)
@@ -97,6 +113,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             Constant = constant;
             Source = source;
             Mapping = mapping;
+            Scale = scale;
+            Value = value;
             ReplacesMainAlpha = replacesMainAlpha;
             RefusalCode = refusalCode;
             RefusalDetail = refusalDetail;
@@ -106,21 +124,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.Off,
-                default, default, default, false, default, null);
+                default, default, default, default, default, false,
+                default, null);
         }
 
         internal static LilToonAlphaMaskTerm MainUnchanged()
         {
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.MainUnchanged,
-                default, default, default, false, default, null);
+                default, default, default, default, default, false,
+                default, null);
         }
 
         internal static LilToonAlphaMaskTerm ConstantTerm(float value)
         {
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.Constant,
-                value, default, default, true, default, null);
+                value, default, default, default, default, true,
+                default, null);
         }
 
         internal static LilToonAlphaMaskTerm SampleOf(
@@ -130,7 +151,21 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.Sample,
-                default, source, mapping, replacesMainAlpha, default, null);
+                default, source, mapping, default, default,
+                replacesMainAlpha, default, null);
+        }
+
+        internal static LilToonAlphaMaskTerm MappedSampleOf(
+            TextureSourceId source,
+            UvMapping mapping,
+            float scale,
+            float value,
+            bool replacesMainAlpha)
+        {
+            return new LilToonAlphaMaskTerm(
+                LilToonAlphaMaskTermKind.MappedSample,
+                default, source, mapping, scale, value,
+                replacesMainAlpha, default, null);
         }
 
         internal static LilToonAlphaMaskTerm Refused(
@@ -139,7 +174,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.Refused,
-                default, default, default, false, code, detail);
+                default, default, default, default, default, false,
+                code, detail);
         }
 
         /// <summary>
@@ -239,25 +275,29 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     : MainUnchanged();
             }
 
+            // Every admitted shape below samples the mask (or is a constant
+            // derived without it), and each sample shape rides the mask's
+            // own source identity and plain affine, so both requirements
+            // gate all of them together.
+            if (!assignment.Texture.HasSourceIdentity)
+            {
+                return Refuse(
+                    diagnostics,
+                    LilToonSemanticDiagnosticCode
+                        .UnstableTextureIdentity,
+                    MaskProperty);
+            }
+
+            if (!assignment.HasScaleOffset)
+            {
+                return Refuse(
+                    diagnostics,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    MaskProperty);
+            }
+
             if (scale == 1f && value == 0f)
             {
-                if (!assignment.Texture.HasSourceIdentity)
-                {
-                    return Refuse(
-                        diagnostics,
-                        LilToonSemanticDiagnosticCode
-                            .UnstableTextureIdentity,
-                        MaskProperty);
-                }
-
-                if (!assignment.HasScaleOffset)
-                {
-                    return Refuse(
-                        diagnostics,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        MaskProperty);
-                }
-
                 // The coordinate is uvMain under the families' identity
                 // gates, transformed by the mask's own plain affine.
                 return SampleOf(
@@ -266,13 +306,31 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     mode == 1f);
             }
 
-            // Every other (scale, value) is the deferred threshold-envelope
-            // contract: proving saturate(r * s + v) == 1 needs a per-texel
-            // predicate whose rounding argument is future work.
-            return Refuse(
-                diagnostics,
-                LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                scale != 1f ? ScaleProperty : ValueProperty);
+            if (scale == 0f)
+            {
+                // 0 * s is exactly zero and zero + v is exactly v in
+                // binary32, so the term is saturate(v) under both orders
+                // with the same operands the shader adds.
+                var constant = Mathf.Clamp01(value);
+                if (mode == 1f)
+                {
+                    return ConstantTerm(constant);
+                }
+
+                return constant >= 1f
+                    ? MainUnchanged()
+                    : Refuse(
+                        diagnostics,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        ScaleProperty);
+            }
+
+            return MappedSampleOf(
+                assignment.Texture.SourceIdentity,
+                new UvMapping(0, assignment.Scale, assignment.Offset),
+                scale,
+                value,
+                mode == 1f);
         }
 
         private static LilToonAlphaMaskTerm Refuse(

@@ -234,6 +234,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 new Vector2(0.85f, 0.4f));
         }
 
+        /// <summary>
+        /// Nondegenerate upper-right triangle whose bilinear footprint
+        /// stays clear of texel (1, 1): with only that texel darkened, every
+        /// texel this hull can reach is white.
+        /// </summary>
+        private static TriangleAlphaInput CornerTriangleOverWhite()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.65f, 0.55f),
+                new Vector2(0.95f, 0.55f),
+                new Vector2(0.65f, 0.85f));
+        }
+
         private static CapturedMaterialEvidence CaptureTransparentEvidence(
             Material material)
         {
@@ -1063,8 +1079,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [TestCase(0.5f)]
-        [TestCase(-1.0f)]
-        public void AlphaMaskMode2_WithValueBelowOne_RefusesAsUnsupportedFeature(float value)
+        public void AlphaMaskMode2_MappedHalfValueOverWhiteMask_ProvesTheCornerTriangle(
+            float value)
         {
             var material = NewGateOffMaterialWithOpaqueTexture("t_mask_val_low");
             material.SetFloat("_AlphaMaskMode", 2f);
@@ -1072,12 +1088,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", value);
             AssignAllWhiteMask(material, "t_mask_val_low_mask");
 
-            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskValue");
+            // The uniform white mask's red is exactly one, so the term is
+            // exactly one: the mask composes nothing and the value proves.
+            // The resolution is classified, not uniform, so the assertion
+            // goes through the triangle classifier, using the same triangle
+            // fixture the file's other resolved tests classify.
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [TestCase(0.5f)]
         [TestCase(2.0f)]
-        public void AlphaMaskMode2_WithScaleNotOne_RefusesAsUnsupportedFeature(float scale)
+        public void AlphaMaskMode2_MappedSaturatingScale_ProvesTheCornerTriangle(
+            float scale)
         {
             var material = NewGateOffMaterialWithOpaqueTexture("t_mask_scale_bad");
             material.SetFloat("_AlphaMaskMode", 2f);
@@ -1085,7 +1111,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", 1f);
             AssignAllWhiteMask(material, "t_mask_scale_bad_mask");
 
-            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskScale");
+            // With value 1 every red in [0, 1] maps to a term at or above
+            // one, so both scales saturate without consulting a texel; the
+            // assertion still runs through the triangle classifier.
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [TestCase(float.NaN)]
@@ -1098,6 +1131,99 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", 1f);
 
             AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskScale");
+        }
+
+        [Test]
+        public void MappedMask_GradientHole_TrianglesOverHolesStayTransparent()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_hole");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0.5f);
+            AssignPartBlackMask(material, "t_mapped_hole_mask");
+
+            var resolution = ResolveThroughTransparentFrontend(
+                material,
+                AllOpaqueChain(),
+                Chain(
+                    OpaqueGridWithTransparentTexelAlpha(1, 1),
+                    Field(2, 2, 255),
+                    Field(1, 1, 255)));
+            // A mask texel at red zero bounds the term to [0.5, 1) on any
+            // triangle whose footprint touches it: unknown, never opaque.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+            Assert.That(
+                resolution.Classify(CornerTriangleOverWhite()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void MappedMask_Sub255Texel_NeverProvesOpaque()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_254");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0.25f);
+            AssignRed254Mask(material, "t_mapped_254_mask");
+
+            var resolution = ResolveThroughTransparentFrontend(
+                material,
+                AllOpaqueChain(),
+                Chain(
+                    Sub255TexelGrid(1, 1),
+                    Field(2, 2, 255),
+                    Field(1, 1, 255)));
+            // A byte-254 red lies in [0, 1), so the term envelope is
+            // [0.25, 1]: mixed, and never provably opaque, whichever real
+            // red value the import carries. Falsifies treating sub-255
+            // bytes as 254/255 or proving from the 255 texels alone.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void MappedMask_NegativeValueOverSub255_ProvesTransparent()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_neg");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", -0.25f);
+            AssignRed254Mask(material, "t_mapped_neg_mask");
+
+            var resolution = ResolveThroughTransparentFrontend(
+                material,
+                AllOpaqueChain(),
+                Chain(
+                    Sub255TexelGrid(1, 1),
+                    Field(2, 2, 255),
+                    Field(1, 1, 255)));
+            // The same byte-254 red with a negative value: the envelope is
+            // [0, 0.75], provably below one over the whole footprint.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void MappedMask_ZeroScaleReplace_IsTheClampedValue()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_zs");
+            material.SetFloat("_AlphaMaskMode", 1f);
+            material.SetFloat("_AlphaMaskScale", 0f);
+            material.SetFloat("_AlphaMaskValue", 0.75f);
+            AssignAllWhiteMask(material, "t_mapped_zs_mask");
+
+            // Replace mode with a zero-scale mask is the constant
+            // saturate(value): alpha 0.75 everywhere, provably below the
+            // opaque bar.
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain());
+            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(outcome, Is.EqualTo(
+                TriangleAlphaOutcome.MustRemainTransparent));
         }
 
         // --- alpha mask composition (2026-09-07 design §3) ----------------
@@ -1142,6 +1268,46 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetTexture(
                 "_AlphaMask",
                 ImportMipmapTexture(name, 4, 4, MaskGrid(4, 4, 255)));
+        }
+
+        private void AssignPartBlackMask(Material material, string name)
+        {
+            material.SetTexture(
+                "_AlphaMask",
+                ImportMipmapTexture(
+                    name, 4, 4, MaskGridWithRedHole(4, 4, 1, 1)));
+        }
+
+        private static Color32[] MaskGridWithSub255Red(
+            int width, int height, int cellX, int cellY)
+        {
+            var pixels = MaskGrid(width, height, 255);
+            pixels[cellY * width + cellX] = new Color32(254, 0, 0, 255);
+            return pixels;
+        }
+
+        private void AssignRed254Mask(Material material, string name)
+        {
+            material.SetTexture(
+                "_AlphaMask",
+                ImportMipmapTexture(
+                    name, 4, 4, MaskGridWithSub255Red(4, 4, 1, 1)));
+        }
+
+        /// <summary>
+        /// Mip-0 red field matching the red-254 mask fixture: one byte-254
+        /// texel, every other texel opaque.
+        /// </summary>
+        private static AlphaTextureData Sub255TexelGrid(int witnessX, int witnessY)
+        {
+            var bytes = new byte[4 * 4];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = 255;
+            }
+
+            bytes[witnessY * 4 + witnessX] = 254;
+            return new AlphaTextureData(4, 4, bytes);
         }
 
         private static AlphaFieldProvider ProvidingForMasked(
@@ -1368,7 +1534,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void AlphaMaskMode1_WithThresholdValue_RefusesNamingValue()
+        public void AlphaMaskMode1_MappedThresholdValue_ProvesTheCornerTriangle()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("t_m1_thr");
             material.SetFloat("_AlphaMaskMode", 1f);
@@ -1376,9 +1542,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", 0.5f);
             AssignAllWhiteMask(material, "t_m1_thr_mask");
 
-            // The threshold envelope saturate(r + 0.5) is a deferred
-            // contract; the refusal must name the additive term.
-            AssertAlphaGateUnknown(InterpretTransparent(material), "_AlphaMaskValue");
+            // The threshold envelope saturate(r + 0.5) is decided by the
+            // map's endpoint rounding: the white mask's red is exactly one,
+            // so the replace term saturates to exactly one over the whole
+            // footprint and the corner triangle proves.
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]
