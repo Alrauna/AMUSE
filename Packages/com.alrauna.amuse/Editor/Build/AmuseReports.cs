@@ -305,16 +305,46 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One Information entry per refused renderer. The mapping refusal
+        /// carries the two slot counts the refusal was computed from, so
+        /// the reader can tell which side to change. The counts ride the
+        /// refusal because the captured slot basis, not a live re-read,
+        /// is the truth the decision used. Causes whose templates name no
+        /// counts ignore the two arguments.
+        /// </summary>
         internal static void RendererRefusal(
-            Renderer renderer, RendererAnalysisRefusal cause)
+            Renderer renderer,
+            RendererAnalysisRefusal cause,
+            int meshSubMeshCount = -1,
+            int materialSlotCount = -1)
         {
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(
                     Localizer,
                     ErrorSeverity.Information,
-                    AmuseReportStrings.RendererKey(cause));
+                    AmuseReportStrings.RendererKey(cause),
+                    SlotCountPhrase(meshSubMeshCount),
+                    SlotCountPhrase(materialSlotCount));
             }
+        }
+
+        /// <summary>
+        /// A slot count renders as a noun phrase, so the sentence stays
+        /// grammatical for zero, one, and many, and an unreadable count
+        /// never prints as a number.
+        /// </summary>
+        private static string SlotCountPhrase(int count)
+        {
+            if (count < 0)
+            {
+                return "an unknown number of material slots";
+            }
+
+            return count == 1
+                ? "1 material slot"
+                : count + " material slots";
         }
 
         internal static void ConsentDeclined(
