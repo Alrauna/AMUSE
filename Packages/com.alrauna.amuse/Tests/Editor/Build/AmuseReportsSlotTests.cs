@@ -153,6 +153,67 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the report must name the offending material");
         }
 
+        [Test]
+        public void SlotSeparationRefusalNamesTheRendererWithoutAnExplicitName()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationRefusal(
+                    _renderer,
+                    0,
+                    AlphaSeparationSlotRefusal.OpaqueCoverageBelowMinimum));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+
+            // After play mode ends the build-copy renderer is destroyed
+            // and the console's object link is dead, so the report text
+            // is the only place that still names the renderer. NDMF
+            // renders a null substitution as the literal "<missing>".
+            Assert.That(message, Does.Contain("AMUSE slot report"),
+                "the report must name the refused renderer");
+            Assert.That(message, Does.Not.Contain("<missing>"),
+                "a named renderer must never render the missing " +
+                "placeholder");
+        }
+
+        [Test]
+        public void SlotSeparationRefusalEmptyRendererNameRendersEmptyNotMissing()
+        {
+            _root.name = "";
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationRefusal(
+                    _renderer,
+                    0,
+                    AlphaSeparationSlotRefusal.OpaqueCoverageBelowMinimum));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+
+            // Falsifier: an implementation that treats an empty name as
+            // a missing name prints the placeholder for a renderer that
+            // has a name, however short. An empty string is not null.
+            Assert.That(message, Does.Not.Contain("<missing>"));
+        }
+
+        [Test]
+        public void SlotSeparationRefusalWithoutRendererKeepsTheMissingPlaceholder()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationRefusal(
+                    null,
+                    0,
+                    AlphaSeparationSlotRefusal.OpaqueCoverageBelowMinimum));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+
+            // Falsifier: the fallback must not throw on an absent
+            // renderer, and the placeholder stays the truthful rendering
+            // when no renderer exists to name.
+            Assert.That(message, Does.Contain("<missing>"));
+        }
+
         private static Material NewFixtureMaterial(string name)
         {
             var material = new Material(Shader.Find("Unlit/Color"))
