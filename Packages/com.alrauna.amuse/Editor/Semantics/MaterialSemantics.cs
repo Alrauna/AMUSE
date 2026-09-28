@@ -480,6 +480,14 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 throw new ArgumentNullException(nameof(map));
             }
+            if (map.Value.Equals(default(AffineAlphaMap)))
+            {
+                throw new ArgumentException(
+                    "A never-constructed map cannot name a mapped sample: " +
+                    "the zero scale pair routes to the constant arm and " +
+                    "FromBinary32 refuses it.",
+                    nameof(map));
+            }
             return new ScalarSemanticValue(
                 ScalarSemanticValueKind.MappedTextureSample,
                 default,
@@ -802,6 +810,11 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal AffineAlphaMap? GetChainMap(int index)
         {
             RequireChain();
+            if (index < 0 || index >= _chainSamples.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
             return _chainMaps == null ? null : _chainMaps[index];
         }
 
