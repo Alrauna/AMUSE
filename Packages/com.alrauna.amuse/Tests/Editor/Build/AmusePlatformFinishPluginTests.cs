@@ -3327,6 +3327,93 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void MappingRefusalReportNamesBothSlotCounts()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE mapping report fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.1f, 0.1f),
+                new Vector2(0.9f, 0.1f),
+                new Vector2(0.1f, 0.9f),
+                new Vector2(0.2f, 0.2f),
+                new Vector2(0.8f, 0.2f),
+                new Vector2(0.2f, 0.8f)
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+            var slot = new GameObject("two parts one slot");
+            slot.transform.SetParent(root.transform, false);
+            var skinned = slot.AddComponent<SkinnedMeshRenderer>();
+            skinned.sharedMesh = mesh;
+            skinned.sharedMaterials = new[]
+            {
+                new Material(Shader.Find("Unlit/Color"))
+            };
+            var context = (BuildContext)null;
+
+            try
+            {
+                context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context, SupportedFacts()));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.UnprovenMaterialSlotMapping),
+                    Is.EqualTo(1),
+                    "the two-part mesh with one slot must refuse by name");
+
+                string message = null;
+                foreach (var report in reports)
+                {
+                    var candidate = report.TheError.ToMessage();
+                    if (candidate.Contains("do not match"))
+                    {
+                        message = candidate;
+                    }
+                }
+
+                Assert.That(message, Is.Not.Null,
+                    "the mapping refusal report must be emitted");
+                // Falsifier: an emission site that drops the counts, or
+                // passes them in swapped order, leaves the report without
+                // one side of the mismatch or names the wrong side.
+                Assert.That(
+                    message,
+                    Does.Contain("mesh supports 2 material slots"));
+                Assert.That(
+                    message,
+                    Does.Contain("renderer has 1 material slot"));
+                Assert.That(message, Does.Not.Contain("unknown number"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void RendererRefusalDoesNotStopLaterRenderers()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
