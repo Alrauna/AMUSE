@@ -733,29 +733,46 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var samples = new List<TextureSample>();
             var channels = new List<TextureChannel>();
+            var maps = new List<AffineAlphaMap?>();
             var multiplier = 1f;
-            multiplier = CollectFactors(baseValue, samples, channels, multiplier);
-            multiplier = CollectFactors(factor, samples, channels, multiplier);
+            multiplier = CollectFactors(
+                baseValue, samples, channels, maps, multiplier);
+            multiplier = CollectFactors(
+                factor, samples, channels, maps, multiplier);
 
             if (samples.Count == 0)
             {
                 return ScalarSemanticValue.Constant(multiplier);
             }
 
-            if (samples.Count == 1)
+            if (samples.Count == 1 && !HasAnyMap(maps))
             {
                 return ScalarSemanticValue.TextureTimesConstant(
                     samples[0], channels[0], multiplier);
             }
 
             return ScalarSemanticValue.ProductChain(
-                samples, channels, multiplier);
+                samples, channels, multiplier, maps);
+        }
+
+        private static bool HasAnyMap(List<AffineAlphaMap?> maps)
+        {
+            for (var index = 0; index < maps.Count; index++)
+            {
+                if (maps[index] != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static float CollectFactors(
             ScalarSemanticValue value,
             List<TextureSample> samples,
             List<TextureChannel> channels,
+            List<AffineAlphaMap?> maps,
             float multiplier)
         {
             switch (value.Kind)
@@ -765,11 +782,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 case ScalarSemanticValueKind.TextureSample:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
+                    maps.Add(null);
                     return multiplier;
                 case ScalarSemanticValueKind.TextureSampleTimesConstant:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
+                    maps.Add(null);
                     return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind.MappedTextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    maps.Add(value.GetMap());
+                    return multiplier;
                 case ScalarSemanticValueKind
                     .ProductChainOfTextureSamples:
                     for (var index = 0;
@@ -778,6 +802,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     {
                         samples.Add(value.GetChainSample(index));
                         channels.Add(value.GetChainChannel(index));
+                        maps.Add(value.GetChainMap(index));
                     }
 
                     return multiplier * value.GetProductMultiplier();

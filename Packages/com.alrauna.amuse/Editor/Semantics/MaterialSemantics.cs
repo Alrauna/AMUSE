@@ -375,6 +375,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         Constant,
         TextureSample,
         TextureSampleTimesConstant,
+        MappedTextureSample,
         ProductChainOfTextureSamples,
         SaturatingSum,
         SaturatingDifference,
@@ -396,8 +397,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         private readonly float _multiplier;
         private readonly TextureSample[] _chainSamples;
         private readonly TextureChannel[] _chainChannels;
+        private readonly AffineAlphaMap?[] _chainMaps;
         private readonly ScalarSemanticValue _firstValue;
         private readonly ScalarSemanticValue _secondValue;
+        private readonly AffineAlphaMap _map;
 
         internal ScalarSemanticValueKind Kind { get; }
 
@@ -416,7 +419,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 null,
                 null,
                 null,
-                null)
+                null,
+                null,
+                default)
         {
         }
 
@@ -457,6 +462,36 @@ namespace Alrauna.Amuse.Editor.Semantics
                 sample,
                 channel,
                 multiplier);
+        }
+
+        /// <summary>
+        /// One normalized scalar built as saturate(sample * scale + value)
+        /// at the sampled coordinate, with the exact map carrying the
+        /// rounding argument. The identity pair never reaches this kind:
+        /// those materials are the existing plain sample.
+        /// </summary>
+        internal static ScalarSemanticValue MappedTexture(
+            TextureSample sample,
+            TextureChannel channel,
+            AffineAlphaMap? map)
+        {
+            ValidateTextureArguments(sample, channel);
+            if (map == null)
+            {
+                throw new ArgumentNullException(nameof(map));
+            }
+            return new ScalarSemanticValue(
+                ScalarSemanticValueKind.MappedTextureSample,
+                default,
+                sample,
+                channel,
+                default,
+                null,
+                null,
+                null,
+                null,
+                null,
+                map.Value);
         }
 
         internal float GetConstantValue()
@@ -500,6 +535,12 @@ namespace Alrauna.Amuse.Editor.Semantics
             return _channel;
         }
 
+        internal AffineAlphaMap GetMap()
+        {
+            RequireKind(ScalarSemanticValueKind.MappedTextureSample);
+            return _map;
+        }
+
         internal float GetMultiplier()
         {
             if (Kind != ScalarSemanticValueKind.TextureSampleTimesConstant)
@@ -538,6 +579,23 @@ namespace Alrauna.Amuse.Editor.Semantics
             IReadOnlyList<TextureChannel> channels,
             float multiplier)
         {
+            return ProductChain(samples, channels, multiplier, null);
+        }
+
+        /// <summary>
+        /// The product chain above with one optional map per factor. A null
+        /// entry is an identity factor; a mapped entry carries the exact
+        /// affine image that factor's sampler applies. A single-factor chain
+        /// is valid only when it carries a map, because the frontends produce
+        /// that shape for a collapsed main constant times one mapped mask
+        /// factor; a mapless single factor has its own kind.
+        /// </summary>
+        internal static ScalarSemanticValue ProductChain(
+            IReadOnlyList<TextureSample> samples,
+            IReadOnlyList<TextureChannel> channels,
+            float multiplier,
+            IReadOnlyList<AffineAlphaMap?> maps)
+        {
             if (samples == null)
             {
                 throw new ArgumentNullException(nameof(samples));
@@ -552,11 +610,23 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "Every chain factor needs exactly one channel.",
                     nameof(channels));
             }
-            if (samples.Count < 2)
+            if (maps != null && maps.Count != samples.Count)
             {
                 throw new ArgumentException(
-                    "A chain carries at least two sampled factors; a single " +
-                    "sample has its own kind.",
+                    "Every chain factor needs exactly one map entry.",
+                    nameof(maps));
+            }
+            if (samples.Count == 0)
+            {
+                throw new ArgumentException(
+                    "A chain carries at least one sampled factor.",
+                    nameof(samples));
+            }
+            if (samples.Count == 1 && !HasMappedFactor(maps))
+            {
+                throw new ArgumentException(
+                    "A single sample has its own kind unless it carries a " +
+                    "map.",
                     nameof(samples));
             }
             for (var index = 0; index < samples.Count; index++)
@@ -570,7 +640,13 @@ namespace Alrauna.Amuse.Editor.Semantics
                 default,
                 null,
                 default,
-                multiplier);
+                multiplier,
+                null,
+                null,
+                null,
+                null,
+                CopyMaps(maps, samples.Count),
+                default);
             var sampleCopy = new TextureSample[samples.Count];
             var channelCopy = new TextureChannel[channels.Count];
             for (var index = 0; index < samples.Count; index++)
@@ -580,6 +656,39 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return value.WithChain(sampleCopy, channelCopy);
+        }
+
+        private static bool HasMappedFactor(
+            IReadOnlyList<AffineAlphaMap?> maps)
+        {
+            if (maps == null)
+            {
+                return false;
+            }
+            for (var index = 0; index < maps.Count; index++)
+            {
+                if (maps[index] != null)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static AffineAlphaMap?[] CopyMaps(
+            IReadOnlyList<AffineAlphaMap?> maps,
+            int count)
+        {
+            if (maps == null)
+            {
+                return null;
+            }
+            var copy = new AffineAlphaMap?[count];
+            for (var index = 0; index < count; index++)
+            {
+                copy[index] = maps[index];
+            }
+            return copy;
         }
 
         /// <summary>
@@ -649,7 +758,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 samples,
                 channels,
                 _firstValue,
-                _secondValue);
+                _secondValue,
+                _chainMaps,
+                _map);
         }
 
         private ScalarSemanticValue WithChildren(
@@ -665,7 +776,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 _chainSamples,
                 _chainChannels,
                 first,
-                second);
+                second,
+                _chainMaps,
+                _map);
         }
 
         internal int GetChainFactorCount()
@@ -684,6 +797,12 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             RequireChain();
             return _chainChannels[index];
+        }
+
+        internal AffineAlphaMap? GetChainMap(int index)
+        {
+            RequireChain();
+            return _chainMaps == null ? null : _chainMaps[index];
         }
 
         internal ScalarSemanticValue GetSumFirst()
@@ -738,7 +857,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             TextureSample[] chainSamples,
             TextureChannel[] chainChannels,
             ScalarSemanticValue firstValue,
-            ScalarSemanticValue secondValue)
+            ScalarSemanticValue secondValue,
+            AffineAlphaMap?[] chainMaps,
+            AffineAlphaMap map)
         {
             Kind = kind;
             _constantValue = constantValue;
@@ -747,8 +868,10 @@ namespace Alrauna.Amuse.Editor.Semantics
             _multiplier = multiplier;
             _chainSamples = chainSamples;
             _chainChannels = chainChannels;
+            _chainMaps = chainMaps;
             _firstValue = firstValue;
             _secondValue = secondValue;
+            _map = map;
         }
 
         public bool Equals(ScalarSemanticValue other)
@@ -769,6 +892,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return _sample.Equals(other._sample) &&
                            _channel == other._channel &&
                            _multiplier.Equals(other._multiplier);
+                case ScalarSemanticValueKind.MappedTextureSample:
+                    return _sample.Equals(other._sample) &&
+                           _channel == other._channel &&
+                           _map.Equals(other._map);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                     if (_multiplier.Equals(other._multiplier) == false ||
                         _chainSamples.Length != other._chainSamples.Length)
@@ -815,6 +942,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                         hash = hash * 397 ^ _sample.GetHashCode();
                         hash = hash * 397 ^ (int)_channel;
                         return hash * 397 ^ _multiplier.GetHashCode();
+                    case ScalarSemanticValueKind.MappedTextureSample:
+                        hash = hash * 397 ^ _sample.GetHashCode();
+                        hash = hash * 397 ^ (int)_channel;
+                        return hash * 397 ^ _map.GetHashCode();
                     case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                         hash = hash * 397 ^ _multiplier.GetHashCode();
                         for (var index = 0; index < _chainSamples.Length; index++)
