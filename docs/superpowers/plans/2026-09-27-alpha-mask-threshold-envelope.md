@@ -1259,10 +1259,14 @@ In `LilToonTransparentAlphaTests.cs`, change the two pinned refusal tests to the
 ```csharp
             // The uniform white mask's red is exactly one, so the term is
             // exactly one: the mask composes nothing and the value proves.
+            // The resolution is classified, not uniform, so the assertion
+            // goes through the triangle classifier, using the same triangle
+            // fixture the file's other resolved tests classify.
             var resolution = ResolveThroughTransparentFrontend(
                 material, AllOpaqueChain());
-            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
-            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
 ```
 
 Apply the same change to the scale-shifted row at lines 1082-1088 (`t_mask_scale_bad`), keeping the material setup. Leave the non-finite row at lines 1091-1097 exactly as it is: it must keep refusing.
@@ -1292,23 +1296,41 @@ Add new tests beside them:
         }
 
         [Test]
-        public void MappedMask_OrderBoundary_DisagreeingOrdersStayUnknown()
+        public void MappedMask_Sub255Texel_NeverProvesOpaque()
         {
-            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_bound");
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_254");
             material.SetFloat("_AlphaMaskMode", 2f);
             material.SetFloat("_AlphaMaskScale", 1f);
-            // 0.99999994f is the largest binary32 below one. A red of 254
-            // puts the fused order inside the round-to-one band while the
-            // unfused order can stay below it, so only the envelope is
-            // provable and the triangle must not claim opaque.
-            material.SetFloat("_AlphaMaskValue", 0.99999994f);
-            AssignRed254Mask(material, "t_mapped_bound_mask");
+            material.SetFloat("_AlphaMaskValue", 0.25f);
+            AssignRed254Mask(material, "t_mapped_254_mask");
 
             var resolution = ResolveThroughTransparentFrontend(
                 material, AllOpaqueChain());
+            // A byte-254 red lies in [0, 1), so the term envelope is
+            // [0.25, 1]: mixed, and never provably opaque, whichever real
+            // red value the import carries. Falsifies treating sub-255
+            // bytes as 254/255 or proving from the 255 texels alone.
             Assert.That(
                 resolution.Classify(CornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void MappedMask_NegativeValueOverSub255_ProvesTransparent()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("t_mapped_neg");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", -0.25f);
+            AssignRed254Mask(material, "t_mapped_neg_mask");
+
+            var resolution = ResolveThroughTransparentFrontend(
+                material, AllOpaqueChain());
+            // The same byte-254 red with a negative value: the envelope is
+            // [0, 0.75], provably below one over the whole footprint.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
         [Test]
@@ -1320,10 +1342,14 @@ Add new tests beside them:
             material.SetFloat("_AlphaMaskValue", 0.75f);
             AssignAllWhiteMask(material, "t_mapped_zs_mask");
 
+            // Replace mode with a zero-scale mask is the constant
+            // saturate(value): alpha 0.75 everywhere, provably below the
+            // opaque bar.
             var resolution = ResolveThroughTransparentFrontend(
                 material, AllOpaqueChain());
             Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
-            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(outcome, Is.EqualTo(
+                TriangleAlphaOutcome.MustRemainTransparent));
         }
 ```
 
@@ -1477,8 +1503,10 @@ The cutout family has no pinned refusal rows for this shape, so all its coverage
             AssignAllWhiteMask(material, "c_mapped_ok_mask");
 
             var resolution = ResolveThroughCutoutFrontend(material);
-            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
-            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            // Classified resolution: the assertion classifies a triangle.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]
