@@ -400,6 +400,121 @@ namespace Alrauna.Amuse.Editor.Analysis
             return TriangleAlphaOutcome.Unknown;
         }
 
+        /// <summary>
+        /// Classifies one triangle's mapped mask term saturate(r * s + v)
+        /// under the same filter dispatch as the raw path. The walk answers
+        /// one question: does the triangle's contributing domain contain a
+        /// texel below byte 255? The field contract then bounds the filtered
+        /// red to [0, 1) on a witness and exactly 1 without one, so the map
+        /// evaluated at the red bounds 0 and 1 decides the level. Erased
+        /// texels always count as witnesses: their red is unknown in [0, 1),
+        /// and the raw erasure-substitution policy is a statement about the
+        /// raw witness verdict, not about a red value this proof reads.
+        /// </summary>
+        internal static TriangleAlphaOutcome ClassifyMapped(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaSamplingSettings sampling,
+            AlphaUvEnvelope envelope,
+            AffineAlphaMap map)
+        {
+            if (texture == null)
+            {
+                throw new ArgumentNullException(nameof(texture));
+            }
+            if (map.Equals(default(AffineAlphaMap)))
+            {
+                throw new ArgumentException(
+                    "A never-constructed map cannot classify: the zero " +
+                    "scale pair routes to the constant arm and FromBinary32 " +
+                    "refuses it.",
+                    nameof(map));
+            }
+            ValidateDensityPolicy(0);
+            ValidateFinite(triangle.Position0, nameof(triangle.Position0));
+            ValidateFinite(triangle.Position1, nameof(triangle.Position1));
+            ValidateFinite(triangle.Position2, nameof(triangle.Position2));
+
+            if (ExactUvGeometry.IsDegenerateGeometry(triangle))
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+            if (!triangle.HasUv0)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            ValidateFinite(triangle.Uv0, nameof(triangle.Uv0));
+            ValidateFinite(triangle.Uv1, nameof(triangle.Uv1));
+            ValidateFinite(triangle.Uv2, nameof(triangle.Uv2));
+
+            if (texture.IsFullyOpaque)
+            {
+                return DecideMapped(map, witness: false);
+            }
+            if (texture.IsFullyNonOpaque)
+            {
+                return DecideMapped(map, witness: true);
+            }
+
+            if (sampling.AnisoMode == TextureAnisoMode.Anisotropic)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            if (sampling.FilterMode == TextureFilterMode.Point &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
+            {
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessPointClamp(triangle, texture, envelope));
+            }
+            if (sampling.FilterMode == TextureFilterMode.Point &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
+            {
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessPointRepeat(triangle, texture, envelope));
+            }
+            if (sampling.FilterMode == TextureFilterMode.Bilinear ||
+                sampling.FilterMode == TextureFilterMode.Trilinear)
+            {
+                var witness = sampling.WrapMode == TextureWrapMode.Clamp
+                    ? HasMappedWitnessBilinearClamp(
+                        triangle, texture, envelope)
+                    : HasMappedWitnessBilinearRepeat(
+                        triangle, texture, envelope);
+                return DecideMapped(map, witness);
+            }
+
+            return TriangleAlphaOutcome.Unknown;
+        }
+
+        /// <summary>
+        /// The mapped three-way lattice on the map's endpoint envelope: a
+        /// lower bound at exactly one proves the term one everywhere; an
+        /// upper bound below one proves the term below one everywhere; the
+        /// rest is unknown.
+        /// </summary>
+        private static TriangleAlphaOutcome DecideMapped(
+            AffineAlphaMap map,
+            bool witness)
+        {
+            var lower = witness
+                ? map.Evaluate(0f).Lower
+                : map.Evaluate(1f).Lower;
+            var upper = map.Evaluate(1f).Upper;
+            if (lower == 1f)
+            {
+                return TriangleAlphaOutcome.ProvenOpaque;
+            }
+            if (upper < 1f)
+            {
+                return TriangleAlphaOutcome.MustRemainTransparent;
+            }
+            return TriangleAlphaOutcome.Unknown;
+        }
+
         private static TriangleAlphaOutcome ClassifyPointClamp(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
@@ -465,6 +580,68 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyPointClamp: the same domain
+        /// construction, clamp window, budget guard, and interval
+        /// intersection, but the walk only asks whether one contributing
+        /// texel stores a byte below the opaque maximum. Erased texels count
+        /// as witnesses: the raw substitution policy speaks to the raw
+        /// witness verdict, not to a red value this proof reads. An
+        /// unbounded candidate window cannot claim a bounded witness set,
+        /// so it returns true - the witness bound that stays the honest
+        /// unknown through the map.
+        /// </summary>
+        private static bool HasMappedWitnessPointClamp(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
+            var minimumX = PointClampIndex(
+                ExactUvGeometry.Minimum(domain, true),
+                texture.Width,
+                domain.TexelScale);
+            var maximumX = PointClampIndex(
+                ExactUvGeometry.Maximum(domain, true),
+                texture.Width,
+                domain.TexelScale);
+            var minimumY = PointClampIndex(
+                ExactUvGeometry.Minimum(domain, false),
+                texture.Height,
+                domain.TexelScale);
+            var maximumY = PointClampIndex(
+                ExactUvGeometry.Maximum(domain, false),
+                texture.Height,
+                domain.TexelScale);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                // An unbounded window cannot claim a bounded witness set;
+                // unknown is the sound answer either way.
+                return true;
+            }
+
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (ExactUvGeometry.Intersects(
+                        domain,
+                        PointClampInterval(x, texture.Width, domain.TexelScale),
+                        PointClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -617,6 +794,97 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyBilinearRepeat: the same normalized
+        /// domain, cell-index and overflow guards, one-texel footprint
+        /// expansion, pre-filter, and repeat interval intersection, but the
+        /// walk only asks whether one contributing texel stores a byte below
+        /// the opaque maximum. Erased texels count as witnesses, and every
+        /// unbounded give-up returns true: the witness bound that keeps red
+        /// in [0, 1) and the decision honest through the map.
+        /// </summary>
+        private static bool HasMappedWitnessBilinearRepeat(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.NormalizeRepeat(
+                ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
+                texture.Width,
+                texture.Height);
+            if (!TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, true),
+                    domain.TexelScale,
+                    out var minCellX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, true),
+                    domain.TexelScale,
+                    out var maxCellX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, false),
+                    domain.TexelScale,
+                    out var minCellY) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, false),
+                    domain.TexelScale,
+                    out var maxCellY))
+            {
+                return true;
+            }
+
+            if (minCellX <= int.MinValue || maxCellX >= int.MaxValue ||
+                minCellY <= int.MinValue || maxCellY >= int.MaxValue)
+            {
+                return true;
+            }
+
+            var minimumX = minCellX - 1;
+            var maximumX = maxCellX + 1;
+            var minimumY = minCellY - 1;
+            var maximumY = maxCellY + 1;
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                return true;
+            }
+
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
+            for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
+            {
+                var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
+                for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
+                {
+                    var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
+                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (canPreFilter && !ConservativeBilinearSupportOverlapsTriangle(
+                            unwrappedX - 0.5, unwrappedX + 1.5,
+                            unwrappedY - 0.5, unwrappedY + 1.5,
+                            v0x, v0y, v1x, v1y, v2x, v2y))
+                    {
+                        continue;
+                    }
+                    if (ExactUvGeometry.Intersects(
+                        domain,
+                        BilinearRepeatInterval(unwrappedX, domain.TexelScale),
+                        BilinearRepeatInterval(unwrappedY, domain.TexelScale)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -776,6 +1044,86 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyBilinearClamp: the same clamped
+        /// window, budget guard, boundary exception, pre-filter, and
+        /// footprint interval intersection, but the walk only asks whether
+        /// one contributing texel stores a byte below the opaque maximum.
+        /// Erased texels count as witnesses, and an over-budget candidate
+        /// window returns true: the witness bound that keeps red in [0, 1)
+        /// and the decision honest through the map.
+        /// </summary>
+        private static bool HasMappedWitnessBilinearClamp(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
+            var minimumX = Math.Max(0, PointClampIndex(
+                ExactUvGeometry.Minimum(domain, true),
+                texture.Width,
+                domain.TexelScale) - 1);
+            var maximumX = Math.Min(texture.Width - 1, PointClampIndex(
+                ExactUvGeometry.Maximum(domain, true),
+                texture.Width,
+                domain.TexelScale) + 1);
+            var minimumY = Math.Max(0, PointClampIndex(
+                ExactUvGeometry.Minimum(domain, false),
+                texture.Height,
+                domain.TexelScale) - 1);
+            var maximumY = Math.Min(texture.Height - 1, PointClampIndex(
+                ExactUvGeometry.Maximum(domain, false),
+                texture.Height,
+                domain.TexelScale) + 1);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                return true;
+            }
+
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < -0.5 || v1x < -0.5 || v2x < -0.5)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
+                                         (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
+                        if (!isBoundary && !ConservativeBilinearSupportOverlapsTriangle(
+                                x - 0.5, x + 1.5,
+                                y - 0.5, y + 1.5,
+                                v0x, v0y, v1x, v1y, v2x, v2y))
+                        {
+                            continue;
+                        }
+                    }
+                    if (ExactUvGeometry.Intersects(
+                        domain,
+                        BilinearClampInterval(x, texture.Width, domain.TexelScale),
+                        BilinearClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>
@@ -1047,6 +1395,73 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
             return TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyPointRepeat: the same normalized
+        /// domain, cell-index window, budget guard, and repeat interval
+        /// intersection, but the walk only asks whether one contributing
+        /// texel stores a byte below the opaque maximum. Erased texels count
+        /// as witnesses, and every unbounded give-up returns true: the
+        /// witness bound that keeps red in [0, 1) and the decision honest
+        /// through the map.
+        /// </summary>
+        private static bool HasMappedWitnessPointRepeat(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.NormalizeRepeat(
+                ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope),
+                texture.Width,
+                texture.Height);
+            if (!TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, true),
+                    domain.TexelScale,
+                    out var minimumX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, true),
+                    domain.TexelScale,
+                    out var maximumX) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Minimum(domain, false),
+                    domain.TexelScale,
+                    out var minimumY) ||
+                !TryGetCellIndex(
+                    ExactUvGeometry.Maximum(domain, false),
+                    domain.TexelScale,
+                    out var maximumY))
+            {
+                return true;
+            }
+
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                return true;
+            }
+
+            for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
+            {
+                var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
+                for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
+                {
+                    var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
+                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (ExactUvGeometry.Intersects(
+                        domain,
+                        PointRepeatInterval(unwrappedX, domain.TexelScale),
+                        PointRepeatInterval(unwrappedY, domain.TexelScale)))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>
