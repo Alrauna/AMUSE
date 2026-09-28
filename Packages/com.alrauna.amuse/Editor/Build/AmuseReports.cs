@@ -158,6 +158,17 @@ namespace Alrauna.Amuse.Editor.Build
                     "AlphaSeparationSlotRefusal.None is not a refusal.");
             }
 
+            // The separation refusals must stay readable after play mode
+            // ends: the build-copy renderer is destroyed then, the
+            // console's object link is dead, and the report text is the
+            // only place that still names the renderer. NDMF renders a
+            // null substitution as the literal "<missing>", so an
+            // omitted name falls back to the live renderer's own name.
+            // An explicit name keeps winning, and a null renderer keeps
+            // the honest placeholder.
+            rendererName = rendererName
+                ?? (renderer != null ? renderer.gameObject.name : null);
+
             // The offending material arrives as the live build copy; the
             // report names the authoring asset when a producer registered
             // the copy's replacement. One resolve here covers every apply
