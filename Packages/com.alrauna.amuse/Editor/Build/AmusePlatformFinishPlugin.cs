@@ -45,6 +45,20 @@ namespace Alrauna.Amuse.Editor.Build
         /// by applied writes.</summary>
         internal int AppliedOpaqueTriangleCount { get; set; }
 
+        /// <summary>
+        /// How many processed renderers kept everything original.
+        /// Analyzed plus renderer-refused renderers split exactly into
+        /// applied and untouched, so the summary's renderer numbers
+        /// cannot hide a refused renderer. The assumption is that
+        /// AppliedRendererCount counts only renderers that
+        /// AnalyzedRendererCount also counts; the pass structure
+        /// guarantees that today, and a future pass reorder must
+        /// re-read this comment.
+        /// </summary>
+        internal int UntouchedRendererCount =>
+            AnalyzedRendererCount + SemanticallyRefusedRendererCount
+            - AppliedRendererCount;
+
         // Private setter, unlike the counters above: this total must stay in
         // lockstep with the per-reason buckets, so RecordRendererRefusal is its
         // only writer.
@@ -576,7 +590,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 request,
                                 bounds,
                                 granted,
-                                out transferred);
+                                out transferred,
+                                RegisteredSourceIdentity.Resolve);
                 }
 
                 var hasIndex = TryGetAnimationIndex(
@@ -599,7 +614,8 @@ namespace Alrauna.Amuse.Editor.Build
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
-                            swappedView);
+                            swappedView,
+                            RegisteredSourceIdentity.Resolve);
                 }
                 else if (selectRequest == null)
                 {
@@ -615,7 +631,8 @@ namespace Alrauna.Amuse.Editor.Build
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
                         LockedMaterialIdentity.PreCheckRefusal,
-                        swappedView);
+                        swappedView,
+                        RegisteredSourceIdentity.Resolve);
                 }
                 else
                 {
@@ -633,7 +650,8 @@ namespace Alrauna.Amuse.Editor.Build
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
-                            swappedView);
+                            swappedView,
+                            RegisteredSourceIdentity.Resolve);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
@@ -753,7 +771,16 @@ namespace Alrauna.Amuse.Editor.Build
                 Renderer renderer,
                 ClosedAlphaMaterialCapturer inner)
         {
-            inner ??= UnityMaterialSemantics.TryCaptureClosedAlphaMaterials;
+            inner ??= (
+                IReadOnlyList<Material> batchMaterials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                MaterialEvidenceRequest batchRequest,
+                AlphaPolicyBounds batchBounds,
+                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                    batchMaterials, batchFamilies, batchRequest,
+                    batchBounds, out batchCaptured,
+                    RegisteredSourceIdentity.Resolve);
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,

@@ -158,12 +158,26 @@ namespace Alrauna.Amuse.Editor.Build
                     "AlphaSeparationSlotRefusal.None is not a refusal.");
             }
 
+            // The offending material arrives as the live build copy; the
+            // report names the authoring asset when a producer registered
+            // the copy's replacement. One resolve here covers every apply
+            // and preparation call site that passes a live material.
+            offendingMaterial = (Material)(
+                RegisteredSourceIdentity.Resolve(offendingMaterial)
+                ?? offendingMaterial);
+
             var names = new List<string>();
             if (provenMapping != null)
             {
                 foreach (var key in provenMapping.Keys)
                 {
-                    names.Add(key != null ? key.name : "<null>");
+                    // The mapping's keys are live build copies; the
+                    // diagnostic names the authoring asset when a producer
+                    // registered the copy's replacement, matching the
+                    // offender naming above.
+                    var namedKey =
+                        RegisteredSourceIdentity.Resolve(key) ?? key;
+                    names.Add(namedKey != null ? namedKey.name : "<null>");
                 }
             }
 
@@ -372,7 +386,6 @@ namespace Alrauna.Amuse.Editor.Build
                 : "";
 
             AmuseBuildStatusStore.Record(
-                avatarRoot.GetInstanceID(),
                 (buildPath == AmuseBuildPath.ApplyOnPlay
                     ? "Last play mode run: "
                     : "Last upload: ") + summary + policySentence);
@@ -406,30 +419,33 @@ namespace Alrauna.Amuse.Editor.Build
     }
 
     /// <summary>
-    /// Session-scoped last-build status for the component inspector. The
-    /// store lives for the editor session only and carries nothing across
-    /// restarts; the avatar root's instance ID is the key.
+    /// Session-scoped last-build status for the component inspector.
+    /// The slot is intentionally not keyed by avatar or build path:
+    /// the processed build copy never survives to be inspected, so an
+    /// object-identity key could never be read. The store describes
+    /// the editor session's most recent AMUSE build, and the recorded
+    /// text names the build path.
     /// </summary>
     internal static class AmuseBuildStatusStore
     {
-        private static readonly Dictionary<int, string> Status =
-            new Dictionary<int, string>();
+        private static string Status;
 
-        internal static void Record(int avatarInstanceId, string summary)
+        internal static void Record(string summary)
         {
-            Status[avatarInstanceId] = summary;
+            Status = summary;
         }
 
-        internal static bool TryGet(int avatarInstanceId, out string summary)
+        internal static bool TryGet(out string summary)
         {
-            return Status.TryGetValue(avatarInstanceId, out summary);
+            summary = Status;
+            return !string.IsNullOrEmpty(summary);
         }
 
-        /// <summary>Removes one avatar's status. Tests use this so a fixed
-        /// instance ID cannot leak state between runs.</summary>
-        internal static void Forget(int avatarInstanceId)
+        /// <summary>Clears the slot. Tests use this so one run cannot
+        /// leak its status into the next.</summary>
+        internal static void Forget()
         {
-            Status.Remove(avatarInstanceId);
+            Status = null;
         }
     }
 }

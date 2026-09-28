@@ -436,61 +436,112 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void AvatarSummaryNamesTheRunKind()
+        public void LatestBuildRecord_ReplacesThePreviousBuildStatus()
         {
-            var root = new GameObject("AMUSE summary label fixture");
+            var root = new GameObject("AMUSE latest build fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
-                AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var uploadStatus);
-                StringAssert.StartsWith(
-                    "Last upload: ", uploadStatus);
-
+                AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
                     root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var playStatus);
-                StringAssert.StartsWith(
-                    "Last play mode run: ", playStatus);
+                AmuseReports.AvatarSummary(
+                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false);
+
+                // Falsifier: a keyed-per-path leftover would still return
+                // the play text. The store describes the session's most
+                // recent AMUSE build.
+                Assert.That(AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                Assert.That(status, Does.Contain("Last upload"));
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
                 Object.DestroyImmediate(root);
             }
         }
 
         [Test]
-        public void SummaryNamesPolicyOnlyWhileAlphaPolicyIsActive()
+        public void Forget_ClearsTheStatusSlot()
         {
-            var root = new GameObject("AMUSE summary policy fixture");
+            var root = new GameObject("AMUSE forget status fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
 
             try
             {
                 AmuseReports.AvatarSummary(
                     root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var inertStatus);
-                Assert.That(
-                    inertStatus.Contains("alpha policy"),
-                    Is.False);
+                AmuseBuildStatusStore.Forget();
 
-                AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
-                AmuseBuildStatusStore.TryGet(
-                    root.GetInstanceID(), out var activeStatus);
-                Assert.That(
-                    activeStatus.Contains("alpha policy"),
-                    Is.True);
+                Assert.That(AmuseBuildStatusStore.TryGet(out _), Is.False);
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void LatestPlayRecord_StartsWithThePlayModePrefix()
+        {
+            var root = new GameObject("AMUSE play prefix fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.StartsWith(
+                    "Last play mode run: ", status);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void PolicySentence_RidesInTheStatusOnlyWhileAlphaPolicyIsActive()
+        {
+            var root = new GameObject("AMUSE status policy fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var activeStatus),
+                    Is.True);
+                StringAssert.StartsWith(
+                    "Last upload: ", activeStatus);
+                StringAssert.Contains(
+                    "alpha policy", activeStatus);
+
+                AmuseReports.AvatarSummary(
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var inertStatus),
+                    Is.True);
+                StringAssert.StartsWith(
+                    "Last upload: ", inertStatus);
+                Assert.That(
+                    inertStatus.Contains("alpha policy"),
+                    Is.False);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
                 Object.DestroyImmediate(root);
             }
         }
@@ -647,30 +698,198 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var fixture = default(AnalyzableRendererFixture);
+            Mesh slotRefusedMesh = null;
+            Material slotRefusedMaterial = null;
 
             try
             {
+                AmuseBuildStatusStore.Forget();
                 fixture = AddAnalyzableRenderer(root);
                 Object.DestroyImmediate(fixture.Material);
                 fixture.Material = Alrauna.Amuse.Tests.Editor.Semantics
                     .LilToon.LilToonFixtureTestBase.CreateVerifiedMaterial();
                 fixture.Renderer.sharedMaterials = new[] { fixture.Material };
+                // Two renderers stay untouched beside the applied one: one
+                // the barrier refuses at renderer scope, one whose slots
+                // refuse as semantics-unknown. The recorded summary text
+                // must count both, so a call-site revert to a narrower
+                // counter cannot pass unnoticed.
+                root.AddComponent<LineRenderer>();
+                slotRefusedMesh = new Mesh();
+                slotRefusedMesh.vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                };
+                slotRefusedMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                slotRefusedMaterial =
+                    new Material(Shader.Find("Unlit/Color"));
+                var refusedFilter = root.AddComponent<MeshFilter>();
+                refusedFilter.sharedMesh = slotRefusedMesh;
+                var refusedRenderer = root.AddComponent<MeshRenderer>();
+                refusedRenderer.sharedMaterials =
+                    new[] { slotRefusedMaterial };
                 var context = AvatarProcessor.ProcessAvatar(
                     root, AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
                 var state = context.GetState<AmusePlatformFinishState>();
 
-                Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero);
+                Assert.That(state.AppliedOpaqueTriangleCount, Is.Zero,
+                    "applied triangles");
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "analyzed renderers");
                 Assert.That(
-                    AmuseBuildStatusStore.TryGet(root.GetInstanceID(), out var summary),
+                    state.SemanticallyRefusedRendererCount, Is.EqualTo(2),
+                    "renderer-scope refusals");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0),
+                    "applied renderers");
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var summary),
                     Is.True);
                 StringAssert.Contains("moved 0 triangles", summary);
+                StringAssert.Contains(
+                    "3 renderers kept everything original", summary);
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(root.GetInstanceID());
+                AmuseBuildStatusStore.Forget();
                 DisposeAnalyzableRenderer(fixture);
+                if (slotRefusedMesh != null)
+                {
+                    Object.DestroyImmediate(slotRefusedMesh);
+                }
+
+                if (slotRefusedMaterial != null)
+                {
+                    Object.DestroyImmediate(slotRefusedMaterial);
+                }
+
                 Object.DestroyImmediate(root);
             }
+        }
+
+        [Test]
+        public void LockedRegisteredBuildCopy_NamesTheAuthoringAssetInItsSentinelReport()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE locked sentinel fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+
+            const string fixtureFolder = "Assets/AmuseTests_LockedSource";
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                if (!AssetDatabase.IsValidFolder(fixtureFolder))
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", "AmuseTests_LockedSource");
+                }
+
+                var shaderPath = fixtureFolder + "/locked.shader";
+                File.WriteAllText(
+                    shaderPath,
+                    "Shader \"Hidden/Locked/AmuseTestLocked\"\n" +
+                    "{\n    Properties\n    {\n" +
+                    "        _ShaderOptimizerEnabled (\"\", Float) = 0\n" +
+                    "    }\n    SubShader { Pass {} }\n}\n");
+                AssetDatabase.ImportAsset(
+                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
+                var lockedShader =
+                    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
+                Assert.That(lockedShader, Is.Not.Null, shaderPath);
+
+                // The authoring asset carries the project path. The live
+                // build copy stays in memory, so its own project path is
+                // empty, and the registry is the only witness that names
+                // the authoring asset. The lock flag and tags make the
+                // production pre-check refuse the material, which is the
+                // locked-identity route that constructs the sentinel.
+                var source = new Material(lockedShader);
+                var sourcePath =
+                    fixtureFolder + "/registered-lock-source.asset";
+                AssetDatabase.CreateAsset(source, sourcePath);
+                var clone = new Material(lockedShader)
+                {
+                    name = source.name + " build copy",
+                };
+                clone.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName,
+                    1f);
+                clone.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    "Amuse/Unattested/Original");
+                clone.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    "deadbeefdeadbeefdeadbeefdeadbeef");
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+
+                fixture = AddAnalyzableRenderer(root);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = clone;
+                fixture.Renderer.sharedMaterials = new[] { clone };
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root,
+                        AlphaSeparationApplyTests.ApplyTestPlatform.Instance));
+                Assert.That(context, Is.Not.Null,
+                    "fixture precondition: the build must run");
+                Assert.That(reports, Is.Not.Empty,
+                    "fixture precondition: the locked slot must emit its " +
+                    "own refusal line");
+
+                var joined = string.Join(
+                    "\n",
+                    reports.Select(report => report.TheError.ToMessage()));
+                StringAssert.Contains(sourcePath, joined);
+                StringAssert.DoesNotContain(clone.name, joined);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                DisposeAnalyzableRenderer(fixture);
+                ObjectRegistry.ActiveRegistry = previous;
+                if (AssetDatabase.IsValidFolder(fixtureFolder))
+                {
+                    AssetDatabase.DeleteAsset(fixtureFolder);
+                }
+
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void UntouchedRendererCount_CountsFullySlotRefusedRenderersAsOriginal()
+        {
+            var state = new AmusePlatformFinishState();
+            state.AnalyzedRendererCount = 2;
+            state.AppliedRendererCount = 1;
+
+            // The second analyzed renderer kept everything original
+            // through slot-level refusals, which never reach
+            // RecordRendererRefusal. The summary must still count it.
+            Assert.That(state.UntouchedRendererCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void UntouchedRendererCount_IncludesRendererScopeRefusals()
+        {
+            var state = new AmusePlatformFinishState();
+            state.AnalyzedRendererCount = 2;
+            state.AppliedRendererCount = 1;
+            state.RecordRendererRefusal(
+                RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton);
+
+            // Falsifier: an implementation that computes only
+            // analyzed minus applied reads 1 here and hides the
+            // renderer-scoped refusal from the summary.
+            Assert.That(state.UntouchedRendererCount, Is.EqualTo(2));
         }
 
         [Test]

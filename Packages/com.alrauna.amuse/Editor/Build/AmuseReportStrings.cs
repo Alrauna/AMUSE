@@ -304,12 +304,16 @@ namespace Alrauna.Amuse.Editor.Build
                 "the original material. The refusal reason is {3}, and " +
                 "the texture {4}.",
             ["amuse.texture.UnavailableCapture:hint"] =
-                "Check that the texture is a real imported asset and that " +
-                "the project supports texture capture. When the report " +
-                "says the texture has no source identity, the build saw a " +
-                "texture that no project asset backs. When it says the " +
-                "texture has a source identity, the capture route refused " +
-                "a real imported asset.",
+                "When the report says the texture has no source " +
+                "identity, an upstream build step replaced the " +
+                "material texture with an in-memory copy. The known " +
+                "producer is the texture-atlas setting of the Trace " +
+                "and Optimize component of Avatar Optimizer. AMUSE " +
+                "kept the affected triangles on the original material. " +
+                "When the report says the texture has a source " +
+                "identity, make sure that the texture is a real " +
+                "imported asset and that the project supports texture " +
+                "capture.",
             ["amuse.texture.NonResidentMips"] =
                 "A material texture on slot {0} is missing mipmap levels.",
             ["amuse.texture.NonResidentMips:description"] =
@@ -364,7 +368,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE analyzed {0} renderers and moved {1} triangles to " +
                 "opaque materials. {2} renderers kept everything original.",
             ["amuse.summary.Title:hint"] =
-                "Open this component to see the same status.",
+                "This status shows in every AMUSE Avatar Optimizer " +
+                "inspector in this editor session.",
             ["amuse.summary.PolicyActive:description"] =
                 "AMUSE moved triangles while the alpha policy was " +
                 "active, so some moved triangles rest on your alpha " +
