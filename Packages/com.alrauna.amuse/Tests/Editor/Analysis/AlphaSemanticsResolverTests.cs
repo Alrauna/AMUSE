@@ -2011,5 +2011,98 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
+        // --- mapped mask samples (threshold envelope) -------------------------
+
+        private static AlphaResolution ResolveComplete(
+            ScalarSemanticValue value,
+            AlphaFieldProvider provider)
+        {
+            return AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                provider, 0);
+        }
+
+        [Test]
+        public void MappedSample_UniformlyBelowOne_NeedsNoTexel()
+        {
+            // The uniform arm still needs the provider's range attestation,
+            // exactly like the scaled constant's lemma (the [0, 1] bound is
+            // what keeps the endpoint image below one), so the provider here
+            // serves a chain. The pin is the uniform outcome itself: an
+            // implementation that skips the arms and classifies the all-
+            // opaque chain answers ProvenOpaque per triangle and exposes no
+            // uniform outcome, failing the first assertion.
+            var map = AffineAlphaMap.FromBinary32(0.5f, 0f);
+            var value = ScalarSemanticValue.MappedTexture(
+                Sample(), TextureChannel.Red, map);
+            var resolution = ResolveComplete(
+                value, Providing(AllOpaqueChain()));
+            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(outcome, Is.EqualTo(
+                TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void MappedSample_MissingField_RefusesByName()
+        {
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var value = ScalarSemanticValue.MappedTexture(
+                Sample(), TextureChannel.Red, map);
+            var resolution = ResolveComplete(value, ProvidingNothing());
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(resolution.Failure, Is.EqualTo(
+                AlphaResolutionFailure.MissingTextureEvidence));
+        }
+
+        [Test]
+        public void MappedSample_ClassifiesThroughTheChain()
+        {
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var value = ScalarSemanticValue.MappedTexture(
+                Sample(), TextureChannel.Red, map);
+            var resolution = ResolveComplete(
+                value, Providing(AllOpaqueChain()));
+            Assert.That(resolution.TryGetUniformOutcome(out _), Is.False);
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ProductChain_UniformTransparentFactor_AbsorbsTheProduct()
+        {
+            var main = Sample();
+            var mask = Sample();
+            var map = AffineAlphaMap.FromBinary32(0.5f, 0f);
+            var value = ScalarSemanticValue.ProductChain(
+                new[] { main, mask },
+                new[] { TextureChannel.Alpha, TextureChannel.Red },
+                1f,
+                new AffineAlphaMap?[] { null, map });
+            var resolution = ResolveComplete(
+                value, Providing(AllOpaqueChain()));
+            Assert.That(resolution.TryGetUniformOutcome(out var outcome), Is.True);
+            Assert.That(outcome, Is.EqualTo(
+                TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ProductChain_UniformOpaqueFactor_DropsOut()
+        {
+            var main = Sample();
+            var mask = Sample();
+            var map = AffineAlphaMap.FromBinary32(1f, 1f);
+            var value = ScalarSemanticValue.ProductChain(
+                new[] { main, mask },
+                new[] { TextureChannel.Alpha, TextureChannel.Red },
+                1f,
+                new AffineAlphaMap?[] { null, map });
+            var resolution = ResolveComplete(
+                value, Providing(AllOpaqueChain()));
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
     }
 }
