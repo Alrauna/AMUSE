@@ -226,7 +226,15 @@ namespace Alrauna.Amuse.Editor.Host
     {
         internal static RendererAlphaAnalysis Analyze(Renderer renderer)
         {
-            var extraction = Capture(renderer);
+            return Analyze(
+                renderer, (RegisteredSourceLookup)null);
+        }
+
+        internal static RendererAlphaAnalysis Analyze(
+            Renderer renderer,
+            RegisteredSourceLookup resolveRegisteredSource)
+        {
+            var extraction = Capture(renderer, resolveRegisteredSource);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(extraction.Snapshot)
                 : RendererAlphaAnalysis.Refused(extraction.Refusal);
@@ -237,7 +245,8 @@ namespace Alrauna.Amuse.Editor.Host
         // cross into proof and planning.
         internal static RendererAlphaAnalysis Analyze(
             Renderer renderer,
-            BaseMaterialSemanticsProvider semanticsProvider)
+            BaseMaterialSemanticsProvider semanticsProvider,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             if (semanticsProvider == null)
             {
@@ -248,7 +257,8 @@ namespace Alrauna.Amuse.Editor.Host
                 renderer,
                 semanticsProvider,
                 null,
-                out var capturedSemantics);
+                out var capturedSemantics,
+                resolveRegisteredSource);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(
                     extraction.Snapshot,
@@ -261,7 +271,15 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
         {
-            return Capture(renderer, null, null, out _);
+            return Capture(renderer, null);
+        }
+
+        internal static UnityRendererAlphaExtraction Capture(
+            Renderer renderer,
+            RegisteredSourceLookup resolveRegisteredSource)
+        {
+            return Capture(
+                renderer, null, null, out _, resolveRegisteredSource);
         }
 
         /// <summary>
@@ -307,7 +325,8 @@ namespace Alrauna.Amuse.Editor.Host
             BaseMaterialSemanticsProvider legacySemanticsProvider,
             IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots,
             out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
-                legacySemantics)
+                legacySemantics,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             legacySemantics = null;
             if (ReferenceEquals(renderer, null))
@@ -441,7 +460,9 @@ namespace Alrauna.Amuse.Editor.Host
                 try
                 {
                     var captured =
-                        UnityMaterialSemantics.CaptureAlphaMaterials(effective);
+                        UnityMaterialSemantics.CaptureAlphaMaterials(
+                            effective,
+                            resolveRegisteredSource);
                     for (var index = 0; index < captured.Count; index++)
                     {
                         capturedSlots[index] = effective[index] == null

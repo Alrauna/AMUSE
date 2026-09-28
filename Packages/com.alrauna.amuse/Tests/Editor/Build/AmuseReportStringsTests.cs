@@ -123,33 +123,57 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReportStrings.Has("amuse.summary.Title:description"),
                 Is.True);
         }
+
+        [Test]
+        public void UnavailableCaptureHint_NamesTheUpstreamReplacement()
+        {
+            var hint = AmuseReportStrings.Get(
+                "amuse.texture.UnavailableCapture:hint");
+
+            Assert.That(hint, Does.Contain(
+                "replaced the material texture with an in-memory copy"));
+            Assert.That(hint, Does.Contain("Trace and Optimize"));
+        }
+
+        [Test]
+        public void UnavailableCaptureHint_DropsTheFalseImportAdvice()
+        {
+            var hint = AmuseReportStrings.Get(
+                "amuse.texture.UnavailableCapture:hint");
+
+            // Falsifier: the old advice sent readers hunting for an
+            // import problem that does not exist for a texture an
+            // upstream build step created.
+            Assert.That(hint, Does.Not.Contain(
+                "Check that the texture is a real imported asset"));
+        }
     }
 
     public sealed class AmuseBuildStatusStoreTests
     {
         [Test]
-        public void RecordedStatusIsReadableByAvatarInstance()
+        public void RecordedStatusIsReadableWithoutAKey()
         {
-            var id = 90210;
             try
             {
-                AmuseBuildStatusStore.Record(id, "analyzed 3 renderers");
+                AmuseBuildStatusStore.Record("analyzed 3 renderers");
                 Assert.That(
-                    AmuseBuildStatusStore.TryGet(id, out var summary),
+                    AmuseBuildStatusStore.TryGet(out var summary),
                     Is.True);
                 Assert.That(summary, Is.EqualTo("analyzed 3 renderers"));
             }
             finally
             {
-                AmuseBuildStatusStore.Forget(id);
+                AmuseBuildStatusStore.Forget();
             }
         }
 
         [Test]
-        public void UnknownAvatarHasNoStatus()
+        public void EmptySlotHasNoStatus()
         {
+            AmuseBuildStatusStore.Forget();
             Assert.That(
-                AmuseBuildStatusStore.TryGet(13371337, out _), Is.False);
+                AmuseBuildStatusStore.TryGet(out _), Is.False);
         }
     }
 }

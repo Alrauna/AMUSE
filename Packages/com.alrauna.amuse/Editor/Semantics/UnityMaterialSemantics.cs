@@ -95,6 +95,15 @@ namespace Alrauna.Amuse.Editor.Semantics
     }
 
     /// <summary>
+    /// Maps a live material to the source object a producer registered
+    /// as its replacement, or null when nothing registered one. The
+    /// capture stores the resolved object's path and name as plain
+    /// strings, so evidence records never hold live Unity objects.
+    /// </summary>
+    internal delegate UnityEngine.Object RegisteredSourceLookup(
+        UnityEngine.Object source);
+
+    /// <summary>
     /// Selects the shader frontend for one base material. Each frontend attests
     /// its own source identity, and no material can be attested by both, so
     /// selection is an exclusive trial rather than a dispatch table: a second
@@ -151,7 +160,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         internal static IReadOnlyList<CapturedAlphaMaterial> CaptureAlphaMaterials(
-            IReadOnlyList<Material> materials)
+            IReadOnlyList<Material> materials,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
             if (materials == null)
             {
@@ -182,7 +192,8 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
             return BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence);
+                materials, families, shaders, evidence,
+                resolveRegisteredSource);
         }
 
         /// <summary>
@@ -214,12 +225,23 @@ namespace Alrauna.Amuse.Editor.Semantics
             return alphaRelevanceRequest != null;
         }
 
+        /// <summary>
+        /// The closed capture with registered-source naming. When a producer
+        /// registered a material's replacement, the capture records the
+        /// registered source's path and name; <paramref name="resolveRegisteredSource"/>
+        /// answers null when nothing registered the material, and the
+        /// material keeps its own identity. There is deliberately no
+        /// overload without the lookup: a capture that could silently skip
+        /// registered-source naming would put build-copy identity into the
+        /// reports.
+        /// </summary>
         internal static bool TryCaptureClosedAlphaMaterials(
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out IReadOnlyList<CapturedAlphaMaterial> captured,
+            RegisteredSourceLookup resolveRegisteredSource)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
             if (families == null) throw new ArgumentNullException(nameof(families));
@@ -247,7 +269,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             var evidence = UnityMaterialEvidenceCapture.Capture(
                 inputs, bounds);
             var result = BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence);
+                materials, families, shaders, evidence,
+                resolveRegisteredSource);
             foreach (var material in result)
             {
                 if (!IsAttestedAlphaMaterial(material))
@@ -269,6 +292,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// unverified-version risk for exactly that name this build. A batch
         /// member outside the granted set still fails the whole batch, so an
         /// unconsented discovery keeps the fail-closed renderer refusal.
+        /// <paramref name="resolveRegisteredSource"/> carries registered-source
+        /// naming the same way the plain overload does.
         /// </summary>
         internal static bool TryCaptureClosedAlphaMaterialsTransferred(
             IReadOnlyList<Material> materials,
@@ -276,7 +301,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
             IReadOnlyCollection<string> grantedShaderNames,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out IReadOnlyList<CapturedAlphaMaterial> captured,
+            RegisteredSourceLookup resolveRegisteredSource)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
             if (families == null) throw new ArgumentNullException(nameof(families));
@@ -304,7 +330,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             var evidence = UnityMaterialEvidenceCapture.Capture(
                 inputs, bounds);
             var result = BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence);
+                materials, families, shaders, evidence,
+                resolveRegisteredSource);
             for (var index = 0; index < result.Count; index++)
             {
                 if (IsAttestedAlphaMaterial(result[index]))
@@ -473,7 +500,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 IReadOnlyList<Shader> shaders,
-                IReadOnlyList<CapturedMaterialEvidence> evidence)
+                IReadOnlyList<CapturedMaterialEvidence> evidence,
+                RegisteredSourceLookup resolveRegisteredSource = null)
         {
             var results = new CapturedAlphaMaterial[materials.Count];
             for (var index = 0; index < results.Length; index++)
@@ -510,18 +538,35 @@ namespace Alrauna.Amuse.Editor.Semantics
                 }
 
                 var source = materials[index];
+                var namedSource = namedSourceFor(
+                    resolveRegisteredSource, source);
                 results[index] = new CapturedAlphaMaterial(
                     families[index], evidence[index], poiyomi, lilToon,
-                    materialPath: source != null
-                        ? AssetDatabase.GetAssetPath(source)
+                    materialPath: namedSource != null
+                        ? AssetDatabase.GetAssetPath(namedSource)
                         : null,
-                    materialName: source != null ? source.name : null,
+                    materialName: namedSource != null
+                        ? namedSource.name
+                        : null,
                     shaderName: source != null && source.shader != null
                         ? source.shader.name
                         : null);
             }
 
             return new ReadOnlyCollection<CapturedAlphaMaterial>(results);
+        }
+
+        /// <summary>
+        /// The one identity fork both capture constructions share: a
+        /// registered lookup that names a replacement wins, and anything
+        /// else — no lookup, an unanswered lookup, a null input — keeps the
+        /// live material's own identity.
+        /// </summary>
+        private static UnityEngine.Object namedSourceFor(
+            RegisteredSourceLookup lookup,
+            UnityEngine.Object source)
+        {
+            return lookup != null ? (lookup(source) ?? source) : source;
         }
 
         /// <summary>
@@ -905,12 +950,31 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// resolution then refuses by that name instead of the generic
         /// destination.
         /// </para>
+        /// <para>
+        /// When a producer registered a material's replacement, the record
+        /// names the registered source's project path and name instead of
+        /// the build copy's. The resolution goes through the read-only
+        /// <c>create:false</c> registry lookup — never the creating static
+        /// one, which would fabricate an entry and block a later
+        /// RegisterReplacedObject for that object — and the record stores
+        /// only the resolved path and name strings, so the evidence never
+        /// holds live Unity objects.
+        /// </para>
         /// </summary>
+        /// <param name="resolveRegisteredSource">
+        /// Maps the live material to the source object a producer
+        /// registered as its replacement. It answers null when nothing
+        /// registered the material, and the material keeps its own
+        /// identity.
+        /// </param>
         internal static CapturedAlphaMaterial UnattestedMaterial(
             RendererAnalysisRefusal lockedIdentityRefusal =
                 RendererAnalysisRefusal.None,
-            Material sourceMaterial = null)
+            Material sourceMaterial = null,
+            RegisteredSourceLookup resolveRegisteredSource = null)
         {
+            var namedSource = namedSourceFor(
+                resolveRegisteredSource, sourceMaterial);
             return new CapturedAlphaMaterial(
                 CapturedAlphaMaterialFamily.Unsupported,
                 new CapturedMaterialEvidence(
@@ -924,11 +988,11 @@ namespace Alrauna.Amuse.Editor.Semantics
                 default(PoiyomiSourceEvidence),
                 null,
                 lockedIdentityRefusal,
-                materialPath: sourceMaterial != null
-                    ? AssetDatabase.GetAssetPath(sourceMaterial)
+                materialPath: namedSource != null
+                    ? AssetDatabase.GetAssetPath(namedSource)
                     : null,
-                materialName: sourceMaterial != null
-                    ? sourceMaterial.name
+                materialName: namedSource != null
+                    ? namedSource.name
                     : null,
                 shaderName: sourceMaterial != null &&
                     sourceMaterial.shader != null

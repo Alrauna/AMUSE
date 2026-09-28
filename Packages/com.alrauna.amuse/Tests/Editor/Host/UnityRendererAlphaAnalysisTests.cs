@@ -1,10 +1,13 @@
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
-using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
+using nadena.dev.ndmf;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
+using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 
 namespace Alrauna.Amuse.Tests.Editor.Host
 {
@@ -30,6 +33,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             _transient.Clear();
+            if (AssetDatabase.IsValidFolder(FixtureAssetFolder))
+            {
+                AssetDatabase.DeleteAsset(FixtureAssetFolder);
+            }
         }
 
         private T Track<T>(T obj) where T : Object
@@ -92,6 +99,63 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var block = new MaterialPropertyBlock();
             block.SetColor("_Color", new Color(1f, 1f, 1f, 0.25f));
             return block;
+        }
+
+        /// <summary>
+        /// The registered-source fixture: an authored material asset under a
+        /// dedicated test folder, so its project path exists. The material is
+        /// deliberately not tracked, because DestroyImmediate refuses
+        /// persistent assets; the shared teardown deletes the folder instead.
+        /// </summary>
+        private const string FixtureAssetFolder = "Assets/AmuseTests_RendererAlpha";
+
+        private Material NewFixtureMaterialAsset()
+        {
+            if (!AssetDatabase.IsValidFolder(FixtureAssetFolder))
+            {
+                AssetDatabase.CreateFolder("Assets", "AmuseTests_RendererAlpha");
+            }
+
+            var material = new Material(Shader.Find("Unlit/Color"));
+            AssetDatabase.CreateAsset(
+                material, FixtureAssetFolder + "/registered-source-source.asset");
+            return material;
+        }
+
+        [Test]
+        public void RegisteredBuildCopyMaterial_NamesTheAuthoringAssetInCapture()
+        {
+            var source = NewFixtureMaterialAsset();
+            var clone = new Material(source.shader)
+            {
+                name = source.name + " build copy",
+            };
+            // The clone stays in memory, so its own project path is empty;
+            // only the registry can name the authoring asset.
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+
+                var renderer = NewSkinned(Quad(), clone);
+                var extraction = UnityRendererAlphaAnalysis.Capture(
+                    renderer, RegisteredSourceIdentity.Resolve);
+
+                Assert.That(
+                    extraction.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal.None));
+                Assert.That(
+                    extraction.Snapshot.Materials.Count, Is.EqualTo(1));
+                Assert.That(
+                    extraction.Snapshot.Materials[0].MaterialPath,
+                    Is.EqualTo(AssetDatabase.GetAssetPath(source)));
+            }
+            finally
+            {
+                ObjectRegistry.ActiveRegistry = previous;
+                Object.DestroyImmediate(clone);
+            }
         }
 
         [Test]
