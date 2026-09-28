@@ -500,28 +500,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             TextureSample maskSample = null;
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
-            {
-                // The mapped emission lands with the cutout mirror of the
-                // transparent frontend. Until then the family keeps its
-                // closed refusal instead of silently dropping the term, and
-                // names the same property the shared interpretation named
-                // before the mapped arm existed.
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    maskTerm.Scale == 1f
-                        ? LilToonAlphaMaskTerm.ValueProperty
-                        : LilToonAlphaMaskTerm.ScaleProperty);
-            }
-
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
+            AffineAlphaMap? maskMap = null;
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample ||
+                maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
             {
                 // The mask borrows _MainTex's captured sampler facts. An
-                // unassigned main has none, so a sampled mask refuses by
-                // name instead of proving through borrowed facts. A later
-                // design can attest the default sampler; this one refuses.
+                // unassigned main has none, so a sampled or mapped mask
+                // refuses by name instead of proving through borrowed facts.
                 if (!hasMainSampler)
                 {
                     return RecordUnknown<ScalarSemanticValue>(
@@ -535,6 +520,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     maskTerm.Source,
                     maskTerm.Mapping,
                     assignment.Texture.Sampling);
+                if (maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
+                {
+                    maskMap = AffineAlphaMap.FromBinary32(
+                        maskTerm.Scale, maskTerm.Value);
+                }
 
                 // A replace mask runs after the layers, so the mask term is
                 // the whole alpha: neither _MainTex's texels nor _Color.a nor
@@ -542,8 +532,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 if (maskTerm.ReplacesMainAlpha)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Complete(
-                        ScalarSemanticValue.Texture(
-                            maskSample, TextureChannel.Red));
+                        maskMap == null
+                            ? ScalarSemanticValue.Texture(
+                                maskSample, TextureChannel.Red)
+                            : ScalarSemanticValue.MappedTexture(
+                                maskSample, TextureChannel.Red, maskMap));
                 }
             }
 
@@ -567,12 +560,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // Multiply mode: the term composes over the layered value.
                 // The multiply cannot fold into a saturating sum or
                 // difference below it, so those shapes refuse.
+                var maskFactor = maskMap == null
+                    ? ScalarSemanticValue.TextureTimesConstant(
+                        maskSample, TextureChannel.Red, 1f)
+                    : ScalarSemanticValue.MappedTexture(
+                        maskSample, TextureChannel.Red, maskMap);
                 var multiplied = Multiply(
-                    alphaChain,
-                    ScalarSemanticValue.TextureTimesConstant(
-                        maskSample, TextureChannel.Red, 1f),
-                    AlphaMaskModeProperty,
-                    diagnostics);
+                    alphaChain, maskFactor, AlphaMaskModeProperty, diagnostics);
                 if (multiplied == null)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Unknown();
