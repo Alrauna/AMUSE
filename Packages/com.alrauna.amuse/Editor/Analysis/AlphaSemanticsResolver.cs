@@ -64,6 +64,11 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly AlphaResolution _secondFactor;
         private readonly bool _isProduct;
         private readonly bool _isDisjunction;
+        // The exact affine image the sampler applies to this factor's
+        // sample. Only a classified resolution carries one: a mapped
+        // sample's uniform arms are decided from the map's endpoints once
+        // at resolve time and must not re-read the map per level.
+        private readonly AffineAlphaMap? _map;
 
         private AlphaResolution(
             bool isResolved,
@@ -77,7 +82,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaResolution firstFactor,
             AlphaResolution secondFactor,
             bool isProduct,
-            bool isDisjunction = false)
+            bool isDisjunction = false,
+            AffineAlphaMap? map = null)
         {
             // Invariants: a resolved value carries no failure, a refusal
             // carries one, and a classified value always has its field.
@@ -104,6 +110,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             _secondFactor = secondFactor;
             _isProduct = isProduct;
             _isDisjunction = isDisjunction;
+            _map = map;
         }
 
         internal bool IsResolved { get; }
@@ -136,7 +143,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaMipChain chain,
             AlphaSamplingSettings sampling,
             UvMapping mapping,
-            int maxNoiseTexelPercent)
+            int maxNoiseTexelPercent,
+            AffineAlphaMap? map = null)
         {
             // The resolver accepts the mesh UV channels carried by
             // `TriangleAlphaInput`. Enforce that boundary here so a direct
@@ -161,7 +169,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 mapping,
                 null,
                 null,
-                false);
+                false,
+                map: map);
         }
 
         /// <summary>
@@ -420,9 +429,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                     continue;
                 }
 
-                var outcome = TriangleAlphaClassifier.Classify(
-                    transformed, _chain[index], _sampling, envelope,
-                    _maxNoiseTexelPercent);
+                // A mapped sample swaps only the classifier entry: the same
+                // transform, envelope, provenance check, and absorbing fold
+                // govern every level exactly as on the plain path.
+                var outcome = _map == null
+                    ? TriangleAlphaClassifier.Classify(
+                        transformed, _chain[index], _sampling, envelope,
+                        _maxNoiseTexelPercent)
+                    : TriangleAlphaClassifier.ClassifyMapped(
+                        transformed, _chain[index], _sampling, envelope,
+                        _map.Value);
                 if (outcome == TriangleAlphaOutcome.MustRemainTransparent)
                 {
                     return TriangleAlphaOutcome.MustRemainTransparent;
@@ -482,6 +498,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetTextureSample(),
                         value.GetChannel(),
                         value.GetMultiplier(),
+                        fieldProvider,
+                        maxNoiseTexelPercent);
+                case ScalarSemanticValueKind.MappedTextureSample:
+                    return ResolveMappedSample(
+                        value.GetTextureSample(),
+                        value.GetChannel(),
+                        value.GetMap(),
                         fieldProvider,
                         maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
@@ -549,6 +572,62 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
+        /// alpha = saturate(s * scale + value) over a sampled field bounded
+        /// in [0, 1] by the contract. The map's endpoint evaluations decide
+        /// two uniform arms with no texel: a lower bound of one at both red
+        /// bounds proves the term one at every reachable sample, and an
+        /// upper bound below one at both proves the opposite. Everything
+        /// else classifies the chain under the map.
+        /// </summary>
+        private static AlphaResolution ResolveMappedSample(
+            TextureSample sample,
+            TextureChannel channel,
+            AffineAlphaMap map,
+            AlphaFieldProvider fieldProvider,
+            int maxNoiseTexelPercent)
+        {
+            if (!fieldProvider(sample.Source, channel, out var chain) ||
+                chain == null)
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.MissingTextureEvidence);
+            }
+
+            var atZero = map.Evaluate(0f);
+            var atOne = map.Evaluate(1f);
+            if (atZero.Lower == 1f && atOne.Lower == 1f)
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.ProvenOpaque);
+            }
+            if (atZero.Upper < 1f && atOne.Upper < 1f)
+            {
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.MustRemainTransparent);
+            }
+
+            // The uniform arms above are coordinate-independent, but the
+            // classified arm feeds `Classified`, which by contract rejects
+            // mappings the proof does not carry. Refuse by name, as the
+            // plain sample path does, instead of letting the factory throw.
+            if (!IsSupportedMapping(sample.Coordinates))
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedUvMapping);
+            }
+
+            return AlphaResolution.Classified(
+                chain,
+                new AlphaSamplingSettings(
+                    sample.Sampling.Filter,
+                    sample.Sampling.Wrap,
+                    sample.Sampling.Aniso),
+                sample.Coordinates,
+                maxNoiseTexelPercent,
+                map);
+        }
+
+        /// <summary>
         /// alpha = (k * f0) * f1 * ... * fn over any number of sampled terms
         /// bounded in [0,1] by the field contract. The multiplier lemmas are
         /// the two-factor ones generalized to any arity: a product of values
@@ -578,14 +657,35 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaResolution conjoined = null;
             for (var index = 0; index < value.GetChainFactorCount(); index++)
             {
-                var factor = ResolveSampled(
-                    value.GetChainSample(index),
-                    value.GetChainChannel(index),
-                    fieldProvider,
-                    maxNoiseTexelPercent);
+                var map = value.GetChainMap(index);
+                var factor = map == null
+                    ? ResolveSampled(
+                        value.GetChainSample(index),
+                        value.GetChainChannel(index),
+                        fieldProvider,
+                        maxNoiseTexelPercent)
+                    : ResolveMappedSample(
+                        value.GetChainSample(index),
+                        value.GetChainChannel(index),
+                        map.Value,
+                        fieldProvider,
+                        maxNoiseTexelPercent);
                 if (!factor.IsResolved)
                 {
                     return factor;
+                }
+
+                if (factor.TryGetUniformOutcome(out var uniform))
+                {
+                    if (uniform == TriangleAlphaOutcome.MustRemainTransparent)
+                    {
+                        return AlphaResolution.Uniform(
+                            TriangleAlphaOutcome.MustRemainTransparent);
+                    }
+
+                    // A uniformly opaque factor multiplies by exactly one
+                    // and drops out of the conjunction.
+                    continue;
                 }
 
                 conjoined = conjoined == null
@@ -593,7 +693,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     : AlphaResolution.Product(conjoined, factor);
             }
 
-            return conjoined;
+            return conjoined ?? AlphaResolution.Uniform(
+                TriangleAlphaOutcome.ProvenOpaque);
         }
 
         /// <summary>

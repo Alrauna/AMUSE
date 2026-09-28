@@ -1249,5 +1249,228 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             AssertCaseMatchesOracle(caseId);
             AssertCaseMatchesOracle(caseId, 0);
         }
+
+        // --- Task 3 mapped mask terms ------------------------------------
+
+        [Test]
+        public void ClassifyMapped_AllOpaqueDomain_ProvesThroughTheMap()
+        {
+            var texture = NewUniformTexture(4, 4, byte.MaxValue);
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var outcome = TriangleAlphaClassifier.ClassifyMapped(
+                CornerTriangle(), texture, PointClampSettings(),
+                AlphaUvEnvelope.Zero, map);
+            // All-255 domain: red is exactly one, term is exactly one.
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ClassifyMapped_WitnessDomain_ProvesTransparentOnlyBelowOne()
+        {
+            var texture = NewUniformTexture(4, 4, byte.MaxValue);
+            texture.SetTexel(0, 0, 0);
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var outcome = TriangleAlphaClassifier.ClassifyMapped(
+                TriangleCoveringTexel(0, 0), texture, PointClampSettings(),
+                AlphaUvEnvelope.Zero, map);
+            // Witness red in [0, 1): term in [0.5, 1): unknown, not opaque.
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            var tight = AffineAlphaMap.FromBinary32(0.5f, 0f);
+            var below = TriangleAlphaClassifier.ClassifyMapped(
+                TriangleCoveringTexel(0, 0), texture, PointClampSettings(),
+                AlphaUvEnvelope.Zero, tight);
+            // Term in [0, 0.5): provably below one.
+            Assert.That(below, Is.EqualTo(
+                TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ClassifyMapped_ErasedTexel_ActsAsWitness()
+        {
+            var texture = NewUniformTexture(4, 4, byte.MaxValue);
+            texture.SetTexel(0, 0, AlphaTextureData.ErasedFlag);
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var outcome = TriangleAlphaClassifier.ClassifyMapped(
+                TriangleCoveringTexel(0, 0), texture, PointClampSettings(),
+                AlphaUvEnvelope.Zero, map);
+            // The mapped path never substitutes erasure: the red behind an
+            // erased texel is unknown in [0, 1).
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ClassifyMapped_AnisotropicSampling_StaysUnknown()
+        {
+            var texture = NewUniformTexture(4, 4, 128);
+            var map = AffineAlphaMap.FromBinary32(1f, 0.5f);
+            var outcome = TriangleAlphaClassifier.ClassifyMapped(
+                CornerTriangle(), texture, AnisotropicSettings(),
+                AlphaUvEnvelope.Zero, map);
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ClassifyMapped_NegativeScaleWitness_StaysUnknown()
+        {
+            // Falsifier: a negative scale makes the term decrease in red.
+            // saturate(1 - r) equals one only at r = 0, so a witness domain
+            // whose red can exceed zero must stay unknown. A witness arm
+            // that reads only the red-zero endpoint fabricates
+            // ProvenOpaque from Evaluate(0) == (1, 1).
+            var texture = NewUniformTexture(4, 4, byte.MaxValue);
+            texture.SetTexel(0, 0, 0);
+            var map = AffineAlphaMap.FromBinary32(-1f, 1f);
+            var outcome = TriangleAlphaClassifier.ClassifyMapped(
+                TriangleCoveringTexel(0, 0), texture, PointClampSettings(),
+                AlphaUvEnvelope.Zero, map);
+            Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [TestCase("Point", "Repeat")]
+        [TestCase("Bilinear", "Clamp")]
+        [TestCase("Bilinear", "Repeat")]
+        [TestCase("Trilinear", "Clamp")]
+        [TestCase("Trilinear", "Repeat")]
+        public void ClassifyMapped_EveryModeledGateAnswersBothWays(
+            string filterName,
+            string wrapName)
+        {
+            // The mapped dispatcher must cover exactly the raw dispatcher's
+            // gate list. An all-opaque level proves through the fast path;
+            // a witness level decides through the map: envelope unknown on
+            // the (1, 0.5) map, provably below one on the (0.5, 0) map.
+            var opaque = NewUniformTexture(4, 4, byte.MaxValue);
+            var witness = NewUniformTexture(4, 4, byte.MaxValue);
+            witness.SetTexel(0, 0, 0);
+            var filter = (TextureFilterMode)Enum.Parse(
+                typeof(TextureFilterMode), filterName);
+            var wrap = (TextureWrapMode)Enum.Parse(
+                typeof(TextureWrapMode), wrapName);
+            var sampling = new AlphaSamplingSettings(filter, wrap);
+
+            Assert.That(
+                TriangleAlphaClassifier.ClassifyMapped(
+                    CornerTriangle(), opaque, sampling,
+                    AlphaUvEnvelope.Zero,
+                    AffineAlphaMap.FromBinary32(1f, 0.5f)),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+            Assert.That(
+                TriangleAlphaClassifier.ClassifyMapped(
+                    TriangleCoveringTexel(0, 0), witness, sampling,
+                    AlphaUvEnvelope.Zero,
+                    AffineAlphaMap.FromBinary32(1f, 0.5f)),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+            Assert.That(
+                TriangleAlphaClassifier.ClassifyMapped(
+                    TriangleCoveringTexel(0, 0), witness, sampling,
+                    AlphaUvEnvelope.Zero,
+                    AffineAlphaMap.FromBinary32(0.5f, 0f)),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void SamplingSettings_RejectMirrorWrapValue()
+        {
+            // Falsifier: Mirror wrap must not ride the repeat walk. FloorMod
+            // tiling names different texels than mirror reflection, so a
+            // repeat verdict is fabricated, not proven. Mirror has no name
+            // in the classifier's closed wrap vocabulary: value 2 is
+            // Unity's Mirror slot, and the sampling settings refuse it at
+            // the construction site. That refusal keeps bilinear Mirror
+            // from reaching any mapped walk today. The mapped dispatcher's
+            // four explicit filter and wrap gates keep any future
+            // vocabulary growth answering Unknown like the raw dispatcher.
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new AlphaSamplingSettings(
+                    TextureFilterMode.Bilinear,
+                    (TextureWrapMode)2,
+                    TextureAnisoMode.None));
+        }
+
+        /// <summary>
+        /// A staged texel pattern held in a mutable buffer: the production
+        /// texture type is immutable, so witness fixtures mutate the buffer
+        /// first and build the texture once the pattern is complete.
+        /// </summary>
+        private sealed class MutableTexture
+        {
+            private readonly byte[] _alpha;
+
+            internal MutableTexture(int width, int height, byte[] alpha)
+            {
+                Width = width;
+                Height = height;
+                _alpha = alpha;
+            }
+
+            internal int Width { get; }
+            internal int Height { get; }
+
+            internal void SetTexel(int x, int y, byte alpha)
+            {
+                _alpha[y * Width + x] = alpha;
+            }
+
+            public static implicit operator AlphaTextureData(
+                MutableTexture texture)
+            {
+                return new AlphaTextureData(
+                    texture.Width,
+                    texture.Height,
+                    texture._alpha);
+            }
+        }
+
+        private static MutableTexture NewUniformTexture(
+            int width,
+            int height,
+            byte alpha)
+        {
+            var filled = new byte[width * height];
+            Array.Fill(filled, alpha);
+            return new MutableTexture(width, height, filled);
+        }
+
+        private static TriangleAlphaInput CornerTriangle()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 0.5f));
+        }
+
+        private static TriangleAlphaInput TriangleCoveringTexel(
+            int x,
+            int y)
+        {
+            // The unit-square cover intersects every texel cell, so it
+            // contains whichever witness texel (x, y) the fixture names.
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+        }
+
+        private static AlphaSamplingSettings PointClampSettings()
+        {
+            return new AlphaSamplingSettings(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp);
+        }
+
+        private static AlphaSamplingSettings AnisotropicSettings()
+        {
+            return new AlphaSamplingSettings(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.Anisotropic);
+        }
     }
 }

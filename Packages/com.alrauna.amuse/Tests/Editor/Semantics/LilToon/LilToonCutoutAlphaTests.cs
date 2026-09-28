@@ -321,6 +321,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 new Vector2(0.05f, 0.45f));
         }
 
+        /// <summary>
+        /// The corner triangle regarded against a part-black mask: its hull
+        /// covers the black texel (1, 1) and white texels besides, so a
+        /// mapped term over it straddles the opaque bar and proves neither
+        /// side.
+        /// </summary>
+        private static TriangleAlphaInput TriangleOverBlackTexel()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f));
+        }
+
         private static TriangleAlphaInput MipZeroOpaqueTexelTriangle()
         {
             return TriangleAlphaInput.WithUv0(
@@ -734,6 +751,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ImportMipmapTexture(name, 4, 4, MaskGrid(4, 4, 255)));
         }
 
+        private void AssignPartBlackMask(Material material, string name)
+        {
+            material.SetTexture(
+                "_AlphaMask",
+                ImportMipmapTexture(
+                    name, 4, 4, MaskGridWithRedHole(4, 4, 1, 1)));
+        }
+
         private static AlphaFieldProvider ProvidingForMasked(
             CapturedMaterialEvidence evidence,
             AlphaMipChain mainChain,
@@ -783,6 +808,72 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 .InterpretVerifiedCutoutAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingForMasked(captured, mainChain, maskChain), 0);
+        }
+
+        /// <summary>
+        /// Resolves through the cutout frontend with the material's own
+        /// captured fields served back at the seam: the main texture's alpha
+        /// chain and the mask's red chain exactly as this capture imported
+        /// them, keyed by their resolved source identities. Mapped-mask
+        /// classifications then read the real fixture grids instead of
+        /// restated synthetic ones.
+        /// </summary>
+        private AlphaResolution ResolveThroughCutoutFrontend(
+            Material material)
+        {
+            var captured = CaptureCutoutEvidence(material);
+            var alpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(captured);
+            return AlphaSemanticsResolver.Resolve(
+                alpha, ProvidingCapturedFields(captured), 0);
+        }
+
+        private static AlphaFieldProvider ProvidingCapturedFields(
+            CapturedMaterialEvidence evidence)
+        {
+            Assert.That(
+                evidence.TryGetTexture(MainTextureProperty, out var main),
+                Is.True);
+            Assert.That(
+                main.IsAssigned && main.Texture.HasSourceIdentity &&
+                main.Texture.HasAlphaChannel,
+                Is.True,
+                "the captured-fields seam keys the main alpha chain on a " +
+                "resolved identity");
+            Assert.That(
+                evidence.TryGetTexture("_AlphaMask", out var mask),
+                Is.True);
+            Assert.That(
+                mask.IsAssigned && mask.Texture.HasSourceIdentity &&
+                mask.Texture.HasRedChannel,
+                Is.True,
+                "the captured-fields seam keys the mask red chain on a " +
+                "resolved identity");
+
+            var mainSource = main.Texture.SourceIdentity;
+            var mainChain = main.Texture.AlphaChannel;
+            var maskSource = mask.Texture.SourceIdentity;
+            var maskChain = mask.Texture.RedChannel;
+            return (TextureSourceId source, TextureChannel channel,
+                out AlphaMipChain result) =>
+            {
+                if (source.Equals(mainSource) &&
+                    channel == TextureChannel.Alpha)
+                {
+                    result = mainChain;
+                    return true;
+                }
+
+                if (source.Equals(maskSource) &&
+                    channel == TextureChannel.Red)
+                {
+                    result = maskChain;
+                    return true;
+                }
+
+                result = null;
+                return false;
+            };
         }
 
         /// <summary>
@@ -881,7 +972,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void AlphaMaskMode1_WithThresholdValue_RefusesNamingValue()
+        public void AlphaMaskMode1_MappedThresholdValue_ProvesTheCornerTriangle()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("c_m1_thr");
             material.SetFloat("_AlphaMaskMode", 1f);
@@ -889,9 +980,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", 0.5f);
             AssignAllWhiteMask(material, "c_m1_thr_mask");
 
-            // The threshold envelope saturate(r + 0.5) is a deferred
-            // contract; the refusal must name the additive term.
-            AssertAlphaGateUnknown(InterpretCutout(material), "_AlphaMaskValue");
+            // The threshold envelope saturate(r + 0.5) is decided by the
+            // map's endpoint rounding: the white mask's red is exactly one,
+            // so the replace term saturates to exactly one over the whole
+            // footprint and the corner triangle proves.
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]
@@ -994,7 +1091,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void AlphaMaskMode2_WithScaleNotOneWithAssignedMask_RefusesNamingScale()
+        public void AlphaMaskMode2_MappedSaturatingScale_ProvesTheCornerTriangle()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("c_m2_scale");
             material.SetFloat("_AlphaMaskMode", 2f);
@@ -1002,7 +1099,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetFloat("_AlphaMaskValue", 1f);
             AssignAllWhiteMask(material, "c_m2_scale_mask");
 
-            AssertAlphaGateUnknown(InterpretCutout(material), "_AlphaMaskScale");
+            // With value 1 every red in [0, 1] maps to a term at or above
+            // one, so the saturating scale proves without consulting a
+            // texel; the assertion still runs through the triangle
+            // classifier.
+            var resolution = ResolveThroughCutoutFrontend(
+                material, AllOpaqueChain(), AllOpaqueChain());
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void MappedMask_ValueAboveCutoff_ProvesCoveredTrianglesOpaque()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_mapped_ok");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0.5f);
+            material.SetFloat("_Cutoff", 0.5f);
+            AssignAllWhiteMask(material, "c_mapped_ok_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(material);
+            // Classified resolution: the assertion classifies a triangle.
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void MappedMask_HoleTriangles_StaysUnknownNotOpaque()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_mapped_hole");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", 0.5f);
+            material.SetFloat("_Cutoff", 0.5f);
+            AssignPartBlackMask(material, "c_mapped_hole_mask");
+
+            var resolution = ResolveThroughCutoutFrontend(material);
+            Assert.That(
+                resolution.Classify(TriangleOverBlackTexel()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void MappedMask_NonFiniteValue_KeepsRefusing()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_mapped_nan");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 1f);
+            material.SetFloat("_AlphaMaskValue", float.NaN);
+            AssignAllWhiteMask(material, "c_mapped_nan_mask");
+
+            AssertAlphaGateUnknown(InterpretCutout(material), "_AlphaMaskValue");
         }
 
         [Test]
