@@ -406,7 +406,10 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// one question: does the triangle's contributing domain contain a
         /// texel below byte 255? The field contract then bounds the filtered
         /// red to [0, 1) on a witness and exactly 1 without one, so the map
-        /// evaluated at the red bounds 0 and 1 decides the level. Erased
+        /// evaluated at the red bounds 0 and 1 decides the level. Mirror and
+        /// MirrorOnce wrap answer Unknown like the raw dispatcher: floor
+        /// division tiling names different texels than mirror reflection,
+        /// so the repeat walk cannot bound a mirror footprint. Erased
         /// texels always count as witnesses: their red is unknown in [0, 1),
         /// and the raw erasure-substitution policy is a statement about the
         /// raw witness verdict, not about a red value this proof reads.
@@ -476,15 +479,33 @@ namespace Alrauna.Amuse.Editor.Analysis
                     map,
                     HasMappedWitnessPointRepeat(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Bilinear ||
-                sampling.FilterMode == TextureFilterMode.Trilinear)
+            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
             {
-                var witness = sampling.WrapMode == TextureWrapMode.Clamp
-                    ? HasMappedWitnessBilinearClamp(
-                        triangle, texture, envelope)
-                    : HasMappedWitnessBilinearRepeat(
-                        triangle, texture, envelope);
-                return DecideMapped(map, witness);
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessBilinearClamp(triangle, texture, envelope));
+            }
+            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
+            {
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessBilinearRepeat(triangle, texture, envelope));
+            }
+            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
+                sampling.WrapMode == TextureWrapMode.Clamp)
+            {
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessBilinearClamp(triangle, texture, envelope));
+            }
+            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
+                sampling.WrapMode == TextureWrapMode.Repeat)
+            {
+                return DecideMapped(
+                    map,
+                    HasMappedWitnessBilinearRepeat(triangle, texture, envelope));
             }
 
             return TriangleAlphaOutcome.Unknown;

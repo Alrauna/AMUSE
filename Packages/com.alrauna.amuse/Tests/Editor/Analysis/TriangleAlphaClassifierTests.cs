@@ -1310,6 +1310,25 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
+        [Test]
+        public void ClassifyMapped_MirrorWrap_IsRefusedAtConstruction()
+        {
+            // Falsifier: Mirror wrap must not ride the repeat walk. FloorMod
+            // tiling names different texels than mirror reflection, so a
+            // repeat verdict is fabricated, not proven. Mirror has no name
+            // in the classifier's closed wrap vocabulary: value 2 is
+            // Unity's Mirror slot, and the sampling settings refuse it at
+            // the construction site. That refusal keeps bilinear Mirror
+            // from reaching any mapped walk today. The mapped dispatcher's
+            // four explicit filter and wrap gates keep any future
+            // vocabulary growth answering Unknown like the raw dispatcher.
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new AlphaSamplingSettings(
+                    TextureFilterMode.Bilinear,
+                    (TextureWrapMode)2,
+                    TextureAnisoMode.None));
+        }
+
         /// <summary>
         /// A staged texel pattern held in a mutable buffer: the production
         /// texture type is immutable, so witness fixtures mutate the buffer
