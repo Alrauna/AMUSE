@@ -117,20 +117,37 @@ namespace Alrauna.Amuse.Editor.Host
         internal UnityRendererAlphaSnapshot Snapshot { get; }
         internal UnityRendererMutationTarget MutationTarget { get; }
 
+        /// <summary>
+        /// The slot facts behind a mapping refusal: the submesh count the
+        /// mesh supports and the material slot count the refusal compared
+        /// it against. The report renders these exact numbers, so they
+        /// ride the refusal instead of a live re-read, which could
+        /// disagree with the decision. Minus one means not recorded.
+        /// </summary>
+        internal int MeshSubMeshCount { get; }
+        internal int MaterialSlotCount { get; }
+
         private UnityRendererAlphaExtraction(
             RendererAnalysisRefusal refusal,
             UnityRendererAlphaSnapshot snapshot,
-            UnityRendererMutationTarget mutationTarget)
+            UnityRendererMutationTarget mutationTarget,
+            int meshSubMeshCount,
+            int materialSlotCount)
         {
             Refusal = refusal;
             Snapshot = snapshot;
             MutationTarget = mutationTarget;
+            MeshSubMeshCount = meshSubMeshCount;
+            MaterialSlotCount = materialSlotCount;
         }
 
         internal static UnityRendererAlphaExtraction Refused(
-            RendererAnalysisRefusal refusal)
+            RendererAnalysisRefusal refusal,
+            int meshSubMeshCount = -1,
+            int materialSlotCount = -1)
         {
-            return new UnityRendererAlphaExtraction(refusal, null, null);
+            return new UnityRendererAlphaExtraction(
+                refusal, null, null, meshSubMeshCount, materialSlotCount);
         }
 
         internal static UnityRendererAlphaExtraction Accepted(
@@ -141,7 +158,9 @@ namespace Alrauna.Amuse.Editor.Host
                 RendererAnalysisRefusal.None,
                 snapshot ?? throw new ArgumentNullException(nameof(snapshot)),
                 mutationTarget ?? throw new ArgumentNullException(
-                    nameof(mutationTarget)));
+                    nameof(mutationTarget)),
+                -1,
+                -1);
         }
     }
 }
