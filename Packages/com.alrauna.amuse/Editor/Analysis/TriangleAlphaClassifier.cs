@@ -515,23 +515,42 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// The mapped three-way lattice on the map's endpoint envelope: a
         /// lower bound at exactly one proves the term one everywhere; an
         /// upper bound below one proves the term below one everywhere; the
-        /// rest is unknown.
+        /// rest is unknown. A witness spans the red interval, and both
+        /// orders are monotone in r with the direction set by the scale
+        /// sign, so the witness arm envelopes both endpoint evaluations
+        /// instead of assuming which endpoint holds the extreme. A
+        /// no-witness red is exactly one, a single point evaluation.
         /// </summary>
         private static TriangleAlphaOutcome DecideMapped(
             AffineAlphaMap map,
             bool witness)
         {
-            var lower = witness
-                ? map.Evaluate(0f).Lower
-                : map.Evaluate(1f).Lower;
-            var upper = map.Evaluate(1f).Upper;
-            if (lower == 1f)
+            if (witness)
             {
-                return TriangleAlphaOutcome.ProvenOpaque;
+                var atZero = map.Evaluate(0f);
+                var atOne = map.Evaluate(1f);
+                var lower = Math.Min(atZero.Lower, atOne.Lower);
+                var upper = Math.Max(atZero.Upper, atOne.Upper);
+                if (lower == 1f)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+                if (upper < 1f)
+                {
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
             }
-            if (upper < 1f)
+            else
             {
-                return TriangleAlphaOutcome.MustRemainTransparent;
+                var atOne = map.Evaluate(1f);
+                if (atOne.Lower == 1f)
+                {
+                    return TriangleAlphaOutcome.ProvenOpaque;
+                }
+                if (atOne.Upper < 1f)
+                {
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
             }
             return TriangleAlphaOutcome.Unknown;
         }

@@ -5,10 +5,11 @@ namespace Alrauna.Amuse.Editor.Semantics
 {
     /// <summary>
     /// The exact binary32 map <c>saturate(r * scale + value)</c>. Both
-    /// hardware evaluation orders are monotone nondecreasing in r, because
-    /// round-to-nearest-half-even and saturate are monotone, so the term
-    /// over any red interval is bounded by the evaluations at that
-    /// interval's endpoints. Every evaluation is carried out on exact
+    /// hardware evaluation orders are monotone in r, because
+    /// round-to-nearest-half-even and saturate are monotone; the direction
+    /// follows the scale sign. The term over any red interval is bounded
+    /// by the evaluations at that interval's endpoints, in both orders.
+    /// Every evaluation is carried out on exact
     /// BigInteger rationals and rounded once per hardware step to the
     /// binary32 grid at half-even; there are no ulp margins. This is the
     /// rounding argument the 2026-09-07 mask composition design deferred.

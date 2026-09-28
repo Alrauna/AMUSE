@@ -97,6 +97,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void Evaluate_OrdersDisagree_SpansBothRoundings()
+        {
+            // r = 1 + 2^-23, s = 1 + 2^-23, v = -(1 + 2^-22), each an
+            // exact binary32 value. The exact product is 1 + 2^-22 + 2^-46.
+            // Fused order: the sum with v is exactly 2^-46, already on the
+            // binary32 grid, so the one rounding keeps 2^-46. Unfused
+            // order: the product rounds to 1 + 2^-22, because its error
+            // 2^-46 sits far under the 2^-24 half ulp at that magnitude,
+            // and that sum with v is exactly 0. The envelope spans both:
+            // lower 0, upper 2^-46.
+            var map = AffineAlphaMap.FromBinary32(
+                1.00000012f, -1.00000024f);
+            var (lower, upper) = map.Evaluate(1.00000012f);
+            Assert.That(lower == 0f && upper == 1f / 70368744177664f, Is.True);
+        }
+
+        [Test]
         public void Factory_RejectsIdentityZeroScaleAndNonFinite()
         {
             Assert.Throws<ArgumentException>(

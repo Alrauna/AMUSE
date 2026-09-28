@@ -22,7 +22,7 @@ Unchanged from the 2026-09-07 design: `lil_common_frag.hlsl:469-473` in the atte
 
 The field contract attests, for every level of a chain, that every effective per-texel value lies in [0, 1], that byte 255 marks exactly the texels whose value is exactly 1, and that the sampled value is 1 exactly when every positive-weight contributing texel is 255. The mapped proof needs one more step: what does `saturate(r * s + v)` do to a sampled red `r` whose exact value the contract bounds but does not name?
 
-The answer is an envelope, computed exactly. Both binary32 evaluation orders are monotone nondecreasing in `r`, because round-to-nearest and saturate are monotone:
+The answer is an envelope, computed exactly. Both binary32 evaluation orders are monotone in `r`, because round-to-nearest and saturate are monotone; the direction follows the sign of `s`:
 
 - fused: `fl(r * s + v)`, one rounding of the exact rational `r·s + v`;
 - unfused: `fl(fl(r * s) + v)`, a rounding of the exact product followed by a rounding of the exact sum.
@@ -30,7 +30,7 @@ The answer is an envelope, computed exactly. Both binary32 evaluation orders are
 So the term over any red interval is bounded by the evaluations at that interval's endpoints, in both orders, with every operation carried out on exact BigInteger rationals and rounded once to the binary32 grid at half-even. No ulp margins, no inequalities: each endpoint evaluation is an exact computation of the two values the hardware could produce there, and monotonicity bounds everything between them. For a sampled red the contract gives exactly two interval shapes:
 
 - every contributing texel is 255, so the filtered red is exactly 1: the envelope is the evaluation at `r = 1`;
-- some contributing texel is below 255, so the filtered red lies in [0, 1): the envelope is [evaluation at `r = 0`, evaluation at `r = 1`], with the upper end a sound bound for an unattained supremum.
+- some contributing texel is below 255, so the filtered red lies in [0, 1): the envelope is the componentwise min and max of the evaluations at `r = 0` and `r = 1`; the evaluation at the open end is a sound bound for the unattained supremum or infimum.
 
 The factor outcome is then the existing three-way lattice on the envelope: the lower binary32 bound equal to exactly 1 proves the factor opaque at this level; the upper bound strictly below 1 proves the factor must remain transparent; anything else is Unknown. Saturate is exact at both clamps, so a real product at or above 1 yields the grid point 1 under either order, and the opaque test is no coarser than today's admitted `(1, v >= 1)` arm.
 
