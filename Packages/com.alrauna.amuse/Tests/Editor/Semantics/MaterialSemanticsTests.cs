@@ -309,6 +309,86 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void MappedTexture_RejectsDefaultMap()
+        {
+            var sample = Sample(
+                "mapped_default",
+                0,
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            Assert.Throws<ArgumentException>(
+                () => ScalarSemanticValue.MappedTexture(
+                    sample, TextureChannel.Red,
+                    default(AffineAlphaMap)));
+        }
+
+        [Test]
+        public void GetChainMap_RejectsOutOfRangeIndex_OnMaplessChain()
+        {
+            var first = Sample(
+                "chain_range_first",
+                0,
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            var second = Sample(
+                "chain_range_second",
+                0,
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            var plain = ScalarSemanticValue.ProductChain(
+                new[] { first, second },
+                new[] { TextureChannel.Alpha, TextureChannel.Red },
+                1f);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => plain.GetChainMap(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => plain.GetChainMap(2));
+        }
+
+        [Test]
+        public void ProductChain_EqualsComparesChainMaps()
+        {
+            var first = Sample(
+                "chain_equal_first",
+                0,
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            var second = Sample(
+                "chain_equal_second",
+                0,
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            var channels = new[] { TextureChannel.Alpha, TextureChannel.Red };
+            var map = AffineAlphaMap.FromBinary32(2f, 1f);
+
+            var mapped = ScalarSemanticValue.ProductChain(
+                new[] { first, second }, channels, 1f,
+                new AffineAlphaMap?[] { null, map });
+            var sameAgain = ScalarSemanticValue.ProductChain(
+                new[] { first, second }, channels, 1f,
+                new AffineAlphaMap?[] { null, map });
+            var flipped = ScalarSemanticValue.ProductChain(
+                new[] { first, second }, channels, 1f,
+                new AffineAlphaMap?[] { map, null });
+            var mapless = ScalarSemanticValue.ProductChain(
+                new[] { first, second }, channels, 1f);
+            var explicitIdentity = ScalarSemanticValue.ProductChain(
+                new[] { first, second }, channels, 1f,
+                new AffineAlphaMap?[] { null, null });
+
+            Assert.That(mapped.Equals(sameAgain), Is.True);
+            Assert.That(
+                mapped.GetHashCode(),
+                Is.EqualTo(sameAgain.GetHashCode()));
+            Assert.That(mapped.Equals(flipped), Is.False);
+            Assert.That(mapped.Equals(mapless), Is.False);
+            // A null array means all identity, so it equals an explicit
+            // all-null array under the carried chain-map ruling.
+            Assert.That(mapless.Equals(explicitIdentity), Is.True);
+        }
+
+        [Test]
         public void IndependentlyConstructedValuesCompareStructurally()
         {
             var first = ColorSemanticValue.TextureTimesConstant(

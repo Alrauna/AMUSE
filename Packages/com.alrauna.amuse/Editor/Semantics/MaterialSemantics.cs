@@ -818,6 +818,20 @@ namespace Alrauna.Amuse.Editor.Semantics
             return _chainMaps == null ? null : _chainMaps[index];
         }
 
+        /// <summary>
+        /// The chain map at one factor, with a null array meaning identity
+        /// at every index. Equality treats two absent arrays as equal and a
+        /// null entry as equal to another absent entry, per the carried
+        /// chain-map ruling. The factory pins a non-null array to the
+        /// sample count, so the index is in range whenever the samples are.
+        /// </summary>
+        private AffineAlphaMap? ChainMapOrNull(int index)
+        {
+            return _chainMaps == null
+                ? (AffineAlphaMap?)null
+                : _chainMaps[index];
+        }
+
         internal ScalarSemanticValue GetSumFirst()
         {
             RequireKind(ScalarSemanticValueKind.SaturatingSum);
@@ -919,7 +933,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     {
                         if (_chainSamples[index].Equals(
                                 other._chainSamples[index]) == false ||
-                            _chainChannels[index] != other._chainChannels[index])
+                            _chainChannels[index] != other._chainChannels[index] ||
+                            ChainMapOrNull(index).Equals(
+                                other.ChainMapOrNull(index)) == false)
                         {
                             return false;
                         }
@@ -965,6 +981,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                         {
                             hash = hash * 397 ^ _chainSamples[index].GetHashCode();
                             hash = hash * 397 ^ (int)_chainChannels[index];
+                            hash = hash * 397 ^
+                                (ChainMapOrNull(index) ?? default).GetHashCode();
                         }
                         return hash;
                     case ScalarSemanticValueKind.SaturatingSum:
