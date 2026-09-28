@@ -500,6 +500,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             TextureSample maskSample = null;
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
+            {
+                // The mapped emission lands with the cutout mirror of the
+                // transparent frontend. Until then the family keeps its
+                // closed refusal instead of silently dropping the term, and
+                // names the same property the shared interpretation named
+                // before the mapped arm existed.
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    maskTerm.Scale == 1f
+                        ? LilToonAlphaMaskTerm.ValueProperty
+                        : LilToonAlphaMaskTerm.ScaleProperty);
+            }
+
             if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample)
             {
                 // The mask borrows _MainTex's captured sampler facts. An
