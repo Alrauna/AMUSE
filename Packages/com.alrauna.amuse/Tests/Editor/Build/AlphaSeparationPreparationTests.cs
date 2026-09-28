@@ -2398,10 +2398,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // All-white RGBA doubles as an all-255 red mask channel.
                 var mask = fixtures.ImportFullyOpaqueMipmap(
                     "cutout_optional_paths_mask");
-                var cases = new (string Label, Action<Material> Configure)[]
+                // The mapped-mask threshold pairs resolve at alpha
+                // resolution since the mapped emission: over this all-white
+                // mask the term saturate(r * 1 + 0.5) is exactly one at
+                // every texel of every level, so both writer modes prove the
+                // arm's triangle exactly as opaque as the gate-off arm and
+                // each arm separates like the cutoff-at-bound control.
+                foreach (var threshold in new (string Label,
+                    Action<Material> Configure)[]
                 {
-                    ("_UseDither",
-                        material => material.SetFloat("_UseDither", 1f)),
                     ("_AlphaMaskMode=1 threshold",
                         material =>
                         {
@@ -2416,6 +2421,64 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             material.SetFloat("_AlphaMaskValue", 0.5f);
                             material.SetTexture("_AlphaMask", mask);
                         }),
+                })
+                {
+                    using var arm = CutoutArmFixture.Create(
+                        texture,
+                        "AMUSE cutout optional " + threshold.Label,
+                        threshold.Configure,
+                        null,
+                        null);
+                    var amuse = arm.Run();
+
+                    Assert.That(
+                        amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None),
+                        threshold.Label);
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        threshold.Label +
+                        ": the mapped threshold term over an all-white " +
+                        "mask is exactly one everywhere, so alpha " +
+                        "resolution admits the arm");
+                    Assert.That(
+                        amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        threshold.Label +
+                        ": the saturating term leaves the triangle an " +
+                        "opaque candidate");
+                    foreach (AlphaSeparationSlotRefusal reason in Enum
+                                 .GetValues(
+                                     typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            threshold.Label + ": the slot must prepare: " +
+                            reason);
+                    }
+
+                    Assert.That(
+                        amuse.Separation,
+                        Is.Not.Null,
+                        threshold.Label);
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(arm.Material, out _),
+                        Is.True,
+                        threshold.Label +
+                        ": the arm must convert and carry the opaque " +
+                        "mapping");
+                }
+
+                var cases = new (string Label, Action<Material> Configure)[]
+                {
+                    ("_UseDither",
+                        material => material.SetFloat("_UseDither", 1f)),
                     ("_AlphaMaskMode=3",
                         material => material.SetFloat("_AlphaMaskMode", 3f)),
                     ("_AlphaMaskMode=4",
