@@ -59,9 +59,8 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.renderer.UnprovenMaterialSlotMapping"] =
                 "This renderer's material slots do not match its mesh.",
             ["amuse.renderer.UnprovenMaterialSlotMapping:description"] =
-                "The mesh has a different number of parts than the " +
-                "renderer has material slots. AMUSE only works when the " +
-                "numbers match.",
+                "The mesh supports {0}. The renderer has {1}. AMUSE " +
+                "only works when the numbers match.",
             ["amuse.renderer.UnprovenMaterialSlotMapping:hint"] =
                 "Make the number of material slots equal the number of " +
                 "mesh parts.",

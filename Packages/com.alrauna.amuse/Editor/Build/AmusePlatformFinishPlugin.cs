@@ -558,11 +558,17 @@ namespace Alrauna.Amuse.Editor.Build
                          .GetComponentsInChildren<Renderer>(true))
             {
                 var refusal = UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
-                    renderer);
+                    renderer,
+                    out var structuralMeshSubMeshCount,
+                    out var structuralMaterialSlotCount);
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     state.RecordRendererRefusal(refusal);
-                    AmuseReports.RendererRefusal(renderer, refusal);
+                    AmuseReports.RendererRefusal(
+                        renderer,
+                        refusal,
+                        structuralMeshSubMeshCount,
+                        structuralMaterialSlotCount);
                     continue;
                 }
 
@@ -687,11 +693,15 @@ namespace Alrauna.Amuse.Editor.Build
                         resolved.SlotResults[slotIndex].UnknownReason);
                 }
                 var opaqueCandidateTriangleCount = 0;
+                var extractionMeshSubMeshCount = -1;
+                var extractionMaterialSlotCount = -1;
                 if (refusal == RendererAnalysisRefusal.None)
                 {
                     var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
                         renderer, resolved.CurrentMaterials);
                     refusal = extraction.Refusal;
+                    extractionMeshSubMeshCount = extraction.MeshSubMeshCount;
+                    extractionMaterialSlotCount = extraction.MaterialSlotCount;
                     if (refusal == RendererAnalysisRefusal.None)
                     {
                         var plan = ClassifyRuntimeStates(
@@ -746,7 +756,11 @@ namespace Alrauna.Amuse.Editor.Build
                     // exception here is an implementation defect and must reach
                     // NDMF as a build-blocking internal failure.
                     state.RecordRendererRefusal(refusal);
-                    AmuseReports.RendererRefusal(renderer, refusal);
+                    AmuseReports.RendererRefusal(
+                        renderer,
+                        refusal,
+                        extractionMeshSubMeshCount,
+                        extractionMaterialSlotCount);
                     continue;
                 }
 
