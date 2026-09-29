@@ -308,6 +308,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void DeclinedConsentReportsTheDeclinedEntryExactlyOnce()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE consent declined report fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(unityVersion: "2022.3.23f1"),
+                        subjects => false));
+
+                var declinedEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.consent.Declined")
+                    {
+                        declinedEntries++;
+                    }
+                }
+
+                Assert.That(declinedEntries, Is.EqualTo(1),
+                    "one consent decline is one console entry, never two");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void GrantedConsentLetsThePipelineRun()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);

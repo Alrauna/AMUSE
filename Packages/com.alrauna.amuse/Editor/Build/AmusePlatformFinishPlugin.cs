@@ -451,10 +451,6 @@ namespace Alrauna.Amuse.Editor.Build
                     consentPresenter ?? VersionConsentDialog.Present))
             {
                 state.ConsentDeclined = true;
-                ErrorReport.ReportError(
-                    AmuseReports.Localizer,
-                    ErrorSeverity.Information,
-                    "amuse.consent.Declined");
                 AmuseReports.ConsentDeclined(subjects);
                 return;
             }
