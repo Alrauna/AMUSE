@@ -127,25 +127,29 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonOpaqueConversionFactors
     {
-        // Unity blend enums: Zero=0, One=1, SrcAlpha=5, OneMinusSrcAlpha=10;
-        // UnityEngine.Rendering.BlendOp: Add=0, Max=4.
-        internal const float BlendOpAdd = 0f;
-        internal const float BlendOpMax = 4f;
-        internal const float BlendFactorZero = 0f;
-        internal const float BlendFactorOne = 1f;
-        internal const float BlendFactorSrcAlpha = 5f;
-        internal const float BlendFactorOneMinusSrcAlpha = 10f;
+        internal const float BlendOpAdd =
+            (float)UnityEngine.Rendering.BlendOp.Add;
+        internal const float BlendOpMax =
+            (float)UnityEngine.Rendering.BlendOp.Max;
+        internal const float BlendFactorZero =
+            (float)UnityEngine.Rendering.BlendMode.Zero;
+        internal const float BlendFactorOne =
+            (float)UnityEngine.Rendering.BlendMode.One;
+        internal const float BlendFactorSrcAlpha =
+            (float)UnityEngine.Rendering.BlendMode.SrcAlpha;
+        internal const float BlendFactorOneMinusSrcAlpha =
+            (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha;
 
-        // UnityEngine.Rendering.CompareFunction.LessEqual
-        internal const float LEqualDepthComparison = 4f;
+        internal const float LEqualDepthComparison =
+            (float)UnityEngine.Rendering.CompareFunction.LessEqual;
 
-        // UnityEngine.Rendering.CompareFunction.Less
-        internal const float LessDepthComparison = 2f;
+        internal const float LessDepthComparison =
+            (float)UnityEngine.Rendering.CompareFunction.Less;
 
-        // UnityEngine.Rendering.ColorWriteMask.All
-        internal const float ColorMaskAll = 15f;
+        internal const float ColorMaskAll =
+            (float)UnityEngine.Rendering.ColorWriteMask.All;
 
-        // UnityEngine.Rendering.DepthWrite.On
+        // The Unity 2022.3 profile lacks UnityEngine.Rendering.DepthWrite (checked 2026-09-29). Revisit this literal on a Unity upgrade.
         internal const float DepthWriteOn = 1f;
 
         /// <summary>One and SrcAlpha both evaluate to 1 at alpha 1.</summary>

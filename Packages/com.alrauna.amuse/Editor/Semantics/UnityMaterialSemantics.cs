@@ -169,31 +169,24 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             var families = new CapturedAlphaMaterialFamily[materials.Count];
-            var shaders = new Shader[materials.Count];
-            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var requests = new MaterialEvidenceRequest[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
                 var material = materials[index];
                 var request = EmptyEvidenceRequest;
                 if (material != null && material.shader != null)
                 {
-                    shaders[index] = material.shader;
                     var classified = ClassifyShaderName(
                         material.shader.name);
                     families[index] = classified.family;
                     request = classified.alpha ?? EmptyEvidenceRequest;
                 }
 
-                inputs[index] = new MaterialEvidenceCaptureInput(
-                    material,
-                    request,
-                    AlphaPredicateRequestFor(material, families[index]));
+                requests[index] = request;
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
-            return BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence,
-                resolveRegisteredSource);
+            return CaptureBatch(
+                materials, families, requests, null, resolveRegisteredSource);
         }
 
         /// <summary>
@@ -252,24 +245,14 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "Material and family counts must match.", nameof(families));
             }
 
-            var shaders = new Shader[materials.Count];
-            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var requests = new MaterialEvidenceRequest[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
-                shaders[index] = materials[index] == null
-                    ? null
-                    : materials[index].shader;
-                inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index],
-                    request,
-                    AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                requests[index] = request;
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(
-                inputs, bounds);
-            var result = BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence,
+            var result = CaptureBatch(
+                materials, families, requests, bounds,
                 resolveRegisteredSource);
             foreach (var material in result)
             {
@@ -313,24 +296,14 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "Material and family counts must match.", nameof(families));
             }
 
-            var shaders = new Shader[materials.Count];
-            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var requests = new MaterialEvidenceRequest[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
-                shaders[index] = materials[index] == null
-                    ? null
-                    : materials[index].shader;
-                inputs[index] = new MaterialEvidenceCaptureInput(
-                    materials[index],
-                    request,
-                    AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                requests[index] = request;
             }
 
-            var evidence = UnityMaterialEvidenceCapture.Capture(
-                inputs, bounds);
-            var result = BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence,
+            var result = CaptureBatch(
+                materials, families, requests, bounds,
                 resolveRegisteredSource);
             for (var index = 0; index < result.Count; index++)
             {
@@ -339,7 +312,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                     continue;
                 }
 
-                var shaderName = shaders[index] == null ? null : shaders[index].name;
+                var shader = materials[index] == null
+                    ? null
+                    : materials[index].shader;
+                var shaderName = shader == null ? null : shader.name;
                 if (shaderName == null
                     || !System.Linq.Enumerable.Contains(
                         grantedShaderNames, shaderName))
@@ -354,85 +330,57 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
+        /// The shared capture middle of the three capture entries: one
+        /// shader array, one input array built with
+        /// <see cref="AlphaPredicateRequestFor"/>, one evidence capture,
+        /// and one captured-batch build. A null bounds selects the
+        /// no-bounds capture overload, which keeps the inert bounds. The
+        /// entries keep their own guards, their own request and family
+        /// construction, and their own attestation loops.
+        /// </summary>
+        private static IReadOnlyList<CapturedAlphaMaterial> CaptureBatch(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            IReadOnlyList<MaterialEvidenceRequest> requests,
+            AlphaPolicyBounds? bounds,
+            RegisteredSourceLookup resolveRegisteredSource)
+        {
+            var shaders = new Shader[materials.Count];
+            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            for (var index = 0; index < materials.Count; index++)
+            {
+                shaders[index] = materials[index] == null
+                    ? null
+                    : materials[index].shader;
+                inputs[index] = new MaterialEvidenceCaptureInput(
+                    materials[index],
+                    requests[index],
+                    AlphaPredicateRequestFor(
+                        materials[index], families[index]));
+            }
+
+            var evidence = bounds == null
+                ? UnityMaterialEvidenceCapture.Capture(inputs)
+                : UnityMaterialEvidenceCapture.Capture(
+                    inputs, bounds.Value);
+            return BuildCapturedAlphaMaterials(
+                materials, families, shaders, evidence,
+                resolveRegisteredSource);
+        }
+
+        /// <summary>
         /// The transferred resolver: the mirror of
         /// <see cref="AnalyzeAlphaMaterial"/> without identity verification.
         /// Only materials the granted capture admitted reach this path; a
         /// missing family-specific evidence still answers all-Unknown, which
-        /// keeps the fail-closed direction inside the transferred mode.
+        /// keeps the fail-closed direction inside the transferred mode. The
+        /// verification gate is skipped by the parameter, not by a second
+        /// switch.
         /// </summary>
         internal static CapturedAlphaSemantics AnalyzeAlphaMaterialTransferred(
             CapturedAlphaMaterial captured)
         {
-            if (captured == null)
-            {
-                throw new ArgumentNullException(nameof(captured));
-            }
-
-            SemanticOutput<ScalarSemanticValue> alpha;
-            AlphaUnknownReason unknownReason;
-            switch (captured.Family)
-            {
-                case CapturedAlphaMaterialFamily.Poiyomi:
-                    // PoiyomiSourceEvidence is a struct: the gather always
-                    // produced one. The consent covers the identity risk.
-                    alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence, out unknownReason);
-                    break;
-                case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    // The same struct guarantee holds, and the consent
-                    // covers the identity risk for both Poiyomi identities.
-                    alpha = PoiyomiMaterialSemantics
-                        .InterpretVerifiedTwoPassAlpha(
-                            captured.Evidence, out unknownReason);
-                    break;
-                case CapturedAlphaMaterialFamily.LilToon:
-                    if (captured.LilToonEvidence == null)
-                    {
-                        return UnknownWithShaderReason(
-                            AlphaUnknownKind.UnattestedShader,
-                            captured.ShaderName);
-                    }
-
-                    alpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                        captured.Evidence, out unknownReason);
-                    break;
-                case CapturedAlphaMaterialFamily.LilToonCutout:
-                    if (captured.LilToonEvidence == null)
-                    {
-                        return UnknownWithShaderReason(
-                            AlphaUnknownKind.UnattestedShader,
-                            captured.ShaderName);
-                    }
-
-                    alpha = LilToonCutoutMaterialSemantics
-                        .InterpretVerifiedCutoutAlpha(
-                            captured.Evidence, out unknownReason);
-                    break;
-                case CapturedAlphaMaterialFamily.LilToonTransparent:
-                    if (captured.LilToonEvidence == null)
-                    {
-                        return UnknownWithShaderReason(
-                            AlphaUnknownKind.UnattestedShader,
-                            captured.ShaderName);
-                    }
-
-                    alpha = LilToonTransparentMaterialSemantics
-                        .InterpretVerifiedTransparentAlpha(
-                            captured.Evidence, out unknownReason);
-                    break;
-                default:
-                    return UnknownWithShaderReason(
-                        AlphaUnknownKind.UnsupportedShader,
-                        captured.ShaderName);
-            }
-
-            return new CapturedAlphaSemantics(
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
-                unknownReason);
+            return AnalyzeAlphaMaterialCore(captured, false);
         }
 
         /// <summary>
@@ -839,8 +787,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
-        internal static CapturedAlphaSemantics AnalyzeAlphaMaterial(
-            CapturedAlphaMaterial captured)
+        private static CapturedAlphaSemantics AnalyzeAlphaMaterialCore(
+            CapturedAlphaMaterial captured,
+            bool verifyIdentity)
         {
             if (captured == null)
             {
@@ -852,7 +801,10 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    // PoiyomiSourceEvidence is a struct: the gather always
+                    // produced one. The consent covers the identity risk.
+                    if (verifyIdentity &&
+                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(
@@ -864,7 +816,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                         captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    // The same struct guarantee holds, and the consent
+                    // covers the identity risk for both Poiyomi identities.
+                    if (verifyIdentity &&
+                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(
@@ -878,8 +833,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null ||
-                        !LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                            captured.LilToonEvidence, out _))
+                        (verifyIdentity && !LilToonSourceAttestation
+                            .TryVerifyLilToonIdentity(
+                                captured.LilToonEvidence, out _)))
                     {
                         return UnknownWithShaderReason(
                             AlphaUnknownKind.UnattestedShader,
@@ -891,9 +847,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     break;
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     if (captured.LilToonEvidence == null ||
-                        !LilToonSourceAttestation
+                        (verifyIdentity && !LilToonSourceAttestation
                             .TryVerifyLilToonCutoutIdentity(
-                                captured.LilToonEvidence, out _))
+                                captured.LilToonEvidence, out _)))
                     {
                         return UnknownWithShaderReason(
                             AlphaUnknownKind.UnattestedShader,
@@ -906,9 +862,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                     break;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     if (captured.LilToonEvidence == null ||
-                        !LilToonSourceAttestation
+                        (verifyIdentity && !LilToonSourceAttestation
                             .TryVerifyLilToonTransparentIdentity(
-                                captured.LilToonEvidence, out _))
+                                captured.LilToonEvidence, out _)))
                     {
                         return UnknownWithShaderReason(
                             AlphaUnknownKind.UnattestedShader,
@@ -932,6 +888,12 @@ namespace Alrauna.Amuse.Editor.Semantics
                     SemanticOutput<ColorSemanticValue>.Unknown(),
                     SemanticOutput<NormalSemanticValue>.Unknown()),
                 unknownReason);
+        }
+
+        internal static CapturedAlphaSemantics AnalyzeAlphaMaterial(
+            CapturedAlphaMaterial captured)
+        {
+            return AnalyzeAlphaMaterialCore(captured, true);
         }
 
         /// <summary>

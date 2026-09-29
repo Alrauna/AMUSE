@@ -294,16 +294,12 @@ namespace Alrauna.Amuse.Editor.Build
         internal PreparedSlotSeparation(
             SubmeshSeparationPlan plan,
             IReadOnlyDictionary<Material, Material> opaqueOfAdmitted,
-            IReadOnlyDictionary<Material, CapturedAlphaMaterialFamily>
-                familyOfAdmitted,
             bool depthTestDivergence,
             bool premultiplyNormalization)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
             OpaqueOfAdmitted = opaqueOfAdmitted
                 ?? throw new ArgumentNullException(nameof(opaqueOfAdmitted));
-            FamilyOfAdmitted = familyOfAdmitted
-                ?? throw new ArgumentNullException(nameof(familyOfAdmitted));
             DepthTestDivergence = depthTestDivergence;
             PremultiplyNormalization = premultiplyNormalization;
         }
@@ -334,19 +330,6 @@ namespace Alrauna.Amuse.Editor.Build
         /// <see cref="PreparedAlphaSeparation"/> documents.
         /// </summary>
         internal IReadOnlyDictionary<Material, Material> OpaqueOfAdmitted { get; }
-
-        /// <summary>
-        /// This slot's admitted source materials mapped to the shader family
-        /// the capture recorded for each, keyed by exactly the sources of
-        /// <see cref="OpaqueOfAdmitted"/>: both maps are populated from the
-        /// same successfully mapped admitted set. The transient unlock
-        /// window close reads it to tell which mapped outputs are generated
-        /// Poiyomi materials a play-mode build must re-lock. Uses the
-        /// default comparer for the reason
-        /// <see cref="PreparedAlphaSeparation"/> documents.
-        /// </summary>
-        internal IReadOnlyDictionary<Material, CapturedAlphaMaterialFamily>
-            FamilyOfAdmitted { get; }
     }
 
     /// <summary>
