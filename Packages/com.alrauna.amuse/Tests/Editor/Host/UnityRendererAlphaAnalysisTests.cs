@@ -316,6 +316,75 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void MappingRefusalExtractionCarriesBothSlotCounts()
+        {
+            var renderer = NewSkinned(TwoSubmeshMesh(), NewMaterial());
+
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(
+                    RendererAnalysisRefusal.UnprovenMaterialSlotMapping));
+            // Falsifier: an extraction that records one count but not
+            // the other, or the two in swapped order, renders a report
+            // that names the wrong side.
+            Assert.That(extraction.MeshSubMeshCount, Is.EqualTo(2));
+            Assert.That(extraction.MaterialSlotCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void SurplusSlotRefusalExtractionCarriesBothSlotCounts()
+        {
+            var renderer = NewSkinned(
+                Quad(), NewMaterial(), NewMaterial());
+
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(
+                    RendererAnalysisRefusal.UnprovenMaterialSlotMapping));
+            Assert.That(extraction.MeshSubMeshCount, Is.EqualTo(1));
+            Assert.That(extraction.MaterialSlotCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void HostRefusalOverloadReportsBothSlotCounts()
+        {
+            var renderer = NewSkinned(TwoSubmeshMesh(), NewMaterial());
+
+            var refusal = UnityRendererAlphaAnalysis
+                .HostStructuralRefusalFor(
+                    renderer,
+                    out var meshSubMeshCount,
+                    out var materialSlotCount);
+
+            Assert.That(
+                refusal,
+                Is.EqualTo(
+                    RendererAnalysisRefusal.UnprovenMaterialSlotMapping));
+            Assert.That(meshSubMeshCount, Is.EqualTo(2));
+            Assert.That(materialSlotCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void NonMappingExtractionLeavesSlotCountsUnrecorded()
+        {
+            var renderer = NewSkinned(null, NewMaterial());
+
+            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.MissingMesh));
+            // Guard: a refusal that is not about the slot mapping must
+            // not grow counts it never used.
+            Assert.That(extraction.MeshSubMeshCount, Is.EqualTo(-1));
+            Assert.That(extraction.MaterialSlotCount, Is.EqualTo(-1));
+        }
+
+        [Test]
         public void NonTriangleTopologyRefusesTheWholeRenderer()
         {
             var renderer = NewSkinned(Quad(MeshTopology.Quads), NewMaterial());

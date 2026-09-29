@@ -39,6 +39,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void MappingRefusalDescriptionFormatsBothSlotCounts()
+        {
+            var description = string.Format(
+                AmuseReportStrings.Get(
+                    "amuse.renderer.UnprovenMaterialSlotMapping:description"),
+                "3 material slots",
+                "1 material slot");
+
+            // Falsifier: an implementation that rewords the sentences
+            // without placeholders renders the old text, states no
+            // count, and leaves the reader unable to tell which side
+            // is wrong.
+            Assert.That(
+                description, Does.Contain("mesh supports 3 material slots"));
+            Assert.That(
+                description, Does.Contain("renderer has 1 material slot"));
+        }
+
+        [Test]
         public void EveryHostRefusalCauseHasPlainEnglishStrings()
         {
             foreach (HostLifecycleRefusal cause in

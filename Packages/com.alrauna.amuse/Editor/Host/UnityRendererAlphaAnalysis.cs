@@ -309,15 +309,32 @@ namespace Alrauna.Amuse.Editor.Host
         internal static RendererAnalysisRefusal HostStructuralRefusalFor(
             Renderer renderer)
         {
+            return HostStructuralRefusalFor(renderer, out _, out _);
+        }
+
+        /// <summary>
+        /// The same host facts, plus the two slot counts a mapping
+        /// refusal report must carry. The counts stay minus one unless
+        /// the mapping check itself ran, so a report never shows a count
+        /// that no decision used.
+        /// </summary>
+        internal static RendererAnalysisRefusal HostStructuralRefusalFor(
+            Renderer renderer,
+            out int meshSubMeshCount,
+            out int materialSlotCount)
+        {
             var refusal = HostStructuralRefusalFor(renderer, out var mesh);
+            meshSubMeshCount = -1;
+            materialSlotCount = -1;
             if (refusal != RendererAnalysisRefusal.None)
             {
                 return refusal;
             }
 
+            meshSubMeshCount = mesh.subMeshCount;
             var materials = renderer.sharedMaterials;
-            return MaterialSlotMappingRefusalFor(
-                mesh, materials == null ? -1 : materials.Length);
+            materialSlotCount = materials == null ? -1 : materials.Length;
+            return MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
         }
 
         private static UnityRendererAlphaExtraction Capture(
@@ -358,7 +375,8 @@ namespace Alrauna.Amuse.Editor.Host
 
             structural = MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
             if (structural != RendererAnalysisRefusal.None)
-                return UnityRendererAlphaExtraction.Refused(structural);
+                return UnityRendererAlphaExtraction.Refused(
+                    structural, mesh.subMeshCount, materialSlotCount);
 
             for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
             {
