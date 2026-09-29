@@ -384,6 +384,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             return comparison < 0 ? exponent - 1 : exponent;
         }
 
+        // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
         private static int BitLength(BigInteger value)
         {
             var length = 0;

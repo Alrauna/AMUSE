@@ -407,19 +407,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 premultiplied);
         }
 
-        // Unity blend enum: Zero=0, One=1, DstColor=2, SrcColor=3,
-        // OneMinusDstColor=4, SrcAlpha=5, DstAlpha=7, OneMinusSrcAlpha=10.
-        private const float BlendOpAdd = 0f;
-        private const float BlendFactorZero = 0f;
-        private const float BlendFactorOne = 1f;
-        private const float BlendFactorSrcAlpha = 5f;
-        private const float BlendFactorOneMinusSrcAlpha = 10f;
+        private const float BlendOpAdd =
+            (float)UnityEngine.Rendering.BlendOp.Add;
+        private const float BlendFactorZero =
+            (float)UnityEngine.Rendering.BlendMode.Zero;
+        private const float BlendFactorOne =
+            (float)UnityEngine.Rendering.BlendMode.One;
+        private const float BlendFactorSrcAlpha =
+            (float)UnityEngine.Rendering.BlendMode.SrcAlpha;
+        private const float BlendFactorOneMinusSrcAlpha =
+            (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha;
 
-        // UnityEngine.Rendering.CompareFunction.LessEqual
-        private const float LEqualDepthComparison = 4f;
+        private const float LEqualDepthComparison =
+            (float)UnityEngine.Rendering.CompareFunction.LessEqual;
 
-        // UnityEngine.Rendering.CompareFunction.Less
-        private const float LessDepthComparison = 2f;
+        private const float LessDepthComparison =
+            (float)UnityEngine.Rendering.CompareFunction.Less;
 
         /// <summary>One and SrcAlpha both evaluate to 1 at alpha 1.</summary>
         private static bool IsUnitSourceFactorAtAlphaOne(float factor)
