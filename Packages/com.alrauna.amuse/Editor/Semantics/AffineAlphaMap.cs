@@ -140,6 +140,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
+        // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
         /// <summary>Counts the significant bits of a non-negative value.</summary>
         private static int BitLength(BigInteger value)
         {
