@@ -1330,6 +1330,65 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AvatarAnimationRefusalReportsExactlyOneEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE avatar refusal count fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var controller = new AnimatorController { name = "unallowlisted" };
+            var fixture = default(AnalyzableRendererFixture);
+
+            try
+            {
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+                fixture = AddAnalyzableRenderer(root);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context, SupportedFacts()));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "fixture precondition: the unallowlisted behaviour must " +
+                    "refuse the avatar");
+
+                var avatarEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey.StartsWith("amuse.avatar."))
+                    {
+                        avatarEntries++;
+                    }
+                }
+
+                Assert.That(avatarEntries, Is.EqualTo(1),
+                    "one avatar refusal is one console entry, never two");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
         public void BehaviourFreeCommittedGraphIsNotRefused()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
