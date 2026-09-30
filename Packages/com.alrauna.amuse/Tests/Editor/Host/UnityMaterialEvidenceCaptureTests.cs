@@ -594,6 +594,42 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(evidence.TryGetScalar("_Cutoff", out _), Is.False);
         }
 
+        // --- Falsifier: a capture that ignores keyword state leaves the Multi mode gate blind. ---
+        [Test]
+        public void CaptureExposesMaterialKeywordsOnlyWhenTheRequestAsksForThem()
+        {
+            // Multi containers carry render mode as keyword state on one
+            // shader asset: UNITY_UI_CLIP_RECT reads as transparent mode,
+            // _COLOROVERLAY_ON as the alpha-mask feature. A regular-family
+            // request reused unchanged captures none of that, so the Multi
+            // mode gate would be blind. The keyword set enters the evidence
+            // only under an explicit request flag, keeping the
+            // closed-request rule: nothing outside the request is captured.
+            //
+            // Keyword-state isolation: the string keyword set lives on the
+            // material, not on the shared shader asset, and this test's
+            // material is created here and destroyed in TearDown, so no
+            // sibling test observes these keywords.
+            var material = NewMaterial(LilToonFixtureShader);
+            material.shaderKeywords = new[]
+            {
+                "_COLOROVERLAY_ON",
+                "UNITY_UI_CLIP_RECT",
+            };
+
+            var requested = Capture(material, Request(captureKeywords: true));
+            var unrequested = Capture(material, Request());
+
+            Assert.That(
+                requested.Keywords,
+                Is.EqualTo(new[] { "UNITY_UI_CLIP_RECT", "_COLOROVERLAY_ON" }),
+                "the enabled keyword set must be captured complete and sorted");
+            Assert.That(
+                unrequested.Keywords,
+                Is.Empty,
+                "the request is closed: no flag, no keyword facts");
+        }
+
         [Test]
         public void PerMaterialRequestsShareStableTextureEvidenceAndRemainImmutable()
         {
@@ -1029,7 +1065,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             IEnumerable<string> scalars = null,
             IEnumerable<string> colors = null,
             IEnumerable<string> vectors = null,
-            IEnumerable<TexturePropertyEvidenceRequest> textures = null)
+            IEnumerable<TexturePropertyEvidenceRequest> textures = null,
+            bool captureKeywords = false)
         {
             return new MaterialEvidenceRequest(
                 shaderName,
@@ -1038,7 +1075,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 scalars ?? Array.Empty<string>(),
                 colors ?? Array.Empty<string>(),
                 vectors ?? Array.Empty<string>(),
-                textures ?? Array.Empty<TexturePropertyEvidenceRequest>());
+                textures ?? Array.Empty<TexturePropertyEvidenceRequest>(),
+                captureKeywords: captureKeywords);
         }
 
         private static bool Requests(
