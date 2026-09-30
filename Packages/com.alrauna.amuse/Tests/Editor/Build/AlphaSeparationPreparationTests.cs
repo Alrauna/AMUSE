@@ -975,6 +975,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the folded entry names the refused channel");
                 Assert.That(slotEntries[0], Does.Contain("UnavailableCapture"),
                     "the folded entry names the capture reason");
+                Assert.That(slotEntries[0], Does.Contain("no source identity"),
+                    "the class-one texture is an in-memory replacement, so " +
+                    "the folded entry must carry the identity fact");
                 Assert.That(textureEntries, Is.Zero,
                     "a refused slot's texture facts ride the slot entry, " +
                     "so no standalone texture entry repeats them");

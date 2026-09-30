@@ -391,7 +391,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "you which rule stopped the proof for this slot.",
             ["amuse.slotAnalysis.CaptureRefused"] =
                 "Texture property {0} (channel {1}) could not be captured. " +
-                "Reason: {2}. The proof for this slot has no texture data.",
+                "Reason: {2}. The texture {3}, so the proof for this slot " +
+                "has no texture data.",
 
             // --- Slot-scoped separation refusals ---
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =
