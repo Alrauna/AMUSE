@@ -33,6 +33,8 @@ Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.
 
 One material on several slots prints one report line per slot. The repetition is deliberate, so a manual test can read the full list.
 
+When a slot's refusal comes from a texture the route could not read, the slot's single line names the texture property, the channel, and the reason. A texture line on its own means the slot kept its proof and the line is a diagnostic only.
+
 NDMF may print "changed outside of NDMF animator services; cloning a second time" between AMUSE pass lines. Those lines are NDMF re-cloning controllers that an upstream tool changed. They are not AMUSE failures, and AMUSE reads the re-cloned state, so its evidence stays current.
 
 The last build status shows in every AMUSE Avatar Optimizer inspector in the editor session. It describes the session's most recent AMUSE build, and the text names the build path.

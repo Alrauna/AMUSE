@@ -53,6 +53,64 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void SlotAnalysisRefusalEmbedsCaptureRefusalFacts()
+        {
+            var refusal = new TextureCaptureRefusal(
+                "_MainTex",
+                false,
+                default,
+                TextureChannel.Alpha,
+                TextureCaptureRefusalReason.UnavailableCapture);
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotAnalysisRefusal(
+                    _renderer,
+                    3,
+                    RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton,
+                    captureRefusals: new[] { refusal }));
+
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("_MainTex"));
+            Assert.That(message, Does.Contain("Alpha"));
+            Assert.That(message, Does.Contain("UnavailableCapture"));
+            Assert.That(message, Does.Contain("no source identity"));
+        }
+
+        [Test]
+        public void SlotAnalysisRefusalEmbedsEveryCaptureRefusal()
+        {
+            var alpha = new TextureCaptureRefusal(
+                "_MainTex",
+                false,
+                default,
+                TextureChannel.Alpha,
+                TextureCaptureRefusalReason.UnavailableCapture);
+            var red = new TextureCaptureRefusal(
+                "_MaskTex",
+                true,
+                default,
+                TextureChannel.Red,
+                TextureCaptureRefusalReason.NonResidentMips);
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotAnalysisRefusal(
+                    _renderer,
+                    1,
+                    RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton,
+                    captureRefusals: new[] { alpha, red }));
+
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("_MainTex"));
+            Assert.That(message, Does.Contain("UnavailableCapture"));
+            Assert.That(message, Does.Contain("no source identity"));
+            Assert.That(message, Does.Contain("has a source identity"),
+                "a fold that hardcodes one identity side loses facts");
+            Assert.That(message, Does.Contain("_MaskTex"),
+                "a fold that keeps only the first refusal loses facts");
+            Assert.That(message, Does.Contain("NonResidentMips"));
+        }
+
+        [Test]
         public void SlotSeparationRefusalReportsSlotIndexAndCause()
         {
             var errors = ErrorReport.CaptureErrors(() =>
