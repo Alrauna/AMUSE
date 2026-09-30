@@ -98,7 +98,10 @@ namespace Alrauna.Amuse.Editor.Build
                         "amuse.slotAnalysis.CaptureRefused"),
                     refusal.PropertyName,
                     refusal.Channel.ToString(),
-                    refusal.Reason.ToString()));
+                    refusal.Reason.ToString(),
+                    refusal.HasSourceIdentity
+                        ? "has a source identity"
+                        : "has no source identity"));
             }
 
             return string.Join(" ", sentences);

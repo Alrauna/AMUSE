@@ -73,6 +73,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(message, Does.Contain("_MainTex"));
             Assert.That(message, Does.Contain("Alpha"));
             Assert.That(message, Does.Contain("UnavailableCapture"));
+            Assert.That(message, Does.Contain("no source identity"));
         }
 
         [Test]
@@ -101,6 +102,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var message = errors[0].TheError.ToMessage();
             Assert.That(message, Does.Contain("_MainTex"));
             Assert.That(message, Does.Contain("UnavailableCapture"));
+            Assert.That(message, Does.Contain("no source identity"));
+            Assert.That(message, Does.Contain("has a source identity"),
+                "a fold that hardcodes one identity side loses facts");
             Assert.That(message, Does.Contain("_MaskTex"),
                 "a fold that keeps only the first refusal loses facts");
             Assert.That(message, Does.Contain("NonResidentMips"));
