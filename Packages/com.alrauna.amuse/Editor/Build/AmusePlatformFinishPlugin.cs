@@ -666,10 +666,17 @@ namespace Alrauna.Amuse.Editor.Build
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
+                var slots = MaterialSlotsFor(
+                    evidence, rendererPath, rendererTypeName);
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
                 // refusal names the renderer: one line per slot, no
                 // aggregation, so a manual test can read the full list.
+                // The slot entry folds the slot's texture capture facts,
+                // so one refused slot is one console entry. The slots and
+                // the slot results come from one MaterialSlotsFor call on
+                // one evidence record, so slot i of one is slot i of the
+                // other, and a divergence is an invariant defect.
                 for (var slotIndex = 0;
                      slotIndex < resolved.SlotResults.Length;
                      slotIndex++)
@@ -685,7 +692,8 @@ namespace Alrauna.Amuse.Editor.Build
                         resolved.SlotResults[slotIndex].Refusal,
                         renderer.gameObject.name,
                         resolved.SlotResults[slotIndex].Offender,
-                        resolved.SlotResults[slotIndex].UnknownReason);
+                        resolved.SlotResults[slotIndex].UnknownReason,
+                        slots[slotIndex].CaptureRefusals);
                 }
                 var opaqueCandidateTriangleCount = 0;
                 var extractionMeshSubMeshCount = -1;
@@ -703,19 +711,27 @@ namespace Alrauna.Amuse.Editor.Build
                             extraction.Snapshot,
                             resolved.SlotResults);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
-                        var slots = MaterialSlotsFor(
-                            evidence, rendererPath, rendererTypeName);
                         for (var slotIndex = 0;
                              slotIndex < slots.Count;
                              slotIndex++)
                         {
-                            foreach (var textureRefusal in
-                                     slots[slotIndex].CaptureRefusals)
+                            // A refused slot's own entry carries the
+                            // capture facts. A standalone texture entry
+                            // for that slot would state one fact twice,
+                            // so it reports only for resolved slots. The
+                            // no-alpha-channel diagnostic refuses nothing
+                            // and names a different fact, so it stays
+                            // unconditional.
+                            if (resolved.SlotResults[slotIndex].IsResolved)
                             {
-                                AmuseReports.TextureCaptureRefusal(
-                                    renderer,
-                                    slotIndex,
-                                    textureRefusal);
+                                foreach (var textureRefusal in
+                                         slots[slotIndex].CaptureRefusals)
+                                {
+                                    AmuseReports.TextureCaptureRefusal(
+                                        renderer,
+                                        slotIndex,
+                                        textureRefusal);
+                                }
                             }
 
                             foreach (var propertyName in

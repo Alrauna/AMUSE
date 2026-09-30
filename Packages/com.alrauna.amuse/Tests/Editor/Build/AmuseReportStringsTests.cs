@@ -141,6 +141,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 AmuseReportStrings.Has("amuse.summary.Title:description"),
                 Is.True);
+            Assert.That(
+                AmuseReportStrings.Has("amuse.slotAnalysis.CaptureRefused"),
+                Is.True);
         }
 
         [Test]

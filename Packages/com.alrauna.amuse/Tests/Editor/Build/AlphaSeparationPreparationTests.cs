@@ -894,6 +894,210 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One refused slot is one console entry. The entry folds the
+        /// slot's texture capture facts, and no standalone texture entry
+        /// repeats them. The sibling slot's conversion is untouched.
+        /// <para>
+        /// Falsifies: a fold that keeps the standalone texture entry, a
+        /// fold that drops the capture facts from the slot entry, and a
+        /// suppression that loses the renderer name or the material.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void RefusedCaptureSlotReportsOneFoldedEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE refused capture fold fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material refusedMaterial = null;
+            Material convertedMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            Texture2D refusedTexture = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                refusedTexture = new Texture2D(
+                    8, 8, TextureFormat.RGBA32, false);
+                refusedMaterial = TextureBackedNonIdentityStMaterial(
+                    refusedTexture, Vector2.one, Vector2.zero);
+                convertedMaterial = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportFullyOpaqueMipmap("fold_convertible_slot"),
+                    Vector2.one, Vector2.zero);
+                AddTwoTriangleRenderer(
+                    root, refusedMaterial, convertedMaterial, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                };
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(root));
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+
+                var slotEntries = new List<string>();
+                var textureEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple)
+                    {
+                        if (simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                        {
+                            slotEntries.Add(entry.TheError.ToMessage());
+                        }
+
+                        if (simple.TitleKey.StartsWith("amuse.texture."))
+                        {
+                            textureEntries++;
+                        }
+                    }
+                }
+
+                Assert.That(slotEntries, Has.Count.EqualTo(1),
+                    "the refused slot reports exactly one entry");
+                Assert.That(slotEntries[0], Does.Contain("_MainTex"),
+                    "the folded entry names the refused texture property");
+                Assert.That(slotEntries[0], Does.Contain("Alpha"),
+                    "the folded entry names the refused channel");
+                Assert.That(slotEntries[0], Does.Contain("UnavailableCapture"),
+                    "the folded entry names the capture reason");
+                Assert.That(textureEntries, Is.Zero,
+                    "a refused slot's texture facts ride the slot entry, " +
+                    "so no standalone texture entry repeats them");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (refusedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(refusedMaterial);
+                }
+
+                if (convertedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(convertedMaterial);
+                }
+
+                if (refusedTexture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(refusedTexture);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// Characterization for the resolved-slot diagnostic branch. An
+        /// imported texture whose format the capture route refuses leaves
+        /// the slot RESOLVED with Unknown triangle outcomes, so the slot
+        /// loop prints no slot entry and the standalone texture entry is
+        /// the only report. This holds before and after the fold, and it
+        /// keeps the resolved-slot gate covered end to end.
+        /// </summary>
+        [Test]
+        public void RefusedFormatCaptureKeepsTheStandaloneDiagnosticEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE refused format diagnostic fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material refusedMaterial = null;
+            Material convertedMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new PoiyomiTextureBackedFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                refusedMaterial = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportRefusedFormatMipmap("diagnostic_refused_slot"),
+                    Vector2.one, Vector2.zero);
+                convertedMaterial = TextureBackedNonIdentityStMaterial(
+                    fixtures.ImportFullyOpaqueMipmap("diagnostic_convertible_slot"),
+                    Vector2.one, Vector2.zero);
+                AddTwoTriangleRenderer(
+                    root, refusedMaterial, convertedMaterial, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                };
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(root));
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+
+                var slotEntries = 0;
+                var textureEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple)
+                    {
+                        if (simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                        {
+                            slotEntries++;
+                        }
+
+                        if (simple.TitleKey.StartsWith("amuse.texture."))
+                        {
+                            textureEntries++;
+                        }
+                    }
+                }
+
+                Assert.That(slotEntries, Is.Zero,
+                    "the unsupported-format refusal resolves its slot with " +
+                    "unknown outcomes, so no slot entry exists");
+                Assert.That(textureEntries, Is.EqualTo(1),
+                    "the resolved slot keeps the standalone texture entry " +
+                    "as its only report");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (refusedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(refusedMaterial);
+                }
+
+                if (convertedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(convertedMaterial);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Defect A regression: avatar-wide deduplication ------------------
 
         [Test]
