@@ -991,8 +991,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // outside it can never be dropped.
             var inSettingRegion = new bool[lines.Length];
             var hlslIncludeOrdinal = 0;
+            var inSubShaderScope = false;
             for (var i = 0; i < lines.Length; i++)
             {
+                // A SubShader-scope include block keeps its settings run
+                // discoverable below the fixed pragma lines (spec F9); a
+                // Shader-scope block keeps the leading-run discipline.
+                if (lines[i].Trim().StartsWith(
+                        "SubShader", StringComparison.Ordinal))
+                {
+                    inSubShaderScope = true;
+                }
+
                 // Region A: after HLSLINCLUDE, the maximal run of D1/D2 lines. A
                 // blank line does not extend the run, and a valued define ends
                 // it immediately — which is why the Shader-scope block holding
@@ -1011,7 +1021,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     var isSkipVariants = SkipVariants.IsMatch(candidate);
                     if (!isDefine && !isSkipVariants)
                     {
-                        break;
+                        // In a SubShader-scope include block a valueless
+                        // D1/D2 line is region content wherever it sits, so
+                        // the scan walks to the end of the block. Elsewhere
+                        // the region stays the maximal run directly after
+                        // HLSLINCLUDE, and any later valueless define stays
+                        // hashed.
+                        if (!inSubShaderScope ||
+                            string.Equals(
+                                candidate, "ENDHLSL", StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+
+                        continue;
                     }
 
                     inSettingRegion[j] = true;
