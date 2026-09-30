@@ -30,6 +30,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// The report names the offending material by its project path
         /// when the capture recorded one, and the exact shader fact that
         /// stopped the alpha proof when the frontend recorded one.
+        /// One refused slot is one entry: the caller passes the slot's
+        /// texture capture refusals, so the entry carries their facts
+        /// instead of a standalone texture entry repeating them.
         /// A <see cref="RendererAnalysisRefusal.None"/> is not a refusal,
         /// so it throws.
         /// </summary>
@@ -39,12 +42,24 @@ namespace Alrauna.Amuse.Editor.Build
             RendererAnalysisRefusal cause,
             string rendererName = null,
             CapturedAlphaMaterial offender = null,
-            AlphaUnknownReason unknownReason = null)
+            AlphaUnknownReason unknownReason = null,
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null)
         {
             if (cause == RendererAnalysisRefusal.None)
             {
                 throw new InvalidOperationException(
                     "RendererAnalysisRefusal.None is not a refusal.");
+            }
+
+            var evidenceSentence = FeatureSentence(unknownReason);
+            var captureSentence = CaptureSentence(captureRefusals);
+            if (evidenceSentence.Length == 0)
+            {
+                evidenceSentence = captureSentence;
+            }
+            else if (captureSentence.Length > 0)
+            {
+                evidenceSentence = evidenceSentence + " " + captureSentence;
             }
 
             using (ErrorReport.WithContextObject(renderer))
@@ -57,8 +72,39 @@ namespace Alrauna.Amuse.Editor.Build
                     cause.ToString(),
                     rendererName,
                     MaterialDescription(offender),
-                    FeatureSentence(unknownReason));
+                    evidenceSentence);
             }
+        }
+
+        /// <summary>
+        /// One sentence per texture capture refusal of this slot, so the
+        /// slot entry names the property, the channel, and the reason the
+        /// proof lost its texture data. Empty when the slot carries no
+        /// capture refusal.
+        /// </summary>
+        private static string CaptureSentence(
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals)
+        {
+            if (captureRefusals == null || captureRefusals.Count == 0)
+            {
+                return "";
+            }
+
+            var sentences = new List<string>(captureRefusals.Count);
+            foreach (var refusal in captureRefusals)
+            {
+                sentences.Add(string.Format(
+                    AmuseReportStrings.Get(
+                        "amuse.slotAnalysis.CaptureRefused"),
+                    refusal.PropertyName,
+                    refusal.Channel.ToString(),
+                    refusal.Reason.ToString(),
+                    refusal.HasSourceIdentity
+                        ? "has a source identity"
+                        : "has no source identity"));
+            }
+
+            return string.Join(" ", sentences);
         }
 
         /// <summary>
