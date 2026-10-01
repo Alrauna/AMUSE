@@ -876,6 +876,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // immediately after it, so this line uniquely locates that slot.
         private const string ShadowSlotAnchor = "#define LIL_PASS_FORWARD";
 
+        // The Multi container define. Only a SubShader-scope include block
+        // that carries it is a generated Multi container, so only there
+        // does the settings walk extend past the fixed pragma lines (spec
+        // F9). A regular asset never carries it, so its region records stay
+        // byte-identical to the pre-F9 scan.
+        private const string MultiContainerDefine = "#define LIL_MULTI";
+
         // R2 keyword domain. GetSkipVariantsShadows() is a fixed literal ending
         // in SHADOW_VERY_HIGH, and UnpackContainer's dedup pass rewrites a
         // surviving skip_variants line to its final keyword alone, so this is
@@ -994,9 +1001,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var inSubShaderScope = false;
             for (var i = 0; i < lines.Length; i++)
             {
-                // A SubShader-scope include block keeps its settings run
-                // discoverable below the fixed pragma lines (spec F9); a
-                // Shader-scope block keeps the leading-run discipline.
+                // SubShader scope is the first gate of the block walk
+                // extension (spec F9); only a block that also carries the
+                // Multi container define extends its walk. A Shader-scope
+                // block always keeps the leading-run discipline.
                 if (lines[i].Trim().StartsWith(
                         "SubShader", StringComparison.Ordinal))
                 {
@@ -1014,6 +1022,32 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
 
                 var records = new List<LilToonRemovedRecord>();
+                // The block walk below extends only into a generated Multi
+                // container: a SubShader-scope include block that carries
+                // the LIL_MULTI define. Every other block keeps the pre-F9
+                // scan, so its removed-region records are byte-identical.
+                var isMultiContainerBlock = false;
+                if (inSubShaderScope)
+                {
+                    for (var k = i + 1; k < lines.Length; k++)
+                    {
+                        var probe = lines[k].Trim();
+                        if (string.Equals(
+                                probe, "ENDHLSL", StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+
+                        if (string.Equals(
+                                probe, MultiContainerDefine,
+                                StringComparison.Ordinal))
+                        {
+                            isMultiContainerBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 for (var j = i + 1; j < lines.Length; j++)
                 {
                     var candidate = lines[j].Trim();
@@ -1021,13 +1055,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     var isSkipVariants = SkipVariants.IsMatch(candidate);
                     if (!isDefine && !isSkipVariants)
                     {
-                        // In a SubShader-scope include block a valueless
-                        // D1/D2 line is region content wherever it sits, so
-                        // the scan walks to the end of the block. Elsewhere
-                        // the region stays the maximal run directly after
-                        // HLSLINCLUDE, and any later valueless define stays
-                        // hashed.
-                        if (!inSubShaderScope ||
+                        // Inside a generated Multi container's include block
+                        // a valueless D1/D2 line is region content wherever
+                        // it sits, so the scan walks to the end of the
+                        // block. Every other block keeps the maximal run
+                        // directly after HLSLINCLUDE, and any later
+                        // valueless define stays hashed.
+                        if (!isMultiContainerBlock ||
                             string.Equals(
                                 candidate, "ENDHLSL", StringComparison.Ordinal))
                         {
