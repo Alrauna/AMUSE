@@ -232,48 +232,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The outline container at mode 1 carries the outline-alpha rows
-        /// over the shared <c>_Outline</c> property set, and the outline
-        /// multiplier must be proven exactly one: half a multiplier is the
-        /// measured trap state where an outline fragment clips although the
-        /// base surface is proven opaque. The refusal rides the same T2
-        /// outline gate rows the regular cutout-outline identity is held
-        /// to (<c>_OutlineColor.a</c>, the outline texture alpha domain,
-        /// <c>_OutlineWidth</c>, <c>_OutlineDeleteMesh</c>,
-        /// <c>_OutlineDisableInVR</c>, <c>_OutlineZTest</c>,
-        /// <c>_OutlineZWrite</c>, <c>_OutlineCull</c>,
-        /// <c>_OutlineColorMask</c>).
+        /// The outline container at mode 1 in plain cutout state is the same
+        /// admitted source as its regular twin, and the parity oracle is
+        /// outcome equality. The 2026-10-01 ruling pins why: the regular
+        /// <c>Hidden/lilToonCutoutOutline</c> twin carries no
+        /// outline-specific eligibility rows at this pin — the S8 outline
+        /// support is attestation, classification, and target resolution
+        /// only, and the wrapper converts through the plain cutout
+        /// evaluator, whose schema names no <c>_Outline</c> property — so
+        /// the Multi evaluator mirrors those plain rows with no outline row
+        /// of its own. Twin leg, labeled: the regular cutout evaluator over
+        /// the regular cutout stand-in, which is the evaluator the regular
+        /// outline wrapper itself converts through. Multi leg, labeled: the
+        /// Multi evaluator over the outline container stand-in set to the
+        /// same scalar surface as the admitted twin state. The
+        /// outline-alpha protection question (F0 §7.3) is a pre-existing
+        /// regular-family scope fact; this fixture neither widens nor
+        /// narrows it.
         /// </summary>
-        /// <remarks>
-        /// The regular twin's eligibility surface carries no outline rows
-        /// at this pin - the S8 outline support is attestation,
-        /// classification, and target resolution only, and a
-        /// <c>Hidden/lilToonCutoutOutline</c> source evaluates through the
-        /// plain cutout schema that names no <c>_Outline</c> property - so
-        /// a literal same-refusal differential is unreachable and this
-        /// fixture pins the Multi-side refusal alone. The differential
-        /// parity oracle lives where the twin can answer: the cutoff
-        /// fixture above and the admitting-degree fixture below.
-        /// </remarks>
-        // --- Falsifier: an outline row that treats outline alpha as proven from the base alpha, or that skips the outline state on the outline container, fails this fixture. ---
+        // --- Falsifier: a Multi evaluator whose verdict diverges from the plain cutout evaluator's on identical plain-cutout state, or one that adds an outline-specific eligibility row, fails this fixture. ---
         [Test]
-        public void OutlineAlphaNotProvenConstantAtCutoutModeOnTheOutlineContainerRefuses()
+        public void OutlineContainerAtCutoutModeConvertsLikeTheRegularCutoutTwin()
         {
-            var material = CutoutModeContainerMaterial(
+            var twin = NewCutoutFixtureMaterial();
+            var twinResult = EvaluateRegularCutoutTwin(twin);
+            AssertConvertible(twinResult);
+
+            var multi = CutoutModeContainerMaterial(
                 OutlineContainerShaderPath);
-            var outlineColor = material.GetColor("_OutlineColor");
-            outlineColor.a = 0.5f;
-            material.SetColor("_OutlineColor", outlineColor);
+            // The same scalar surface as the supported regular cutout
+            // stand-in, whose fresh alpha destination factor is the
+            // OneMinusSrcAlpha class both evaluators admit.
+            multi.SetFloat("_DstBlendAlpha", 10f);
+            var multiResult = EvaluateMulti(multi);
 
-            var result = EvaluateMulti(material);
-
-            // The same closed-vocabulary note as the mask fixture: the
-            // outline rows refuse inside the cutout vocabulary, and this
-            // fixture pins the refused outcome.
             Assert.That(
-                result.Outcome,
-                Is.EqualTo(LilToonOpaqueConversionOutcome.Refused),
-                "refusal was " + result.Refusal);
+                multiResult.Outcome,
+                Is.EqualTo(twinResult.Outcome),
+                "refusal was " + multiResult.Refusal);
         }
 
         /// <summary>
