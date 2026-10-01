@@ -22,8 +22,13 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
     /// </summary>
     public sealed class LilToonMultiModeGateTests
     {
+        // The gate stand-in declares exactly the two scalar facts the gate
+        // rules read, so SetFloat carries them and the capture records real
+        // values. The shared LilToonSemanticTest stand-in declares neither,
+        // and SetFloat on an undeclared property is a silent no-op that
+        // leaves the captured scalars absent.
         private const string LilToonFixtureShader =
-            "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
+            "Hidden/Alrauna/AmuseTests/LilToonMultiModeGateTest";
 
         private readonly List<Material> _materials = new List<Material>();
 
