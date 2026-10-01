@@ -48,7 +48,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonMultiModeGate
     {
-        private const int OpaqueMode = 0;
+        /// <summary>
+        /// The mode the conversion recipe writes keyword state for. The
+        /// derivation exposure below exists so the recipe writes the pinned
+        /// table's own output, never a second hand-list.
+        /// </summary>
+        internal const int OpaqueMode = 0;
         private const int CutoutMode = 1;
         private const int TransparentMode = 2;
         private const int MaxAdmittedMode = TransparentMode;
@@ -195,6 +200,65 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             refusal = default;
             return true;
+        }
+
+        /// <summary>
+        /// The keyword set the pinned derivation produces for the captured
+        /// facts and the mode: exactly the non-tolerated rows whose
+        /// producing condition holds, which is the same set
+        /// <see cref="Evaluate"/>'s second loop demands present. Tolerated
+        /// rows never enter the set: their presence or absence never
+        /// refuses, and on the NDMF play-mode path the vendor preprocess
+        /// never writes them.
+        /// <para>
+        /// The conversion recipe writes this set verbatim through the
+        /// keyword API, so the pinned table stays the only derivation in
+        /// the codebase: a state this method produces is, by construction,
+        /// a state <see cref="Evaluate"/> admits when the same request
+        /// captures the material again.
+        /// </para>
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The mode is outside the admitted set. The derivation has no
+        /// meaning for a mode the gate refuses; callers derive only
+        /// admitted modes.
+        /// </exception>
+        internal static string[] DeriveKeywordSet(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            if (mode < OpaqueMode || mode > MaxAdmittedMode)
+            {
+                throw new ArgumentOutOfRangeException(nameof(mode));
+            }
+
+            var count = 0;
+            for (var index = 0; index < DerivationTable.Length; index++)
+            {
+                var row = DerivationTable[index];
+                if (!row.Tolerated && row.Produces(evidence, mode))
+                {
+                    count++;
+                }
+            }
+
+            var derived = new string[count];
+            var filled = 0;
+            for (var index = 0; index < DerivationTable.Length; index++)
+            {
+                var row = DerivationTable[index];
+                if (!row.Tolerated && row.Produces(evidence, mode))
+                {
+                    derived[filled++] = row.Keyword;
+                }
+            }
+
+            return derived;
         }
 
         /// <summary>
