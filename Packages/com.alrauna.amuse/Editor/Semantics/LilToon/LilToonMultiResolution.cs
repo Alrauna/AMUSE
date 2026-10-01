@@ -408,6 +408,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return true;
         }
 
+        /// <summary>
+        /// The captured Multi mode, with the resolver's own read policy: a
+        /// missing property reads as the vendor zero fallback, and a
+        /// non-finite or fractional value refuses. The conversion
+        /// boundary's eligibility conditional reads the mode off the same
+        /// evidence the resolution gated, so the boundary never re-derives
+        /// a second mode fact. A stored resolution implies this read
+        /// succeeds: the resolver refused the unreadable states before any
+        /// record was stored.
+        /// </summary>
+        internal static bool TryReadCapturedMode(
+            CapturedMaterialEvidence evidence,
+            out int mode)
+        {
+            return TryReadMode(evidence, out mode, out _);
+        }
+
         private static bool IsSpecializedContainerShaderName(
             string shaderName)
         {
