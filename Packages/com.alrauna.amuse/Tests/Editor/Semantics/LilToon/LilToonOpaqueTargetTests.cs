@@ -317,6 +317,272 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(source.shader, Is.SameAs(shaderBefore));
         }
 
+        // --- Multi container clone recipe ------------------------------------
+
+        // For a Multi source the conversion's target is the source asset
+        // itself: the clone stays on its container, takes the canonical
+        // eighteen-property recipe, and must land at the explicit canonical
+        // render facts - RenderType Opaque and queue 2000 on BOTH containers,
+        // never the outline container's declared 2900 - plus the exact
+        // mode-0 keyword set written through the keyword API (spec
+        // "Conversion recipe" 1-3). The fixtures drive the production recipe
+        // with the two container stand-ins and label each assertion's
+        // expected phase-A state honestly.
+
+        private const string MultiBaseContainerShaderName =
+            "Hidden/Alrauna/AmuseTests/LilToonMultiContainerTest";
+        private const string MultiOutlineContainerShaderName =
+            "Hidden/Alrauna/AmuseTests/LilToonMultiOutlineContainerTest";
+
+        /// <summary>
+        /// Creates a Multi container stand-in material with the mode and
+        /// both gate scalars set explicitly, so no fixture depends on
+        /// stand-in shader defaults - the same discipline the Multi
+        /// resolution and gate fixtures use.
+        /// </summary>
+        private Material NewMultiContainerMaterial(string shaderName)
+        {
+            var shader = Shader.Find(shaderName);
+            Assert.That(
+                shader, Is.Not.Null,
+                $"Fixture shader '{shaderName}' must import.");
+            var material = Track(new Material(shader));
+            material.SetFloat("_TransparentMode", 0f);
+            material.SetFloat("_UseClippingCanceller", 0f);
+            material.SetFloat("_AsOverlay", 0f);
+            return material;
+        }
+
+        /// <summary>
+        /// Writes the same junk values as <see cref="Scramble"/> into the
+        /// eighteen recipe floats but leaves the render queue and the
+        /// RenderType tag at the container's own declared form, so an
+        /// outline-container fixture observes exactly the
+        /// container-inheritance alternative - Transparent at 2900 - when
+        /// the recipe fails to write the canonical facts.
+        /// </summary>
+        private static void ScrambleRecipeFloats(Material material)
+        {
+            Assert.That(
+                ExpectedCanonicalTuple.Length, Is.EqualTo(18),
+                "Junk values 101..118 depend on the 18-entry recipe.");
+            for (var index = 0; index < ExpectedCanonicalTuple.Length; index++)
+            {
+                material.SetFloat(
+                    ExpectedCanonicalTuple[index].Property, 101f + index);
+            }
+        }
+
+        /// <summary>
+        /// The base container's clone lands at the explicit canonical
+        /// render facts even when the source material carries a non-opaque
+        /// vendor form. The recipe runs against the source asset itself,
+        /// so the clone also stays on its container.
+        /// <para>
+        /// Phase-A expectation: green on these assertions - the recipe's
+        /// queue and tag writes are already unconditional on every path.
+        /// The fixture stays as the falsifier that pins the explicit-write
+        /// contract against a recipe that inherits the source's render
+        /// state.
+        /// </para>
+        /// </summary>
+        // --- Falsifier: a recipe that inherits the source's render state instead of writing the canonical facts lands the clone at the vendor form and fails this fixture. ---
+        [Test]
+        public void
+            ModeZeroBaseContainerCloneLandsAtRenderTypeOpaqueAndQueueTwoThousand()
+        {
+            var source = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            Scramble(source);
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            foreach (var (property, value) in ExpectedCanonicalTuple)
+            {
+                Assert.That(
+                    clone.GetFloat(property),
+                    Is.EqualTo(value),
+                    $"Prepared clone must carry canonical '{property}'.");
+            }
+
+            Assert.That(clone.renderQueue, Is.EqualTo(2000));
+            Assert.That(
+                clone.GetTag("RenderType", false), Is.EqualTo("Opaque"));
+            Assert.That(
+                clone.shader, Is.SameAs(target),
+                "the Multi clone stays on its own container");
+            Assert.That(clone.name, Is.Empty);
+        }
+
+        /// <summary>
+        /// The outline container declares RenderType Transparent at queue
+        /// 2900. The recipe writes the explicit canonical facts on both
+        /// containers - the binding decision against the vendor form whose
+        /// empty override resolves per container - so the clone reads
+        /// Opaque/2000 at the material level, never the container's
+        /// declared 2900.
+        /// <para>
+        /// Phase-A expectation: green on these assertions, for the same
+        /// reason as the base container fixture. The fixture stays as the
+        /// falsifier for the rejected alternative: any recipe that leaves
+        /// the clone at container defaults produces Transparent/2900 here.
+        /// </para>
+        /// </summary>
+        // --- Falsifier: a recipe that inherits container tags lands the outline clone at Transparent/2900 and fails this fixture. ---
+        [Test]
+        public void
+            ModeZeroOutlineContainerCloneLandsAtOpaqueAndQueueTwoThousandInsteadOfTheContainerDefault()
+        {
+            var source = NewMultiContainerMaterial(
+                MultiOutlineContainerShaderName);
+            Assert.That(
+                source.renderQueue, Is.EqualTo(2900),
+                "the outline container stand-in must declare queue 2900; " +
+                "the fixture only means something against that form");
+            Assert.That(
+                source.GetTag("RenderType", true),
+                Is.EqualTo("Transparent"),
+                "the outline container stand-in must declare RenderType " +
+                "Transparent; the fixture only means something against " +
+                "that form");
+            ScrambleRecipeFloats(source);
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            foreach (var (property, value) in ExpectedCanonicalTuple)
+            {
+                Assert.That(
+                    clone.GetFloat(property),
+                    Is.EqualTo(value),
+                    $"Prepared clone must carry canonical '{property}'.");
+            }
+
+            Assert.That(
+                clone.renderQueue, Is.EqualTo(2000),
+                "the clone must carry the explicit canonical queue, not " +
+                "the outline container's declared 2900");
+            Assert.That(
+                clone.GetTag("RenderType", false),
+                Is.EqualTo("Opaque"),
+                "the clone must carry the override tag written at the " +
+                "material level; the container's declared tag is not " +
+                "canonical");
+            Assert.That(
+                clone.shader, Is.SameAs(target),
+                "the Multi clone stays on its own container");
+        }
+
+        /// <summary>
+        /// The clone's keyword set is exactly the mode-0 derivation set.
+        /// This source presents one enabled alpha feature keyword,
+        /// <c>_COLOROVERLAY_ON</c>; at mode 0 the derivation produces no
+        /// keyword for it (the alpha mask keyword needs a mode other than
+        /// zero), and the source presents no dissolve, distance fade, or
+        /// outline-tone facts, so the mode-0 set is empty. The clone must
+        /// carry exactly that empty set.
+        /// <para>
+        /// Phase-A expectation: red - the recipe did not write the keyword
+        /// set at phase A, and the material copy carries the source's enabled
+        /// keyword onto the clone.
+        /// </para>
+        /// </summary>
+        // --- Falsifier: a recipe that copies the source keywords keeps _COLOROVERLAY_ON on the clone and fails this fixture. ---
+        [Test]
+        public void
+            ModeZeroCloneCarriesExactlyTheModeZeroKeywordSetDroppingTheSourceOverlayKeyword()
+        {
+            var source = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            source.shaderKeywords = new[] { "_COLOROVERLAY_ON" };
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(
+                clone.shaderKeywords, Is.Empty,
+                "the mode-0 derivation set for this source is empty; a " +
+                "recipe that copies the source keywords keeps " +
+                "'_COLOROVERLAY_ON' on the clone");
+        }
+
+        /// <summary>
+        /// The clone renders mode 0 by keyword evidence: the clone's
+        /// captured keyword set feeds the Multi mode-consistency gate at
+        /// mode 0 and admits, and the clone's captured
+        /// <c>_TransparentMode</c> reads zero. Property reads alone prove
+        /// nothing; the gate is the same verdict the routing ran on the
+        /// source, now run on the recipe's output.
+        /// <para>
+        /// Phase-A expectation: red - the recipe did not write the keyword
+        /// set at phase A, so the clone still carried the source's
+        /// <c>_COLOROVERLAY_ON</c>, which the gate refuses at mode 0 as a
+        /// keyword and mode mismatch.
+        /// </para>
+        /// </summary>
+        // --- Falsifier: a recipe that forgets the keyword write leaves the gate refusing the clone and fails this fixture. ---
+        [Test]
+        public void
+            ModeZeroCloneProvesItsRenderModeThroughTheGateOnTheCapturedKeywordEvidence()
+        {
+            var source = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            source.shaderKeywords = new[] { "_COLOROVERLAY_ON" };
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            var cloneEvidence = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    clone, MultiCloneEvidenceRequest()),
+            })[0];
+
+            Assert.That(
+                LilToonMultiModeGate.Evaluate(cloneEvidence, 0, out _),
+                Is.True,
+                "the clone's captured keyword set must be exactly the " +
+                "mode-0 derivation set the gate admits");
+            Assert.That(
+                cloneEvidence.TryGetScalar("_TransparentMode", out var mode),
+                Is.True,
+                "the clone capture must carry '_TransparentMode'");
+            Assert.That(
+                mode, Is.EqualTo(0f),
+                "the clone's captured mode must read zero");
+        }
+
+        /// <summary>
+        /// The closed request the clone capture runs under: the three Multi
+        /// scalars the mode read and the gate rules consume, plus the
+        /// keyword set. The request names exactly the facts the fixture
+        /// asserts, so the gate's missing-fact policy decides everything
+        /// the request does not carry.
+        /// </summary>
+        private static MaterialEvidenceRequest MultiCloneEvidenceRequest()
+        {
+            return new MaterialEvidenceRequest(
+                shaderName: false,
+                activeColorSpace: false,
+                presenceProperties: Array.Empty<string>(),
+                scalarProperties: new[]
+                {
+                    "_TransparentMode",
+                    "_UseClippingCanceller",
+                    "_AsOverlay",
+                },
+                colorProperties: Array.Empty<string>(),
+                vectorProperties: Array.Empty<string>(),
+                textureProperties:
+                    Array.Empty<TexturePropertyEvidenceRequest>(),
+                captureKeywords: true);
+        }
+
         // --- Validation failure policy ---------------------------------------
 
         private static int LoadedMaterialCount()

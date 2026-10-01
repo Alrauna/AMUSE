@@ -86,6 +86,13 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyCollection<string> VectorProperties { get; }
         internal IReadOnlyList<TexturePropertyEvidenceRequest> TextureProperties { get; }
 
+        /// <summary>
+        /// Whether this request gathers the material's shader keyword set.
+        /// The request model is closed: keyword facts exist on the captured
+        /// evidence only when a request declared them.
+        /// </summary>
+        internal bool CaptureKeywords { get; }
+
         internal MaterialEvidenceRequest(
             bool shaderName,
             bool activeColorSpace,
@@ -93,7 +100,8 @@ namespace Alrauna.Amuse.Editor.Host
             IEnumerable<string> scalarProperties,
             IEnumerable<string> colorProperties,
             IEnumerable<string> vectorProperties,
-            IEnumerable<TexturePropertyEvidenceRequest> textureProperties)
+            IEnumerable<TexturePropertyEvidenceRequest> textureProperties,
+            bool captureKeywords = false)
         {
             ShaderName = shaderName;
             ActiveColorSpace = activeColorSpace;
@@ -106,6 +114,7 @@ namespace Alrauna.Amuse.Editor.Host
             VectorProperties = CopyNames(
                 vectorProperties, nameof(vectorProperties));
             TextureProperties = CopyTextures(textureProperties);
+            CaptureKeywords = captureKeywords;
 
             var typed = new HashSet<string>(StringComparer.Ordinal);
             AddTyped(typed, ScalarProperties);
@@ -133,6 +142,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             var shaderName = false;
             var activeColorSpace = false;
+            var captureKeywords = false;
             var presence = new SortedSet<string>(StringComparer.Ordinal);
             var scalars = new SortedSet<string>(StringComparer.Ordinal);
             var colors = new SortedSet<string>(StringComparer.Ordinal);
@@ -151,6 +161,7 @@ namespace Alrauna.Amuse.Editor.Host
 
                 shaderName |= request.ShaderName;
                 activeColorSpace |= request.ActiveColorSpace;
+                captureKeywords |= request.CaptureKeywords;
                 presence.UnionWith(request.PresenceProperties);
                 scalars.UnionWith(request.ScalarProperties);
                 colors.UnionWith(request.ColorProperties);
@@ -196,7 +207,8 @@ namespace Alrauna.Amuse.Editor.Host
                 scalars,
                 colors,
                 vectors,
-                textureRequests);
+                textureRequests,
+                captureKeywords);
         }
 
         private static IReadOnlyCollection<string> CopyNames(
@@ -498,11 +510,21 @@ namespace Alrauna.Amuse.Editor.Host
         private readonly ColorEntry[] _colors;
         private readonly VectorEntry[] _vectors;
         private readonly TextureEntry[] _textureAssignments;
+        private readonly string[] _keywords;
 
         internal bool HasShaderName { get; }
         internal string ShaderName { get; }
         internal bool HasActiveColorSpace { get; }
         internal ColorSpace ActiveColorSpace { get; }
+
+        /// <summary>
+        /// The material's shader keyword set in ordinal sort order, when the
+        /// request asked for keywords; otherwise empty, never null. The array
+        /// is adopted from the capture already sorted and deduplicated and is
+        /// never mutated after construction, so derivations share it unchanged.
+        /// </summary>
+        internal IReadOnlyList<string> Keywords => _keywords;
+
         internal IReadOnlyCollection<CapturedTextureEvidence> Textures { get; }
 
         /// <summary>
@@ -535,7 +557,8 @@ namespace Alrauna.Amuse.Editor.Host
             ColorEntry[] colors,
             VectorEntry[] vectors,
             TextureEntry[] textureAssignments,
-            IReadOnlyCollection<CapturedTextureEvidence> textures)
+            IReadOnlyCollection<CapturedTextureEvidence> textures,
+            string[] keywords = null)
         {
             HasShaderName = hasShaderName;
             ShaderName = shaderName;
@@ -546,12 +569,15 @@ namespace Alrauna.Amuse.Editor.Host
             // construction, and each With* derivation clones the one category
             // it replaces, so derived evidence can share the rest safely. An
             // in-place write added later would silently corrupt every object
-            // sharing the array.
+            // sharing the array. The keyword array is adopted under the same
+            // rule: the capture hands it over already ordinal-sorted and
+            // deduplicated, and derivations share it unchanged.
             _presence = presence;
             _scalars = scalars;
             _colors = colors;
             _vectors = vectors;
             _textureAssignments = textureAssignments;
+            _keywords = keywords ?? Array.Empty<string>();
             Textures = textures;
             CaptureRefusals = AggregateCaptureRefusals(textureAssignments);
         }
@@ -774,7 +800,7 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// Rebuilds the whole evidence object around three typed categories, so
         /// no derivation can silently drop the shader name, colour space,
-        /// presence, texture assignments, or shared texture evidence.
+        /// keywords, presence, texture assignments, or shared texture evidence.
         /// </summary>
         private CapturedMaterialEvidence Derive(
             ScalarEntry[] scalars,
@@ -791,7 +817,8 @@ namespace Alrauna.Amuse.Editor.Host
                 colors,
                 vectors,
                 _textureAssignments,
-                Textures);
+                Textures,
+                _keywords);
         }
 
         private static void ValidatePropertyName(string name)
@@ -1039,7 +1066,8 @@ namespace Alrauna.Amuse.Editor.Host
                     material.Vectors,
                     textureEntries,
                     new ReadOnlyCollection<CapturedTextureEvidence>(
-                        distinctTextures));
+                        distinctTextures),
+                    material.Keywords);
             }
 
             return new ReadOnlyCollection<CapturedMaterialEvidence>(results);
@@ -1083,6 +1111,9 @@ namespace Alrauna.Amuse.Editor.Host
                 ActiveColorSpace = isLive && request.ActiveColorSpace
                     ? QualitySettings.activeColorSpace
                     : default,
+                Keywords = request.CaptureKeywords
+                    ? CaptureKeywords(material, isLive)
+                    : Array.Empty<string>(),
                 Presence = CapturePresence(request, facts),
                 Scalars = CaptureScalars(material, request, facts),
                 Colors = CaptureColors(material, request, facts),
@@ -1276,6 +1307,32 @@ namespace Alrauna.Amuse.Editor.Host
             return entries;
         }
 
+        /// <summary>
+        /// The material's live shader keyword set as one ordinal-sorted,
+        /// deduplicated snapshot. Called only when the request asked for
+        /// keywords; a dead material carries no keyword facts and yields an
+        /// empty set, never null.
+        /// </summary>
+        private static string[] CaptureKeywords(
+            Material material,
+            bool isLive)
+        {
+            if (!isLive)
+            {
+                return Array.Empty<string>();
+            }
+
+            var unique = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var keyword in material.shaderKeywords)
+            {
+                unique.Add(keyword);
+            }
+
+            var keywords = new string[unique.Count];
+            unique.CopyTo(keywords);
+            return keywords;
+        }
+
         private static CapturedTextureEvidence CaptureTexture(
             Texture texture,
             TextureEvidenceKinds evidence,
@@ -1423,6 +1480,7 @@ namespace Alrauna.Amuse.Editor.Host
             internal string ShaderName;
             internal bool HasActiveColorSpace;
             internal ColorSpace ActiveColorSpace;
+            internal string[] Keywords = Array.Empty<string>();
             internal CapturedMaterialEvidence.PresenceEntry[] Presence;
             internal CapturedMaterialEvidence.ScalarEntry[] Scalars;
             internal CapturedMaterialEvidence.ColorEntry[] Colors;

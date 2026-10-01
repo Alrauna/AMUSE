@@ -140,7 +140,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// slot-refusal report embeds it, so the reader sees the cause, not
         /// only the refused rule's name.
         /// </summary>
-        private static string FeatureSentence(AlphaUnknownReason reason)
+        internal static string FeatureSentence(AlphaUnknownReason reason)
         {
             if (reason == null)
             {
@@ -158,6 +158,14 @@ namespace Alrauna.Amuse.Editor.Build
                         : "";
                     return "AMUSE has no proven rule for " + feature +
                         property + ", so it cannot prove alpha.";
+                case AlphaUnknownKind.UnsupportedMultiState:
+                    var multiState = reason.Feature != null
+                        ? reason.Feature
+                        : "an unnamed Multi state";
+                    return string.Format(
+                        AmuseReportStrings.Get(
+                            "amuse.slotAnalysis.UnsupportedMultiState"),
+                        multiState);
                 case AlphaUnknownKind.UnsupportedShader:
                     return reason.ShaderName != null
                         ? "The shader '" + reason.ShaderName +

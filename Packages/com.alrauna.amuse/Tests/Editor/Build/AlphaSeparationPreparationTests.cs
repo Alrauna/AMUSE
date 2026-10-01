@@ -1888,6 +1888,222 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Final review, Important: the Multi boundary is reachable and
+        // --- fail-closed until the rows land -------------------------------
+
+        // Why these fixtures drive the boundary below the avatar pass: the
+        // pass's D8 consent pre-scan (CollectTransferConsent) runs the
+        // production capture over every assigned material of a supported
+        // family, and a supported-container material against the empty row
+        // table is by definition unattested, so the pre-scan adds a consent
+        // subject and ShouldProceed refuses batch mode before any renderer
+        // is analyzed. That gate is production-correct and batch-impassable;
+        // the boundary facts the wave pins live one layer below it, in the
+        // production selection, the production closed capture, and the
+        // production analyze - all real, no resolver injection. The closed
+        // capture entry is all-or-nothing on attestation, so the shipping
+        // boundary's closed refusal for a Multi material is the batch
+        // refusal itself; the per-material transport (the family kept, the
+        // refusal named) rides the production analysis capture, which Task 7
+        // wired to carry the refused record.
+
+        /// <summary>
+        /// A supported-container Multi material at a mode-1 state reaches
+        /// the one resolution point on the shipping boundary and refuses
+        /// closed until the Task 2 rows land. The selection must serve the
+        /// Multi capture request - the wave's Critical 1 falsifier: at the
+        /// pre-wave head the schema was null and the shared selection loop
+        /// sentinel-ed the material as UnattestedMaterial before any
+        /// capture, so the first assertion fails against that behavior.
+        /// The closed capture then refuses the batch (all-or-nothing
+        /// attestation against the empty row table), and the production
+        /// analysis capture carries the refused record: the family stays
+        /// Multi, the record names AttestationFailed, and the analyze
+        /// transport answers all-Unknown with that refusal value in words.
+        /// Coverage map for the admit path this fixture deliberately does
+        /// not exercise: the resolution admits through the Task 7 profile
+        /// seam (ModeZeroMultiAndRegularTwinResolveToTheSameProvenOpaqueAnswer
+        /// and the mode-1/mode-2 parity twins in LilToonMultiResolutionTests),
+        /// the identity-recipe clone through the Task 8 recipe fixtures in
+        /// LilToonOpaqueTargetTests, and the eligibility decision surface
+        /// through the LilToonMultiSourceEligibilityTests matrix.
+        /// </summary>
+        // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
+        [Test]
+        public void ModeOneMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
+        {
+            var fixtures = new LilToonCutoutConversionFixtures();
+            Material material = null;
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    1f,
+                    new[] { "UNITY_UI_ALPHACLIP" });
+
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out _,
+                        out var captureSchema);
+                Assert.That(selected, Is.True);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(captureSchema, Is.Not.Null,
+                    "at the pre-wave head this schema was null and the " +
+                    "shipping selection sentinel-ed the material before " +
+                    "the resolution point");
+
+                var batchAdmitted =
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        new[] { material },
+                        new[] { family },
+                        captureSchema,
+                        AlphaPolicyBounds.Inert,
+                        out var captured,
+                        RegisteredSourceIdentity.Resolve);
+                Assert.That(batchAdmitted, Is.False,
+                    "the empty row table must refuse the batch closed " +
+                    "until the Task 2 rows land");
+                Assert.That(captured, Is.Null);
+
+                var analyzedMaterial =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(
+                        new[] { material })[0];
+                Assert.That(
+                    analyzedMaterial.Family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti),
+                    "a refused material keeps the Multi family at the " +
+                    "one resolution point");
+                Assert.That(
+                    analyzedMaterial.MultiResolution, Is.Not.Null);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.IsResolved, Is.False);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.Refusal,
+                    Is.EqualTo(LilToonMultiResolutionRefusal
+                        .AttestationFailed),
+                    "the closed refusal value must be the empty row " +
+                    "table's AttestationFailed");
+
+                var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    analyzedMaterial);
+                Assert.That(
+                    analysis.Semantics.Alpha.IsComplete, Is.False,
+                    "the refused transport answers all-Unknown alpha");
+                Assert.That(analysis.AlphaUnknownReason, Is.Not.Null);
+                Assert.That(
+                    analysis.AlphaUnknownReason.Kind,
+                    Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState));
+                Assert.That(
+                    analysis.AlphaUnknownReason.Feature,
+                    Is.EqualTo(LilToonMultiResolution.RefusalFeatureWords(
+                        LilToonMultiResolutionRefusal.AttestationFailed)),
+                    "the transport must name the refusal value in words");
+            }
+            finally
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The mode-0 state - the observed corpus form, the empty derived
+        /// keyword set - refuses closed exactly as the mode-1 one: the row
+        /// table's emptiness is mode-independent. Reachability, closed
+        /// batch refusal, and transport assertions as in the mode-1
+        /// fixture; the falsifier and the coverage map are stated there.
+        /// </summary>
+        // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
+        [Test]
+        public void ModeZeroMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
+        {
+            var fixtures = new LilToonCutoutConversionFixtures();
+            Material material = null;
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    0f,
+                    Array.Empty<string>());
+                material.renderQueue = 2000;
+                material.SetOverrideTag("RenderType", "Opaque");
+
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out _,
+                        out var captureSchema);
+                Assert.That(selected, Is.True);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(captureSchema, Is.Not.Null);
+
+                var batchAdmitted =
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        new[] { material },
+                        new[] { family },
+                        captureSchema,
+                        AlphaPolicyBounds.Inert,
+                        out var captured,
+                        RegisteredSourceIdentity.Resolve);
+                Assert.That(batchAdmitted, Is.False);
+                Assert.That(captured, Is.Null);
+
+                var analyzedMaterial =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(
+                        new[] { material })[0];
+                Assert.That(
+                    analyzedMaterial.Family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(
+                    analyzedMaterial.MultiResolution, Is.Not.Null);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.IsResolved, Is.False);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.Refusal,
+                    Is.EqualTo(LilToonMultiResolutionRefusal
+                        .AttestationFailed));
+
+                var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    analyzedMaterial);
+                Assert.That(
+                    analysis.Semantics.Alpha.IsComplete, Is.False);
+                Assert.That(
+                    analysis.AlphaUnknownReason.Kind,
+                    Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState));
+                Assert.That(
+                    analysis.AlphaUnknownReason.Feature,
+                    Is.EqualTo(LilToonMultiResolution.RefusalFeatureWords(
+                        LilToonMultiResolutionRefusal.AttestationFailed)));
+            }
+            finally
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+
         // --- Task 4: affine _MainTex_ST support (design 2026-08-31) --------
 
         /// <summary>
@@ -7412,6 +7628,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private class LilToonCutoutConversionFixtures
             : LilToonFixtureTestBase
         {
+            /// <summary>
+            /// The shared stand-in folder, exposed for outer fixture
+            /// methods that mint assets through the fixture base's static
+            /// helpers; the base's own setup and teardown manage it.
+            /// </summary>
+            internal const string FixtureTempFolder = TempFolder;
+
             internal Texture2D ImportFullyOpaqueMipmap(string name)
             {
                 return ImportMipmapTexture(

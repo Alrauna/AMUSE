@@ -393,6 +393,9 @@ namespace Alrauna.Amuse.Editor.Build
                 "Texture property {0} (channel {1}) could not be captured. " +
                 "Reason: {2}. The texture {3}, so the proof for this slot " +
                 "has no texture data.",
+            ["amuse.slotAnalysis.UnsupportedMultiState"] =
+                "The material's lilToon Multi state is outside the states " +
+                "AMUSE can prove: {0}.",
 
             // --- Slot-scoped separation refusals ---
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =

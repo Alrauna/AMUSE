@@ -190,7 +190,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Attests the target's capability, clones the source, swaps the
         /// clone to the caller-supplied attested opaque target shader,
         /// applies the complete canonical Opaque tuple, then re-reads and
-        /// validates every canonical fact and the target identity.
+        /// validates every canonical fact and the target identity. When the
+        /// caller supplies the source's own shader - the Multi call shape,
+        /// whose target is the source asset itself - the recipe additionally
+        /// writes the mode-0 keyword set through the keyword API.
         /// <para>
         /// The source material is never written: <c>new Material(source)</c>
         /// is the only relationship between them. Source avatar assets are
@@ -213,10 +216,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         /// <exception cref="InvalidOperationException">
         /// The attested target does not declare a recipe property, a written
-        /// canonical fact did not read back, or the clone did not take the
+        /// canonical fact did not read back, the Multi keyword write did not
+        /// read back, or the clone did not take the
         /// attested target shader. The property check runs before
         /// <c>new Material(source)</c>, so that throw leaves no clone to
-        /// destroy; the other two throw after
+        /// destroy; the other three throw after
         /// <see cref="UnityEngine.Object.DestroyImmediate"/> has destroyed
         /// the clone, so no material leaks. The source gates have already
         /// proven every property present on the SOURCE and every input
@@ -225,7 +229,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// disagreement falsifies the assumption that AMUSE can write this
         /// material's render state; a target that cannot declare the recipe,
         /// or a target mismatch, would silently convert the material onto a
-        /// wrong or partially-capable shader. All three are compatibility or
+        /// wrong or partially-capable shader. All four are compatibility or
         /// programming failures, not unsupported materials, and converting
         /// either into a conservative refusal would hide a broken write path
         /// behind a plausible-looking "preserved the input" outcome.
@@ -278,6 +282,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             clone.renderQueue = CanonicalOpaqueRenderQueue;
             clone.SetOverrideTag(RenderTypeTagName, CanonicalOpaqueRenderType);
 
+            // The Multi call shape: the resolution resolves a Multi
+            // container to itself, so the attested target IS the source's
+            // own shader. The regular family always swaps the clone onto a
+            // different attested opaque shader, so this identity is exactly
+            // the recipe rule that the Multi target is the source asset
+            // itself (spec, conversion recipe 1). Tests drive the same
+            // shape with container stand-ins.
+            if (attestedTarget == source.shader)
+            {
+                WriteMultiModeZeroKeywordSet(clone);
+            }
+
             if (TryFindNonCanonicalFact(clone, out var fact))
             {
                 UnityEngine.Object.DestroyImmediate(clone);
@@ -295,6 +311,95 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return clone;
+        }
+
+        /// <summary>
+        /// Writes the clone's keyword state for a Multi conversion: the
+        /// exact mode-0 set the pinned derivation produces for the clone's
+        /// own captured facts, through the keyword API, replacing whatever
+        /// the material copy inherited from the source.
+        /// <para>
+        /// Load-bearing: the clone renders mode 0 by keyword evidence. A
+        /// copied source keyword set would silently re-enter a non-opaque
+        /// mode - an inherited <c>_COLOROVERLAY_ON</c> compiles the color
+        /// overlay variant that the mode-0 derivation does not produce, and
+        /// the mode gate refuses the material as a keyword and mode
+        /// mismatch. The write is therefore unconditional on this path,
+        /// never gated on the source's keywords.
+        /// </para>
+        /// <para>
+        /// The derivation runs under the same combined Multi request the
+        /// resolution captures under. The derivation's missing-fact policy
+        /// then agrees with the gate's own evaluation of the clone;
+        /// deriving under a richer request could write keywords that a
+        /// later capture under this request refuses as non-derivable.
+        /// </para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        /// The keyword write did not read back. Like every canonical write
+        /// in this recipe, a read-back disagreement falsifies the
+        /// assumption that AMUSE can write this material's state, so the
+        /// clone is destroyed and the failure throws instead of silently
+        /// passing.
+        /// </exception>
+        private static void WriteMultiModeZeroKeywordSet(Material clone)
+        {
+            var cloneEvidence = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    clone, LilToonMultiResolution.MultiEvidenceRequest),
+            })[0];
+            var written = LilToonMultiModeGate.DeriveKeywordSet(
+                cloneEvidence, LilToonMultiModeGate.OpaqueMode);
+            clone.shaderKeywords = written;
+
+            var readBack = clone.shaderKeywords;
+            if (!KeywordSetReadsBack(readBack, written))
+            {
+                UnityEngine.Object.DestroyImmediate(clone);
+                throw new InvalidOperationException(
+                    "Generated Multi material did not read back the " +
+                    "mode-0 keyword set.");
+            }
+        }
+
+        /// <summary>
+        /// Order-insensitive ordinal set comparison for the keyword
+        /// read-back. The written set holds no duplicates - one table row
+        /// per keyword - so counts plus one-directional containment is an
+        /// exact set equality.
+        /// </summary>
+        private static bool KeywordSetReadsBack(
+            string[] readBack,
+            string[] written)
+        {
+            if (readBack.Length != written.Length)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < written.Length; index++)
+            {
+                var found = false;
+                for (var probe = 0; probe < readBack.Length; probe++)
+                {
+                    if (string.Equals(
+                            readBack[probe],
+                            written[index],
+                            StringComparison.Ordinal))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         internal delegate bool TargetIdentityVerifier(
