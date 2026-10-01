@@ -21,12 +21,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// measurement, so the production entry point refuses every Multi
     /// container and the fixtures inject one test-only profile row plus the
     /// gathered identity evidence that matches it. The specialized-container
-    /// fixture alone targets the production signature the hub calls, because
-    /// a specialized container refuses by container identity before
-    /// attestation matters and carries no digest row to inject. Every test
-    /// comment names the path it exercises and the phase that turns it
-    /// green. Every input flows through the production capture path, so no
-    /// fixture depends on stand-in shader defaults.
+    /// fixture injects a fur-named row, so a specialized container's
+    /// identity refusal is pinned against attestation with a row that
+    /// would otherwise attest. Every test comment names the path it
+    /// exercises and the phase that turns it green. Every input flows
+    /// through the production capture path, so no fixture depends on
+    /// stand-in shader defaults.
     /// </para>
     /// </summary>
     public sealed class LilToonMultiResolutionTests
@@ -43,11 +43,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         internal const string TestContainerCanonicalDigest =
             "1029384756afbccddeeff0123456789a" +
             "fedcba98765432100123456789abcdef";
-
-        // The vendor-admitting opaque form the observed corpus sits at on
-        // both containers: explicit queue 2000 and RenderType Opaque.
-        private const int AdmittingQueue = 2000;
-        private const string AdmittingRenderType = "Opaque";
 
         private const string TempFolder = "Assets/AmuseTests_MultiResolution";
 
@@ -150,21 +145,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // The specialized containers refuse by container identity before
-        // attestation matters - they carry no digest rows at all - so this
-        // fixture alone drives the production signature the hub calls, and
-        // it turns green the moment the resolver lands: the empty production
-        // row table cannot reach it. The injected row of the seam fixtures
-        // would mask the identity-versus-attestation order, so the
-        // production entry is the honest surface here.
-        // Path: production signature. Green when the resolver lands.
-        // --- Falsifier: a resolver that attests before classifying container identity answers AttestationFailed instead of the container refusal. ---
+        // attestation matters - they carry no digest rows at all. The seam
+        // runs with a fur-named profile the identity evidence matches by
+        // construction, so the identity-versus-attestation order is the
+        // single fault under test: a resolver that attests first would
+        // admit this state instead of refusing it.
+        // Path: profile injection seam, matched fur row. Green when the
+        // resolver lands.
+        // --- Falsifier: a resolver that attests before classifying container identity admits the matched fur row instead of refusing by identity. ---
         [Test]
-        public void SpecializedFurContainerRefusesThroughTheProductionSignature()
+        public void SpecializedFurContainerRefusesByIdentityBeforeAttestation()
         {
             var resolved = LilToonMultiResolution.Resolve(
                 CapturedMultiEvidence(SpecializedFurName),
-                AdmittingQueue,
-                AdmittingRenderType,
+                MatchingSourceEvidence(SpecializedFurName),
+                MatchingProfile(SpecializedFurName),
+                keywordsRequested: true,
                 out _,
                 out _,
                 out var refusal);
@@ -219,8 +215,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 MatchingSourceEvidence(BaseContainerName),
                 MatchingProfile(BaseContainerName),
                 keywordsRequested: false,
-                AdmittingQueue,
-                AdmittingRenderType,
                 out _,
                 out _,
                 out var refusal);
@@ -438,8 +432,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 MatchingSourceEvidence(containerName),
                 MatchingProfile(containerName),
                 keywordsRequested: true,
-                AdmittingQueue,
-                AdmittingRenderType,
                 out family,
                 out mode,
                 out refusal);
@@ -475,13 +467,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The test-only profile row, built through the ForTests factory
-        /// convention the include tree and the Task 6 verify fixtures use.
+        /// The test-only profile row: the same synthetic identity values
+        /// the Task 6 verify fixtures use, named after the container under
+        /// test.
         /// </summary>
         internal static LilToonMultiContainerProfile MatchingProfile(
             string containerName)
         {
-            return LilToonSourceAttestation.MultiContainerProfileForTests(
+            return new LilToonMultiContainerProfile(
                 containerName,
                 TestContainerGuid,
                 TestContainerCanonicalDigest);

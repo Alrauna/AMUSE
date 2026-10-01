@@ -2122,17 +2122,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return false;
         }
 
-        /// <summary>Test seam: build one row without measured pins.</summary>
-        internal static LilToonMultiContainerProfile
-            MultiContainerProfileForTests(
-                string shaderName,
-                string shaderGuid,
-                string shaderCanonicalDigest)
-        {
-            return new LilToonMultiContainerProfile(
-                shaderName, shaderGuid, shaderCanonicalDigest);
-        }
-
         /// <summary>
         /// The Multi container identity conjunction, parameterized by one
         /// injected row. The terms are the container shader name, the asset
@@ -2231,45 +2220,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return true;
         }
 
-        /// <summary>
-        /// Verifies one material's shader against the pinned Multi container
-        /// rows. A row must match the live shader's name and asset GUID
-        /// exactly. Fail-closed against unmeasured installs: a shader whose
-        /// name and GUID match no row refuses with
-        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>.
-        /// Filling the table is a data-only append.
-        /// <para>
-        /// The mode half of a Multi profile is the keyword-derivation
-        /// mode-consistency gate's contract, never a LIL_RENDER scan. This
-        /// entry point attests the source only.
-        /// </para>
-        /// </summary>
-        internal static bool TryVerifyMultiContainer(
-            Shader shader,
-            CapturedMaterialEvidence evidence,
-            out LilToonMultiResolutionRefusal refusal)
-        {
-            if (shader == null) throw new ArgumentNullException(nameof(shader));
-            if (evidence == null)
-            {
-                throw new ArgumentNullException(nameof(evidence));
-            }
-
-            if (!TryResolveMultiContainer(
-                    shader,
-                    evidence,
-                    out var sourceEvidence,
-                    out var profile,
-                    out refusal))
-            {
-                return false;
-            }
-
-            return TryVerifyMultiContainer(
-                sourceEvidence,
-                profile,
-                out refusal);
-        }
 
         /// <summary>
         /// Resolves one live shader's Multi container row and gathers its
