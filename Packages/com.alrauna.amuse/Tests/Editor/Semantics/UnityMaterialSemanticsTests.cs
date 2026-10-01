@@ -848,6 +848,34 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// The D8 consent subject for a refused Multi material must name
+        /// the actual refusal. The generic "not a verified version"
+        /// wording is true for an attestation failure and false for every
+        /// other Multi gate: a material refusing on mode, keywords, or the
+        /// clipping canceller is verified at the source and stopped by its
+        /// state. The subject carries the refusal feature words so the
+        /// dialog names the real gate.
+        /// </summary>
+        // --- Falsifier: a pre-scan that reports every refused Multi material as an unverified version hides the gate that refused it. ---
+        [Test]
+        public void ConsentSubjectForRefusedMultiMaterialNamesTheRefusal()
+        {
+            var material = NewMaterial(
+                "refused-multi-consent-subject.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain("the shader source does not verify"),
+                "the subject must name the refusing gate in words");
+        }
+
+        /// <summary>
         /// Fresh invariance row beside
         /// <see cref="LilToonCaptureSchemaIsExactlyItsAlphaRelevance"/>:
         /// adding the cutout family to the selection map must not disturb
