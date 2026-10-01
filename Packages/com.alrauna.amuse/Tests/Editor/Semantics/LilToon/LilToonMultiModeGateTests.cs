@@ -140,15 +140,172 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
                 Is.True);
         }
 
+        /// <summary>
+        /// The writer writes feature keywords for every feature the
+        /// material turns on, on every inspector save
+        /// (Editor/lilMaterialUtils.cs:397-468 at the pin): shadow, rim
+        /// shade, emission with a blend mask, emission second with a blend
+        /// mask, normal maps, anisotropy, matcaps with custom normals, rim,
+        /// glitter, audio link as local, backlight, parallax with POM,
+        /// reflection, main second, and main third. A real avatar material
+        /// therefore carries keyword state far beyond the mode rows, and an
+        /// exact-set comparison against the mode rows alone refuses
+        /// materials the vendor itself considers consistent. The full
+        /// writer transcription must admit this state at mode 0 and derive
+        /// the same keyword set the writer writes.
+        /// </summary>
+        // --- Falsifier: a gate whose keyword table covers only the mode rows refuses a real feature-loaded material the vendor writer accepts. ---
+        [Test]
+        public void FeatureLoadedOpaqueMaterialAdmitsAndDerivesTheWriterKeywords()
+        {
+            var evidence = GateEvidence(
+                new[]
+                {
+                    "_REQUIRE_UV2", "AUTO_KEY_VALUE", "_EMISSION",
+                    "GEOM_TYPE_BRANCH", "_SUNDISK_SIMPLE", "_NORMALMAP",
+                    "EFFECT_BUMP", "SOURCE_GBUFFER",
+                    "_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A",
+                    "_SPECULARHIGHLIGHTS_OFF", "GEOM_TYPE_MESH",
+                    "_METALLICGLOSSMAP", "_SPECGLOSSMAP",
+                    "_MAPPING_6_FRAMES_LAYOUT", "_SUNDISK_HIGH_QUALITY",
+                    "_COLORADDSUBDIFF_ON", "_COLORCOLOR_ON",
+                    "ANTI_FLICKER", "_PARALLAXMAP",
+                    "PIXELSNAP_ON", "_GLOSSYREFLECTIONS_OFF",
+                },
+                clippingCanceller: 0f,
+                asOverlay: 0f,
+                scalars: new Dictionary<string, float>
+                {
+                    { "_UseShadow", 1f },
+                    { "_UseRimShade", 1f },
+                    { "_UseEmission", 1f },
+                    { "_UseEmission2nd", 1f },
+                    { "_UseBumpMap", 1f },
+                    { "_UseBump2ndMap", 1f },
+                    { "_UseAnisotropy", 1f },
+                    { "_UseMatCap", 1f },
+                    { "_MatCapCustomNormal", 1f },
+                    { "_UseMatCap2nd", 1f },
+                    { "_MatCap2ndCustomNormal", 1f },
+                    { "_UseRim", 1f },
+                    { "_UseGlitter", 1f },
+                    { "_UseAudioLink", 1f },
+                    { "_AudioLinkAsLocal", 1f },
+                    { "_UseBacklight", 1f },
+                    { "_UseParallax", 1f },
+                    { "_UsePOM", 1f },
+                    { "_UseReflection", 1f },
+                    { "_UseMain2ndTex", 1f },
+                    { "_UseMain3rdTex", 1f },
+                },
+                textures: new Dictionary<string, Texture>
+                {
+                    { "_EmissionBlendMask", Texture2D.whiteTexture },
+                    { "_Emission2ndBlendMask", Texture2D.whiteTexture },
+                });
+
+            Assert.That(
+                LilToonMultiModeGate.Evaluate(evidence, 0, out var refusal),
+                Is.True,
+                "a feature-loaded material the vendor writer accepts must " +
+                "admit: " + refusal);
+
+            var derived = LilToonMultiModeGate.DeriveKeywordSet(evidence, 0);
+            foreach (var keyword in new[]
+                     {
+                         "_REQUIRE_UV2", "AUTO_KEY_VALUE", "_EMISSION",
+                         "GEOM_TYPE_BRANCH", "_SUNDISK_SIMPLE", "_NORMALMAP",
+                         "EFFECT_BUMP", "SOURCE_GBUFFER",
+                         "_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A",
+                         "_SPECULARHIGHLIGHTS_OFF", "GEOM_TYPE_MESH",
+                         "_METALLICGLOSSMAP", "_SPECGLOSSMAP",
+                         "_MAPPING_6_FRAMES_LAYOUT", "_SUNDISK_HIGH_QUALITY",
+                         "_COLORADDSUBDIFF_ON", "_COLORCOLOR_ON",
+                         "ANTI_FLICKER", "_PARALLAXMAP",
+                         "PIXELSNAP_ON", "_GLOSSYREFLECTIONS_OFF",
+                     })
+            {
+                CollectionAssert.Contains(
+                    derived, keyword, keyword + " must derive");
+            }
+        }
+
+        /// <summary>
+        /// The production Multi request must carry every property name the
+        /// derivation table consults. The capture treats an unrequested
+        /// name as feature-off, so one missing request entry would turn a
+        /// table row off for every real material while every synthetic
+        /// fixture - whose own request names exactly what it sets - stays
+        /// green. This fixture is the drift guard for that failure mode.
+        /// </summary>
+        // --- Falsifier: a new gate row whose condition input the production request does not carry refuses every real material that turns the feature on. ---
+        [Test]
+        public void ProductionMultiRequestCarriesEveryConsultedConditionInput()
+        {
+            var request = LilToonMultiResolution.MultiEvidenceRequest;
+
+            foreach (var scalar in LilToonMultiModeGate
+                         .ConsultedScalarProperties)
+            {
+                CollectionAssert.Contains(
+                    request.ScalarProperties,
+                    scalar,
+                    scalar + " must ride the production Multi request");
+            }
+
+            foreach (var vector in LilToonMultiModeGate
+                         .ConsultedVectorProperties)
+            {
+                CollectionAssert.Contains(
+                    request.VectorProperties,
+                    vector,
+                    vector + " must ride the production Multi request");
+            }
+
+            foreach (var texture in LilToonMultiModeGate
+                         .ConsultedTextureProperties)
+            {
+                Assert.That(
+                    request.TextureProperties,
+                    Has.Some.Matches<TexturePropertyEvidenceRequest>(
+                        t => t.PropertyName == texture),
+                    texture + " must ride the production Multi request");
+            }
+        }
+
         private CapturedMaterialEvidence GateEvidence(
             string[] keywords,
             float clippingCanceller,
-            float asOverlay)
+            float asOverlay,
+            IReadOnlyDictionary<string, float> scalars = null,
+            IReadOnlyDictionary<string, Vector4> vectors = null,
+            IReadOnlyDictionary<string, Texture> textures = null)
         {
             var material = NewMaterial();
             material.shaderKeywords = keywords;
             material.SetFloat("_UseClippingCanceller", clippingCanceller);
             material.SetFloat("_AsOverlay", asOverlay);
+            if (scalars != null)
+            {
+                foreach (var pair in scalars)
+                {
+                    material.SetFloat(pair.Key, pair.Value);
+                }
+            }
+            if (vectors != null)
+            {
+                foreach (var pair in vectors)
+                {
+                    material.SetVector(pair.Key, pair.Value);
+                }
+            }
+            if (textures != null)
+            {
+                foreach (var pair in textures)
+                {
+                    material.SetTexture(pair.Key, pair.Value);
+                }
+            }
             return Capture(material, GateRequest());
         }
 
@@ -173,9 +330,10 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
 
         /// <summary>
         /// The closed request every fixture captures under: the two gate
-        /// scalars the mode-consistency rules read, plus the keyword set.
-        /// Every fixture sets exactly these material properties, so no
-        /// fixture depends on stand-in shader defaults.
+        /// scalars the mode-consistency rules read, every vendor
+        /// keyword-writer condition input, and the keyword set. Every
+        /// fixture sets exactly these material properties, so no fixture
+        /// depends on stand-in shader defaults.
         /// </summary>
         private static MaterialEvidenceRequest GateRequest()
         {
@@ -183,10 +341,57 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
                 shaderName: false,
                 activeColorSpace: false,
                 presenceProperties: Array.Empty<string>(),
-                scalarProperties: new[] { "_UseClippingCanceller", "_AsOverlay" },
+                scalarProperties: new[]
+                {
+                    "_UseClippingCanceller",
+                    "_AsOverlay",
+                    "_UseShadow",
+                    "_UseRimShade",
+                    "_UseEmission",
+                    "_UseEmission2nd",
+                    "_UseBumpMap",
+                    "_UseBump2ndMap",
+                    "_UseAnisotropy",
+                    "_UseMatCap",
+                    "_UseMatCap2nd",
+                    "_MatCapCustomNormal",
+                    "_MatCap2ndCustomNormal",
+                    "_UseRim",
+                    "_RimDirStrength",
+                    "_UseGlitter",
+                    "_UseAudioLink",
+                    "_AudioLinkAsLocal",
+                    "_UseBacklight",
+                    "_UseParallax",
+                    "_UsePOM",
+                    "_UseReflection",
+                    "_MainGradationStrength",
+                    "_UseMain2ndTex",
+                    "_UseMain3rdTex",
+                    "_UseDither",
+                    "_AlphaMaskMode",
+                },
                 colorProperties: Array.Empty<string>(),
-                vectorProperties: Array.Empty<string>(),
-                textureProperties: Array.Empty<TexturePropertyEvidenceRequest>(),
+                vectorProperties: new[]
+                {
+                    "_MainTexHSVG",
+                    "_Main2ndTexDecalAnimation",
+                    "_Main3rdTexDecalAnimation",
+                    "_Main2ndDissolveParams",
+                    "_Main3rdDissolveParams",
+                    "_DissolveParams",
+                    "_DistanceFade",
+                    "_OutlineTexHSVG",
+                },
+                textureProperties: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_EmissionBlendMask",
+                        TextureEvidenceKinds.None),
+                    new TexturePropertyEvidenceRequest(
+                        "_Emission2ndBlendMask",
+                        TextureEvidenceKinds.None),
+                },
                 captureKeywords: true);
         }
     }

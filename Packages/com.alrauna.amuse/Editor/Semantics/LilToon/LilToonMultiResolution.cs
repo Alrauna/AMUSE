@@ -80,11 +80,62 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             ModeProperty,
                             ClippingCancellerProperty,
                             OverlayProperty,
+                            // The keyword-writer condition inputs
+                            // (lilMaterialUtils.cs:364-391 at the pin). The
+                            // mode gate's derivation table reads one scalar
+                            // per feature row; an unrequested name reads as
+                            // feature-off, so the request must carry every
+                            // input a table row can consult.
+                            "_UseShadow",
+                            "_UseRimShade",
+                            "_UseEmission",
+                            "_UseEmission2nd",
+                            "_UseBumpMap",
+                            "_UseBump2ndMap",
+                            "_UseAnisotropy",
+                            "_UseMatCap",
+                            "_UseMatCap2nd",
+                            "_MatCapCustomNormal",
+                            "_MatCap2ndCustomNormal",
+                            "_UseRim",
+                            "_RimDirStrength",
+                            "_UseGlitter",
+                            "_UseAudioLink",
+                            "_AudioLinkAsLocal",
+                            "_UseBacklight",
+                            "_UseParallax",
+                            "_UsePOM",
+                            "_UseReflection",
+                            "_MainGradationStrength",
+                            "_UseMain2ndTex",
+                            "_UseMain3rdTex",
+                            "_UseDither",
+                            "_AlphaMaskMode",
                         },
                         colorProperties: Array.Empty<string>(),
-                        vectorProperties: Array.Empty<string>(),
-                        textureProperties:
-                            Array.Empty<TexturePropertyEvidenceRequest>(),
+                        vectorProperties: new[]
+                        {
+                            "_MainTexHSVG",
+                            "_Main2ndTexDecalAnimation",
+                            "_Main3rdTexDecalAnimation",
+                            "_Main2ndDissolveParams",
+                            "_Main3rdDissolveParams",
+                            "_DissolveParams",
+                            "_DistanceFade",
+                            "_OutlineTexHSVG",
+                        },
+                        textureProperties: new[]
+                        {
+                            // Assignment-only evidence for the emission blend
+                            // masks the writer's _SUNDISK_SIMPLE row consults
+                            // (lilMaterialUtils.cs:387-388 at the pin).
+                            new TexturePropertyEvidenceRequest(
+                                "_EmissionBlendMask",
+                                TextureEvidenceKinds.None),
+                            new TexturePropertyEvidenceRequest(
+                                "_Emission2ndBlendMask",
+                                TextureEvidenceKinds.None),
+                        },
                         captureKeywords: true));
 
         /// <summary>
