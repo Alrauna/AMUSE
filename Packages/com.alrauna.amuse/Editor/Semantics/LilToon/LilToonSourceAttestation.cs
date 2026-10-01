@@ -2234,11 +2234,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Verifies one material's shader against the pinned Multi container
         /// rows. A row must match the live shader's name and asset GUID
-        /// exactly. Fail-closed: the row table ships empty until the Task 2
-        /// digest measurement lands, so this entry point refuses every Multi
-        /// container with
-        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>
-        /// until then. Filling the table is a data-only append.
+        /// exactly. Fail-closed against unmeasured installs: a shader whose
+        /// name and GUID match no row refuses with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>.
+        /// Filling the table is a data-only append.
         /// <para>
         /// The mode half of a Multi profile is the keyword-derivation
         /// mode-consistency gate's contract, never a LIL_RENDER scan. This
@@ -2333,7 +2332,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// real settings shapes; no placeholder digest ships here.
         /// </summary>
         private static readonly LilToonMultiContainerProfile[]
-            MultiContainerProfiles = { };
+            MultiContainerProfiles =
+            {
+                // Measured on 2026-10-01 through the production
+                // Canonicalize + ComputeNormalizedSourceHash from two real
+                // installed settings shapes of a scratch 2.3.4 project
+                // (default import, then vertex-light and anisotropy
+                // settings applied): both shapes produce one digest per
+                // container, and the same run reproduced every regular
+                // pin above byte-for-byte. Never re-derive these from the
+                // lilToon repository, whose committed generated shaders
+                // are stale relative to their own tag's generator.
+                new LilToonMultiContainerProfile(
+                    "_lil/lilToonMulti",
+                    "9294844b15dca184d914a632279b24e1",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f"),
+                new LilToonMultiContainerProfile(
+                    "Hidden/lilToonMultiOutline",
+                    "51b2dee0ab07bd84d8147601ff89e511",
+                    "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
+            };
 
         /// <summary>
         /// Reads identity evidence from a live shader and already-captured
