@@ -624,7 +624,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 request.CaptureKeywords,
                 effectiveRenderQueue,
                 effectiveRenderType,
-                out family);
+                out family,
+                out _);
             if (!record.IsResolved)
             {
                 // A refusal keeps the Multi family, so the stored record
