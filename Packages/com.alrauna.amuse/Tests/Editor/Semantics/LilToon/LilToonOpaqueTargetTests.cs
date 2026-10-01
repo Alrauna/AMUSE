@@ -485,8 +485,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// outline-tone facts, so the mode-0 set is empty. The clone must
         /// carry exactly that empty set.
         /// <para>
-        /// Phase-A expectation: red - the recipe does not write the keyword
-        /// set today, and the material copy carries the source's enabled
+        /// Phase-A expectation: red - the recipe did not write the keyword
+        /// set at phase A, and the material copy carries the source's enabled
         /// keyword onto the clone.
         /// </para>
         /// </summary>
@@ -518,8 +518,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// nothing; the gate is the same verdict the routing ran on the
         /// source, now run on the recipe's output.
         /// <para>
-        /// Phase-A expectation: red - the recipe does not write the keyword
-        /// set today, so the clone still carries the source's
+        /// Phase-A expectation: red - the recipe did not write the keyword
+        /// set at phase A, so the clone still carried the source's
         /// <c>_COLOROVERLAY_ON</c>, which the gate refuses at mode 0 as a
         /// keyword and mode mismatch.
         /// </para>
