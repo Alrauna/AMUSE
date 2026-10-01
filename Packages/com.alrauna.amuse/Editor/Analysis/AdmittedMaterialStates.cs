@@ -272,7 +272,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.LockedIdentityRefusal,
                         material.MaterialPath,
                         material.MaterialName,
-                        material.ShaderName);
+                        material.ShaderName,
+                        material.MultiResolution);
                 var capturedSemantics = resolveSemantics(admitted)
                     ?? CapturedAlphaSemantics.AllUnknown();
                 // Field lookups are scoped to this admitted material's own

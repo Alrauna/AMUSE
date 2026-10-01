@@ -1884,12 +1884,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Resolves the canonical opaque target shader name for a source
-        /// shader name. Outline wrapper sources move to the outline opaque
-        /// shader. All other sources move to the plain opaque shader.
+        /// shader name. A Multi container resolves to itself: the clone
+        /// stays on its container asset. Outline wrapper sources move to
+        /// the outline opaque shader. All other sources move to the plain
+        /// opaque shader.
         /// </summary>
         internal static string ResolveCanonicalTargetShaderName(
             string sourceShaderName)
         {
+            if (LilToonMultiResolution.IsMultiContainerShaderName(
+                    sourceShaderName))
+            {
+                return sourceShaderName;
+            }
+
             return IsOutlineWrapperShaderName(sourceShaderName)
                 ? OutlineShaderName
                 : SupportedShaderName;
@@ -2248,27 +2256,70 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(evidence));
             }
 
+            if (!TryResolveMultiContainer(
+                    shader,
+                    evidence,
+                    out var sourceEvidence,
+                    out var profile,
+                    out refusal))
+            {
+                return false;
+            }
+
+            return TryVerifyMultiContainer(
+                sourceEvidence,
+                profile,
+                out refusal);
+        }
+
+        /// <summary>
+        /// Resolves one live shader's Multi container row and gathers its
+        /// source evidence. The row must match the live shader's name and
+        /// asset GUID exactly. Fail-closed: the row table ships empty until
+        /// the Task 2 digest measurement lands, so this entry refuses every
+        /// Multi container with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>
+        /// until then. The verify itself is the parameterized conjunction,
+        /// so the resolution point can store the verified gather without a
+        /// second canonicalization pass.
+        /// </summary>
+        internal static bool TryResolveMultiContainer(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            out LilToonSourceEvidence sourceEvidence,
+            out LilToonMultiContainerProfile profile,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            if (shader == null) throw new ArgumentNullException(nameof(shader));
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
             var shaderName = shader.name;
             var normalizedGuid = assetGuid?.ToLowerInvariant();
 
-            foreach (var profile in MultiContainerProfiles)
+            foreach (var row in MultiContainerProfiles)
             {
                 if (string.Equals(
-                        shaderName, profile.ShaderName,
+                        shaderName, row.ShaderName,
                         StringComparison.Ordinal) &&
                     string.Equals(
-                        normalizedGuid, profile.ShaderGuid,
+                        normalizedGuid, row.ShaderGuid,
                         StringComparison.Ordinal))
                 {
-                    return TryVerifyMultiContainer(
-                        GatherMultiContainerEvidence(shader, evidence),
-                        profile,
-                        out refusal);
+                    sourceEvidence =
+                        GatherMultiContainerEvidence(shader, evidence);
+                    profile = row;
+                    refusal = default;
+                    return true;
                 }
             }
 
+            sourceEvidence = null;
+            profile = null;
             refusal = LilToonMultiResolutionRefusal.AttestationFailed;
             return false;
         }
