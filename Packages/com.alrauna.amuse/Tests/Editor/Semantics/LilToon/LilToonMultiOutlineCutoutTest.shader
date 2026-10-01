@@ -8,8 +8,9 @@
 // The property set is byte-identical to the base container stand-in's,
 // exactly as the two vendor container assets share one property block;
 // the outline property set is live container state here. The vendor
-// container name is the point: the outline eligibility rows key on the
-// captured container identity. It is not a pretend lilToon distribution,
+// container name is load-bearing through the Task 5 mode-consistency
+// gate, whose outline-tone keyword derivation reads the captured name.
+// It is not a pretend lilToon distribution,
 // contains no upstream lilToon source, no LIL_RENDER define, and no
 // keyword variants.
 Shader "Hidden/lilToonMultiOutline"

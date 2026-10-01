@@ -7,9 +7,10 @@
 // properties, the version and cutoff source facts, the three Multi
 // scalars, the runtime feature scalars the mode gate and the mode-1 rows
 // read, and the outline property set, which is inert residue on this
-// container. The vendor container name is the point: the eligibility rows
-// key on the captured container identity, and the task fixtures must not
-// depend on stand-in defaults outside this declared state. It is not a
+// container. The vendor container name is load-bearing through the Task 5
+// mode-consistency gate, whose outline-tone keyword derivation reads the
+// captured name, and the task fixtures must not depend on stand-in
+// defaults outside this declared state. It is not a
 // pretend lilToon distribution, contains no upstream lilToon source, no
 // LIL_RENDER define, and no keyword variants.
 Shader "_lil/lilToonMulti"
