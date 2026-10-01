@@ -88,6 +88,16 @@ characterization, never dressed up as red.
 **Files:**
 - Create: `docs/superpowers/investigations/2026-09-30-multi-clone-inheritance-characterization.md`
 
+> Re-scope, dated 2026-10-01: this task never ran — the throwaway Unity
+> project never existed this session — and the record is not written.
+> The keyword-write half is mooted by the unconditional read-back guard
+> the Task 8 implementation landed (`WriteMultiModeZeroKeywordSet`
+> throws on any read-back disagreement), which the Task 8 fixtures
+> evidence, so no measured starting fact remains to record there. The
+> pass-enable half (`new Material` and the pass-enable list) moves to
+> the `_AsOverlay` follow-up branch as that branch's own first task,
+> its measured starting fact.
+
 - [ ] **Step 1:** In the throwaway project, characterize `new
   Material(shader)` for both containers: inherited queue and
   RenderType tag, inherited keyword state, and whether the
