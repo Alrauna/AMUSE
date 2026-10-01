@@ -1964,7 +1964,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new[] { material },
                         new[] { family },
                         captureSchema,
-                        null,
+                        AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
                 Assert.That(batchAdmitted, Is.False,
@@ -2059,7 +2059,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new[] { material },
                         new[] { family },
                         captureSchema,
-                        null,
+                        AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
                 Assert.That(batchAdmitted, Is.False);
