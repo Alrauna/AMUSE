@@ -1,8 +1,10 @@
 # lilToonMulti full-parity support design
 
-Date: 2026-09-30. Status: Stage A (mode 0, both containers) implemented
-and validated as of 2026-10-01. The full-suite failure set is identical to
-the base commit's pre-existing items. Stages B and C pending.
+Date: 2026-09-30. Status: Stages A, B, and C implemented and validated as
+of 2026-10-01. The full-suite failure set is identical to the base commit's
+pre-existing items. Remaining before merge value: the Task 2 digest
+measurement (the production row table ships empty, so every Multi material
+fail-closed refuses until it runs) and the Lab re-characterization.
 
 Parent context: the decision record of this date
 (`docs/superpowers/investigations/2026-09-30-liltoon-multi-support-path.md`),
