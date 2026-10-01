@@ -14,9 +14,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// <para>
     /// Every fixture drives the production capture path over a committed
     /// container stand-in carrying the real container identity, because the
-    /// outline rows key on the captured container name. The declared render
-    /// state of both stand-ins is the vendor cutout form the vendor editor
-    /// writes at cutout mode: blend One/Zero, <c>_AlphaToMask</c> 1,
+    /// Task 5 mode-consistency gate reads that name: its outline-tone
+    /// keyword derivation needs the outline shader identity. The declared
+    /// render state of both stand-ins is the vendor cutout form the vendor
+    /// editor writes at cutout mode: blend One/Zero, <c>_AlphaToMask</c> 1,
     /// RenderType TransparentCutout, queue 2450. The mode-1 keyword feature
     /// facts are exercised as runtime scalars through captured evidence,
     /// never as keyword reads: the disabled-mask control is the
@@ -25,16 +26,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// derivation's output for that state.
     /// </para>
     /// <para>
-    /// Red against the missing <c>LilToonMultiSourceEligibility</c> type:
-    /// every fixture references it, so the test assembly does not compile
-    /// (CS0246) until the Task 10 green step lands the type.
+    /// The fixtures landed at the phase A commit as a compile red against
+    /// the missing <c>LilToonMultiSourceEligibility</c> type; the green
+    /// step of 2026-10-01 landed the type, and the fixtures now run the
+    /// real evaluator.
     /// </para>
     /// </summary>
     public sealed class LilToonMultiSourceEligibilityTests : LilToonFixtureTestBase
     {
         // The stand-ins carry the real container identities as their shader
         // names, `_lil/lilToonMulti` and `Hidden/lilToonMultiOutline`,
-        // because the eligibility rows key on the captured container name.
+        // because the Task 5 mode-consistency gate reads the captured name:
+        // only its outline-tone keyword derivation consumes the container
+        // identity, and no eligibility row does.
         private const string BaseContainerShaderPath =
             "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
             "LilToonMultiCutoutTest.shader";
@@ -178,13 +182,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// behind it.
         /// </summary>
         /// <remarks>
-        /// The refusal names the alpha mask inside the closed cutout
-        /// vocabulary, and no existing member names it: the vocabulary
-        /// deliberately does not widen for Multi. This fixture pins the
-        /// refused outcome; the green step's member choice stays inside
-        /// <see cref="LilToonOpaqueConversionRefusal"/>.
+        /// The refusal member is the 2026-10-01 green step's documented
+        /// choice inside the closed cutout vocabulary: each mode-1 feature
+        /// composes into the alpha or the coverage before the cutout clip,
+        /// so the clip-proof member refuses each of them.
         /// </remarks>
-        // --- Falsifier: a gate that treats the _COLOROVERLAY_ON keyword itself as proof of the mask, or that skips the _AlphaMaskMode scalar, fails this fixture. ---
+        // --- Falsifier: a gate that treats the _COLOROVERLAY_ON keyword itself as proof of the mask, that skips the _AlphaMaskMode scalar, or that refuses with any member but the clip-proof one, fails this fixture. ---
         [Test]
         public void AlphaMaskScalarOnAtCutoutModeRefuses()
         {
@@ -196,12 +199,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "UNITY_UI_ALPHACLIP", "_COLOROVERLAY_ON",
             };
 
-            var result = EvaluateMulti(material);
+            AssertRefusal(
+                EvaluateMulti(material),
+                LilToonOpaqueConversionRefusal
+                    .ClipThresholdDiscardsOpaqueAlpha);
+        }
 
-            Assert.That(
-                result.Outcome,
-                Is.EqualTo(LilToonOpaqueConversionOutcome.Refused),
-                "refusal was " + result.Refusal);
+        /// <summary>
+        /// Dither is a runtime scalar gate with the exact-zero admitted
+        /// state. The scalar here is the half the vendor derivation writes
+        /// no keyword for: the derivation produces the dither keyword only
+        /// at exactly one, so the captured set is the mode keyword alone,
+        /// the mode-consistency gate admits, and the scalar itself must
+        /// refuse. Any non-zero is on, exactly as the zero gates of the
+        /// cutout interpretation read the feature.
+        /// </summary>
+        // --- Falsifier: a dither gate borrowed from the derivation's ==1 keyword condition (silently admitting the half), one that skips the _UseDither scalar, or one that refuses with any member but the clip-proof one, fails this fixture. ---
+        [Test]
+        public void DitherScalarOnAtCutoutModeRefuses()
+        {
+            var material =
+                CutoutModeContainerMaterial(BaseContainerShaderPath);
+            material.SetFloat("_UseDither", 0.5f);
+
+            AssertRefusal(
+                EvaluateMulti(material),
+                LilToonOpaqueConversionRefusal
+                    .ClipThresholdDiscardsOpaqueAlpha);
+        }
+
+        /// <summary>
+        /// The layer dissolve is a runtime scalar gate on the x component of
+        /// the params vector, dissolve mode zero exactly admitted. The
+        /// scalar here is a non-integer mode the vendor derivation still
+        /// writes its keyword for, so the captured set is the exact
+        /// derivation output, the mode-consistency gate admits, and the
+        /// scalar itself must refuse.
+        /// </summary>
+        // --- Falsifier: a dissolve gate that reads any component but x, that keys on an integer comparison instead of the exact-zero admitted state, that skips the vector scalar, or that refuses with any member but the clip-proof one, fails this fixture. ---
+        [Test]
+        public void DissolveScalarOnAtCutoutModeRefuses()
+        {
+            var material =
+                CutoutModeContainerMaterial(BaseContainerShaderPath);
+            material.SetVector(
+                "_DissolveParams", new Vector4(0.5f, 0f, 0.5f, 0.1f));
+            material.shaderKeywords = new[]
+            {
+                "UNITY_UI_ALPHACLIP", "GEOM_TYPE_BRANCH_DETAIL",
+            };
+
+            AssertRefusal(
+                EvaluateMulti(material),
+                LilToonOpaqueConversionRefusal
+                    .ClipThresholdDiscardsOpaqueAlpha);
         }
 
         /// <summary>
