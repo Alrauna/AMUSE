@@ -134,11 +134,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Every property name the derivation table's producing conditions
-        /// can consult, split by evidence kind. The capture request that
-        /// feeds this gate must carry every name: an unrequested name reads
-        /// as feature-off, so a missing request entry silently turns a row
-        /// off for every real material. The request agreement fixture pins
-        /// the union against the production Multi request.
+        /// can consult, split by evidence kind. The Multi evidence request
+        /// builds its own lists from these arrays, so the request cannot
+        /// drop a name a table row reads: an unrequested name reads as
+        /// feature-off, which would silently turn a row off for every real
+        /// material.
         /// </summary>
         internal static readonly string[] ConsultedScalarProperties =
         {
@@ -194,185 +194,100 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             int mode);
 
         /// <summary>
-        /// One row of the pinned derivation table. A tolerated row carries
-        /// no condition, because the comparison skips tolerated rows in both
-        /// directions: their presence never refuses and their absence never
-        /// refuses.
+        /// The pinned vendor derivation table. A simple row names the one
+        /// scalar property the vendor feature read consults, and the shared
+        /// condition is "the captured scalar is on". A complex row carries
+        /// a delegate for the conditions that read a mode, a vector, a
+        /// texture, or the shader name. A tolerated row carries neither:
+        /// the comparison skips tolerated rows in both directions, so their
+        /// presence never refuses and their absence never refuses. Each
+        /// comment cites the vendor row it transcribes at the pin.
         /// </summary>
-        private sealed class KeywordDerivationRow
+        private static readonly
+            (string Keyword, bool Tolerated, string ScalarProperty,
+             ProducingCondition Produces)[] DerivationTable =
         {
-            internal string Keyword;
-            internal bool Tolerated;
-            internal ProducingCondition Produces;
-        }
-
-        /// <summary>
-        /// The pinned vendor derivation table. Rows sit in the order the
-        /// design's gate section names them. Each condition comment cites
-        /// the vendor row it transcribes at the pin.
-        /// </summary>
-        private static readonly KeywordDerivationRow[] DerivationTable =
-        {
-            new KeywordDerivationRow
-            {
-                Keyword = "UNITY_UI_ALPHACLIP",
-                Produces = ProducesAlphaClip,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "UNITY_UI_CLIP_RECT",
-                Produces = ProducesClipRect,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "ETC1_EXTERNAL_ALPHA",
-                Produces = ProducesDither,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_COLOROVERLAY_ON",
-                Produces = ProducesAlphaMask,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "GEOM_TYPE_BRANCH_DETAIL",
-                Produces = ProducesLayerDissolve,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_FADING_ON",
-                Produces = ProducesDistanceFade,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_DETAIL_MULX2",
-                Produces = ProducesOutlineTone,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_REQUIRE_UV2",
-                Produces = ProducesShadow,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "AUTO_KEY_VALUE",
-                Produces = ProducesRimShade,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_EMISSION",
-                Produces = ProducesEmission,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "GEOM_TYPE_BRANCH",
-                Produces = ProducesEmission2nd,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SUNDISK_SIMPLE",
-                Produces = ProducesEmissionBlendMask,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_NORMALMAP",
-                Produces = ProducesBumpMap,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "EFFECT_BUMP",
-                Produces = ProducesBump2ndMap,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "SOURCE_GBUFFER",
-                Produces = ProducesAnisotropy,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A",
-                Produces = ProducesMatCap,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SPECULARHIGHLIGHTS_OFF",
-                Produces = ProducesMatCap2nd,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "GEOM_TYPE_MESH",
-                Produces = ProducesMatCapCustomNormal,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_METALLICGLOSSMAP",
-                Produces = ProducesRim,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SPECGLOSSMAP",
-                Produces = ProducesGlitter,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_MAPPING_6_FRAMES_LAYOUT",
-                Produces = ProducesAudioLink,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SUNDISK_HIGH_QUALITY",
-                Produces = ProducesAudioLinkAsLocal,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_COLORADDSUBDIFF_ON",
-                Produces = ProducesMain2ndTex,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_COLORCOLOR_ON",
-                Produces = ProducesMain3rdTex,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_SUNDISK_NONE",
-                Produces = ProducesDecalAnimation,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "GEOM_TYPE_FROND",
-                Produces = ProducesMainDissolve,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "ANTI_FLICKER",
-                Produces = ProducesBacklight,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_PARALLAXMAP",
-                Produces = ProducesParallax,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "PIXELSNAP_ON",
-                Produces = ProducesParallaxOcclusion,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "_GLOSSYREFLECTIONS_OFF",
-                Produces = ProducesReflection,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "GEOM_TYPE_LEAF",
-                Tolerated = true,
-            },
-            new KeywordDerivationRow
-            {
-                Keyword = "EFFECT_HUE_VARIATION",
-                Tolerated = true,
-            },
+            // Editor/lilMaterialUtils.cs:397 at the pin.
+            ("UNITY_UI_ALPHACLIP", false, null, ProducesAlphaClip),
+            // :398. The vendor condition also admits a second mode value
+            // outside the admitted set, so that arm stays inert behind the
+            // mode range check.
+            ("UNITY_UI_CLIP_RECT", false, null, ProducesClipRect),
+            // :399. The vendor compares the dither float against exactly
+            // one, not against zero.
+            ("ETC1_EXTERNAL_ALPHA", false, null, ProducesDither),
+            // :455, with the alpha mask feature read at :385. The gem
+            // branch forces the keyword off at :442, and the gem name
+            // family carries no Multi container this gate admits.
+            ("_COLOROVERLAY_ON", false, null, ProducesAlphaMask),
+            // :433, with the dissolve feature read at :374: the x
+            // component of the params vector.
+            ("GEOM_TYPE_BRANCH_DETAIL", false, null, ProducesLayerDissolve),
+            // :416, with the distance fade feature read at :359: the z
+            // component of the fade vector. The gem branch forces the
+            // keyword off at :410 for the same name-family reason.
+            ("_FADING_ON", false, null, ProducesDistanceFade),
+            // :462-468. The vendor branch forces the keyword off on the
+            // refraction, fur, and gem name families, so the keyword is
+            // refused everywhere except outline shaders.
+            ("_DETAIL_MULX2", false, null, ProducesOutlineTone),
+            // :414, with the feature read at :364. The gem branch forces
+            // the keyword off at :405 for a name family no admitted
+            // container belongs to.
+            ("_REQUIRE_UV2", false, UseShadowProperty, null),
+            // :415, with the feature read at :365.
+            ("AUTO_KEY_VALUE", false, UseRimShadeProperty, null),
+            // :418, with the feature read at :368.
+            ("_EMISSION", false, UseEmissionProperty, null),
+            // :419, with the feature read at :369.
+            ("GEOM_TYPE_BRANCH", false, UseEmission2ndProperty, null),
+            // :420. The blend masks are texture-presence features read at
+            // :387-388 through IsFeatureOnTexture.
+            ("_SUNDISK_SIMPLE", false, null, ProducesEmissionBlendMask),
+            // :422, with the feature read at :370.
+            ("_NORMALMAP", false, UseBumpMapProperty, null),
+            // :423, with the feature read at :371.
+            ("EFFECT_BUMP", false, UseBump2ndMapProperty, null),
+            // :424, with the feature read at :372.
+            ("SOURCE_GBUFFER", false, UseAnisotropyProperty, null),
+            // :425, with the feature read at :373.
+            ("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A",
+                false, UseMatCapProperty, null),
+            // :426, with the feature read at :374.
+            ("_SPECULARHIGHLIGHTS_OFF", false, UseMatCap2ndProperty, null),
+            // :427, with the custom normal features read at :375-376.
+            ("GEOM_TYPE_MESH", false, null, ProducesMatCapCustomNormal),
+            // :428, with the feature read at :377.
+            ("_METALLICGLOSSMAP", false, UseRimProperty, null),
+            // :430, with the feature read at :379.
+            ("_SPECGLOSSMAP", false, UseGlitterProperty, null),
+            // :431, with the feature read at :380.
+            ("_MAPPING_6_FRAMES_LAYOUT", false, UseAudioLinkProperty, null),
+            // :432, with the local audio link feature read at :381.
+            ("_SUNDISK_HIGH_QUALITY", false, null, ProducesAudioLinkAsLocal),
+            // :448, with the main second feature read at :381.
+            ("_COLORADDSUBDIFF_ON", false, UseMain2ndTexProperty, null),
+            // :449, with the main third feature read at :382.
+            ("_COLORCOLOR_ON", false, UseMain3rdTexProperty, null),
+            // :450, with the main second feature read at :381 and the
+            // decal animation vectors read at :389-390 through
+            // IsFeatureOnDecalAnimation.
+            ("_SUNDISK_NONE", false, null, ProducesDecalAnimation),
+            // :451, with the dissolve features read at :382-383 through
+            // IsFeatureOnVectorX.
+            ("GEOM_TYPE_FROND", false, null, ProducesMainDissolve),
+            // :453, with the feature read at :384.
+            ("ANTI_FLICKER", false, UseBacklightProperty, null),
+            // :454, with the feature read at :385.
+            ("_PARALLAXMAP", false, UseParallaxProperty, null),
+            // :455, with the POM feature read at :386.
+            ("PIXELSNAP_ON", false, null, ProducesParallaxOcclusion),
+            // :456, with the feature read at :387.
+            ("_GLOSSYREFLECTIONS_OFF", false, UseReflectionProperty, null),
+            // Animation-derived color keywords, tolerated in both
+            // directions (see the class doc).
+            ("GEOM_TYPE_LEAF", true, null, null),
+            ("EFFECT_HUE_VARIATION", true, null, null),
         };
 
         /// <summary>
@@ -416,7 +331,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             for (var index = 0; index < DerivationTable.Length; index++)
             {
                 var row = DerivationTable[index];
-                if (row.Tolerated || !row.Produces(evidence, mode))
+                if (row.Tolerated || !RowProduces(row, evidence, mode))
                 {
                     continue;
                 }
@@ -471,7 +386,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             for (var index = 0; index < DerivationTable.Length; index++)
             {
                 var row = DerivationTable[index];
-                if (!row.Tolerated && row.Produces(evidence, mode))
+                if (!row.Tolerated && RowProduces(row, evidence, mode))
                 {
                     count++;
                 }
@@ -482,7 +397,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             for (var index = 0; index < DerivationTable.Length; index++)
             {
                 var row = DerivationTable[index];
-                if (!row.Tolerated && row.Produces(evidence, mode))
+                if (!row.Tolerated && RowProduces(row, evidence, mode))
                 {
                     derived[filled++] = row.Keyword;
                 }
@@ -509,7 +424,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
-                return row.Tolerated || row.Produces(evidence, mode);
+                return row.Tolerated || RowProduces(row, evidence, mode);
             }
 
             return false;
@@ -528,6 +443,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// One row's producing condition: the delegate a complex row
+        /// carries, or, for the simple rows, the shared feature read on
+        /// the row's own scalar property.
+        /// </summary>
+        private static bool RowProduces(
+            (string Keyword, bool Tolerated, string ScalarProperty,
+             ProducingCondition Produces) row,
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return row.Produces != null
+                ? row.Produces(evidence, mode)
+                : FeatureIsOn(evidence, row.ScalarProperty);
         }
 
         // Editor/lilMaterialUtils.cs:397 at the pin.
@@ -626,43 +557,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 && tone != DefaultHsvgColor;
         }
 
-        // Editor/lilMaterialUtils.cs:414 at the pin, with the feature read
-        // at :364. The gem branch forces the keyword off at :405 for a name
-        // family no admitted container belongs to.
-        private static bool ProducesShadow(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseShadowProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:415 at the pin, with the feature read
-        // at :365.
-        private static bool ProducesRimShade(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseRimShadeProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:418 at the pin, with the feature read
-        // at :368.
-        private static bool ProducesEmission(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseEmissionProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:419 at the pin, with the feature read
-        // at :369.
-        private static bool ProducesEmission2nd(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseEmission2ndProperty);
-        }
-
         // Editor/lilMaterialUtils.cs:420 at the pin. The blend masks are
         // texture-presence features read at :387-388 through
         // IsFeatureOnTexture.
@@ -677,51 +571,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         evidence, Emission2ndBlendMaskProperty));
         }
 
-        // Editor/lilMaterialUtils.cs:422 at the pin, with the feature read
-        // at :370.
-        private static bool ProducesBumpMap(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseBumpMapProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:423 at the pin, with the feature read
-        // at :371.
-        private static bool ProducesBump2ndMap(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseBump2ndMapProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:424 at the pin, with the feature read
-        // at :372.
-        private static bool ProducesAnisotropy(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseAnisotropyProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:425 at the pin, with the feature read
-        // at :373.
-        private static bool ProducesMatCap(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseMatCapProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:426 at the pin, with the feature read
-        // at :374.
-        private static bool ProducesMatCap2nd(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseMatCap2ndProperty);
-        }
-
         // Editor/lilMaterialUtils.cs:427 at the pin, with the custom normal
         // features read at :375-376.
         private static bool ProducesMatCapCustomNormal(
@@ -734,33 +583,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     && FeatureIsOn(evidence, MatCap2ndCustomNormalProperty));
         }
 
-        // Editor/lilMaterialUtils.cs:428 at the pin, with the feature read
-        // at :377.
-        private static bool ProducesRim(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseRimProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:430 at the pin, with the feature read
-        // at :379.
-        private static bool ProducesGlitter(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseGlitterProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:431 at the pin, with the feature read
-        // at :380.
-        private static bool ProducesAudioLink(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseAudioLinkProperty);
-        }
-
         // Editor/lilMaterialUtils.cs:432 at the pin, with the local audio
         // link feature read at :381.
         private static bool ProducesAudioLinkAsLocal(
@@ -769,25 +591,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return FeatureIsOn(evidence, UseAudioLinkProperty)
                 && FeatureIsOn(evidence, AudioLinkAsLocalProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:448 at the pin, with the main second
-        // feature read at :381 and the decal animation vectors read at
-        // :389-390 through IsFeatureOnDecalAnimation.
-        private static bool ProducesMain2ndTex(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseMain2ndTexProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:449 at the pin, with the main third
-        // feature read at :382.
-        private static bool ProducesMain3rdTex(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseMain3rdTexProperty);
         }
 
         // Editor/lilMaterialUtils.cs:450 at the pin, with the main second
@@ -823,24 +626,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         evidence, Main3rdDissolveParamsProperty));
         }
 
-        // Editor/lilMaterialUtils.cs:453 at the pin, with the feature read
-        // at :384.
-        private static bool ProducesBacklight(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseBacklightProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:454 at the pin, with the feature read
-        // at :385.
-        private static bool ProducesParallax(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseParallaxProperty);
-        }
-
         // Editor/lilMaterialUtils.cs:455 at the pin, with the POM feature
         // read at :386.
         private static bool ProducesParallaxOcclusion(
@@ -849,15 +634,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return FeatureIsOn(evidence, UseParallaxProperty)
                 && FeatureIsOn(evidence, UsePomProperty);
-        }
-
-        // Editor/lilMaterialUtils.cs:456 at the pin, with the feature read
-        // at :387.
-        private static bool ProducesReflection(
-            CapturedMaterialEvidence evidence,
-            int mode)
-        {
-            return FeatureIsOn(evidence, UseReflectionProperty);
         }
 
         /// <summary>

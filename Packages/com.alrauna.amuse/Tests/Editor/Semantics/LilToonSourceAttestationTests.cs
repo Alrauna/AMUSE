@@ -242,18 +242,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         /// <summary>
         /// Runs the Multi verify conjunction once against one injected
-        /// profile row. The row travels through the same ForTests factory
-        /// convention the include tree uses.
+        /// profile row carrying the same synthetic identity values the
+        /// other fixtures use.
         /// </summary>
         private static bool VerifyAgainstBaseContainerProfile(
             LilToonSourceEvidence evidence,
             out LilToonMultiResolutionRefusal refusal)
         {
-            var profile = LilToonSourceAttestation
-                .MultiContainerProfileForTests(
-                    BaseContainerName,
-                    BaseContainerGuid,
-                    BaseContainerCanonicalDigest);
+            var profile = new LilToonMultiContainerProfile(
+                BaseContainerName,
+                BaseContainerGuid,
+                BaseContainerCanonicalDigest);
             return LilToonSourceAttestation.TryVerifyMultiContainer(
                 evidence, profile, out refusal);
         }
