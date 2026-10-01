@@ -502,9 +502,23 @@ namespace Alrauna.Amuse.Editor.Semantics
                     continue;
                 }
 
-                subjects.Add("Shader '" + material.shader.name + "' is not " +
-                    "a verified version. AMUSE would treat it with the " +
-                    "verified version's rules, which may be wrong.");
+                var subject = "Shader '" + material.shader.name +
+                    "' is not a verified version. AMUSE would treat it " +
+                    "with the verified version's rules, which may be " +
+                    "wrong.";
+                var multiResolution = capturedList[0].MultiResolution;
+                if (multiResolution != null && !multiResolution.IsResolved)
+                {
+                    // A refused Multi material is often verified at the
+                    // source and stopped by its state instead: mode,
+                    // keywords, the clipping canceller, or the overlay
+                    // pass. The generic wording would misname the gate
+                    // that refused it, so name the refusal in words.
+                    subject += " AMUSE refused this material because " +
+                        LilToonMultiResolution.RefusalFeatureWords(
+                            multiResolution.Refusal) + ".";
+                }
+                subjects.Add(subject);
                 names.Add(material.shader.name);
             }
 
