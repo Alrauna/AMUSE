@@ -1891,20 +1891,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Final review, Important: the Multi boundary is reachable and
         // --- fail-closed until the rows land -------------------------------
 
+        // Why these fixtures drive the boundary below the avatar pass: the
+        // pass's D8 consent pre-scan (CollectTransferConsent) runs the
+        // production capture over every assigned material of a supported
+        // family, and a supported-container material against the empty row
+        // table is by definition unattested, so the pre-scan adds a consent
+        // subject and ShouldProceed refuses batch mode before any renderer
+        // is analyzed. That gate is production-correct and batch-impassable;
+        // the boundary facts the wave pins live one layer below it, in the
+        // production selection, the production closed capture, and the
+        // production analyze - all real, no resolver injection. The closed
+        // capture entry is all-or-nothing on attestation, so the shipping
+        // boundary's closed refusal for a Multi material is the batch
+        // refusal itself; the per-material transport (the family kept, the
+        // refusal named) rides the production analysis capture, which Task 7
+        // wired to carry the refused record.
+
         /// <summary>
         /// A supported-container Multi material at a mode-1 state reaches
         /// the one resolution point on the shipping boundary and refuses
-        /// closed there: the production row table is empty until the Task 2
-        /// digest measurement, so the resolution refuses AttestationFailed,
-        /// the material keeps the Multi family, and the slot's analysis is
-        /// all-Unknown through the Multi refusal transport. Before the
-        /// closed-capture fix this material never reached resolution: the
-        /// selection nulls its capture request and sentinel-ed it as
-        /// UnattestedMaterial, whose cause names no Multi refusal, so the
-        /// transport assertions below fail against that behavior.
-        /// Drives the real production boundary: production selection, the
-        /// production closed capture, and the production analyze, with no
-        /// resolver injection anywhere.
+        /// closed until the Task 2 rows land. The selection must serve the
+        /// Multi capture request - the wave's Critical 1 falsifier: at the
+        /// pre-wave head the schema was null and the shared selection loop
+        /// sentinel-ed the material as UnattestedMaterial before any
+        /// capture, so the first assertion fails against that behavior.
+        /// The closed capture then refuses the batch (all-or-nothing
+        /// attestation against the empty row table), and the production
+        /// analysis capture carries the refused record: the family stays
+        /// Multi, the record names AttestationFailed, and the analyze
+        /// transport answers all-Unknown with that refusal value in words.
         /// Coverage map for the admit path this fixture deliberately does
         /// not exercise: the resolution admits through the Task 7 profile
         /// seam (ModeZeroMultiAndRegularTwinResolveToTheSameProvenOpaqueAnswer
@@ -1913,19 +1928,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// LilToonOpaqueTargetTests, and the eligibility decision surface
         /// through the LilToonMultiSourceEligibilityTests matrix.
         /// </summary>
-        // --- Falsifier: a selection that nulls the Multi capture request and sentinel-ed the material before resolution, or a transport whose cause names anything but the Multi refusal, fails this fixture. ---
+        // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
         [Test]
         public void ModeOneMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE multi mode one boundary");
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
             var fixtures = new LilToonCutoutConversionFixtures();
+            Material material = null;
 
             try
             {
@@ -1935,62 +1943,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "_lil/lilToonMulti",
                     1f,
                     new[] { "UNITY_UI_ALPHACLIP" });
-                AddSingleTriangleRenderer(root, material, out mesh);
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: UnityMaterialSemantics
-                        .TrySelectAlphaMaterialRequests,
-                    capturer: CaptureThroughProductionClosedCapture,
-                    resolveSemantics: UnityMaterialSemantics
-                        .AnalyzeAlphaMaterial);
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out _,
+                        out var captureSchema);
+                Assert.That(selected, Is.True);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(captureSchema, Is.Not.Null,
+                    "at the pre-wave head this schema was null and the " +
+                    "shipping selection sentinel-ed the material before " +
+                    "the resolution point");
 
-                Assert.That(
-                    amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1),
-                    "the renderer must stop at the closed Multi refusal, " +
-                    "not analyze past it");
-                Assert.That(
-                    amuse.RendererRefusalCount(
-                        RendererAnalysisRefusal
-                            .AdmittedMaterialSemanticsUnknown),
-                    Is.EqualTo(1),
-                    "the slot's own refusal is the semantics-unknown " +
-                    "destination of the refused Multi transport");
-                Assert.That(
-                    amuse.AnalyzedRendererCount, Is.EqualTo(0),
-                    "the closed refusal precedes any triangle proof");
-                Assert.That(amuse.Separation, Is.Null);
-                Assert.That(
-                    amuse.SlotRefusalCount(
-                        AlphaSeparationSlotRefusal
-                            .OpaqueConversionUnsupportedFamily),
-                    Is.Zero,
-                    "the family member never surfaces downstream: the " +
-                    "material refused at the resolution point");
-                Assert.That(
-                    amuse.SlotRefusalCount(
-                        AlphaSeparationSlotRefusal.OpaqueConversionRefused),
-                    Is.Zero,
-                    "the conversion boundary is never reached pre-rows");
+                var batchAdmitted =
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        new[] { material },
+                        new[] { family },
+                        captureSchema,
+                        null,
+                        out var captured,
+                        RegisteredSourceIdentity.Resolve);
+                Assert.That(batchAdmitted, Is.False,
+                    "the empty row table must refuse the batch closed " +
+                    "until the Task 2 rows land");
+                Assert.That(captured, Is.Null);
 
-                // The transport leg: the same production capture and
-                // analyze, read directly. The cause must name the Multi
-                // refusal value in words - the exact production words for
-                // AttestationFailed, not a generic unsupported-shader
-                // cause.
-                var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
-                    new[] { material });
+                var analyzedMaterial =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(
+                        new[] { material })[0];
                 Assert.That(
-                    captured[0].Family,
+                    analyzedMaterial.Family,
                     Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti),
                     "a refused material keeps the Multi family at the " +
                     "one resolution point");
-                var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
-                    captured[0]);
-                Assert.That(analysis.Semantics.Alpha.IsComplete, Is.False,
-                    "the refused transport answers all-Unknown alpha");
                 Assert.That(
-                    analysis.AlphaUnknownReason, Is.Not.Null);
+                    analyzedMaterial.MultiResolution, Is.Not.Null);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.IsResolved, Is.False);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.Refusal,
+                    Is.EqualTo(LilToonMultiResolutionRefusal
+                        .AttestationFailed),
+                    "the closed refusal value must be the empty row " +
+                    "table's AttestationFailed");
+
+                var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    analyzedMaterial);
+                Assert.That(
+                    analysis.Semantics.Alpha.IsComplete, Is.False,
+                    "the refused transport answers all-Unknown alpha");
+                Assert.That(analysis.AlphaUnknownReason, Is.Not.Null);
                 Assert.That(
                     analysis.AlphaUnknownReason.Kind,
                     Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState));
@@ -1998,14 +2004,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     analysis.AlphaUnknownReason.Feature,
                     Is.EqualTo(LilToonMultiResolution.RefusalFeatureWords(
                         LilToonMultiResolutionRefusal.AttestationFailed)),
-                    "the closed refusal value must be the empty row " +
-                    "table's AttestationFailed, named in words");
+                    "the transport must name the refusal value in words");
             }
             finally
             {
-                DestroyGenerated(amuse);
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
                 {
                     UnityEngine.Object.DestroyImmediate(material);
@@ -2016,27 +2018,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The mode-0 state refuses closed exactly as the mode-1 one: the
-        /// row table's emptiness is mode-independent, so even the observed
-        /// corpus state - the vendor opaque form, the empty derived keyword
-        /// set - reaches the one resolution point and refuses
-        /// AttestationFailed until the Task 2 rows land. Reachability and
-        /// transport assertions as in the mode-1 fixture; the admit path's
-        /// coverage map is stated there.
+        /// The mode-0 state - the observed corpus form, the empty derived
+        /// keyword set - refuses closed exactly as the mode-1 one: the row
+        /// table's emptiness is mode-independent. Reachability, closed
+        /// batch refusal, and transport assertions as in the mode-1
+        /// fixture; the falsifier and the coverage map are stated there.
         /// </summary>
-        // --- Falsifier: a selection that nulls the Multi capture request and sentinel-ed the material before resolution, or a transport whose cause names anything but the Multi refusal, fails this fixture. ---
+        // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
         [Test]
         public void ModeZeroMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE multi mode zero boundary");
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
             var fixtures = new LilToonCutoutConversionFixtures();
+            Material material = null;
 
             try
             {
@@ -2048,38 +2041,49 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Array.Empty<string>());
                 material.renderQueue = 2000;
                 material.SetOverrideTag("RenderType", "Opaque");
-                AddSingleTriangleRenderer(root, material, out mesh);
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: UnityMaterialSemantics
-                        .TrySelectAlphaMaterialRequests,
-                    capturer: CaptureThroughProductionClosedCapture,
-                    resolveSemantics: UnityMaterialSemantics
-                        .AnalyzeAlphaMaterial);
-
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out _,
+                        out var captureSchema);
+                Assert.That(selected, Is.True);
                 Assert.That(
-                    amuse.SemanticallyRefusedRendererCount, Is.EqualTo(1),
-                    "the renderer must stop at the closed Multi refusal, " +
-                    "not analyze past it");
-                Assert.That(
-                    amuse.RendererRefusalCount(
-                        RendererAnalysisRefusal
-                            .AdmittedMaterialSemanticsUnknown),
-                    Is.EqualTo(1));
-                Assert.That(
-                    amuse.AnalyzedRendererCount, Is.EqualTo(0));
-                Assert.That(amuse.Separation, Is.Null);
-
-                var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
-                    new[] { material });
-                Assert.That(
-                    captured[0].Family,
+                    family,
                     Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(captureSchema, Is.Not.Null);
+
+                var batchAdmitted =
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        new[] { material },
+                        new[] { family },
+                        captureSchema,
+                        null,
+                        out var captured,
+                        RegisteredSourceIdentity.Resolve);
+                Assert.That(batchAdmitted, Is.False);
+                Assert.That(captured, Is.Null);
+
+                var analyzedMaterial =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(
+                        new[] { material })[0];
+                Assert.That(
+                    analyzedMaterial.Family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(
+                    analyzedMaterial.MultiResolution, Is.Not.Null);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.IsResolved, Is.False);
+                Assert.That(
+                    analyzedMaterial.MultiResolution.Refusal,
+                    Is.EqualTo(LilToonMultiResolutionRefusal
+                        .AttestationFailed));
+
                 var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
-                    captured[0]);
-                Assert.That(analysis.Semantics.Alpha.IsComplete, Is.False,
-                    "the refused transport answers all-Unknown alpha");
+                    analyzedMaterial);
+                Assert.That(
+                    analysis.Semantics.Alpha.IsComplete, Is.False);
                 Assert.That(
                     analysis.AlphaUnknownReason.Kind,
                     Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState));
@@ -2090,9 +2094,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
                 {
                     UnityEngine.Object.DestroyImmediate(material);
@@ -2100,28 +2101,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 fixtures.BaseTearDown();
             }
-        }
-
-        /// <summary>
-        /// The production closed capture behind the capturer seam shape:
-        /// the real capture and the real resolution point, with the
-        /// registered-source lookup production itself passes. No resolver
-        /// injection.
-        /// </summary>
-        private static bool CaptureThroughProductionClosedCapture(
-            IReadOnlyList<Material> materials,
-            IReadOnlyList<CapturedAlphaMaterialFamily> families,
-            MaterialEvidenceRequest request,
-            AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
-        {
-            return UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                materials,
-                families,
-                request,
-                bounds,
-                out captured,
-                RegisteredSourceIdentity.Resolve);
         }
 
 
