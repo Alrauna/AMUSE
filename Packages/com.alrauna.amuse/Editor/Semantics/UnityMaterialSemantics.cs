@@ -608,12 +608,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
-        /// The hub half of the one resolution point: reads the effective
-        /// render state the eligibility layers own, then hands the
-        /// material to the resolver once. The keyword-evidence fact comes
-        /// from the capture request that shaped the evidence, because the
-        /// evidence alone cannot carry the requested-and-not-requested
-        /// fact apart.
+        /// The hub half of the one resolution point: hands the material to
+        /// the resolver once. The effective render state is not a
+        /// resolution fact — the eligibility layers read it at their own
+        /// boundary — so the hub does not read it here. The
+        /// keyword-evidence fact comes from the capture request that shaped
+        /// the evidence, because the evidence alone cannot carry the
+        /// requested-and-not-requested fact apart.
         /// </summary>
         private static LilToonMultiResolutionRecord ResolveMultiMaterial(
             Material material,
@@ -629,15 +630,10 @@ namespace Alrauna.Amuse.Editor.Semantics
                     LilToonMultiResolutionRefusal.AttestationFailed);
             }
 
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
-                material, out var effectiveRenderQueue,
-                out var effectiveRenderType);
             var record = LilToonMultiResolution.ResolveCapturedMaterial(
                 shader,
                 evidence,
                 request.CaptureKeywords,
-                effectiveRenderQueue,
-                effectiveRenderType,
                 out family,
                 out _);
             if (!record.IsResolved)

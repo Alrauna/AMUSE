@@ -47,23 +47,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         };
 
         private const string ModeProperty = "_TransparentMode";
-        private const string ClippingCancellerProperty =
-            "_UseClippingCanceller";
-        private const string OverlayProperty = "_AsOverlay";
 
         /// <summary>
         /// The combined Multi evidence request: the alpha facts of all three
-        /// resolved regular families, plus the three Multi scalars the mode
-        /// read and the gate rules consume, plus the keyword set the gate
-        /// compares. The union is mode-independent because the capture runs
-        /// before the one resolution point, and a resolved mode-1 or mode-2
-        /// material interprets through the cutout or transparent
-        /// interpreter, whose gates read schema facts the opaque request
-        /// alone never carried; an interpreter read of an unrequested name
-        /// throws, so the resolved family's own schema must ride the one
-        /// Multi capture. Every supported container classifies under this
-        /// one request, so one capture serves the resolution and the
-        /// interpretation on both containers.
+        /// resolved regular families, plus the mode scalar and every
+        /// condition input the mode gate's derivation table consults, plus
+        /// the keyword set the gate compares. The scalar, vector, and
+        /// texture names are the gate's own consulted-property lists, so
+        /// the request cannot drop a name a table row reads: an unrequested
+        /// name reads as feature-off. The union is mode-independent because
+        /// the capture runs before the one resolution point, and a resolved
+        /// mode-1 or mode-2 material interprets through the cutout or
+        /// transparent interpreter, whose gates read schema facts the
+        /// opaque request alone never carried; an interpreter read of an
+        /// unrequested name throws, so the resolved family's own schema
+        /// must ride the one Multi capture. Every supported container
+        /// classifies under this one request, so one capture serves the
+        /// resolution and the interpretation on both containers.
         /// </summary>
         internal static readonly MaterialEvidenceRequest
             MultiEvidenceRequest =
@@ -75,68 +75,46 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         shaderName: true,
                         activeColorSpace: false,
                         presenceProperties: Array.Empty<string>(),
-                        scalarProperties: new[]
-                        {
-                            ModeProperty,
-                            ClippingCancellerProperty,
-                            OverlayProperty,
-                            // The keyword-writer condition inputs
-                            // (lilMaterialUtils.cs:364-391 at the pin). The
-                            // mode gate's derivation table reads one scalar
-                            // per feature row; an unrequested name reads as
-                            // feature-off, so the request must carry every
-                            // input a table row can consult.
-                            "_UseShadow",
-                            "_UseRimShade",
-                            "_UseEmission",
-                            "_UseEmission2nd",
-                            "_UseBumpMap",
-                            "_UseBump2ndMap",
-                            "_UseAnisotropy",
-                            "_UseMatCap",
-                            "_UseMatCap2nd",
-                            "_MatCapCustomNormal",
-                            "_MatCap2ndCustomNormal",
-                            "_UseRim",
-                            "_RimDirStrength",
-                            "_UseGlitter",
-                            "_UseAudioLink",
-                            "_AudioLinkAsLocal",
-                            "_UseBacklight",
-                            "_UseParallax",
-                            "_UsePOM",
-                            "_UseReflection",
-                            "_MainGradationStrength",
-                            "_UseMain2ndTex",
-                            "_UseMain3rdTex",
-                            "_UseDither",
-                            "_AlphaMaskMode",
-                        },
+                        scalarProperties: BuildMultiScalarSchema(),
                         colorProperties: Array.Empty<string>(),
-                        vectorProperties: new[]
-                        {
-                            "_MainTexHSVG",
-                            "_Main2ndTexDecalAnimation",
-                            "_Main3rdTexDecalAnimation",
-                            "_Main2ndDissolveParams",
-                            "_Main3rdDissolveParams",
-                            "_DissolveParams",
-                            "_DistanceFade",
-                            "_OutlineTexHSVG",
-                        },
-                        textureProperties: new[]
-                        {
-                            // Assignment-only evidence for the emission blend
-                            // masks the writer's _SUNDISK_SIMPLE row consults
-                            // (lilMaterialUtils.cs:387-388 at the pin).
-                            new TexturePropertyEvidenceRequest(
-                                "_EmissionBlendMask",
-                                TextureEvidenceKinds.None),
-                            new TexturePropertyEvidenceRequest(
-                                "_Emission2ndBlendMask",
-                                TextureEvidenceKinds.None),
-                        },
+                        vectorProperties:
+                            LilToonMultiModeGate.ConsultedVectorProperties,
+                        textureProperties: BuildMultiTextureRequests(),
                         captureKeywords: true));
+
+        /// <summary>
+        /// The Multi scalars in one array: the mode read first, then every
+        /// scalar the derivation table consults, from the gate's own list.
+        /// </summary>
+        private static string[] BuildMultiScalarSchema()
+        {
+            var consulted = LilToonMultiModeGate.ConsultedScalarProperties;
+            var scalars = new string[consulted.Length + 1];
+            scalars[0] = ModeProperty;
+            Array.Copy(
+                consulted, 0, scalars, 1, consulted.Length);
+            return scalars;
+        }
+
+        /// <summary>
+        /// Assignment-only texture evidence for every texture name the
+        /// derivation table consults (lilMaterialUtils.cs:387-388 at the
+        /// pin): the writer's blend-mask rows read presence alone.
+        /// </summary>
+        private static TexturePropertyEvidenceRequest[]
+            BuildMultiTextureRequests()
+        {
+            var consulted = LilToonMultiModeGate.ConsultedTextureProperties;
+            var requests = new TexturePropertyEvidenceRequest[
+                consulted.Length];
+            for (var index = 0; index < consulted.Length; index++)
+            {
+                requests[index] = new TexturePropertyEvidenceRequest(
+                    consulted[index], TextureEvidenceKinds.None);
+            }
+
+            return requests;
+        }
 
         /// <summary>
         /// The profile injection seam, shaped for the Task 6 verify
@@ -149,8 +127,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             LilToonSourceEvidence sourceEvidence,
             LilToonMultiContainerProfile profile,
             bool keywordsRequested,
-            int effectiveRenderQueue,
-            string effectiveRenderType,
             out CapturedAlphaMaterialFamily family,
             out int mode,
             out LilToonMultiResolutionRefusal refusal)
@@ -187,61 +163,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 out refusal);
         }
 
-        /// <summary>
-        /// The production signature: resolves the container row from the
-        /// captured shader identity and delegates to the seam overload. The
-        /// row table ships empty until the Task 2 digest measurement, so
-        /// this entry refuses every supported container with
-        /// AttestationFailed until then. Specialized containers refuse by
-        /// identity first, which is why this entry can answer before any
-        /// live shader is resolved. The entry asserts the closed Multi
-        /// capture request named the keyword set, because the evidence
-        /// record cannot carry the requested-and-not-requested fact apart.
-        /// </summary>
-        internal static bool Resolve(
-            CapturedMaterialEvidence evidence,
-            int effectiveRenderQueue,
-            string effectiveRenderType,
-            out CapturedAlphaMaterialFamily family,
-            out int mode,
-            out LilToonMultiResolutionRefusal refusal)
-        {
-            if (evidence == null)
-            {
-                throw new ArgumentNullException(nameof(evidence));
-            }
-
-            family = CapturedAlphaMaterialFamily.Unsupported;
-            mode = 0;
-            if (IsSpecializedContainerShaderName(evidence.ShaderName))
-            {
-                refusal = LilToonMultiResolutionRefusal.SpecializedContainer;
-                return false;
-            }
-
-            // Name-only re-resolution, fail-closed: a second asset that
-            // carries the same name attests through its own GUID at the row
-            // verify and refuses there.
-            var shader = evidence.HasShaderName
-                ? Shader.Find(evidence.ShaderName)
-                : null;
-            if (shader == null)
-            {
-                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
-                return false;
-            }
-
-            var record = ResolveCapturedMaterial(
-                shader,
-                evidence,
-                keywordsRequested: true,
-                effectiveRenderQueue,
-                effectiveRenderType,
-                out family,
-                out mode);
-            refusal = record.Refusal;
-            return record.IsResolved;
-        }
 
         /// <summary>
         /// The one production entry the capture assembly point calls for a
@@ -258,8 +179,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             Shader shader,
             CapturedMaterialEvidence evidence,
             bool keywordsRequested,
-            int effectiveRenderQueue,
-            string effectiveRenderType,
             out CapturedAlphaMaterialFamily family,
             out int mode)
         {
@@ -293,8 +212,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     sourceEvidence,
                     profile,
                     keywordsRequested,
-                    effectiveRenderQueue,
-                    effectiveRenderType,
                     out family,
                     out mode,
                     out refusal))

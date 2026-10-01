@@ -7,36 +7,27 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// <summary>
     /// Multi source eligibility for mode 1 (cutout) and mode 2
     /// (transparent), on either supported container. Parity rule, pinned
-    /// 2026-10-01: the mode-1 rows mirror the plain cutout rows of
-    /// <see cref="LilToonCutoutSourceEligibility"/>, because that is what
-    /// the shipped regular outline twin evaluates through. The S8 outline
-    /// support is attestation, classification, and target resolution only;
-    /// a <c>Hidden/lilToonCutoutOutline</c> source classifies to the cutout
+    /// 2026-10-01: after the Multi-only gates, the resolved mode's own
+    /// regular evaluator judges the material through delegation, so parity
+    /// against the regular twin is outcome equality by construction, not
+    /// by maintained transcription. The S8 outline support is
+    /// attestation, classification, and target resolution only; a
+    /// <c>Hidden/lilToonCutoutOutline</c> source classifies to the cutout
     /// family and converts through the plain cutout evaluator, whose schema
     /// names no <c>_Outline</c> property. This evaluator therefore carries
-    /// no outline-specific eligibility row on either container, and parity
-    /// against the regular twin is outcome equality on identical
-    /// plain-cutout state. The outline-alpha protection question (F0 §7.3)
-    /// is a pre-existing regular-family scope fact that this evaluator
-    /// neither widens nor narrows.
+    /// no outline-specific eligibility row on either container. The
+    /// outline-alpha protection question (F0 §7.3) is a pre-existing
+    /// regular-family scope fact that this evaluator neither widens nor
+    /// narrows.
     /// <para>
-    /// The mode-2 rows mirror the plain transparent rows of <see
-    /// cref="LilToonTransparentSourceEligibility"/> the same way: the same
-    /// constants by reference, the same refusal members, the same order.
-    /// Multi transparent eligibility mirrors the plain transparent evaluator
-    /// rows. Multi transparent is Normal-class only, so no FORWARD_BACK
-    /// pre-pass exists to mirror and no row demands a pre-pass fact. The
-    /// dither scalar is a deliberate non-gate at mode 2, because the dither
-    /// block is compiled out at LIL_RENDER 2.
-    /// </para>
-    /// <para>
-    /// The rows beyond the mirror are the Multi-only facts: the Task 5
-    /// mode-consistency gate, and the keyword feature facts as runtime
-    /// scalar gates on the captured feature scalars. A keyword is
-    /// never proof of a feature and a feature never hides behind its
-    /// keyword. The outline property scalars ride the conversion request and
-    /// gate nothing here, so a Multi material evaluates exactly as its
-    /// regular twin does on the shared scalar surface.
+    /// The Multi-only prefix before the delegation: the mode's strict
+    /// schema on the mirrored source facts, the finiteness sweep over the
+    /// schema scalars and the dissolve and distance-fade vectors, the Task
+    /// 5 mode-consistency gate, and the keyword feature facts as runtime
+    /// scalar gates on the captured feature scalars. A keyword is never
+    /// proof of a feature and a feature never hides behind its keyword. The
+    /// outline property scalars ride the conversion request and gate
+    /// nothing here.
     /// </para>
     /// </summary>
     internal static class LilToonMultiSourceEligibility
@@ -261,15 +252,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// own facts, then finiteness over the schema scalars and the
         /// dissolve vector, then the Task 5
         /// mode-consistency gate, then the runtime scalar feature gates,
-        /// then the mirrored rows of the mode's regular evaluator in that
+        /// then the mode's regular evaluator, delegated, in that
         /// evaluator's own order. The gate runs before the scalar gates
         /// because the derivation-consistency question is about the
         /// captured state as a whole, while the scalar gates judge one
-        /// feature each. The mirrored rows keep the mirrored evaluator's
-        /// own order, including the queue and RenderType checks before the
-        /// scalar render-state gates: canonicalization changes both facts
-        /// and the alpha proof does not authorize erasing custom source
-        /// overrides.
+        /// feature each. The delegated evaluator keeps its own order,
+        /// including the queue and RenderType checks before the scalar
+        /// render-state gates: canonicalization changes both facts and the
+        /// alpha proof does not authorize erasing custom source overrides.
         /// </para>
         /// </summary>
         internal static LilToonOpaqueConversionEligibility
@@ -441,371 +431,29 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         .ClipThresholdDiscardsOpaqueAlpha);
             }
 
-            // --- Mode 2: the mirrored transparent rows. Each row below
-            // mirrors one LilToonTransparentSourceEligibility gate,
-            // unchanged and in the source's own order: the same constants by
-            // reference, the same refusal member. Nothing here re-derives a
-            // value the transparent family pins, so the two evaluators
-            // cannot drift. The number in parentheses is the mirrored
-            // gate's number in its own file.
-            if (mode == TransparentMode)
-            {
-                // 5-6 (transparent gates 3-4). The admitted source queues
-                //      are the vendor transparent default and Unity's
-                //      Transparent bucket with a two-digit offset — the
-                //      vendor Multi transparent arm writes 2460 and the
-                //      worlds override writes 3000, and the regular
-                //      transparent family admits the bucket beside its
-                //      pinned default. The intended 2460 -> 2000
-                //      normalization is part of the conversion; anything
-                //      else expresses ordering or classification intent
-                //      that the alpha proof does not preserve, and a Multi
-                //      material refuses it exactly as its regular twin
-                //      does.
-                if (effectiveRenderQueue !=
-                        LilToonTransparentSourceEligibility
-                            .SupportedTransparentRenderQueue &&
-                    (effectiveRenderQueue <
-                        LilToonTransparentSourceEligibility
-                            .TransparentBucketRenderQueueFloor ||
-                     effectiveRenderQueue >
-                        LilToonTransparentSourceEligibility
-                            .TransparentBucketRenderQueueCeiling))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedRenderQueue);
-                }
-
-                if (!string.Equals(
+            // 5. The mode's own regular evaluator, delegated. Parity is by
+            //    construction, not by maintenance: the resolved mode's
+            //    evaluator judges the same captured evidence with its own
+            //    schema, finiteness sweep, gate order, constants, refusal
+            //    members, and DepthTestDivergence answer, so a Multi
+            //    material refuses exactly where its regular twin refuses
+            //    and admits exactly where it admits (the 2026-10-01 parity
+            //    rule). The delegated schema is a subset of the schema gate
+            //    this prefix already passed, so the evaluator's own
+            //    schema-and-finiteness head cannot fire here.
+            return mode == TransparentMode
+                ? LilToonTransparentSourceEligibility
+                    .EvaluateVerifiedEligibility(
+                        evidence,
+                        effectiveRenderQueue,
                         effectiveRenderType,
-                        LilToonTransparentSourceEligibility
-                            .SupportedTransparentRenderType,
-                        StringComparison.Ordinal))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedRenderType);
-                }
-
-                // 7 (transparent gate 5). Depth comparison, mirrored, with
-                //    the same opt-in policy beside LEqual as the mirrored
-                //    row. See the mirrored row for the full
-                //    visibility-intent reasoning.
-                var transparentDepthComparison =
-                    Read(schema, values, "_ZTest");
-                if (transparentDepthComparison !=
-                        LilToonOpaqueConversionFactors.LEqualDepthComparison &&
-                    !(allowDepthTestChange &&
-                      transparentDepthComparison ==
-                      LilToonOpaqueConversionFactors.LessDepthComparison))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedDepthComparison);
-                }
-
-                // 8 (transparent gate 6). Depth write, mirrored. The vendor
-                //    transparent branch writes _ZWrite on, the admitted
-                //    form.
-                if (Read(schema, values, "_ZWrite") !=
-                    LilToonOpaqueConversionFactors.DepthWriteOn)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedDepthWrite);
-                }
-
-                // 9 (transparent gate 7). Color mask, mirrored.
-                if (Read(schema, values, "_ColorMask") !=
-                    LilToonOpaqueConversionFactors.ColorMaskAll)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedColorMask);
-                }
-
-                // 10 (transparent gate 8). Depth offset, mirrored.
-                if (Read(schema, values, "_OffsetFactor") != 0f ||
-                    Read(schema, values, "_OffsetUnits") != 0f)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedDepthOffset);
-                }
-
-                // 11 (transparent gate 9). Base RGB blend, mirrored. The
-                //     vendor transparent branch writes One/OneMinusSrcAlpha
-                //     on the shared block; at alpha 1 both accepted source
-                //     factors evaluate to 1 and both accepted destination
-                //     factors to 0, so the blend degenerates to
-                //     `dst := src` and the normalization is an identity
-                //     there.
-                if (Read(schema, values, "_BlendOp") !=
-                        LilToonOpaqueConversionFactors.BlendOpAdd ||
-                    !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                        Read(schema, values, "_SrcBlend")) ||
-                    !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                        Read(schema, values, "_DstBlend")))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal.UnsupportedBlendEquation);
-                }
-
-                // 12 (transparent gate 10). Base alpha blend, mirrored,
-                //     same degeneracy argument. The vendor branch writes
-                //     One/OneMinusSrcAlpha on the alpha pair too.
-                if (Read(schema, values, "_BlendOpAlpha") !=
-                        LilToonOpaqueConversionFactors.BlendOpAdd ||
-                    !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                        Read(schema, values, "_SrcBlendAlpha")) ||
-                    !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                        Read(schema, values, "_DstBlendAlpha")))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedAlphaBlendEquation);
-                }
-
-                // 13 (transparent gate 11). ForwardAdd blend, mirrored. The
-                //     Multi container carries the same FORWARD_ADD pass
-                //     shape the row constrains.
-                if (!LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                        Read(schema, values, "_SrcBlendFA")) ||
-                    Read(schema, values, "_DstBlendFA") !=
-                        LilToonOpaqueConversionFactors.BlendFactorOne ||
-                    Read(schema, values, "_BlendOpFA") !=
-                        LilToonOpaqueConversionFactors.BlendOpMax ||
-                    Read(schema, values, "_BlendOpAlphaFA") !=
-                        LilToonOpaqueConversionFactors.BlendOpMax)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedForwardAddBlendEquation);
-                }
-
-                // 14 (transparent gate 12). Clip threshold, mirrored, with
-                //     the transparent family's own bound by reference. The
-                //     transparent forward site is a plain
-                //     clip(alpha - _Cutoff), so alpha exactly 1 provably
-                //     survives while the threshold stays at or under the
-                //     bound; the cutout twice-margin constant is
-                //     deliberately not shared. A NaN cutoff never reaches
-                //     this comparison: gate 2 already refused it.
-                if (Read(schema, values, CutoffProperty) >
-                    LilToonTransparentSourceEligibility.MaxProvableCutoff)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .ClipThresholdDiscardsOpaqueAlpha);
-                }
-
-                // 15 (transparent gate 13). ForwardAdd premultiply,
-                //     mirrored. The FORWARD_ADD pass applies
-                //     saturate(fd.col.a * _AlphaBoostFA) at LIL_RENDER 2,
-                //     and that is the identity at a = 1 only when the boost
-                //     saturates to at least 1.
-                if (Read(schema, values, AlphaBoostFaProperty) <
-                    LilToonTransparentSourceEligibility
-                        .MinProvableAlphaBoostFa)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedForwardAddAlphaBoost);
-                }
-
-                // 16 (transparent gate 14). Distance fade, mirrored. At
-                //     LIL_RENDER 2 the _FADING_ON block writes fd.col.a
-                //     after the clip, so it is the one post-clip alpha
-                //     writer, and the .z strength component is the gate;
-                //     the keyword compiles the block and never stands proof
-                //     of the fade, and _DistanceFadeColor.a drives the RGB
-                //     arm and does not disable the alpha write.
-                //     Non-finite components already refused at gate 2.
-                if (distanceFade.z != 0f)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedDistanceFade);
-                }
-
-                // 17 (transparent gate 15). Subpass shadow clip, mirrored.
-                //     The target casts shadows unconditionally, so a source
-                //     that clips its shadow against a threshold above the
-                //     bound is not convertible.
-                if (Read(schema, values, SubpassCutoffProperty) >
-                    LilToonTransparentSourceEligibility
-                        .MaxProvableSubpassCutoff)
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .UnsupportedSubpassCutoff);
-                }
-
-                // Deliberately ungated, mirroring the transparent
-                // evaluator's own list: _AlphaToMask (full coverage holds
-                // at alpha one under any value, and the vendor transparent
-                // branch writes 0), _SrcBlendAlphaFA and _DstBlendAlphaFA
-                // (the FORWARD_ADD pass declares its alpha pair as literal
-                // Zero One regardless of the stored values), and _UseDither
-                // (compiled out: the dither block exists only under
-                // LIL_RENDER == 1, and this mode is LIL_RENDER 2).
-                // Deliberately absent from the schema: any FORWARD_BACK
-                // pre-pass fact such as _PreCutoff — the Multi transparent
-                // identity is Normal-class only, so no pre-pass exists to
-                // mirror — and every outline scalar, by the 2026-10-01
-                // parity ruling: they ride the request and gate nothing, so
-                // a Multi material refuses exactly where its regular twin
-                // refuses and admits exactly where it admits.
-
-                return LilToonOpaqueConversionEligibility.Convertible(
-                    transparentDepthComparison ==
-                    LilToonOpaqueConversionFactors.LessDepthComparison);
-            }
-
-            // --- Mirrored cutout rows. Each row below mirrors one
-            // LilToonCutoutSourceEligibility gate, unchanged and in the
-            // source's own order: the same constants by reference, the same
-            // refusal member. Nothing here re-derives a value the cutout
-            // family pins, so the two evaluators cannot drift. The number
-            // in parentheses is the mirrored gate's number in its own file.
-
-            // 5-6 (cutout gates 3-4). The canonical cutout defaults are the
-            //      only admitted source queue and RenderType; the vendor
-            //      Multi cutout form writes exactly this pair. The intended
-            //      2450 -> 2000 normalization is part of the conversion;
-            //      custom overrides express ordering or classification
-            //      intent that the alpha proof does not preserve, and a
-            //      Multi material refuses them exactly as its regular twin
-            //      does.
-            if (effectiveRenderQueue !=
-                LilToonCutoutSourceEligibility.SupportedCutoutRenderQueue)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedRenderQueue);
-            }
-
-            if (!string.Equals(
-                    effectiveRenderType,
-                    LilToonCutoutSourceEligibility
-                        .SupportedCutoutRenderType,
-                    StringComparison.Ordinal))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedRenderType);
-            }
-
-            // 7 (cutout gate 5). Depth comparison, mirrored. Required to be
-            //    LEqual already rather than normalized to it; the opt-in
-            //    policy admits Less beside LEqual as a stated, consented
-            //    divergence the caller learns through DepthTestDivergence.
-            //    See the mirrored row for the full visibility-intent
-            //    reasoning.
-            var depthComparison = Read(schema, values, "_ZTest");
-            if (depthComparison !=
-                    LilToonOpaqueConversionFactors.LEqualDepthComparison &&
-                !(allowDepthTestChange &&
-                  depthComparison ==
-                  LilToonOpaqueConversionFactors.LessDepthComparison))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
-            }
-
-            // 8 (cutout gate 6). Depth write, mirrored.
-            if (Read(schema, values, "_ZWrite") !=
-                LilToonOpaqueConversionFactors.DepthWriteOn)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthWrite);
-            }
-
-            // 9 (cutout gate 7). Color mask, mirrored.
-            if (Read(schema, values, "_ColorMask") !=
-                LilToonOpaqueConversionFactors.ColorMaskAll)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedColorMask);
-            }
-
-            // 10 (cutout gate 8). Depth offset, mirrored.
-            if (Read(schema, values, "_OffsetFactor") != 0f ||
-                Read(schema, values, "_OffsetUnits") != 0f)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthOffset);
-            }
-
-            // 11 (cutout gate 9). Base RGB blend, mirrored. At alpha 1 both
-            //     accepted source factors evaluate to 1 and both accepted
-            //     destination factors to 0, so the vendor Multi One/Zero
-            //     form and the regular family's admitted forms admit
-            //     identically.
-            if (Read(schema, values, "_BlendOp") !=
-                    LilToonOpaqueConversionFactors.BlendOpAdd ||
-                !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlend")) ||
-                !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(schema, values, "_DstBlend")))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedBlendEquation);
-            }
-
-            // 12 (cutout gate 10). Base alpha blend, mirrored, same
-            //     degeneracy argument.
-            if (Read(schema, values, "_BlendOpAlpha") !=
-                    LilToonOpaqueConversionFactors.BlendOpAdd ||
-                !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlendAlpha")) ||
-                !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(schema, values, "_DstBlendAlpha")))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .UnsupportedAlphaBlendEquation);
-            }
-
-            // 13 (cutout gate 11). ForwardAdd blend, mirrored. The Multi
-            //     container carries the same FORWARD_ADD pass shape the row
-            //     constrains.
-            if (!LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlendFA")) ||
-                Read(schema, values, "_DstBlendFA") !=
-                    LilToonOpaqueConversionFactors.BlendFactorOne ||
-                Read(schema, values, "_BlendOpFA") !=
-                    LilToonOpaqueConversionFactors.BlendOpMax ||
-                Read(schema, values, "_BlendOpAlphaFA") !=
-                    LilToonOpaqueConversionFactors.BlendOpMax)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .UnsupportedForwardAddBlendEquation);
-            }
-
-            // 14 (cutout gate 12). Clip threshold, mirrored, with the
-            //     cutout family's own bound by reference. The cutout shader
-            //     clips with clip(alpha - _Cutoff), so alpha exactly 1
-            //     provably survives only while the threshold stays at or
-            //     under the bound. A NaN cutoff never reaches this
-            //     comparison: gate 2 already refused it.
-            if (Read(schema, values, CutoffProperty) >
-                LilToonCutoutSourceEligibility.MaxProvableCutoff)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .ClipThresholdDiscardsOpaqueAlpha);
-            }
-
-            // Deliberately ungated, mirroring the cutout evaluator's own
-            // list: _AlphaToMask (full coverage holds at alpha one under any
-            // value, and the vendor Multi cutout form writes 1),
-            // _SrcBlendAlphaFA and _DstBlendAlphaFA (the FORWARD_ADD pass
-            // declares its alpha pair as literal Zero One regardless of the
-            // stored values). Deliberately ungated and deliberately absent
-            // from the schema: every outline scalar, by the 2026-10-01
-            // parity ruling — they ride the request and gate nothing, so a
-            // Multi material refuses exactly where its regular twin refuses
-            // and admits exactly where it admits.
-
-            return LilToonOpaqueConversionEligibility.Convertible(
-                depthComparison ==
-                LilToonOpaqueConversionFactors.LessDepthComparison);
+                        allowDepthTestChange)
+                : LilToonCutoutSourceEligibility
+                    .EvaluateVerifiedEligibility(
+                        evidence,
+                        effectiveRenderQueue,
+                        effectiveRenderType,
+                        allowDepthTestChange);
         }
 
         /// <summary>

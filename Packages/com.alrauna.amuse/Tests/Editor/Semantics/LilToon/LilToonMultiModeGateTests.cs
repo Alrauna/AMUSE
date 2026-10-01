@@ -230,49 +230,6 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
             }
         }
 
-        /// <summary>
-        /// The production Multi request must carry every property name the
-        /// derivation table consults. The capture treats an unrequested
-        /// name as feature-off, so one missing request entry would turn a
-        /// table row off for every real material while every synthetic
-        /// fixture - whose own request names exactly what it sets - stays
-        /// green. This fixture is the drift guard for that failure mode.
-        /// </summary>
-        // --- Falsifier: a new gate row whose condition input the production request does not carry refuses every real material that turns the feature on. ---
-        [Test]
-        public void ProductionMultiRequestCarriesEveryConsultedConditionInput()
-        {
-            var request = LilToonMultiResolution.MultiEvidenceRequest;
-
-            foreach (var scalar in LilToonMultiModeGate
-                         .ConsultedScalarProperties)
-            {
-                CollectionAssert.Contains(
-                    request.ScalarProperties,
-                    scalar,
-                    scalar + " must ride the production Multi request");
-            }
-
-            foreach (var vector in LilToonMultiModeGate
-                         .ConsultedVectorProperties)
-            {
-                CollectionAssert.Contains(
-                    request.VectorProperties,
-                    vector,
-                    vector + " must ride the production Multi request");
-            }
-
-            foreach (var texture in LilToonMultiModeGate
-                         .ConsultedTextureProperties)
-            {
-                Assert.That(
-                    request.TextureProperties,
-                    Has.Some.Matches<TexturePropertyEvidenceRequest>(
-                        t => t.PropertyName == texture),
-                    texture + " must ride the production Multi request");
-            }
-        }
-
         private CapturedMaterialEvidence GateEvidence(
             string[] keywords,
             float clippingCanceller,

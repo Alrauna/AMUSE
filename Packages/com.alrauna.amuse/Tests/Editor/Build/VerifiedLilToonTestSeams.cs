@@ -161,7 +161,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // because the production table stays empty until the
                     // Task 2 digest measurement.
                     multiResolution = ResolveMultiThroughProfileSeam(
-                        materials[index],
                         evidence[index],
                         request.CaptureKeywords,
                         out family);
@@ -225,20 +224,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// Resolves one captured Multi material through the profile
         /// injection seam: the synthetic identity evidence and the test-only
         /// row that match by construction, named after the container the
-        /// captured evidence carries. The effective render state reads the
-        /// way the production resolution point reads it. A refusal keeps
-        /// the Multi family, exactly as the production hub stores it.
+        /// captured evidence carries. A refusal keeps the Multi family,
+        /// exactly as the production hub stores it.
         /// </summary>
         private static LilToonMultiResolutionRecord
             ResolveMultiThroughProfileSeam(
-                Material material,
                 CapturedMaterialEvidence evidence,
                 bool keywordsRequested,
                 out CapturedAlphaMaterialFamily family)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
-                material, out var effectiveRenderQueue,
-                out var effectiveRenderType);
             var containerName = evidence.HasShaderName
                 ? evidence.ShaderName
                 : LilToonMultiResolutionTests.BaseContainerName;
@@ -250,8 +244,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 sourceEvidence,
                 LilToonMultiResolutionTests.MatchingProfile(containerName),
                 keywordsRequested,
-                effectiveRenderQueue,
-                effectiveRenderType,
                 out family,
                 out _,
                 out var refusal);
