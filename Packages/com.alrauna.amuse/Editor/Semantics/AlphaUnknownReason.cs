@@ -28,6 +28,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// exact shader property that carries it.
         /// </summary>
         UnsupportedFeature,
+
+        /// <summary>
+        /// A lilToon Multi material refused at the Multi resolution point.
+        /// <see cref="AlphaUnknownReason.Feature"/> names the refusal value
+        /// in words, for example "clipping canceller enabled".
+        /// </summary>
+        UnsupportedMultiState,
     }
 
     /// <summary>
@@ -41,7 +48,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal AlphaUnknownKind Kind { get; }
 
         /// <summary>The feature in plain words, for example "Dissolve".
-        /// Null when the kind is not UnsupportedFeature.</summary>
+        /// For UnsupportedMultiState it names the refusal value in words.
+        /// Null when the kind is not UnsupportedFeature or
+        /// UnsupportedMultiState.</summary>
         internal string Feature { get; }
 
         /// <summary>The exact shader property that carries the feature, for
@@ -50,7 +59,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal string Property { get; }
 
         /// <summary>The live shader name captured at capture time. Set for
-        /// both shader kinds, null for UnsupportedFeature.</summary>
+        /// the two shader kinds, null for UnsupportedFeature and
+        /// UnsupportedMultiState.</summary>
         internal string ShaderName { get; }
 
         private AlphaUnknownReason(
@@ -84,6 +94,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             return new AlphaUnknownReason(
                 AlphaUnknownKind.UnsupportedFeature, feature, property, null);
+        }
+
+        internal static AlphaUnknownReason UnsupportedMultiState(
+            string feature)
+        {
+            return new AlphaUnknownReason(
+                AlphaUnknownKind.UnsupportedMultiState, feature, null, null);
         }
     }
 }

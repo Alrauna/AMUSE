@@ -214,6 +214,36 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
     }
 
+    /// <summary>
+    /// One pinned Multi container identity. A row carries the container
+    /// shader name, its asset GUID, and the canonical digest of the measured
+    /// installed shape. The package version, the shader-format stamp, and the
+    /// include-tree digest stay class constants on
+    /// <see cref="LilToonSourceAttestation"/>: one lilToon 2.3.4 frontend and
+    /// one <c>Shader/Includes</c> tree are shared by every row, exactly as
+    /// the regular profiles treat them. A row carries no render-mode field.
+    /// The mode half of a Multi material is decided by the
+    /// keyword-derivation mode-consistency gate, never by a LIL_RENDER scan.
+    /// A Multi container also declares no pass asset, so no pass identity
+    /// exists to pin.
+    /// </summary>
+    internal sealed class LilToonMultiContainerProfile
+    {
+        internal LilToonMultiContainerProfile(
+            string shaderName,
+            string shaderGuid,
+            string shaderCanonicalDigest)
+        {
+            ShaderName = shaderName;
+            ShaderGuid = shaderGuid;
+            ShaderCanonicalDigest = shaderCanonicalDigest;
+        }
+
+        internal string ShaderName { get; }
+        internal string ShaderGuid { get; }
+        internal string ShaderCanonicalDigest { get; }
+    }
+
     internal enum LilToonRemovedRecordKind
     {
         Define,
@@ -876,6 +906,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // immediately after it, so this line uniquely locates that slot.
         private const string ShadowSlotAnchor = "#define LIL_PASS_FORWARD";
 
+        // The Multi container define. Only a SubShader-scope include block
+        // that carries it is a generated Multi container, so only there
+        // does the settings walk extend past the fixed pragma lines (spec
+        // F9). A regular asset never carries it, so its region records stay
+        // byte-identical to the pre-F9 scan.
+        private const string MultiContainerDefine = "#define LIL_MULTI";
+
         // R2 keyword domain. GetSkipVariantsShadows() is a fixed literal ending
         // in SHADOW_VERY_HIGH, and UnpackContainer's dedup pass rewrites a
         // surviving skip_variants line to its final keyword alone, so this is
@@ -991,8 +1028,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // outside it can never be dropped.
             var inSettingRegion = new bool[lines.Length];
             var hlslIncludeOrdinal = 0;
+            var inSubShaderScope = false;
             for (var i = 0; i < lines.Length; i++)
             {
+                // SubShader scope is the first gate of the block walk
+                // extension (spec F9); only a block that also carries the
+                // Multi container define extends its walk. A Shader-scope
+                // block always keeps the leading-run discipline.
+                if (lines[i].Trim().StartsWith(
+                        "SubShader", StringComparison.Ordinal))
+                {
+                    inSubShaderScope = true;
+                }
+
                 // Region A: after HLSLINCLUDE, the maximal run of D1/D2 lines. A
                 // blank line does not extend the run, and a valued define ends
                 // it immediately — which is why the Shader-scope block holding
@@ -1004,6 +1052,32 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
 
                 var records = new List<LilToonRemovedRecord>();
+                // The block walk below extends only into a generated Multi
+                // container: a SubShader-scope include block that carries
+                // the LIL_MULTI define. Every other block keeps the pre-F9
+                // scan, so its removed-region records are byte-identical.
+                var isMultiContainerBlock = false;
+                if (inSubShaderScope)
+                {
+                    for (var k = i + 1; k < lines.Length; k++)
+                    {
+                        var probe = lines[k].Trim();
+                        if (string.Equals(
+                                probe, "ENDHLSL", StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+
+                        if (string.Equals(
+                                probe, MultiContainerDefine,
+                                StringComparison.Ordinal))
+                        {
+                            isMultiContainerBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 for (var j = i + 1; j < lines.Length; j++)
                 {
                     var candidate = lines[j].Trim();
@@ -1011,7 +1085,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     var isSkipVariants = SkipVariants.IsMatch(candidate);
                     if (!isDefine && !isSkipVariants)
                     {
-                        break;
+                        // Inside a generated Multi container's include block
+                        // a valueless D1/D2 line is region content wherever
+                        // it sits, so the scan walks to the end of the
+                        // block. Every other block keeps the maximal run
+                        // directly after HLSLINCLUDE, and any later
+                        // valueless define stays hashed.
+                        if (!isMultiContainerBlock ||
+                            string.Equals(
+                                candidate, "ENDHLSL", StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+
+                        continue;
                     }
 
                     inSettingRegion[j] = true;
@@ -1797,12 +1884,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Resolves the canonical opaque target shader name for a source
-        /// shader name. Outline wrapper sources move to the outline opaque
-        /// shader. All other sources move to the plain opaque shader.
+        /// shader name. A Multi container resolves to itself: the clone
+        /// stays on its container asset. Outline wrapper sources move to
+        /// the outline opaque shader. All other sources move to the plain
+        /// opaque shader.
         /// </summary>
         internal static string ResolveCanonicalTargetShaderName(
             string sourceShaderName)
         {
+            if (LilToonMultiResolution.IsMultiContainerShaderName(
+                    sourceShaderName))
+            {
+                return sourceShaderName;
+            }
+
             return IsOutlineWrapperShaderName(sourceShaderName)
                 ? OutlineShaderName
                 : SupportedShaderName;
@@ -2027,6 +2122,237 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return false;
         }
 
+        /// <summary>Test seam: build one row without measured pins.</summary>
+        internal static LilToonMultiContainerProfile
+            MultiContainerProfileForTests(
+                string shaderName,
+                string shaderGuid,
+                string shaderCanonicalDigest)
+        {
+            return new LilToonMultiContainerProfile(
+                shaderName, shaderGuid, shaderCanonicalDigest);
+        }
+
+        /// <summary>
+        /// The Multi container identity conjunction, parameterized by one
+        /// injected row. The terms are the container shader name, the asset
+        /// GUID, the material shader-format stamp, the package version when
+        /// the package is installed, the include tree, and the canonical
+        /// source digest. Every mismatch refuses with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>;
+        /// the closed refusal vocabulary carries no per-term values. No
+        /// LIL_RENDER scan and no pass check runs: the mode half of a Multi
+        /// material is the keyword-derivation mode-consistency gate's input,
+        /// and a Multi container declares no pass asset.
+        /// </summary>
+        internal static bool TryVerifyMultiContainer(
+            LilToonSourceEvidence evidence,
+            LilToonMultiContainerProfile profile,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            if (profile == null)
+            {
+                throw new ArgumentNullException(nameof(profile));
+            }
+
+            // 1. Container identity. Exact name and asset GUID; there is no
+            //    name-only fallback.
+            if (!string.Equals(
+                    evidence.ShaderName,
+                    profile.ShaderName,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    evidence.AssetGuid,
+                    profile.ShaderGuid,
+                    StringComparison.Ordinal))
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            // 2. Material shader-format stamp, compared exactly. A malformed
+            //    or nearby value must never be normalized into the pinned
+            //    one.
+            if (!evidence.HasShaderFormatVersion ||
+                float.IsNaN(evidence.ShaderFormatVersion) ||
+                float.IsInfinity(evidence.ShaderFormatVersion) ||
+                evidence.ShaderFormatVersion != ShaderFormatVersion)
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            // 3. Package identity, when installed as a package. 2.3.4 is the
+            //    only admitted Multi version row; earlier versions stay on
+            //    the consent path. A loose install carries no version label,
+            //    so the pinned include tree below identifies the version.
+            if (evidence.HasPackage &&
+                (!string.Equals(
+                        evidence.PackageName, PackageName,
+                        StringComparison.Ordinal) ||
+                 !string.Equals(
+                        evidence.PackageVersion, PackageVersion,
+                        StringComparison.Ordinal)))
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            // 4. The include tree. One 2.3.4 tree is shared with the regular
+            //    rows, and it is the only tree a Multi container admits.
+            if (string.IsNullOrEmpty(evidence.IncludeTreeDigest) ||
+                !string.Equals(
+                    evidence.IncludeTreeDigest,
+                    IncludeTreeDigest,
+                    StringComparison.Ordinal))
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            // 5. The container canonical digest, over the Task 1
+            //    canonicalization. Missing or mismatched source refuses.
+            if (string.IsNullOrEmpty(evidence.ShaderCanonicalDigest) ||
+                !string.Equals(
+                    evidence.ShaderCanonicalDigest,
+                    profile.ShaderCanonicalDigest,
+                    StringComparison.Ordinal))
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            refusal = default;
+            return true;
+        }
+
+        /// <summary>
+        /// Verifies one material's shader against the pinned Multi container
+        /// rows. A row must match the live shader's name and asset GUID
+        /// exactly. Fail-closed against unmeasured installs: a shader whose
+        /// name and GUID match no row refuses with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>.
+        /// Filling the table is a data-only append.
+        /// <para>
+        /// The mode half of a Multi profile is the keyword-derivation
+        /// mode-consistency gate's contract, never a LIL_RENDER scan. This
+        /// entry point attests the source only.
+        /// </para>
+        /// </summary>
+        internal static bool TryVerifyMultiContainer(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            if (shader == null) throw new ArgumentNullException(nameof(shader));
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            if (!TryResolveMultiContainer(
+                    shader,
+                    evidence,
+                    out var sourceEvidence,
+                    out var profile,
+                    out refusal))
+            {
+                return false;
+            }
+
+            return TryVerifyMultiContainer(
+                sourceEvidence,
+                profile,
+                out refusal);
+        }
+
+        /// <summary>
+        /// Resolves one live shader's Multi container row and gathers its
+        /// source evidence. The row must match the live shader's name and
+        /// asset GUID exactly. Fail-closed: the row table ships empty until
+        /// the Task 2 digest measurement lands, so this entry refuses every
+        /// Multi container with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>
+        /// until then. The verify itself is the parameterized conjunction,
+        /// so the resolution point can store the verified gather without a
+        /// second canonicalization pass.
+        /// </summary>
+        internal static bool TryResolveMultiContainer(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            out LilToonSourceEvidence sourceEvidence,
+            out LilToonMultiContainerProfile profile,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            if (shader == null) throw new ArgumentNullException(nameof(shader));
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                shader, out var assetGuid, out long _);
+            var shaderName = shader.name;
+            var normalizedGuid = assetGuid?.ToLowerInvariant();
+
+            foreach (var row in MultiContainerProfiles)
+            {
+                if (string.Equals(
+                        shaderName, row.ShaderName,
+                        StringComparison.Ordinal) &&
+                    string.Equals(
+                        normalizedGuid, row.ShaderGuid,
+                        StringComparison.Ordinal))
+                {
+                    sourceEvidence =
+                        GatherMultiContainerEvidence(shader, evidence);
+                    profile = row;
+                    refusal = default;
+                    return true;
+                }
+            }
+
+            sourceEvidence = null;
+            profile = null;
+            refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+            return false;
+        }
+
+        /// <summary>
+        /// The pinned Multi container rows: the base container and its
+        /// outline wrapper, one row each. The table stays empty until the
+        /// Task 2 digest measurement lands, and the entry point above
+        /// refuses every Multi container while it stays empty. Each row
+        /// needs a digest measured from installed shapes across at least two
+        /// real settings shapes; no placeholder digest ships here.
+        /// </summary>
+        private static readonly LilToonMultiContainerProfile[]
+            MultiContainerProfiles =
+            {
+                // Measured on 2026-10-01 through the production
+                // Canonicalize + ComputeNormalizedSourceHash from two real
+                // installed settings shapes of a scratch 2.3.4 project
+                // (default import, then vertex-light and anisotropy
+                // settings applied): both shapes produce one digest per
+                // container, and the same run reproduced every regular
+                // pin above byte-for-byte. Never re-derive these from the
+                // lilToon repository, whose committed generated shaders
+                // are stale relative to their own tag's generator.
+                new LilToonMultiContainerProfile(
+                    "_lil/lilToonMulti",
+                    "9294844b15dca184d914a632279b24e1",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f"),
+                new LilToonMultiContainerProfile(
+                    "Hidden/lilToonMultiOutline",
+                    "51b2dee0ab07bd84d8147601ff89e511",
+                    "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
+            };
+
         /// <summary>
         /// Reads identity evidence from a live shader and already-captured
         /// material facts. Every filesystem access resolves through an explicit
@@ -2183,6 +2509,78 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 ScanCompiledFeatures(passText),
                 shaderAnalysis,
                 passAnalysis);
+        }
+
+        /// <summary>
+        /// Gathers Multi container identity evidence. The material shader is
+        /// read directly, and no pass asset is resolved, because a Multi
+        /// container declares no pass half. No LIL_RENDER scan runs: the
+        /// material's mode is the mode-consistency gate's input, not source
+        /// evidence. Unreadable evidence is omitted rather than guessed, so
+        /// the conjunction refuses.
+        /// </summary>
+        private static LilToonSourceEvidence GatherMultiContainerEvidence(
+            Shader shader,
+            CapturedMaterialEvidence evidence)
+        {
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                shader, out var assetGuid, out long _);
+
+            var hasVersion = evidence.TryGetScalar(
+                ShaderFormatVersionProperty, out var version);
+            if (!hasVersion)
+            {
+                version = float.NaN;
+            }
+
+            // Project-relative: Unity asset APIs consume this form directly.
+            var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
+            var package = UnityEditor.PackageManager.PackageInfo
+                .FindForAssetPath(shaderAssetPath);
+
+            // Absolute: every System.IO call below uses this form only.
+            var projectRoot = TryGetProjectRoot();
+            var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
+            var shaderDirectory = shaderFullPath == null
+                ? null
+                : Path.GetDirectoryName(shaderFullPath);
+            var includeFolder = shaderDirectory == null
+                ? null
+                : Path.Combine(shaderDirectory, IncludeFolderName);
+
+            var includeTree = LilToonIncludeTree.Enumerate(
+                includeFolder, ReadTextOrNull, ComputeNormalizedSourceHash);
+
+            var includeDigest = includeTree.Files.Count == 0
+                ? null
+                : ComputeIncludeTreeDigest(includeTree.Files);
+
+            var shaderText = ReadTextOrNull(shaderFullPath);
+            var shaderAnalysis = shaderText == null
+                ? null
+                : AnalyzeCanonicalization(
+                    shaderText, shaderDirectory, projectRoot, includeTree);
+            var shaderDigest = shaderAnalysis == null
+                ? null
+                : Sha256(shaderAnalysis.CanonicalSource);
+
+            return new LilToonSourceEvidence(
+                evidence.HasShaderName ? evidence.ShaderName : null,
+                assetGuid?.ToLowerInvariant(),
+                hasVersion,
+                version,
+                package != null,
+                package?.name,
+                package?.version,
+                null, // No pass asset: no pass identity exists to resolve.
+                shaderDigest,
+                null,
+                includeDigest,
+                false, // No LIL_RENDER scan: the mode gate owns the mode half.
+                0,
+                ScanCompiledFeatures(null), // No pass text: no pass features.
+                shaderAnalysis,
+                null);
         }
 
         /// <summary>

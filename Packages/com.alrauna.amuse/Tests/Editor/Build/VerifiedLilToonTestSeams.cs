@@ -147,40 +147,67 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var poiyomi = default(PoiyomiSourceEvidence);
                 LilToonSourceEvidence lilToon = null;
-                switch (families[index])
+                LilToonMultiResolutionRecord multiResolution = null;
+                var family = families[index];
+                if (family == CapturedAlphaMaterialFamily.LilToonMulti)
                 {
-                    case CapturedAlphaMaterialFamily.Poiyomi:
-                        poiyomi = PoiyomiMaterialSemantics
-                            .GatherAlphaSourceEvidence(
+                    // The profile injection seam the Task 6 verify fixtures
+                    // established: the captured evidence resolves against
+                    // one test-only container row plus the matching
+                    // synthetic identity, with the keyword-request fact the
+                    // shared batch request carries. The verdict order, the
+                    // stored record, and the family rewrite are the
+                    // production ones; only the row source is injected,
+                    // because the production table stays empty until the
+                    // Task 2 digest measurement.
+                    multiResolution = ResolveMultiThroughProfileSeam(
+                        materials[index],
+                        evidence[index],
+                        request.CaptureKeywords,
+                        out family);
+                    if (multiResolution.IsResolved)
+                    {
+                        lilToon = multiResolution.SourceEvidence;
+                    }
+                }
+                else
+                {
+                    switch (family)
+                    {
+                        case CapturedAlphaMaterialFamily.Poiyomi:
+                            poiyomi = PoiyomiMaterialSemantics
+                                .GatherAlphaSourceEvidence(
+                                    shaders[index], evidence[index]);
+                            break;
+                        case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
+                            // Both Poiyomi identities verify through one
+                            // conjunction, so the gather is the same function
+                            // the plain family uses.
+                            poiyomi = PoiyomiMaterialSemantics
+                                .GatherAlphaSourceEvidence(
+                                    shaders[index], evidence[index]);
+                            break;
+                        case CapturedAlphaMaterialFamily.LilToon:
+                            lilToon = LilToonSourceAttestation.GatherSourceEvidence(
                                 shaders[index], evidence[index]);
-                        break;
-                    case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                        // Both Poiyomi identities verify through one
-                        // conjunction, so the gather is the same function
-                        // the plain family uses.
-                        poiyomi = PoiyomiMaterialSemantics
-                            .GatherAlphaSourceEvidence(
-                                shaders[index], evidence[index]);
-                        break;
-                    case CapturedAlphaMaterialFamily.LilToon:
-                        lilToon = LilToonSourceAttestation.GatherSourceEvidence(
-                            shaders[index], evidence[index]);
-                        break;
-                    case CapturedAlphaMaterialFamily.LilToonCutout:
-                        lilToon = LilToonSourceAttestation
-                            .GatherCutoutSourceEvidence(
-                                shaders[index], evidence[index]);
-                        break;
-                    case CapturedAlphaMaterialFamily.LilToonTransparent:
-                        lilToon = LilToonSourceAttestation
-                            .GatherTransparentSourceEvidence(
-                                shaders[index], evidence[index]);
-                        break;
+                            break;
+                        case CapturedAlphaMaterialFamily.LilToonCutout:
+                            lilToon = LilToonSourceAttestation
+                                .GatherCutoutSourceEvidence(
+                                    shaders[index], evidence[index]);
+                            break;
+                        case CapturedAlphaMaterialFamily.LilToonTransparent:
+                            lilToon = LilToonSourceAttestation
+                                .GatherTransparentSourceEvidence(
+                                    shaders[index], evidence[index]);
+                            break;
+                    }
                 }
 
                 var source = materials[index];
                 result[index] = new CapturedAlphaMaterial(
-                    families[index], evidence[index], poiyomi, lilToon,
+                    family, evidence[index], poiyomi, lilToon,
+                    multiResolution: multiResolution,
                     materialPath: source != null
                         ? AssetDatabase.GetAssetPath(source)
                         : null,
@@ -192,6 +219,49 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             captured = result;
             return true;
+        }
+
+        /// <summary>
+        /// Resolves one captured Multi material through the profile
+        /// injection seam: the synthetic identity evidence and the test-only
+        /// row that match by construction, named after the container the
+        /// captured evidence carries. The effective render state reads the
+        /// way the production resolution point reads it. A refusal keeps
+        /// the Multi family, exactly as the production hub stores it.
+        /// </summary>
+        private static LilToonMultiResolutionRecord
+            ResolveMultiThroughProfileSeam(
+                Material material,
+                CapturedMaterialEvidence evidence,
+                bool keywordsRequested,
+                out CapturedAlphaMaterialFamily family)
+        {
+            LilToonOpaqueTarget.ReadEffectiveRenderState(
+                material, out var effectiveRenderQueue,
+                out var effectiveRenderType);
+            var containerName = evidence.HasShaderName
+                ? evidence.ShaderName
+                : LilToonMultiResolutionTests.BaseContainerName;
+            var sourceEvidence =
+                LilToonMultiResolutionTests.MatchingSourceEvidence(
+                    containerName);
+            var resolved = LilToonMultiResolution.Resolve(
+                evidence,
+                sourceEvidence,
+                LilToonMultiResolutionTests.MatchingProfile(containerName),
+                keywordsRequested,
+                effectiveRenderQueue,
+                effectiveRenderType,
+                out family,
+                out _,
+                out var refusal);
+            if (!resolved)
+            {
+                family = CapturedAlphaMaterialFamily.LilToonMulti;
+                return LilToonMultiResolutionRecord.Refused(refusal);
+            }
+
+            return LilToonMultiResolutionRecord.Admitted(sourceEvidence);
         }
 
         /// <summary>

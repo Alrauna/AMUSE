@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -36,6 +37,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AmuseReportStrings.Has(key + ":hint"), Is.True,
                     "missing hint for " + cause);
             }
+        }
+
+        [Test]
+        public void EveryAlphaUnknownKindHasPlainEnglishSentence()
+        {
+            var reasons = new[]
+            {
+                AlphaUnknownReason.UnsupportedShader("lilToon"),
+                AlphaUnknownReason.UnattestedShader("lilToon"),
+                AlphaUnknownReason.UnsupportedFeature(
+                    "Dissolve", "_DissolveParams"),
+                AlphaUnknownReason.UnsupportedMultiState(
+                    "the clipping canceller is enabled"),
+            };
+
+            foreach (var reason in reasons)
+            {
+                Assert.That(
+                    AmuseReports.FeatureSentence(reason),
+                    Is.Not.Empty,
+                    "missing sentence for " + reason.Kind);
+            }
+
+            // The Multi cause sentence comes from the string table, so a
+            // table regression surfaces here and not only in a report.
+            Assert.That(
+                AmuseReportStrings.Has(
+                    "amuse.slotAnalysis.UnsupportedMultiState"),
+                Is.True,
+                "missing the Multi cause sentence");
         }
 
         [Test]

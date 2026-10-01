@@ -27,6 +27,16 @@ namespace Alrauna.Amuse.Editor.Semantics
         LilToon,
         LilToonCutout,
         LilToonTransparent,
+
+        /// <summary>
+        /// A supported Multi container between classification and
+        /// resolution. The one post-capture resolution point maps an
+        /// admitted material onto the resolved regular family, so the
+        /// downstream switches never dispatch on this member. It survives
+        /// only on a refusal, whose material answers all-Unknown alpha
+        /// through the named Multi cause kind.
+        /// </summary>
+        LilToonMulti,
     }
 
     internal sealed class CapturedAlphaMaterial
@@ -45,6 +55,17 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// name instead. Every other refusal path ignores it.
         /// </summary>
         internal RendererAnalysisRefusal LockedIdentityRefusal { get; }
+
+        /// <summary>
+        /// The typed record of one Multi material's resolution at the one
+        /// post-capture resolution point, or null for every material that
+        /// did not classify to a Multi container. A record whose source
+        /// evidence is set resolved, and the stored family is the resolved
+        /// regular family. A record without source evidence carries the
+        /// closed refusal value, and the stored family stays
+        /// <see cref="CapturedAlphaMaterialFamily.LilToonMulti"/>.
+        /// </summary>
+        internal LilToonMultiResolutionRecord MultiResolution { get; }
 
         /// <summary>
         /// The material's project asset path, name, and live shader name,
@@ -67,7 +88,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 RendererAnalysisRefusal.None,
             string materialPath = null,
             string materialName = null,
-            string shaderName = null)
+            string shaderName = null,
+            LilToonMultiResolutionRecord multiResolution = null)
         {
             if (!Enum.IsDefined(typeof(CapturedAlphaMaterialFamily), family))
             {
@@ -82,12 +104,44 @@ namespace Alrauna.Amuse.Editor.Semantics
                     nameof(lockedIdentityRefusal));
             }
 
+            // The Multi record and the family agree: the Multi family means
+            // a stored refusal, and a stored resolution means the resolved
+            // regular family.
+            if (family == CapturedAlphaMaterialFamily.LilToonMulti)
+            {
+                if (multiResolution == null || multiResolution.IsResolved)
+                {
+                    throw new ArgumentException(
+                        "A Multi family capture carries its refusal record.",
+                        nameof(multiResolution));
+                }
+            }
+            else if (multiResolution != null)
+            {
+                if (!multiResolution.IsResolved)
+                {
+                    throw new ArgumentException(
+                        "A Multi refusal rides only a Multi family capture.",
+                        nameof(multiResolution));
+                }
+
+                if (family != CapturedAlphaMaterialFamily.LilToon &&
+                    family != CapturedAlphaMaterialFamily.LilToonCutout &&
+                    family != CapturedAlphaMaterialFamily.LilToonTransparent)
+                {
+                    throw new ArgumentException(
+                        "A resolved Multi capture stores a regular family.",
+                        nameof(family));
+                }
+            }
+
             Family = family;
             Evidence = evidence
                 ?? throw new ArgumentNullException(nameof(evidence));
             PoiyomiEvidence = poiyomiEvidence;
             LilToonEvidence = lilToonEvidence;
             LockedIdentityRefusal = lockedIdentityRefusal;
+            MultiResolution = multiResolution;
             MaterialPath = materialPath;
             MaterialName = materialName;
             ShaderName = shaderName;
@@ -212,8 +266,22 @@ namespace Alrauna.Amuse.Editor.Semantics
             out MaterialEvidenceRequest alphaRelevanceRequest,
             out MaterialEvidenceRequest captureRequest)
         {
-            family = IdentifyFamily(material);
-            alphaRelevanceRequest = AlphaRequestForFamily(family);
+            // The one shader-name map answers selection directly: the
+            // family and its alpha relevance come from the same branch, so
+            // a Multi-classified name cannot drift between the two
+            // questions. The pairs are the ones IdentifyFamily and
+            // AlphaRequestForFamily have always agreed on.
+            if (material == null || material.shader == null)
+            {
+                family = CapturedAlphaMaterialFamily.Unsupported;
+                alphaRelevanceRequest = null;
+                captureRequest = null;
+                return false;
+            }
+
+            var classified = ClassifyShaderName(material.shader.name);
+            family = classified.family;
+            alphaRelevanceRequest = classified.alpha;
             captureRequest = CaptureRequestForFamily(family);
             return alphaRelevanceRequest != null;
         }
@@ -364,7 +432,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 : UnityMaterialEvidenceCapture.Capture(
                     inputs, bounds.Value);
             return BuildCapturedAlphaMaterials(
-                materials, families, shaders, evidence,
+                materials, families, requests, shaders, evidence,
                 resolveRegisteredSource);
         }
 
@@ -434,9 +502,23 @@ namespace Alrauna.Amuse.Editor.Semantics
                     continue;
                 }
 
-                subjects.Add("Shader '" + material.shader.name + "' is not " +
-                    "a verified version. AMUSE would treat it with the " +
-                    "verified version's rules, which may be wrong.");
+                var subject = "Shader '" + material.shader.name +
+                    "' is not a verified version. AMUSE would treat it " +
+                    "with the verified version's rules, which may be " +
+                    "wrong.";
+                var multiResolution = capturedList[0].MultiResolution;
+                if (multiResolution != null && !multiResolution.IsResolved)
+                {
+                    // A refused Multi material is often verified at the
+                    // source and stopped by its state instead: mode,
+                    // keywords, the clipping canceller, or the overlay
+                    // pass. The generic wording would misname the gate
+                    // that refused it, so name the refusal in words.
+                    subject += " AMUSE refused this material because " +
+                        LilToonMultiResolution.RefusalFeatureWords(
+                            multiResolution.Refusal) + ".";
+                }
+                subjects.Add(subject);
                 names.Add(material.shader.name);
             }
 
@@ -447,6 +529,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             BuildCapturedAlphaMaterials(
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                IReadOnlyList<MaterialEvidenceRequest> requests,
                 IReadOnlyList<Shader> shaders,
                 IReadOnlyList<CapturedMaterialEvidence> evidence,
                 RegisteredSourceLookup resolveRegisteredSource = null)
@@ -456,28 +539,47 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 var poiyomi = default(PoiyomiSourceEvidence);
                 LilToonSourceEvidence lilToon = null;
-                if (families[index] == CapturedAlphaMaterialFamily.Poiyomi ||
-                    families[index] ==
-                    CapturedAlphaMaterialFamily.PoiyomiTwoPass)
+                LilToonMultiResolutionRecord multiResolution = null;
+                var family = families[index];
+                if (family == CapturedAlphaMaterialFamily.LilToonMulti)
+                {
+                    // The one post-capture resolution point. The resolver
+                    // runs once per Multi material here: an admitted
+                    // material stores the resolved regular family and the
+                    // verified gather, and every downstream switch sees
+                    // only the regular families. A refused material keeps
+                    // the Multi family and carries the named refusal.
+                    multiResolution = ResolveMultiMaterial(
+                        materials[index],
+                        shaders[index],
+                        evidence[index],
+                        requests[index],
+                        out family);
+                    if (multiResolution.IsResolved)
+                    {
+                        lilToon = multiResolution.SourceEvidence;
+                    }
+                }
+                else if (family == CapturedAlphaMaterialFamily.Poiyomi ||
+                    family == CapturedAlphaMaterialFamily.PoiyomiTwoPass)
                 {
                     // Both admitted Poiyomi identities verify through one
                     // conjunction, so the gather is the same function.
                     poiyomi = PoiyomiMaterialSemantics.GatherAlphaSourceEvidence(
                         shaders[index], evidence[index]);
                 }
-                else if (families[index] == CapturedAlphaMaterialFamily.LilToon)
+                else if (family == CapturedAlphaMaterialFamily.LilToon)
                 {
                     lilToon = LilToonSourceAttestation.GatherSourceEvidence(
                         shaders[index], evidence[index]);
                 }
-                else if (families[index] ==
-                    CapturedAlphaMaterialFamily.LilToonCutout)
+                else if (family == CapturedAlphaMaterialFamily.LilToonCutout)
                 {
                     lilToon = LilToonSourceAttestation
                         .GatherCutoutSourceEvidence(
                             shaders[index], evidence[index]);
                 }
-                else if (families[index] ==
+                else if (family ==
                     CapturedAlphaMaterialFamily.LilToonTransparent)
                 {
                     lilToon = LilToonSourceAttestation
@@ -489,7 +591,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 var namedSource = namedSourceFor(
                     resolveRegisteredSource, source);
                 results[index] = new CapturedAlphaMaterial(
-                    families[index], evidence[index], poiyomi, lilToon,
+                    family, evidence[index], poiyomi, lilToon,
+                    multiResolution: multiResolution,
                     materialPath: namedSource != null
                         ? AssetDatabase.GetAssetPath(namedSource)
                         : null,
@@ -502,6 +605,49 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return new ReadOnlyCollection<CapturedAlphaMaterial>(results);
+        }
+
+        /// <summary>
+        /// The hub half of the one resolution point: reads the effective
+        /// render state the eligibility layers own, then hands the
+        /// material to the resolver once. The keyword-evidence fact comes
+        /// from the capture request that shaped the evidence, because the
+        /// evidence alone cannot carry the requested-and-not-requested
+        /// fact apart.
+        /// </summary>
+        private static LilToonMultiResolutionRecord ResolveMultiMaterial(
+            Material material,
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            MaterialEvidenceRequest request,
+            out CapturedAlphaMaterialFamily family)
+        {
+            if (material == null || shader == null || request == null)
+            {
+                family = CapturedAlphaMaterialFamily.LilToonMulti;
+                return LilToonMultiResolutionRecord.Refused(
+                    LilToonMultiResolutionRefusal.AttestationFailed);
+            }
+
+            LilToonOpaqueTarget.ReadEffectiveRenderState(
+                material, out var effectiveRenderQueue,
+                out var effectiveRenderType);
+            var record = LilToonMultiResolution.ResolveCapturedMaterial(
+                shader,
+                evidence,
+                request.CaptureKeywords,
+                effectiveRenderQueue,
+                effectiveRenderType,
+                out family,
+                out _);
+            if (!record.IsResolved)
+            {
+                // A refusal keeps the Multi family, so the stored record
+                // and the stored family agree at the constructor guard.
+                family = CapturedAlphaMaterialFamily.LilToonMulti;
+            }
+
+            return record;
         }
 
         /// <summary>
@@ -642,6 +788,19 @@ namespace Alrauna.Amuse.Editor.Semantics
                     LilToonTransparentMaterialSemantics.AlphaEvidenceRequest);
             }
 
+            // The two supported Multi containers classify to their own
+            // family member with the combined Multi request: the keyword
+            // set the gate compares and the three Multi scalars the mode
+            // read and the gate rules consume. The member exists only
+            // between classification and resolution.
+            if (LilToonMultiResolution.IsSupportedContainerShaderName(
+                    shaderName))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.LilToonMulti,
+                    LilToonMultiResolution.MultiEvidenceRequest);
+            }
+
             return (CapturedAlphaMaterialFamily.Unsupported, null);
         }
 
@@ -749,6 +908,15 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return LilToonCaptureRequest;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     return LilToonTransparentCaptureRequest;
+                case CapturedAlphaMaterialFamily.LilToonMulti:
+                    // The closed capture must gather the combined Multi
+                    // schema, or the shared selection loop reads a null
+                    // request and refuses every supported container before
+                    // the one resolution point can run. The combined request
+                    // spans the three resolved families' alpha facts beside
+                    // the Multi scalars and keywords, so one capture serves
+                    // the resolution and every resolved-mode interpreter.
+                    return LilToonMultiResolution.MultiEvidenceRequest;
                 default:
                     return null;
             }
@@ -757,6 +925,15 @@ namespace Alrauna.Amuse.Editor.Semantics
         private static bool IsAttestedAlphaMaterial(
             CapturedAlphaMaterial material)
         {
+            // A Multi material attests through the resolver's row verify at
+            // the one resolution point, never through a regular family
+            // identity. Its stored lilToon evidence is the Multi gather, so
+            // the regular verifies below cannot read it.
+            if (material.MultiResolution != null)
+            {
+                return material.MultiResolution.IsResolved;
+            }
+
             switch (material.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
@@ -794,6 +971,39 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (captured == null)
             {
                 throw new ArgumentNullException(nameof(captured));
+            }
+
+            var multiResolution = captured.MultiResolution;
+            if (multiResolution != null)
+            {
+                if (!multiResolution.IsResolved)
+                {
+                    // The refused Multi transport: all-Unknown alpha and
+                    // the shared cause kind whose feature field names the
+                    // refusal value in words.
+                    return new CapturedAlphaSemantics(
+                        AllUnknown(),
+                        AlphaUnknownReason.UnsupportedMultiState(
+                            LilToonMultiResolution.RefusalFeatureWords(
+                                multiResolution.Refusal)));
+                }
+
+                // The Multi verify ran once at the resolution point, so the
+                // rebuilt material takes the transferred path: the one
+                // per-family switch below interprets the resolved family
+                // without a second identity verify. Resolution never
+                // re-enters this switch.
+                return AnalyzeAlphaMaterialCore(
+                    new CapturedAlphaMaterial(
+                        captured.Family,
+                        captured.Evidence,
+                        default(PoiyomiSourceEvidence),
+                        captured.LilToonEvidence,
+                        captured.LockedIdentityRefusal,
+                        captured.MaterialPath,
+                        captured.MaterialName,
+                        captured.ShaderName),
+                    false);
             }
 
             SemanticOutput<ScalarSemanticValue> alpha;

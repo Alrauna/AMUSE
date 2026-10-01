@@ -675,8 +675,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// outline wrapper names are no longer here either: S8 pinned them
         /// as admitted identities of their families, and S9 did the same
         /// for the one-pass and two-pass transparent variants and their
-        /// outline wrappers. The exactness of every admitted name is
-        /// guarded by the off-by-one near misses below.
+        /// outline wrappers. The two supported Multi containers are no
+        /// longer here either: they classify to their own family member
+        /// before resolution, selected by
+        /// MultiContainersClassifyToTheMultiFamilyWithKeywordCapture. The
+        /// three specialized Multi containers stay in this list - they
+        /// refuse at the hub exactly as their regular counterparts do, and
+        /// gain their named refusals at the resolver. The exactness of every
+        /// admitted name is guarded by the off-by-one near misses below.
         /// </summary>
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
@@ -713,8 +719,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                          "_lil/[Optional] lilToonFakeShadow",
                          "_lil/[Optional] lilToonOverlay",
                          "_lil/[Optional] lilToonOverlayOnePass",
-                         "_lil/lilToonMulti",
-                         "Hidden/lilToonMultiOutline",
                          "Hidden/lilToonMultiRefraction",
                          "Hidden/lilToonMultiFur",
                          "Hidden/lilToonMultiGem",
@@ -741,6 +745,134 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Assert.That(request, Is.Null, shaderName);
                 Assert.That(captureSchema, Is.Null, shaderName);
             }
+        }
+
+        /// <summary>
+        /// The two supported Multi containers classify to their own family
+        /// member, with a combined Multi evidence request that asks for the
+        /// keyword set: the mode-consistency gate cannot run without it, and
+        /// the request carries the three Multi scalars the mode read and the
+        /// gate rules consume. The closed-capture selection hands the same
+        /// combined request back as the capture schema - a null there would
+        /// turn the shared selection loop's sentinel path against every
+        /// supported container before the one resolution point runs. The
+        /// member exists only between classification and resolution - the
+        /// resolver maps it onto the regular families afterwards, so no
+        /// downstream switch ever sees it.
+        /// Compile-fail red on the family member until Task 7 phase B.
+        /// </summary>
+        // --- Falsifier: a classifier that leaves the supported containers in the unsupported path, a Multi request that skips the keyword capture, or a closed-capture selection that nulls the Multi capture request, fails this fixture. ---
+        [Test]
+        public void MultiContainersClassifyToTheMultiFamilyWithKeywordCapture()
+        {
+            foreach (var shaderName in new[]
+                     {
+                         "_lil/lilToonMulti",
+                         "Hidden/lilToonMultiOutline",
+                     })
+            {
+                var material = NewMaterial(
+                    "admitted-" + shaderName.Replace('/', '-') + ".shader",
+                    shaderName,
+                    MultiProperties());
+
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out var alphaRelevance,
+                        out var captureSchema);
+
+                Assert.That(selected, Is.True, shaderName);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti),
+                    shaderName);
+                Assert.That(alphaRelevance, Is.Not.Null, shaderName);
+                Assert.That(
+                    alphaRelevance.CaptureKeywords, Is.True, shaderName);
+                Assert.That(captureSchema, Is.Not.Null, shaderName);
+                Assert.That(
+                    captureSchema.CaptureKeywords, Is.True, shaderName);
+                foreach (var multiScalar in new[]
+                         {
+                             "_TransparentMode",
+                             "_UseClippingCanceller",
+                             "_AsOverlay",
+                         })
+                {
+                    CollectionAssert.Contains(
+                        alphaRelevance.ScalarProperties,
+                        multiScalar,
+                        shaderName + " must capture " + multiScalar);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A resolver-refused Multi material answers all-Unknown alpha and
+        /// carries the shared Multi cause kind, whose feature field names
+        /// the refusal value in words for the slot-refusal report. With the
+        /// production Multi row table empty until Task 2, every captured
+        /// Multi material refuses, so this fixture exercises the real
+        /// refusal transport end to end the moment Task 7 phase B lands.
+        /// Compile-fail red on the family member and the cause kind until
+        /// then.
+        /// </summary>
+        // --- Falsifier: a transport that reports the generic unsupported-shader cause, or a bare Unknown with no named Multi refusal, fails this fixture. ---
+        [Test]
+        public void ResolverRefusedMultiMaterialCarriesUnsupportedMultiStateReason()
+        {
+            var material = NewMaterial(
+                "refused-multi-transport.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { material });
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+
+            var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                captured[0]);
+            AssertAllUnknown(analysis.Semantics);
+            Assert.That(analysis.AlphaUnknownReason, Is.Not.Null);
+            Assert.That(
+                analysis.AlphaUnknownReason.Kind,
+                Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState));
+            Assert.That(
+                analysis.AlphaUnknownReason.Feature,
+                Is.Not.Empty,
+                "the reason must name the refusal value in words");
+        }
+
+        /// <summary>
+        /// The D8 consent subject for a refused Multi material must name
+        /// the actual refusal. The generic "not a verified version"
+        /// wording is true for an attestation failure and false for every
+        /// other Multi gate: a material refusing on mode, keywords, or the
+        /// clipping canceller is verified at the source and stopped by its
+        /// state. The subject carries the refusal feature words so the
+        /// dialog names the real gate.
+        /// </summary>
+        // --- Falsifier: a pre-scan that reports every refused Multi material as an unverified version hides the gate that refused it. ---
+        [Test]
+        public void ConsentSubjectForRefusedMultiMaterialNamesTheRefusal()
+        {
+            var material = NewMaterial(
+                "refused-multi-consent-subject.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain("the shader source does not verify"),
+                "the subject must name the refusing gate in words");
         }
 
         /// <summary>
@@ -1136,6 +1268,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [HideInInspector] _lilToonVersion (""Version"", Int) = 45
         _Invisible (""Invisible"", Int) = 0
         _UDIMDiscardCompile (""UDIM"", Int) = 0";
+        }
+
+        /// <summary>
+        /// The Multi stand-in property block: the three Multi scalars the
+        /// mode read and the gate rules consume, at the all-off corpus
+        /// state, plus the two opaque coverage facts. The fixture that
+        /// refuses at the resolver never reads past the attestation, so the
+        /// block stays minimal on purpose.
+        /// </summary>
+        private static string MultiProperties()
+        {
+            return @"
+        _TransparentMode (""TransparentMode"", Float) = 0
+        _UseClippingCanceller (""ClippingCanceller"", Float) = 0
+        _AsOverlay (""AsOverlay"", Float) = 0
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0";
         }
 
         /// <summary>
