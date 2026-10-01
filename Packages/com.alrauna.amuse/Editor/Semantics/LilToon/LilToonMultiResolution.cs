@@ -52,17 +52,25 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string OverlayProperty = "_AsOverlay";
 
         /// <summary>
-        /// The combined Multi evidence request: the plain lilToon alpha
-        /// facts the resolved family's interpreter reads, plus the three
-        /// Multi scalars the mode read and the gate rules consume, plus the
-        /// keyword set the gate compares. Every supported container
-        /// classifies under this one request, so one capture serves the
-        /// resolution and the interpretation on both containers.
+        /// The combined Multi evidence request: the alpha facts of all three
+        /// resolved regular families, plus the three Multi scalars the mode
+        /// read and the gate rules consume, plus the keyword set the gate
+        /// compares. The union is mode-independent because the capture runs
+        /// before the one resolution point, and a resolved mode-1 or mode-2
+        /// material interprets through the cutout or transparent
+        /// interpreter, whose gates read schema facts the opaque request
+        /// alone never carried; an interpreter read of an unrequested name
+        /// throws, so the resolved family's own schema must ride the one
+        /// Multi capture. Every supported container classifies under this
+        /// one request, so one capture serves the resolution and the
+        /// interpretation on both containers.
         /// </summary>
         internal static readonly MaterialEvidenceRequest
             MultiEvidenceRequest =
                 MaterialEvidenceRequest.Combine(
                     LilToonMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest,
                     new MaterialEvidenceRequest(
                         shaderName: true,
                         activeColorSpace: false,

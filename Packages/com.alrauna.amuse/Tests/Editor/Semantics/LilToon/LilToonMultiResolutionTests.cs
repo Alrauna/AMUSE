@@ -34,13 +34,13 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
         // Synthetic container identity vocabulary, the same test-only values
         // the Task 6 verify fixtures use. They are never measured pins; Task
         // 2 fills the production table and no fixture value moves there.
-        private const string BaseContainerName = "_lil/lilToonMulti";
+        internal const string BaseContainerName = "_lil/lilToonMulti";
         private const string OutlineContainerName =
             "Hidden/lilToonMultiOutline";
         private const string SpecializedFurName = "Hidden/lilToonMultiFur";
-        private const string TestContainerGuid =
+        internal const string TestContainerGuid =
             "0f19e2a4b7c8d6051324a5b6c7d8e9f0";
-        private const string TestContainerCanonicalDigest =
+        internal const string TestContainerCanonicalDigest =
             "1029384756afbccddeeff0123456789a" +
             "fedcba98765432100123456789abcdef";
 
@@ -287,6 +287,126 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(1f));
         }
 
+        // The mode-1 parity oracle: a keyword-consistent mode-1 Multi
+        // material and the regular cutout identity, captured under ONE
+        // shared request - the production combined Multi request the closed
+        // capture selection hands back - must land on the same resolved
+        // family, and the resolved family's own interpreter must answer
+        // without throwing and with the same proven-opaque alpha on the
+        // identical alpha-relevant facts. The interpreter reads the cutout
+        // schema by name; before the request carried the cutout and
+        // transparent schemas beside the opaque one, this read threw on the
+        // first unrequested cutout fact, which is the defect the widened
+        // union fixes.
+        // Path: profile injection seam for the resolution half; the
+        // production selection and the production interpreter for the rest.
+        // Green when the union lands.
+        // --- Falsifier: a Multi request that omits the cutout schema, or an interpreter answer that diverges from the regular twin on identical evidence, fails this fixture. ---
+        [Test]
+        public void CutoutModeMultiAndTheCutoutTwinAnswerTheSameResolvedFamilyAlpha()
+        {
+            var multiMaterial = NewCutoutSchemaMaterial(
+                BaseContainerName, 1f, new[] { "UNITY_UI_ALPHACLIP" });
+            var twinMaterial = NewCutoutSchemaMaterial(
+                "Hidden/lilToonCutout", 0f, Array.Empty<string>());
+
+            var multiSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiMaterial,
+                    out var multiFamily,
+                    out _,
+                    out var sharedRequest);
+            Assert.That(multiSelected, Is.True);
+            Assert.That(
+                multiFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+            Assert.That(sharedRequest, Is.Not.Null);
+
+            var multi = Capture(multiMaterial, sharedRequest);
+            var twin = Capture(twinMaterial, sharedRequest);
+
+            var resolved = ResolveThroughSeam(
+                multi,
+                BaseContainerName,
+                out var family,
+                out var mode);
+            Assert.That(resolved, Is.True);
+            Assert.That(
+                family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(mode, Is.EqualTo(1));
+
+            var multiAlpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(multi);
+            var twinAlpha = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(twin);
+            Assert.That(multiAlpha.IsComplete, Is.True);
+            Assert.That(twinAlpha.IsComplete, Is.True);
+            Assert.That(
+                multiAlpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(twinAlpha.GetCompleteValue().GetConstantValue()));
+            Assert.That(
+                multiAlpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(1f));
+        }
+
+        // The mode-2 parity oracle, shaped exactly like the mode-1 one: the
+        // resolved transparent interpreter reads the transparent schema by
+        // name, so the same union argument applies with the transparent
+        // request in place of the cutout one.
+        // Path: profile injection seam for the resolution half; the
+        // production selection and the production interpreter for the rest.
+        // Green when the union lands.
+        // --- Falsifier: a Multi request that omits the transparent schema, or an interpreter answer that diverges from the regular twin on identical evidence, fails this fixture. ---
+        [Test]
+        public void TransparentModeMultiAndTheTransparentTwinAnswerTheSameResolvedFamilyAlpha()
+        {
+            var multiMaterial = NewCutoutSchemaMaterial(
+                BaseContainerName, 2f, new[] { "UNITY_UI_CLIP_RECT" });
+            var twinMaterial = NewCutoutSchemaMaterial(
+                "Hidden/lilToonTransparent", 0f, Array.Empty<string>());
+
+            var multiSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiMaterial,
+                    out var multiFamily,
+                    out _,
+                    out var sharedRequest);
+            Assert.That(multiSelected, Is.True);
+            Assert.That(
+                multiFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+            Assert.That(sharedRequest, Is.Not.Null);
+
+            var multi = Capture(multiMaterial, sharedRequest);
+            var twin = Capture(twinMaterial, sharedRequest);
+
+            var resolved = ResolveThroughSeam(
+                multi,
+                BaseContainerName,
+                out var family,
+                out var mode);
+            Assert.That(resolved, Is.True);
+            Assert.That(
+                family,
+                Is.EqualTo(CapturedAlphaMaterialFamily
+                    .LilToonTransparent));
+            Assert.That(mode, Is.EqualTo(2));
+
+            var multiAlpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(multi);
+            var twinAlpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(twin);
+            Assert.That(multiAlpha.IsComplete, Is.True);
+            Assert.That(twinAlpha.IsComplete, Is.True);
+            Assert.That(
+                multiAlpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(twinAlpha.GetCompleteValue().GetConstantValue()));
+            Assert.That(
+                multiAlpha.GetCompleteValue().GetConstantValue(),
+                Is.EqualTo(1f));
+        }
+
         /// <summary>
         /// Runs the resolver once through the profile injection seam: the
         /// gathered identity evidence and the test-only row the Task 6
@@ -332,7 +452,7 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
         /// conjunction reads only the name, GUID, stamp, package, include
         /// tree, and canonical digest terms.
         /// </summary>
-        private static LilToonSourceEvidence MatchingSourceEvidence(
+        internal static LilToonSourceEvidence MatchingSourceEvidence(
             string containerName)
         {
             return new LilToonSourceEvidence(
@@ -358,7 +478,7 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
         /// The test-only profile row, built through the ForTests factory
         /// convention the include tree and the Task 6 verify fixtures use.
         /// </summary>
-        private static LilToonMultiContainerProfile MatchingProfile(
+        internal static LilToonMultiContainerProfile MatchingProfile(
             string containerName)
         {
             return LilToonSourceAttestation.MultiContainerProfileForTests(
@@ -405,6 +525,23 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
             Assert.That(shader, Is.Not.Null, path);
             var material = new Material(shader);
+            _materials.Add(material);
+            return material;
+        }
+
+        /// <summary>
+        /// The full cutout-schema stand-in minted under this class's own
+        /// temp folder, tracked for teardown. See
+        /// <see cref="LilToonFixtureTestBase.CreateCutoutSchemaStandIn"/>
+        /// for the minted state.
+        /// </summary>
+        private Material NewCutoutSchemaMaterial(
+            string shaderName,
+            float transparentMode,
+            string[] keywords)
+        {
+            var material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                TempFolder, shaderName, transparentMode, keywords);
             _materials.Add(material);
             return material;
         }
