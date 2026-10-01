@@ -579,7 +579,11 @@ namespace Alrauna.Amuse.Editor.Build
         /// admitted against this material's own captured defaults under its
         /// family's own conversion request, the conversion step (the real
         /// family route, or the verified-fixture seam), and the renderer-wide
-        /// runtime-overwrite rule against the family's own recipe. Returns
+        /// runtime-overwrite rule against the family's own recipe. A
+        /// resolved Multi material consults its stored resolution record
+        /// instead of the family route: the Multi eligibility evaluator
+        /// judges with the captured mode, and the recipe stays the resolved
+        /// family's own. Returns
         /// the mapped opaque result, or the slot-local refusal. A material
         /// the depth-test policy admitted onto a mixed-split plan refuses
         /// here, before any material is prepared for that slot.
@@ -658,6 +662,56 @@ namespace Alrauna.Amuse.Editor.Build
                             return AlphaSeparationSlotRefusal
                                 .ConversionPropertyOverwrittenAtRuntime;
                         }
+                    }
+
+                    // A resolved Multi material attested once, at the one
+                    // post-capture resolution point, and its verdict is
+                    // stored on the material. The per-family source verify
+                    // below cannot read a Multi container, so the boundary
+                    // consults the resolution record instead: the Multi
+                    // eligibility evaluator judges the same derived
+                    // evidence with the captured mode, and the canonical
+                    // recipe stays the resolved family's own. A regular
+                    // material never carries a record, so this conditional
+                    // is inert on every existing family.
+                    if (captured.MultiResolution != null)
+                    {
+                        // Effective non-property facts, read in the barrier
+                        // beside the evidence exactly as the regular route
+                        // reads them: neither fact is animation-reachable.
+                        LilToonOpaqueTarget.ReadEffectiveRenderState(
+                            live, out var multiQueue,
+                            out var multiRenderType);
+                        if (!LilToonMultiResolution.TryReadCapturedMode(
+                                captured.Evidence, out var multiMode))
+                        {
+                            throw new InvalidOperationException(
+                                "A resolved Multi material carries no " +
+                                "readable mode.");
+                        }
+
+                        var multiEligibility =
+                            LilToonMultiSourceEligibility
+                                .EvaluateVerifiedEligibility(
+                                    derived, multiQueue, multiRenderType,
+                                    multiMode, allowDepthTestChange);
+                        if (multiEligibility.Outcome !=
+                            LilToonOpaqueConversionOutcome.Convertible)
+                        {
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
+                        }
+
+                        depthTestDivergence =
+                            multiEligibility.DepthTestDivergence;
+
+                        // An already-prepared artifact for this source is
+                        // reused here; only a first conversion creates the
+                        // canonical clone.
+                        opaque = preparedOpaque ??
+                            LilToonOpaqueTarget
+                                .PrepareCanonicalOpaqueClone(live, derived);
+                        return AlphaSeparationSlotRefusal.None;
                     }
 
                     if (lilToonConversion != null)

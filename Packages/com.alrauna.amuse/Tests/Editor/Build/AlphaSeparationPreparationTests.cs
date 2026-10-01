@@ -1888,6 +1888,216 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Final review, Important: the Multi eligibility runs at the
+        // --- conversion boundary --------------------------------------------
+
+        /// <summary>
+        /// A Multi-resolved material at a mode-1 state and the observed
+        /// corpus queue (2000, not the vendor cutout form's 2450) refuses
+        /// through the boundary's Multi eligibility conditional: the record
+        /// the one resolution point stored routes the decision to
+        /// <see cref="LilToonMultiSourceEligibility"/> with the captured
+        /// mode, whose mode-1 queue row refuses the opaque queue. The slot
+        /// transport folds the refusal to the shared member. The decision
+        /// leg at the end names the evaluator's own answer for the same
+        /// state, which the family-blind dispatch never carried: without
+        /// the record conditional the boundary consulted the regular
+        /// cutout evaluator, whose mode-blind rows are not the rows this
+        /// refusal came from.
+        /// Reachability precondition: the same fixture fails against the
+        /// pre-wave head, where the closed-capture selection nulled the
+        /// Multi capture request and the material never became a
+        /// candidate.
+        /// </summary>
+        // --- Falsifier: a boundary that dispatches a resolved Multi material through the resolved family's own evaluator, or one that refuses it before the Multi rows run, fails this fixture. ---
+        [Test]
+        public void MultiResolvedCutoutModeAtTheOpaqueQueueRefusesThroughTheMultiEligibilityRows()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE multi mode one boundary");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    1f,
+                    new[] { "UNITY_UI_ALPHACLIP" });
+                material.renderQueue = 2000;
+                material.SetTexture(
+                    "_MainTex",
+                    fixtures.ImportFullyOpaqueMipmap(
+                        "multi_boundary_main"));
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: UnityMaterialSemantics
+                        .TrySelectAlphaMaterialRequests,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "fixture precondition: the resolved Multi material " +
+                    "must prove its triangle opaque, or there is no " +
+                    "conversion candidate for the boundary to judge");
+
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionRefused),
+                    Is.EqualTo(1),
+                    "the mode-1 state at the opaque queue must refuse " +
+                    "exactly this slot through the Multi eligibility rows");
+                Assert.That(
+                    amuse.Separation, Is.Null,
+                    "the refused slot prepares nothing");
+
+                // The labeled decision leg: the Multi evaluator's own
+                // answer for this state. The slot transport folds it to
+                // the shared refusal member, so the member is asserted
+                // here, at the surface the boundary consulted.
+                var derived =
+                    UnityMaterialEvidenceCapture.Capture(new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            material,
+                            LilToonMultiSourceEligibility
+                                .ConversionEvidenceRequest),
+                    })[0];
+                LilToonOpaqueTarget.ReadEffectiveRenderState(
+                    material, out var queue, out var renderType);
+                var decision =
+                    LilToonMultiSourceEligibility
+                        .EvaluateVerifiedEligibility(
+                            derived, queue, renderType, 1);
+                Assert.That(
+                    decision.Outcome,
+                    Is.EqualTo(LilToonOpaqueConversionOutcome.Refused));
+                Assert.That(
+                    decision.Refusal,
+                    Is.EqualTo(
+                        LilToonOpaqueConversionRefusal
+                            .UnsupportedRenderQueue),
+                    "the boundary refusal must be the Multi evaluator's " +
+                    "mode-1 queue row");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// A mode-0 Multi material at the vendor opaque form converts
+        /// through the same recipe as before the wave: the resolution maps
+        /// the mode onto the regular opaque family, and the boundary's
+        /// identity mapping keeps the runtime material swap valid without a
+        /// clone, exactly as every resolved regular opaque material has
+        /// always mapped. The record conditional is inert on this path.
+        /// </summary>
+        // --- Falsifier: a boundary whose Multi wiring disturbs the resolved opaque family's identity mapping fails this fixture. ---
+        [Test]
+        public void MultiResolvedOpaqueModeConvertsThroughTheSameIdentityRecipe()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE multi mode zero boundary");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    0f,
+                    Array.Empty<string>());
+                material.renderQueue = 2000;
+                material.SetOverrideTag("RenderType", "Opaque");
+                AddSingleTriangleRenderer(root, material, out mesh);
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: UnityMaterialSemantics
+                        .TrySelectAlphaMaterialRequests,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly);
+
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be analyzable");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "fixture precondition: the resolved mode-0 material " +
+                    "must prove its triangle opaque");
+
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionRefused),
+                    Is.Zero,
+                    "the mode-0 material must convert, not refuse");
+                Assert.That(amuse.Separation, Is.Not.Null);
+                Assert.That(
+                    amuse.Separation.CreatedClones, Is.Empty,
+                    "the resolved opaque family maps to itself and never " +
+                    "enters CreatedClones");
+                Assert.That(
+                    amuse.Separation.OpaqueBySource[material],
+                    Is.SameAs(material),
+                    "the mode-0 recipe is the identity mapping the " +
+                    "resolved opaque family has always produced");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Task 4: affine _MainTex_ST support (design 2026-08-31) --------
 
         /// <summary>
@@ -7412,6 +7622,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private class LilToonCutoutConversionFixtures
             : LilToonFixtureTestBase
         {
+            /// <summary>
+            /// The shared stand-in folder, exposed for outer fixture
+            /// methods that mint assets through the fixture base's static
+            /// helpers; the base's own setup and teardown manage it.
+            /// </summary>
+            internal const string FixtureTempFolder = TempFolder;
+
             internal Texture2D ImportFullyOpaqueMipmap(string name)
             {
                 return ImportMipmapTexture(
