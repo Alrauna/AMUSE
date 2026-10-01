@@ -752,12 +752,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// member, with a combined Multi evidence request that asks for the
         /// keyword set: the mode-consistency gate cannot run without it, and
         /// the request carries the three Multi scalars the mode read and the
-        /// gate rules consume. The member exists only between classification
-        /// and resolution - the resolver maps it onto the regular families
-        /// afterwards, so no downstream switch ever sees it.
+        /// gate rules consume. The closed-capture selection hands the same
+        /// combined request back as the capture schema - a null there would
+        /// turn the shared selection loop's sentinel path against every
+        /// supported container before the one resolution point runs. The
+        /// member exists only between classification and resolution - the
+        /// resolver maps it onto the regular families afterwards, so no
+        /// downstream switch ever sees it.
         /// Compile-fail red on the family member until Task 7 phase B.
         /// </summary>
-        // --- Falsifier: a classifier that leaves the supported containers in the unsupported path, or a Multi request that skips the keyword capture, fails this fixture. ---
+        // --- Falsifier: a classifier that leaves the supported containers in the unsupported path, a Multi request that skips the keyword capture, or a closed-capture selection that nulls the Multi capture request, fails this fixture. ---
         [Test]
         public void MultiContainersClassifyToTheMultiFamilyWithKeywordCapture()
         {
@@ -787,6 +791,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Assert.That(alphaRelevance, Is.Not.Null, shaderName);
                 Assert.That(
                     alphaRelevance.CaptureKeywords, Is.True, shaderName);
+                Assert.That(captureSchema, Is.Not.Null, shaderName);
+                Assert.That(
+                    captureSchema.CaptureKeywords, Is.True, shaderName);
                 foreach (var multiScalar in new[]
                          {
                              "_TransparentMode",

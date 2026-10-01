@@ -894,6 +894,15 @@ namespace Alrauna.Amuse.Editor.Semantics
                     return LilToonCaptureRequest;
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     return LilToonTransparentCaptureRequest;
+                case CapturedAlphaMaterialFamily.LilToonMulti:
+                    // The closed capture must gather the combined Multi
+                    // schema, or the shared selection loop reads a null
+                    // request and refuses every supported container before
+                    // the one resolution point can run. The combined request
+                    // spans the three resolved families' alpha facts beside
+                    // the Multi scalars and keywords, so one capture serves
+                    // the resolution and every resolved-mode interpreter.
+                    return LilToonMultiResolution.MultiEvidenceRequest;
                 default:
                     return null;
             }
