@@ -15,13 +15,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// The derivation table is a static pinned array, one row per keyword
     /// with its producing condition. It is transcribed from lilToon 2.3.4,
     /// upstream commit 252fd8cfc46106d4967e95b3f2c788418502f227, keyword
-    /// writes at <c>Editor/lilMaterialUtils.cs:397-468</c>. The table pins
-    /// the rows the design's gate section names: the two mode keywords, the
-    /// dither keyword, the alpha mask keyword, the layer dissolve keyword,
-    /// the distance fade keyword, the outline tone keyword, and the two
-    /// tolerated animation-derived color keywords. Every other keyword a
-    /// material carries is outside the table, so its captured presence is a
-    /// state the derivation cannot produce and refuses as a mismatch.
+    /// writes at <c>Editor/lilMaterialUtils.cs:397-468</c>. The transcription
+    /// covers every keyword the writer produces on the supported containers:
+    /// the two mode keywords, the dither keyword, the alpha mask keyword,
+    /// the layer dissolve keyword, the distance fade keyword, the outline
+    /// tone keyword, and the full feature-keyword set (shadow, rim shade,
+    /// emission and its blend masks, normal maps, anisotropy, matcaps, rim,
+    /// glitter, audio link, backlight, parallax, reflection, main second
+    /// and third with their dissolve and decal-animation states). A real
+    /// avatar material carries that feature set on every vendor inspector
+    /// save, so a table limited to the mode rows would refuse materials the
+    /// vendor itself considers consistent. The two animation-derived color
+    /// keywords stay tolerated in both directions: the vendor's animation
+    /// pass can enable them beyond the static writer state
+    /// (<c>SetupMultiMaterial(Material[], AnimationClip[])</c> at the pin),
+    /// so their presence never refuses and their absence never refuses.
+    /// Every other keyword a material carries is outside the table, so its
+    /// captured presence is a state the derivation cannot produce and
+    /// refuses as a mismatch.
     /// </para>
     /// <para>
     /// Missing-fact policy: the derivation consults captured facts only. A
@@ -65,14 +76,118 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string DissolveParamsProperty = "_DissolveParams";
         private const string DistanceFadeProperty = "_DistanceFade";
         private const string OutlineToneProperty = "_OutlineTexHSVG";
+        private const string UseShadowProperty = "_UseShadow";
+        private const string UseRimShadeProperty = "_UseRimShade";
+        private const string UseEmissionProperty = "_UseEmission";
+        private const string UseEmission2ndProperty = "_UseEmission2nd";
+        private const string EmissionBlendMaskProperty = "_EmissionBlendMask";
+        private const string Emission2ndBlendMaskProperty =
+            "_Emission2ndBlendMask";
+        private const string UseBumpMapProperty = "_UseBumpMap";
+        private const string UseBump2ndMapProperty = "_UseBump2ndMap";
+        private const string UseAnisotropyProperty = "_UseAnisotropy";
+        private const string UseMatCapProperty = "_UseMatCap";
+        private const string UseMatCap2ndProperty = "_UseMatCap2nd";
+        private const string MatCapCustomNormalProperty = "_MatCapCustomNormal";
+        private const string MatCap2ndCustomNormalProperty =
+            "_MatCap2ndCustomNormal";
+        private const string UseRimProperty = "_UseRim";
+        private const string RimDirStrengthProperty = "_RimDirStrength";
+        private const string UseGlitterProperty = "_UseGlitter";
+        private const string UseAudioLinkProperty = "_UseAudioLink";
+        private const string AudioLinkAsLocalProperty = "_AudioLinkAsLocal";
+        private const string UseBacklightProperty = "_UseBacklight";
+        private const string UseParallaxProperty = "_UseParallax";
+        private const string UsePomProperty = "_UsePOM";
+        private const string UseReflectionProperty = "_UseReflection";
+        private const string MainGradationStrengthProperty =
+            "_MainGradationStrength";
+        private const string MainTexHsvgProperty = "_MainTexHSVG";
+        private const string UseMain2ndTexProperty = "_UseMain2ndTex";
+        private const string UseMain3rdTexProperty = "_UseMain3rdTex";
+        private const string Main2ndTexDecalAnimationProperty =
+            "_Main2ndTexDecalAnimation";
+        private const string Main3rdTexDecalAnimationProperty =
+            "_Main3rdTexDecalAnimation";
+        private const string Main2ndDissolveParamsProperty =
+            "_Main2ndDissolveParams";
+        private const string Main3rdDissolveParamsProperty =
+            "_Main3rdDissolveParams";
 
         /// <summary>
         /// The vendor written-off outline tone color
         /// (<c>lilConstants.defaultHSVG</c> at the pin). A material whose
-        /// outline tone vector holds this exact value derives no keyword.
+        /// outline tone or main texture HSVG vector holds this exact value
+        /// derives no keyword.
         /// </summary>
-        private static readonly Vector4 OutlineToneOffColor =
+        private static readonly Vector4 DefaultHsvgColor =
             new Vector4(0f, 1f, 1f, 1f);
+
+        /// <summary>
+        /// The vendor default decal animation vector
+        /// (<c>lilConstants.defaultDecalAnim</c> at the pin). A material
+        /// whose decal animation vector holds this exact value derives no
+        /// keyword.
+        /// </summary>
+        private static readonly Vector4 DefaultDecalAnim =
+            new Vector4(1f, 1f, 1f, 30f);
+
+        /// <summary>
+        /// Every property name the derivation table's producing conditions
+        /// can consult, split by evidence kind. The capture request that
+        /// feeds this gate must carry every name: an unrequested name reads
+        /// as feature-off, so a missing request entry silently turns a row
+        /// off for every real material. The request agreement fixture pins
+        /// the union against the production Multi request.
+        /// </summary>
+        internal static readonly string[] ConsultedScalarProperties =
+        {
+            ClippingCancellerProperty,
+            OverlayProperty,
+            DitherProperty,
+            AlphaMaskModeProperty,
+            UseShadowProperty,
+            UseRimShadeProperty,
+            UseEmissionProperty,
+            UseEmission2ndProperty,
+            UseBumpMapProperty,
+            UseBump2ndMapProperty,
+            UseAnisotropyProperty,
+            UseMatCapProperty,
+            UseMatCap2ndProperty,
+            MatCapCustomNormalProperty,
+            MatCap2ndCustomNormalProperty,
+            UseRimProperty,
+            RimDirStrengthProperty,
+            UseGlitterProperty,
+            UseAudioLinkProperty,
+            AudioLinkAsLocalProperty,
+            UseBacklightProperty,
+            UseParallaxProperty,
+            UsePomProperty,
+            UseReflectionProperty,
+            MainGradationStrengthProperty,
+            UseMain2ndTexProperty,
+            UseMain3rdTexProperty,
+        };
+
+        internal static readonly string[] ConsultedVectorProperties =
+        {
+            DissolveParamsProperty,
+            DistanceFadeProperty,
+            OutlineToneProperty,
+            MainTexHsvgProperty,
+            Main2ndTexDecalAnimationProperty,
+            Main3rdTexDecalAnimationProperty,
+            Main2ndDissolveParamsProperty,
+            Main3rdDissolveParamsProperty,
+        };
+
+        internal static readonly string[] ConsultedTextureProperties =
+        {
+            EmissionBlendMaskProperty,
+            Emission2ndBlendMaskProperty,
+        };
 
         private delegate bool ProducingCondition(
             CapturedMaterialEvidence evidence,
@@ -132,6 +247,121 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             {
                 Keyword = "_DETAIL_MULX2",
                 Produces = ProducesOutlineTone,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_REQUIRE_UV2",
+                Produces = ProducesShadow,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "AUTO_KEY_VALUE",
+                Produces = ProducesRimShade,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_EMISSION",
+                Produces = ProducesEmission,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "GEOM_TYPE_BRANCH",
+                Produces = ProducesEmission2nd,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SUNDISK_SIMPLE",
+                Produces = ProducesEmissionBlendMask,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_NORMALMAP",
+                Produces = ProducesBumpMap,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "EFFECT_BUMP",
+                Produces = ProducesBump2ndMap,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "SOURCE_GBUFFER",
+                Produces = ProducesAnisotropy,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A",
+                Produces = ProducesMatCap,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SPECULARHIGHLIGHTS_OFF",
+                Produces = ProducesMatCap2nd,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "GEOM_TYPE_MESH",
+                Produces = ProducesMatCapCustomNormal,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_METALLICGLOSSMAP",
+                Produces = ProducesRim,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SPECGLOSSMAP",
+                Produces = ProducesGlitter,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_MAPPING_6_FRAMES_LAYOUT",
+                Produces = ProducesAudioLink,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SUNDISK_HIGH_QUALITY",
+                Produces = ProducesAudioLinkAsLocal,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_COLORADDSUBDIFF_ON",
+                Produces = ProducesMain2ndTex,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_COLORCOLOR_ON",
+                Produces = ProducesMain3rdTex,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_SUNDISK_NONE",
+                Produces = ProducesDecalAnimation,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "GEOM_TYPE_FROND",
+                Produces = ProducesMainDissolve,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "ANTI_FLICKER",
+                Produces = ProducesBacklight,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_PARALLAXMAP",
+                Produces = ProducesParallax,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "PIXELSNAP_ON",
+                Produces = ProducesParallaxOcclusion,
+            },
+            new KeywordDerivationRow
+            {
+                Keyword = "_GLOSSYREFLECTIONS_OFF",
+                Produces = ProducesReflection,
             },
             new KeywordDerivationRow
             {
@@ -393,7 +623,290 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return TryReadVector(evidence, OutlineToneProperty, out var tone)
-                && tone != OutlineToneOffColor;
+                && tone != DefaultHsvgColor;
+        }
+
+        // Editor/lilMaterialUtils.cs:414 at the pin, with the feature read
+        // at :364. The gem branch forces the keyword off at :405 for a name
+        // family no admitted container belongs to.
+        private static bool ProducesShadow(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseShadowProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:415 at the pin, with the feature read
+        // at :365.
+        private static bool ProducesRimShade(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseRimShadeProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:418 at the pin, with the feature read
+        // at :368.
+        private static bool ProducesEmission(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseEmissionProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:419 at the pin, with the feature read
+        // at :369.
+        private static bool ProducesEmission2nd(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseEmission2ndProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:420 at the pin. The blend masks are
+        // texture-presence features read at :387-388 through
+        // IsFeatureOnTexture.
+        private static bool ProducesEmissionBlendMask(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return (FeatureIsOn(evidence, UseEmissionProperty)
+                    && TextureIsAssigned(evidence, EmissionBlendMaskProperty))
+                || (FeatureIsOn(evidence, UseEmission2ndProperty)
+                    && TextureIsAssigned(
+                        evidence, Emission2ndBlendMaskProperty));
+        }
+
+        // Editor/lilMaterialUtils.cs:422 at the pin, with the feature read
+        // at :370.
+        private static bool ProducesBumpMap(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseBumpMapProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:423 at the pin, with the feature read
+        // at :371.
+        private static bool ProducesBump2ndMap(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseBump2ndMapProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:424 at the pin, with the feature read
+        // at :372.
+        private static bool ProducesAnisotropy(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseAnisotropyProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:425 at the pin, with the feature read
+        // at :373.
+        private static bool ProducesMatCap(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseMatCapProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:426 at the pin, with the feature read
+        // at :374.
+        private static bool ProducesMatCap2nd(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseMatCap2ndProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:427 at the pin, with the custom normal
+        // features read at :375-376.
+        private static bool ProducesMatCapCustomNormal(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return (FeatureIsOn(evidence, UseMatCapProperty)
+                    && FeatureIsOn(evidence, MatCapCustomNormalProperty))
+                || (FeatureIsOn(evidence, UseMatCap2ndProperty)
+                    && FeatureIsOn(evidence, MatCap2ndCustomNormalProperty));
+        }
+
+        // Editor/lilMaterialUtils.cs:428 at the pin, with the feature read
+        // at :377.
+        private static bool ProducesRim(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseRimProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:430 at the pin, with the feature read
+        // at :379.
+        private static bool ProducesGlitter(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseGlitterProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:431 at the pin, with the feature read
+        // at :380.
+        private static bool ProducesAudioLink(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseAudioLinkProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:432 at the pin, with the local audio
+        // link feature read at :381.
+        private static bool ProducesAudioLinkAsLocal(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseAudioLinkProperty)
+                && FeatureIsOn(evidence, AudioLinkAsLocalProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:448 at the pin, with the main second
+        // feature read at :381 and the decal animation vectors read at
+        // :389-390 through IsFeatureOnDecalAnimation.
+        private static bool ProducesMain2ndTex(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseMain2ndTexProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:449 at the pin, with the main third
+        // feature read at :382.
+        private static bool ProducesMain3rdTex(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseMain3rdTexProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:450 at the pin, with the main second
+        // feature read at :381 and the decal animation vectors read at
+        // :389-390 through IsFeatureOnDecalAnimation.
+        private static bool ProducesDecalAnimation(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return (FeatureIsOn(evidence, UseMain2ndTexProperty)
+                    && VectorDiffers(
+                        evidence,
+                        Main2ndTexDecalAnimationProperty,
+                        DefaultDecalAnim))
+                || (FeatureIsOn(evidence, UseMain3rdTexProperty)
+                    && VectorDiffers(
+                        evidence,
+                        Main3rdTexDecalAnimationProperty,
+                        DefaultDecalAnim));
+        }
+
+        // Editor/lilMaterialUtils.cs:451 at the pin, with the dissolve
+        // features read at :382-383 through IsFeatureOnVectorX.
+        private static bool ProducesMainDissolve(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return (FeatureIsOn(evidence, UseMain2ndTexProperty)
+                    && VectorComponentIsNonZero(
+                        evidence, Main2ndDissolveParamsProperty))
+                || (FeatureIsOn(evidence, UseMain3rdTexProperty)
+                    && VectorComponentIsNonZero(
+                        evidence, Main3rdDissolveParamsProperty));
+        }
+
+        // Editor/lilMaterialUtils.cs:453 at the pin, with the feature read
+        // at :384.
+        private static bool ProducesBacklight(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseBacklightProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:454 at the pin, with the feature read
+        // at :385.
+        private static bool ProducesParallax(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseParallaxProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:455 at the pin, with the POM feature
+        // read at :386.
+        private static bool ProducesParallaxOcclusion(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseParallaxProperty)
+                && FeatureIsOn(evidence, UsePomProperty);
+        }
+
+        // Editor/lilMaterialUtils.cs:456 at the pin, with the feature read
+        // at :387.
+        private static bool ProducesReflection(
+            CapturedMaterialEvidence evidence,
+            int mode)
+        {
+            return FeatureIsOn(evidence, UseReflectionProperty);
+        }
+
+        /// <summary>
+        /// True when the captured evidence shows the named texture slot
+        /// assigned. A slot the request did not carry reads as unassigned,
+        /// mirroring the vendor fallback that treats a missing property as
+        /// feature-off (<c>Editor/lilMaterialUtils.cs:530-534</c> at the
+        /// pin, through IsFeatureOnTexture).
+        /// </summary>
+        private static bool TextureIsAssigned(
+            CapturedMaterialEvidence evidence,
+            string property)
+        {
+            try
+            {
+                return evidence.TryGetTexture(property, out _);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True when the named captured vector exists and differs from the
+        /// given vendor default. The vendor's IsFeatureOnDecalAnimation
+        /// (<c>Editor/lilMaterialUtils.cs:524-528</c> at the pin) compares
+        /// the whole vector against the constant.
+        /// </summary>
+        private static bool VectorDiffers(
+            CapturedMaterialEvidence evidence,
+            string property,
+            Vector4 defaultVector)
+        {
+            return TryReadVector(evidence, property, out var value)
+                && value != defaultVector;
+        }
+
+        /// <summary>
+        /// True when the named captured vector exists and its x component
+        /// is nonzero. The vendor's IsFeatureOnVectorX
+        /// (<c>Editor/lilMaterialUtils.cs:512-517</c> at the pin).
+        /// </summary>
+        private static bool VectorComponentIsNonZero(
+            CapturedMaterialEvidence evidence,
+            string property)
+        {
+            return TryReadVector(evidence, property, out var value)
+                && value.x != 0f;
         }
 
         /// <summary>
