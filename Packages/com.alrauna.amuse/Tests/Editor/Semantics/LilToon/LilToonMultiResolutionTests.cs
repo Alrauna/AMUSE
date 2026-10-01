@@ -8,7 +8,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 
-namespace Alrauna.Tests.Editor.Semantics.LilToon
+namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
     /// <summary>
     /// Falsifier fixtures for the Multi resolution routing: the follower
