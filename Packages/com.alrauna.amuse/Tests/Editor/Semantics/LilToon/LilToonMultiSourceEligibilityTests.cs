@@ -167,7 +167,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// <summary>
         /// The parity twin leg, labeled: the regular cutout evaluator over
         /// the regular cutout stand-in, captured under the regular family's
-        /// own conversion request.
+        /// own production capture schema - the alpha request combined with
+        /// the conversion request, the composition the verified seam uses -
+        /// so the distance-fade vector the alpha request declares rides into
+        /// the evidence the twin's gates read.
         /// </summary>
         private static LilToonOpaqueConversionEligibility
             EvaluateRegularCutoutTwin(Material material)
@@ -178,7 +181,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             {
                 new MaterialEvidenceCaptureInput(
                     material,
-                    LilToonCutoutSourceEligibility.ConversionEvidenceRequest),
+                    MaterialEvidenceRequest.Combine(
+                        LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                        LilToonCutoutSourceEligibility
+                            .ConversionEvidenceRequest)),
             })[0];
             return LilToonCutoutSourceEligibility
                 .EvaluateVerifiedEligibility(captured, queue, renderType);

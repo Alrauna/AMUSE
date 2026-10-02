@@ -558,11 +558,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "_SrcBlendAlpha", "_DstBlendAlpha", "_BlendOp",
                     "_BlendOpAlpha", "_SrcBlendFA", "_DstBlendFA",
                     "_SrcBlendAlphaFA", "_DstBlendAlphaFA", "_BlendOpFA",
-                    "_BlendOpAlphaFA", "_Cutoff",
+                    "_BlendOpAlphaFA", "_Cutoff", "_DistanceFade",
                 },
                 captureSchema.PresenceProperties,
                 "the cutout capture schema's presence dimension must stay " +
-                "exactly the recipe plus the cutout source's own _Cutoff");
+                "exactly the recipe plus the cutout source's own _Cutoff " +
+                "and distance-fade presence");
             CollectionAssert.IsSubsetOf(
                 alphaRelevance.ScalarProperties,
                 captureSchema.ScalarProperties,
