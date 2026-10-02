@@ -282,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return material;
         }
 
-        private static void AssertAlphaGateUnknown(
+        private static AlphaUnknownReason AssertAlphaGateUnknown(
             LilToonSemanticResult result,
             string propertyName)
         {
@@ -290,15 +290,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 result.Semantics.Alpha.IsComplete,
                 Is.False,
                 $"{propertyName}: alpha must stay Unknown");
+            var naming = DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
+                .Where(d =>
+                    (d.Code == LilToonSemanticDiagnosticCode
+                        .UnsupportedFeature ||
+                     d.Code == LilToonSemanticDiagnosticCode
+                         .FeatureRetention) &&
+                    d.Detail.Contains(propertyName))
+                .ToList();
             Assert.That(
-                DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
-                    .Any(d =>
-                        d.Code == LilToonSemanticDiagnosticCode
-                            .UnsupportedFeature &&
-                        d.Detail.Contains(propertyName)),
-                Is.True,
-                "expected an UnsupportedFeature alpha diagnostic naming " +
-                propertyName);
+                naming,
+                Is.Not.Empty,
+                "expected an alpha diagnostic naming " + propertyName);
+            return LilToonMaterialSemantics.AlphaUnknownReasonFor(naming);
         }
 
         private static LilToonSemanticResult InterpretTransparent(
@@ -1836,16 +1840,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         // --- row 8: distance fade (copy detector) -------------------------
 
         [Test]
-        public void DistanceFadeEnabled_IsUnknownNamingDistanceFade()
+        public void DistanceFadeStrengthOn_RetainsNamingDistanceFade()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("t_fade_on");
             material.SetVector(
                 DistanceFadeProperty, new Vector4(0.1f, 0.01f, 0.5f, 0f));
 
-            // Falsifies: omitting the only post-clip alpha writer, and
-            // gating on _DistanceFadeColor.a instead of _DistanceFade.z.
-            AssertAlphaGateUnknown(
+            // Falsifies: omitting the only post-clip alpha writer, and gating
+            // on _DistanceFadeColor.a instead of _DistanceFade.z.
+            var reason = AssertAlphaGateUnknown(
                 InterpretTransparent(material), DistanceFadeProperty);
+            Assert.That(
+                reason.Kind,
+                Is.EqualTo(AlphaUnknownKind.FeatureRetention));
         }
 
         [Test]
