@@ -45,6 +45,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly string[] SourcePresenceSchema =
         {
             CutoffProperty,
+            "_DistanceFade",
         };
 
         private static readonly string[] SourceSchema =
@@ -54,8 +55,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         };
 
         /// <summary>
-        /// The cutout source's own eligibility evidence: two properties. The
-        /// recipe never writes it, and it is not target evidence.
+        /// The cutout source's own eligibility evidence: the version and
+        /// cutoff scalars plus the distance-fade presence fact. The recipe
+        /// never writes them, and they are not target evidence. The
+        /// distance-fade vector itself rides the alpha capture request,
+        /// which declares it.
         /// </summary>
         internal static MaterialEvidenceRequest SourceEvidenceRequest { get; } =
             new MaterialEvidenceRequest(
@@ -311,6 +315,36 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
                         .ClipThresholdDiscardsOpaqueAlpha);
+            }
+
+            // 13. Distance fade. The vendor forward pass lerps the fragment
+            //     color by the fade weight at LIL_RENDER 1, and the dither path
+            //     lerps alpha before the coverage transform. A moved triangle
+            //     would lose both, so a finite nonzero strength refuses. The
+            //     vector rides the alpha capture request, so its absence refuses
+            //     as ConversionPropertyAbsent, exactly like the transparent
+            //     family.
+            if (!evidence.TryGetVector(
+                    LilToonDistanceFadeSemantics.DistanceFadeProperty,
+                    out var distanceFade))
+            {
+                return LilToonOpaqueConversionEligibility.Refused(
+                    LilToonOpaqueConversionRefusal.ConversionPropertyAbsent);
+            }
+
+            if (float.IsNaN(distanceFade.x) || float.IsInfinity(distanceFade.x) ||
+                float.IsNaN(distanceFade.y) || float.IsInfinity(distanceFade.y) ||
+                float.IsNaN(distanceFade.z) || float.IsInfinity(distanceFade.z) ||
+                float.IsNaN(distanceFade.w) || float.IsInfinity(distanceFade.w))
+            {
+                return LilToonOpaqueConversionEligibility.Refused(
+                    LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
+            }
+
+            if (distanceFade.z != 0f)
+            {
+                return LilToonOpaqueConversionEligibility.Refused(
+                    LilToonOpaqueConversionRefusal.UnsupportedDistanceFade);
             }
 
             // Deliberately ungated: _AlphaToMask, _SrcBlendAlphaFA and

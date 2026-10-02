@@ -50,7 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "_SrcBlendAlpha", "_DstBlendAlpha", "_BlendOp", "_BlendOpAlpha",
             "_SrcBlendFA", "_DstBlendFA", "_SrcBlendAlphaFA", "_DstBlendAlphaFA",
             "_BlendOpFA", "_BlendOpAlphaFA",
-            "_Cutoff",
+            "_Cutoff", "_DistanceFade",
         };
 
         // --- Request shape -----------------------------------------------------
@@ -81,7 +81,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             Assert.That(request.ShaderName, Is.True);
             Assert.That(request.ActiveColorSpace, Is.False);
-            Assert.That(request.PresenceProperties.Count, Is.EqualTo(19));
+            Assert.That(request.PresenceProperties.Count, Is.EqualTo(20));
             Assert.That(request.ScalarProperties.Count, Is.EqualTo(20));
             Assert.That(request.ScalarProperties, Has.Member("_Cutoff"));
             Assert.That(request.ScalarProperties, Has.Member("_lilToonVersion"));
@@ -109,9 +109,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The cutout source owns exactly two properties. Falsifies a split
-        /// that left properties on the target, and a split that widened the
-        /// source request with recipe render state it reads but does not own.
+        /// The cutout source owns exactly two scalars plus the distance-fade
+        /// presence fact. Falsifies a split that left properties on the
+        /// target, and a split that widened the source request with recipe
+        /// render state it reads but does not own.
         /// </summary>
         [Test]
         public void SourceEvidenceRequest_IsExactlyVersionAndCutoff()
@@ -119,7 +120,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var request = LilToonCutoutSourceEligibility.SourceEvidenceRequest;
 
             CollectionAssert.AreEquivalent(
-                new[] { "_Cutoff" }, request.PresenceProperties);
+                new[] { "_Cutoff", "_DistanceFade" },
+                request.PresenceProperties);
             CollectionAssert.AreEquivalent(
                 new[] { "_lilToonVersion", "_Cutoff" }, request.ScalarProperties);
             Assert.That(request.ColorProperties, Is.Empty);
@@ -139,7 +141,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonCutoutSourceEligibility.ConversionEvidenceRequest;
 
             Assert.That(request.ShaderName, Is.True);
-            Assert.That(request.PresenceProperties.Count, Is.EqualTo(19));
+            Assert.That(request.PresenceProperties.Count, Is.EqualTo(20));
             Assert.That(request.ScalarProperties.Count, Is.EqualTo(20));
             CollectionAssert.AreEquivalent(
                 ExpectedConversionSchema, request.ScalarProperties);
@@ -168,13 +170,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "refusal was " + result.Refusal);
         }
 
+        /// <summary>
+        /// Captures with the production conversion schema: the family alpha
+        /// request combined with this conversion request, exactly as the
+        /// verified seam composes it. The _DistanceFade vector is declared
+        /// by the alpha request, so the evidence the gates read carries it.
+        /// </summary>
         private static CapturedMaterialEvidence CaptureConversion(Material material)
         {
             return UnityMaterialEvidenceCapture.Capture(new[]
             {
                 new MaterialEvidenceCaptureInput(
                     material,
-                    LilToonCutoutSourceEligibility.ConversionEvidenceRequest),
+                    MaterialEvidenceRequest.Combine(
+                        LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                        LilToonCutoutSourceEligibility
+                            .ConversionEvidenceRequest)),
             })[0];
         }
 
@@ -204,6 +215,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 queue,
                 renderType,
                 allowDepthTestChange);
+        }
+
+        /// <summary>
+        /// Evaluates evidence whose vector record has no _DistanceFade value.
+        /// The schema-complete cutout stand-in always declares the property,
+        /// so absence is built from the opaque stand-in: it declares the
+        /// whole scalar schema but no _DistanceFade, so the combined capture
+        /// records the vector as requested but absent - exactly the state
+        /// the gate's absence branch consumes. The queue and RenderType
+        /// overrides put the stand-in inside the cutout family's admitted
+        /// render state, so the refusal names the vector, not the render
+        /// state.
+        /// </summary>
+        private LilToonOpaqueConversionEligibility
+            EvaluateForEvidenceWithoutVector()
+        {
+            var material = NewOpaqueConversionMaterial();
+            material.renderQueue =
+                LilToonCutoutSourceEligibility.SupportedCutoutRenderQueue;
+            material.SetOverrideTag(
+                LilToonOpaqueTarget.RenderTypeTagName,
+                LilToonCutoutSourceEligibility.SupportedCutoutRenderType);
+            return EvaluateFor(material);
         }
 
         /// <summary>
@@ -307,6 +341,49 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             AssertRefusal(
                 EvaluateWith(material, "_Cutoff", float.NaN),
                 LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
+        }
+
+        // --- Falsifier: a cutout conversion that admits a finite nonzero
+        // --- distance fade strength, or that refuses absence or a non-finite
+        // --- component with any member but the conversion vocabulary's own,
+        // --- fails one of these fixtures. ---
+        [Test]
+        public void DistanceFadeStrengthOn_RefusesUnsupportedDistanceFade()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
+
+            AssertRefusal(
+                EvaluateFor(material),
+                LilToonOpaqueConversionRefusal.UnsupportedDistanceFade);
+        }
+
+        [Test]
+        public void DistanceFadeNonFinite_RefusesConversionPropertyNotFinite()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0f, float.NaN));
+
+            AssertRefusal(
+                EvaluateFor(material),
+                LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
+        }
+
+        [Test]
+        public void DistanceFadeAbsent_RefusesConversionPropertyAbsent()
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetVector("_DistanceFade", new Vector4(
+                float.NaN, float.NaN, float.NaN, float.NaN));
+            // A shader without the property cannot be expressed on a compiled
+            // stand-in, so absence is exercised at the evidence level: build
+            // the evidence without the vector, exactly as the transparent
+            // class does for its absence test.
+            AssertRefusal(
+                EvaluateForEvidenceWithoutVector(),
+                LilToonOpaqueConversionRefusal.ConversionPropertyAbsent);
         }
 
         // --- Per-gate refusal matrix -----------------------------------------
