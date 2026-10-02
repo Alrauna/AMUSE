@@ -47,6 +47,7 @@ namespace Alrauna.Amuse.Research.Census
         UnsupportedAnimationCurveForm,
         AnimatedMaterialPropertyNotSingleton,
         AdmittedMaterialSemanticsUnknown,
+        AdmittedMaterialRetainedByFeature,
         /// <summary>
         /// Retired from the AMUSE product on 2026-09-24 by the vendor lock
         /// handover. Retained so recorded census data keeps its category.

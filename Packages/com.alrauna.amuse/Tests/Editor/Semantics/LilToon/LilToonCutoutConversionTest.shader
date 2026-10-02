@@ -49,6 +49,7 @@ Shader "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"
         _Main3rdBlendMask ("Main3rdBlendMask", 2D) = "white" {}
         _Main2ndDistanceFade ("Main2ndDistanceFade", Vector) = (0.1,0.01,0,0)
         _Main3rdDistanceFade ("Main3rdDistanceFade", Vector) = (0.1,0.01,0,0)
+        _DistanceFade ("DistanceFade", Vector) = (0.1,0.01,0,0)
         _Main2ndDissolveParams ("Main2ndDissolveParams", Vector) = (0,0,0.5,0.1)
         _Main3rdDissolveParams ("Main3rdDissolveParams", Vector) = (0,0,0.5,0.1)
         _AudioLink2Main2nd ("AudioLink2Main2nd", Int) = 0

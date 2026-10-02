@@ -133,6 +133,16 @@ namespace Alrauna.Amuse.Editor.Build
                 "and nothing was proven wrong.",
             ["amuse.renderer.AdmittedMaterialSemanticsUnknown:hint"] =
                 "Check the material textures if you expected a split.",
+
+            ["amuse.renderer.AdmittedMaterialRetainedByFeature"] =
+                "AMUSE kept this material whole for a shader feature.",
+            ["amuse.renderer.AdmittedMaterialRetainedByFeature:description"] =
+                "The material uses a shader feature that AMUSE supports. " +
+                "The rule for that feature keeps the material whole, so " +
+                "no triangle moves. AMUSE changed nothing for it.",
+            ["amuse.renderer.AdmittedMaterialRetainedByFeature:hint"] =
+                "Nothing is wrong. A feature such as distance fade needs " +
+                "the material to stay whole.",
             ["amuse.renderer.AdditiveLayerWithProofRelevantMaterialProperty:hint"] =
                 "Move the material-property curves out of the additive " +
                 "layer.",

@@ -35,6 +35,15 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// in words, for example "clipping canceller enabled".
         /// </summary>
         UnsupportedMultiState,
+
+        /// <summary>
+        /// A supported vendor feature is active and the family retains the
+        /// material by rule. <see cref="AlphaUnknownReason.Feature"/> names the
+        /// feature in words and <see cref="AlphaUnknownReason.Property"/> names
+        /// the exact shader property, exactly like UnsupportedFeature. The
+        /// slot refusal value differs: retention, not missing support.
+        /// </summary>
+        FeatureRetention,
     }
 
     /// <summary>
@@ -49,13 +58,13 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         /// <summary>The feature in plain words, for example "Dissolve".
         /// For UnsupportedMultiState it names the refusal value in words.
-        /// Null when the kind is not UnsupportedFeature or
-        /// UnsupportedMultiState.</summary>
+        /// Non-null for UnsupportedFeature, UnsupportedMultiState, and
+        /// FeatureRetention. Null for every other kind.</summary>
         internal string Feature { get; }
 
         /// <summary>The exact shader property that carries the feature, for
-        /// example "_DissolveParams". Null when the kind is not
-        /// UnsupportedFeature.</summary>
+        /// example "_DissolveParams". Non-null for UnsupportedFeature and
+        /// FeatureRetention. Null for every other kind.</summary>
         internal string Property { get; }
 
         /// <summary>The live shader name captured at capture time. Set for
@@ -94,6 +103,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             return new AlphaUnknownReason(
                 AlphaUnknownKind.UnsupportedFeature, feature, property, null);
+        }
+
+        internal static AlphaUnknownReason FeatureRetention(
+            string feature, string property)
+        {
+            return new AlphaUnknownReason(
+                AlphaUnknownKind.FeatureRetention, feature, property, null);
         }
 
         internal static AlphaUnknownReason UnsupportedMultiState(
