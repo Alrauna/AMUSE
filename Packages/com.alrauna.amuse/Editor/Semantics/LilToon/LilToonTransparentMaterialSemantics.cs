@@ -51,7 +51,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string MainTexScrollRotateProperty = "_MainTex_ScrollRotate";
         private const string AlphaBoostFaProperty = "_AlphaBoostFA";
         private const string SubpassCutoffProperty = "_SubpassCutoff";
-        private const string DistanceFadeProperty = "_DistanceFade";
 
         /// <summary>
         /// The transparent clip bound (design §9 gate 12; T1 §9.2). The
@@ -186,7 +185,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 {
                     DissolveParamsProperty,
                     MainTexScrollRotateProperty,
-                    DistanceFadeProperty,
+                    LilToonDistanceFadeSemantics.DistanceFadeProperty,
                     "_Main2ndTex_ScrollRotate",
                     "_Main3rdTex_ScrollRotate",
                     "_Main2ndDistanceFade",
@@ -434,21 +433,30 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     SubpassCutoffProperty);
             }
 
-            // (7) Distance fade. At LIL_RENDER 2 the distance-fade block
-            // writes fd.col.a after the clip, so an enabled fade is the one
-            // post-clip alpha writer this family must refuse. The gate is
-            // the .z strength component, not _DistanceFadeColor.a: the two
-            // arms diverge, and only .z disables the alpha write.
-            if (!evidence.TryGetVector(
-                    DistanceFadeProperty, out var distanceFade) ||
-                !IsFinite(distanceFade) ||
-                distanceFade.z != 0f)
+            // (7) The distance fade strength. The vendor block scales every arm
+            //     by the .z strength, so a finite zero strength is an exact
+            //     no-op. A finite nonzero strength retains the material: the
+            //     color arm runs at every render mode, so a moved triangle would
+            //     lose its fade. The gate is the .z strength component, not
+            //     _DistanceFadeColor.a: the two arms diverge, and only .z
+            //     disables the alpha write.
+            switch (LilToonDistanceFadeSemantics.Evaluate(evidence))
             {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    DistanceFadeProperty);
+                case LilToonDistanceFadeAnswer.Inert:
+                    break;
+                case LilToonDistanceFadeAnswer.Retained:
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.FeatureRetention,
+                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
+                default:
+                    // Absent and NonFinite keep today's refusal wording.
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
             }
 
             // (8) The tint multiplier must be present with a finite alpha.
