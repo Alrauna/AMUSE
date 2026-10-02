@@ -5631,6 +5631,151 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A transparent fixture material whose <c>_DistanceFade</c>
+        /// strength is finite and non-zero resolves to the named retention
+        /// refusal, not the generic unknown-semantics destination. The
+        /// slot refusal carries the frontend's FeatureRetention reason,
+        /// and the refused slot donates nothing: the material keeps its
+        /// original assignment, no clone is created, and no triangle
+        /// moves.
+        /// </summary>
+        /// <remarks>
+        /// Slot level runs the production resolver over the captured
+        /// evidence, mirroring the mode-2 retention falsifier's verified
+        /// capture seam; the same fixture then drives the preparation
+        /// pass end to end. Only the vendor digest row is injected, both
+        /// at capture and at alpha resolution, because no stand-in
+        /// shader can pass the real row verify; the refusal mapping and
+        /// the reason carried into the slot are the production ones.
+        /// </remarks>
+        // --- Falsifier: a slot resolution that lands the retained state in the generic unknown bucket, drops the frontend reason, or converts any part of the retained material, fails this fixture. ---
+        [Test]
+        public void
+            TransparentDistanceFadeStrengthRefusesTheSlotAsRetainedByFeature()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var texture = fixtures.ImportFullyOpaqueMipmap(
+                    "transparent_distance_fade_retained");
+                using var arm = TransparentArmFixture.Create(
+                    texture,
+                    "AMUSE transparent distance fade retained",
+                    material => material.SetVector(
+                        "_DistanceFade",
+                        new Vector4(0.1f, 0.01f, 0.5f, 1f)),
+                    null,
+                    null);
+
+                // Slot level: the production resolver on the captured
+                // evidence, exactly as the renderer path consumes it.
+                Assert.That(
+                    VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest(
+                        arm.Material,
+                        out var family,
+                        out var alphaRelevance,
+                        out var captureSchema),
+                    Is.True,
+                    "fixture precondition: the transparent stand-in " +
+                    "must select at the verified seam");
+                Assert.That(
+                    family,
+                    Is.EqualTo(
+                        CapturedAlphaMaterialFamily.LilToonTransparent));
+                VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials(
+                    new[] { arm.Material },
+                    new[] { family },
+                    captureSchema,
+                    AlphaPolicyBounds.Inert,
+                    out var captured);
+                Assert.That(captured.Count, Is.EqualTo(1));
+
+                var result = AdmittedMaterialStates.ResolveSlot(
+                    new CapturedMaterialSlotEvidence(0, new[] { 0 }),
+                    captured,
+                    System.Array.Empty<
+                        (CapturedFloatBinding, AnimatedPropertyRef)>(),
+                    alphaRelevance,
+                    new AlphaFieldSet(
+                        new Dictionary<AlphaFieldKey, AlphaMipChain>()),
+                    0,
+                    VerifiedLilToonTestSeams.VerifiedAlphaOnly);
+
+                Assert.That(result.IsResolved, Is.False);
+                Assert.That(
+                    result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AdmittedMaterialRetainedByFeature),
+                    "a finite non-zero _DistanceFade.z must refuse as " +
+                    "retention, not as unknown semantics");
+                Assert.That(result.UnknownReason, Is.Not.Null);
+                Assert.That(
+                    result.UnknownReason.Kind,
+                    Is.EqualTo(AlphaUnknownKind.FeatureRetention));
+                Assert.That(
+                    result.UnknownReason.Property,
+                    Is.EqualTo("_DistanceFade"));
+                Assert.That(
+                    result.Resolutions,
+                    Is.Empty,
+                    "a refused slot proves no triangle, so nothing can " +
+                    "move");
+                Assert.That(
+                    result.Offender,
+                    Is.SameAs(captured[0]),
+                    "the refusal must name the retained material");
+
+                // Preparation end to end: the retained slot donates
+                // nothing.
+                var amuse = arm.Run();
+
+                Assert.That(
+                    amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialRetainedByFeature),
+                    Is.EqualTo(1),
+                    "the retained state must land in its own refusal " +
+                    "bucket");
+                Assert.That(
+                    amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.Zero,
+                    "retention must not stack on the generic unknown " +
+                    "bucket");
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount,
+                    Is.EqualTo(1));
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+                Assert.That(
+                    amuse.Separation,
+                    Is.Null,
+                    "retention keeps the material whole: no clone is " +
+                    "created and no triangle moves");
+                var live = arm.Renderer.sharedMaterials;
+                Assert.That(live, Has.Length.EqualTo(1));
+                Assert.That(
+                    live[0],
+                    Is.SameAs(arm.Material),
+                    "the refused slot must keep its original material " +
+                    "assignment");
+                Assert.That(
+                    live[0].GetVector("_DistanceFade"),
+                    Is.EqualTo(new Vector4(0.1f, 0.01f, 0.5f, 1f)));
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// The depth-test policy on a transparent source whose depth
         /// comparison is Less: a wholly opaque slot converts under the
         /// policy and its success report carries the fixed divergence
@@ -6504,6 +6649,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             internal Material Material { get; private set; }
 
+            internal SkinnedMeshRenderer Renderer { get; private set; }
+
             internal static TransparentArmFixture Create(
                 Texture mainTex,
                 string rootName,
@@ -6538,6 +6685,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     fixture.root.AddComponent<SkinnedMeshRenderer>();
                 renderer.sharedMesh = fixture.mesh;
                 renderer.sharedMaterials = new[] { fixture.Material };
+                fixture.Renderer = renderer;
 
                 if (animatedBinding != null)
                 {
