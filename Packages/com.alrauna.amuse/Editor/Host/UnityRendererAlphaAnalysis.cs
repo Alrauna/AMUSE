@@ -86,6 +86,14 @@ namespace Alrauna.Amuse.Editor.Host
         AdmittedMaterialSemanticsUnknown,
 
         /// <summary>
+        /// A supported vendor feature is active on an admitted material, and
+        /// the family's rule retains the material. This is an expected
+        /// outcome, not missing support. The report sentence names the
+        /// feature and the property.
+        /// </summary>
+        AdmittedMaterialRetainedByFeature,
+
+        /// <summary>
         /// This renderer holds a material whose serialization carries the
         /// Thry locked identity, and that identity names an original shader
         /// the AssetDatabase cannot resolve or that fails the pinned Poiyomi
