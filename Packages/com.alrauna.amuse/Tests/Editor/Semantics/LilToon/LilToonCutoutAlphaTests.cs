@@ -429,11 +429,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 DiagnosticsFor(result, LilToonSemanticOutput.Alpha)
                     .Any(d =>
-                        d.Code == LilToonSemanticDiagnosticCode
-                            .UnsupportedFeature &&
+                        (d.Code == LilToonSemanticDiagnosticCode
+                            .UnsupportedFeature ||
+                         d.Code == LilToonSemanticDiagnosticCode
+                             .FeatureRetention) &&
                         d.Detail.Contains(propertyName)),
                 Is.True,
-                $"expected an UnsupportedFeature alpha diagnostic naming " +
+                $"expected an alpha diagnostic naming " +
                 propertyName);
         }
 
@@ -701,6 +703,55 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             AssertAlphaGateUnknown(result, property);
         }
 
+        // --- Falsifier: a cutout gate that refuses zero strength, that admits
+        // --- a nonzero strength, or that reports any kind but retention for a
+        // --- finite nonzero strength fails one of these fixtures. ---
+        [Test]
+        public void DistanceFadeStrengthOn_RetainsAtCutout()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_fade_on");
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
+
+            AssertAlphaGateUnknown(InterpretCutout(material), "_DistanceFade");
+            Assert.That(
+                InterpretCutoutWithReason(material).Kind,
+                Is.EqualTo(AlphaUnknownKind.FeatureRetention));
+        }
+
+        [Test]
+        public void DistanceFadeStrengthZero_ProvesAtCutout()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_fade_off");
+
+            // The shipped default (0.1, 0.01, 0, 0) has z == 0 and is inert.
+            // Resolve and classify exactly as the transparent mirror does in
+            // DistanceFadeDisabled_ProvesTheCornerTriangle
+            // (LilToonTransparentAlphaTests.cs:1864-1876): the cutout class's
+            // resolve, chain, and triangle helpers replace the transparent
+            // ones.
+            var resolution =
+                ResolveThroughCutoutFrontend(material, AllOpaqueChain());
+
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void DistanceFadeNonFinite_UnknownNamesPropertyAtCutout()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_fade_nan");
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0f, float.NaN));
+
+            AssertAlphaGateUnknown(
+                InterpretCutout(material), "_DistanceFade");
+            Assert.That(
+                InterpretCutoutWithReason(material).Kind,
+                Is.EqualTo(AlphaUnknownKind.UnsupportedFeature));
+        }
+
         // --- 4a. alpha mask composition (2026-09-07 design §3) -------------
         // Modes 1 and 2 left the blanket gate: the mask term
         // saturate(mask.r * _AlphaMaskScale + _AlphaMaskValue) is composed
@@ -712,6 +763,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return LilToonCutoutMaterialSemantics
                 .InterpretVerifiedCutoutMaterial(
                     material, ColorSpace.Linear, AllFeatures);
+        }
+
+        private static AlphaUnknownReason InterpretCutoutWithReason(
+            Material material)
+        {
+            // Build the evidence exactly as InterpretCutout does, then pass
+            // it to the interpreter's out-parameter seam.
+            var captured = CaptureCutoutEvidence(material);
+            LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
+                captured, out var reason);
+            return reason;
         }
 
         private static Color32[] MaskGrid(int width, int height, byte red)
