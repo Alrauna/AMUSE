@@ -543,6 +543,71 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// Mode 1 delegates to the cutout evaluator, so the distance fade
+        /// strength refusal must arrive through delegation, with the
+        /// mirrored cutout row's own member. The captured keyword set is
+        /// exactly the pinned derivation's output for a non-zero strength
+        /// at mode 1 - <c>_FADING_ON</c> beside the mode keyword - so the
+        /// mode-consistency gate admits, and the delegated evaluator's
+        /// strength row must refuse. The dissolve vector sits at its
+        /// explicit off state, so the strength row is the only refusing
+        /// fact.
+        /// </summary>
+        /// <remarks>
+        /// The refusal member is the mirrored cutout row's own member, the
+        /// closed conversion vocabulary's dedicated distance-fade refusal
+        /// the Task 6 gates refuse with: the delegation keeps the member by
+        /// reference, and no member is re-derived for Multi.
+        /// </remarks>
+        // --- Falsifier: a mode-1 delegation that loses the distance fade refusal, or that refuses with any member but UnsupportedDistanceFade, fails this fixture. ---
+        [Test]
+        public void DistanceFadeStrengthOnAtCutoutModeRefusesThroughDelegation()
+        {
+            var material = CutoutModeContainerMaterial(
+                BaseContainerShaderPath);
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
+            material.SetVector(
+                "_DissolveParams", new Vector4(0f, 0f, 0.5f, 0.1f));
+            material.shaderKeywords = new[]
+            {
+                "UNITY_UI_ALPHACLIP", "_FADING_ON",
+            };
+
+            AssertRefusal(
+                EvaluateMulti(material),
+                LilToonOpaqueConversionRefusal.UnsupportedDistanceFade);
+        }
+
+        /// <summary>
+        /// The mode gate derives <c>_FADING_ON</c> from a non-zero
+        /// <c>_DistanceFade.z</c>, so a non-zero strength without the
+        /// keyword is a state the vendor derivation cannot produce. The
+        /// keyword set here is the mode keyword alone: the gate refuses it
+        /// before any strength question, and the closed conversion
+        /// vocabulary carries that state as the shared unattested member -
+        /// the same mismatch the resolution layer names "the material
+        /// keywords do not match the Multi mode". The strength rule never
+        /// sees this state, so it can neither admit nor retain it.
+        /// </summary>
+        // --- Falsifier: a keyword state the derivation cannot produce that slips past the mode gate into admission or into retention, fails this fixture. ---
+        [Test]
+        public void MissingDerivedFadeKeywordAtCutoutModeRefusesAsUnattested()
+        {
+            var material = CutoutModeContainerMaterial(
+                BaseContainerShaderPath);
+            material.SetVector(
+                "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
+            material.SetVector(
+                "_DissolveParams", new Vector4(0f, 0f, 0.5f, 0.1f));
+            material.shaderKeywords = new[] { "UNITY_UI_ALPHACLIP" };
+
+            AssertRefusal(
+                EvaluateMulti(material),
+                LilToonOpaqueConversionRefusal.UnattestedMaterial);
+        }
+
+        /// <summary>
         /// Dither is compiled out at LIL_RENDER 2 - the dither block exists
         /// only under LIL_RENDER == 1 (T1 §6 row 16) - so
         /// <c>_UseDither</c> is not a mode-2 gate, and the mirrored
