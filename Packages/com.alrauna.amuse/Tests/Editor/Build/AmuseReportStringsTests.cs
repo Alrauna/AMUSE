@@ -50,6 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "Dissolve", "_DissolveParams"),
                 AlphaUnknownReason.UnsupportedMultiState(
                     "the clipping canceller is enabled"),
+                AlphaUnknownReason.FeatureRetention("Distance fade", "_DistanceFade"),
             };
 
             foreach (var reason in reasons)
