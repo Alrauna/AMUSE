@@ -45,6 +45,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
                     "UnsupportedAnimationCurveForm",
                     "AnimatedMaterialPropertyNotSingleton",
                     "AdmittedMaterialSemanticsUnknown",
+                    "AdmittedMaterialRetainedByFeature",
                     "LockedPoiyomiThryUnattested",
                     "LockedPoiyomiOriginalShaderUnattested",
                 },

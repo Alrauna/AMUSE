@@ -313,8 +313,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.LockedIdentityRefusal !=
                         RendererAnalysisRefusal.None
                             ? material.LockedIdentityRefusal
-                            : RendererAnalysisRefusal
-                                .AdmittedMaterialSemanticsUnknown;
+                            : capturedSemantics.AlphaUnknownReason != null &&
+                              capturedSemantics.AlphaUnknownReason.Kind ==
+                                  AlphaUnknownKind.FeatureRetention
+                                ? RendererAnalysisRefusal
+                                    .AdmittedMaterialRetainedByFeature
+                                : RendererAnalysisRefusal
+                                    .AdmittedMaterialSemanticsUnknown;
                     return SlotResolutionResult.Refused(
                         slotRefusal,
                         material,

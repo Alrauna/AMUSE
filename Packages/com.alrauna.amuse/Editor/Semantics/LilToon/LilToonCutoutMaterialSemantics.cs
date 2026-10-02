@@ -155,6 +155,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 {
                     DissolveParamsProperty,
                     MainTexScrollRotateProperty,
+                    "_DistanceFade",
                     "_Main2ndTex_ScrollRotate",
                     "_Main3rdTex_ScrollRotate",
                     "_Main2ndDistanceFade",
@@ -369,6 +370,29 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
                     CutoffProperty);
+            }
+
+            // The distance fade strength. The vendor block scales every arm by
+            // the .z strength, so a finite zero strength is an exact no-op. At
+            // LIL_RENDER 1 the color arm still runs, and the dither path lerps
+            // alpha before the coverage transform, so a finite nonzero strength
+            // retains the material.
+            switch (LilToonDistanceFadeSemantics.Evaluate(evidence))
+            {
+                case LilToonDistanceFadeAnswer.Inert:
+                    break;
+                case LilToonDistanceFadeAnswer.Retained:
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.FeatureRetention,
+                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
+                default:
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        LilToonSemanticOutput.Alpha,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
             }
 
             // (5) The tint multiplier must be present with a finite alpha.

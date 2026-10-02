@@ -158,6 +158,17 @@ namespace Alrauna.Amuse.Editor.Build
                         : "";
                     return "AMUSE has no proven rule for " + feature +
                         property + ", so it cannot prove alpha.";
+                case AlphaUnknownKind.FeatureRetention:
+                    var retainedFeature = reason.Feature != null
+                        ? "the " + reason.Feature + " feature"
+                        : "a shader feature";
+                    var retainedProperty = reason.Property != null
+                        ? " (property " + reason.Property + ")"
+                        : "";
+                    return "AMUSE retains this material because " +
+                        retainedFeature + " is active" + retainedProperty +
+                        ". A moved triangle would lose its distance fade, " +
+                        "so no triangle moves.";
                 case AlphaUnknownKind.UnsupportedMultiState:
                     var multiState = reason.Feature != null
                         ? reason.Feature

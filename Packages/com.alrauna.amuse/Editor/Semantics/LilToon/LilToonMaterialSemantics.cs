@@ -41,6 +41,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         UnstableTextureIdentity,
         UnsupportedColorSpace,
         UnsupportedTextureImport,
+
+        /// <summary>
+        /// A supported vendor feature is active, and the rule for it is
+        /// retention, not refusal. The property still names the fact, and the
+        /// alpha answer stays Unknown because no triangle can move.
+        /// </summary>
+        FeatureRetention,
     }
 
     /// <summary>
@@ -562,8 +569,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
-                return AlphaUnknownReason.UnsupportedFeature(
-                    FeatureLabelFor(diagnostic.Detail), diagnostic.Detail);
+                return diagnostic.Code ==
+                    LilToonSemanticDiagnosticCode.FeatureRetention
+                    ? AlphaUnknownReason.FeatureRetention(
+                          FeatureLabelFor(diagnostic.Detail),
+                          diagnostic.Detail)
+                    : AlphaUnknownReason.UnsupportedFeature(
+                          FeatureLabelFor(diagnostic.Detail),
+                          diagnostic.Detail);
             }
 
             return null;
