@@ -1863,8 +1863,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 DistanceFadeProperty,
                 new Vector4(0.1f, 0.01f, 0f, float.NaN));
 
-            AssertAlphaGateUnknown(
+            var reason = AssertAlphaGateUnknown(
                 InterpretTransparent(material), DistanceFadeProperty);
+            Assert.That(
+                reason.Kind,
+                Is.EqualTo(AlphaUnknownKind.UnsupportedFeature));
         }
 
         [Test]
