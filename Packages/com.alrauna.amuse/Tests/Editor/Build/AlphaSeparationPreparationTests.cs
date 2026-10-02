@@ -2103,6 +2103,90 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A mode-2 Multi material with a finite non-zero distance fade
+        /// strength resolves to the transparent family and interprets
+        /// through it. The transport must answer retention, not an
+        /// unsupported feature. The captured keyword set is exactly the
+        /// pinned derivation's output for a non-zero strength at mode 2 -
+        /// <c>_FADING_ON</c> beside the mode keyword - so the mode gate
+        /// admits, and the delegated transparent interpreter's own
+        /// distance-fade row answers.
+        /// </summary>
+        /// <remarks>
+        /// Resolution runs through the profile injection seam the Task 6
+        /// verify fixtures established. The verdict order, the stored
+        /// record, and the delegated interpreter are the production ones.
+        /// Only the vendor digest row is injected, because no stand-in
+        /// shader can pass the real row verify.
+        /// </remarks>
+        // --- Falsifier: a Multi transport that answers the retained state as an unsupported feature, or that names any property but _DistanceFade, fails this fixture. ---
+        [Test]
+        public void ModeTwoMultiMaterialWithDistanceFadeStrengthRetainsThroughDelegation()
+        {
+            var fixtures = new LilToonCutoutConversionFixtures();
+            Material material = null;
+
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    2f,
+                    new[] { "UNITY_UI_CLIP_RECT", "_FADING_ON" });
+                material.SetVector(
+                    "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 1f));
+
+                var selected =
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out var family,
+                        out _,
+                        out var captureSchema);
+                Assert.That(selected, Is.True);
+                Assert.That(
+                    family,
+                    Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+                Assert.That(captureSchema, Is.Not.Null);
+
+                VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials(
+                    new[] { material },
+                    new[] { family },
+                    captureSchema,
+                    AlphaPolicyBounds.Inert,
+                    out var captured);
+                Assert.That(captured.Count, Is.EqualTo(1));
+                Assert.That(
+                    captured[0].MultiResolution, Is.Not.Null);
+                Assert.That(
+                    captured[0].MultiResolution.IsResolved, Is.True,
+                    "the derivation-consistent mode-2 state must resolve " +
+                    "at the gate");
+
+                var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    captured[0]);
+                Assert.That(
+                    analysis.Semantics.Alpha.IsComplete, Is.False,
+                    "the retained state answers all-Unknown alpha");
+                Assert.That(
+                    analysis.AlphaUnknownReason.Kind,
+                    Is.EqualTo(AlphaUnknownKind.FeatureRetention));
+                Assert.That(
+                    analysis.AlphaUnknownReason.Property,
+                    Is.EqualTo("_DistanceFade"));
+            }
+            finally
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
 
         // --- Task 4: affine _MainTex_ST support (design 2026-08-31) --------
 
