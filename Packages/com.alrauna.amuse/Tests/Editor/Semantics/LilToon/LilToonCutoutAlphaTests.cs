@@ -110,6 +110,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             "_DissolveParams",
             "_MainTex_ScrollRotate",
+            "_DistanceFade",
             "_Main2ndTex_ScrollRotate",
             "_Main3rdTex_ScrollRotate",
             "_Main2ndDistanceFade",
