@@ -65,6 +65,9 @@ namespace Alrauna.Amuse.Research.Collection
                 case RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown:
                     return Census.RendererRefusal
                         .AdmittedMaterialSemanticsUnknown;
+                case RendererAnalysisRefusal.AdmittedMaterialRetainedByFeature:
+                    return Census.RendererRefusal
+                        .AdmittedMaterialRetainedByFeature;
                 case RendererAnalysisRefusal.LockedPoiyomiOriginalShaderUnattested:
                     return Census.RendererRefusal
                         .LockedPoiyomiOriginalShaderUnattested;
