@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Alrauna.Amuse.Editor.Semantics;
+using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -98,6 +99,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
+        [Test]
+        public void AssetBackedTextureNeverCarriesTheReplacementForm()
+        {
+            // --- Falsifier 7, first half: the shipped forms never cross. ---
+            var texture = Import("forms", sourceHasAlpha: true);
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(texture, out var id),
+                    Is.True);
+                Assert.That(
+                    id.Value.StartsWith("unity-asset:", StringComparison.Ordinal),
+                    Is.True);
+            }
+            finally
+            {
+                // Existing fixture teardown handles the imported asset.
+            }
+        }
+
+        [Test]
+        public void AdmittedCopyCarriesTheReplacementFormThroughTryGetSourceId()
+        {
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var previousVersion =
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull;
+            var source = Import("replacement-source", sourceHasAlpha: true);
+            var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            copy.name = source.name + "_compressed";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, copy);
+                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "0.9.0";
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(copy, out var id),
+                    Is.True);
+                Assert.That(
+                    id.Value.StartsWith(
+                        "unity-replacement:", StringComparison.Ordinal),
+                    Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+                ReplacementTextureAttestation.ResetForTests();
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    previousVersion;
+                ObjectRegistry.ActiveRegistry = previousRegistry;
             }
         }
 

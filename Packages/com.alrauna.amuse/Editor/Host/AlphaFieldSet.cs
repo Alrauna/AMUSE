@@ -177,6 +177,12 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new ArgumentOutOfRangeException(nameof(channel));
             }
 
+            if (!ReplacementTextureIdentity.IsUsable(source))
+            {
+                chain = null;
+                return false;
+            }
+
             chain = null;
             var found = false;
             var key = default(AlphaFieldKey);
