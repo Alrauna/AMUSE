@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEngine;
 
@@ -60,6 +61,43 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal static bool IsVersionAdmitted(string version)
         {
             return !string.IsNullOrEmpty(version) && Admitted.Contains(version);
+        }
+
+        internal static bool TryIdentifyReplacement(Texture texture, out Texture2D source)
+        {
+            source = null;
+            if (!(texture is Texture2D copy))
+            {
+                return false;
+            }
+            // Conjunct 1: a live copy with no asset path.
+            if (!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(copy)))
+            {
+                return false;
+            }
+            // Conjunct 2: the pinned name shape.
+            var name = copy.name ?? string.Empty;
+            if (!name.EndsWith(ReplacementNameSuffix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            // Conjunct 3: the registry names an asset-backed source, one hop only.
+            if (!(RegisteredSourceIdentity.Resolve(copy) is Texture2D resolved))
+            {
+                return false;
+            }
+            if (string.IsNullOrEmpty(AssetDatabase.GetAssetPath(resolved)))
+            {
+                return false;
+            }
+            // Conjunct 4: the producer is installed and its version is admitted.
+            if (!TryReadInstalledProducerVersion(out var version) ||
+                !IsVersionAdmitted(version))
+            {
+                return false;
+            }
+            source = resolved;
+            return true;
         }
 
         private static string ReadVersionFromPackageManager(string packageName)
