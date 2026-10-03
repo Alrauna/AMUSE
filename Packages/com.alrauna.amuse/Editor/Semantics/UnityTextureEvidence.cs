@@ -19,7 +19,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Resolves the stable project identity of an assigned texture as
         /// <c>unity-asset:&lt;lowercase-guid&gt;:&lt;invariant-decimal-local-id&gt;</c>.
-        /// Scene-only or unidentifiable textures fail.
+        /// Scene-only or unidentifiable textures fail, except an admitted
+        /// replacement copy, which resolves as
+        /// <c>unity-replacement:&lt;lowercase-source-guid&gt;:&lt;source-local-id&gt;</c>
+        /// when the session ledger names it usable.
         /// Characterized sub-assets resolve through their container asset identity.
         /// Identity is never fabricated from instance id, path, name, pixels, or reference equality.
         /// </summary>
@@ -30,6 +33,18 @@ namespace Alrauna.Amuse.Editor.Semantics
             sourceId = default;
             if (texture == null)
             {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(AssetDatabase.GetAssetPath(texture)))
+            {
+                if (texture is Texture2D copy &&
+                    ReplacementTextureAttestation.TryIdentifyReplacement(
+                        copy, out var replacementSource))
+                {
+                    return ReplacementTextureIdentity.TryMint(
+                        replacementSource, copy.GetInstanceID(), out sourceId);
+                }
                 return false;
             }
 
