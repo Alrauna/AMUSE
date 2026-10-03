@@ -19,6 +19,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     {
         private const string TempFolder = "Assets/AmuseTests_TexEvidence";
 
+        private nadena.dev.ndmf.IObjectRegistry previousRegistry;
+
         [SetUp]
         public void SetUp()
         {
@@ -26,11 +28,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 AssetDatabase.CreateFolder("Assets", "AmuseTests_TexEvidence");
             }
+
+            // Shared fixture seam: admission requires an injected admitted
+            // version and an isolated registry, so every test starts from the
+            // same admitted-session shape and nothing leaks between tests.
+            ReplacementTextureAttestation.ResetForTests();
+            previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
         }
 
         [TearDown]
         public void TearDown()
         {
+            ReplacementTextureAttestation.ResetForTests();
+            ObjectRegistry.ActiveRegistry = previousRegistry;
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
@@ -436,6 +450,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
         }
 
+        [Test]
+        public void AdmittedCopyReadsColorInterpretationFromItsGraphicsFormat()
+        {
+            // Fixture mirrors AdmittedCopyCarriesTheReplacementForm's setup:
+            // registered copy, admitted version injected. The copy keeps the
+            // source's sRGB flag because LAC re-encodes with the source color
+            // space.
+            var copy = MakeRegisteredAdmittedCopy("colorspace");
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryGetColorInterpretation(
+                        copy, out var interpretation),
+                    Is.True);
+                Assert.That(
+                    interpretation,
+                    Is.EqualTo(TextureColorInterpretation.Srgb));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+            }
+        }
+
         // --- TryProveSampledAlphaIsOne ---
 
         [Test]
@@ -458,6 +496,57 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 importer => importer.alphaSource = TextureImporterAlphaSource.FromInput);
 
             Assert.That(UnityTextureEvidence.TryProveSampledAlphaIsOne(texture), Is.False);
+        }
+
+        [Test]
+        public void NoAlphaCopyProvesSampledAlphaExactlyOne()
+        {
+            var copy = MakeRegisteredAdmittedCopy("noalpha", TextureFormat.DXT1);
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryProveSampledAlphaIsOne(copy), Is.True,
+                    "a DXT1 copy carries no alpha channel, so the sampler " +
+                    "answers exactly one");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+            }
+        }
+
+        [Test]
+        public void AlphaBearingCopyStaysUnprovenForSampledAlphaOne()
+        {
+            var copy = MakeRegisteredAdmittedCopy("withalpha", TextureFormat.BC7);
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryProveSampledAlphaIsOne(copy), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+            }
+        }
+
+        [Test]
+        public void UnadmittedPathlessTextureProvesNothing()
+        {
+            var bare = new Texture2D(4, 4, TextureFormat.DXT1, false);
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryProveSampledAlphaIsOne(bare), Is.False);
+                Assert.That(
+                    UnityTextureEvidence.TryGetColorInterpretation(
+                        bare, out _),
+                    Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(bare);
+            }
         }
 
         // --- IsCanonicalNormalMapImport ---
@@ -498,6 +587,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var texture = Import("notanormal", sourceHasAlpha: false);
 
             Assert.That(UnityTextureEvidence.IsCanonicalNormalMapImport(texture), Is.False);
+        }
+
+        private static Texture2D ImportSourceAsset(string name)
+        {
+            return Import(
+                name, sourceHasAlpha: false,
+                importer => importer.mipmapEnabled = true);
+        }
+
+        private static Texture2D MakeRegisteredAdmittedCopy(
+            string sourceName, TextureFormat format = TextureFormat.RGBA32)
+        {
+            var source = ImportSourceAsset(sourceName);
+            // Always create uncompressed, then compress: CompressTexture expects an
+            // uncompressed input, and a native-DXT1 construction skips SetPixels.
+            var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            copy.name = source.name + "_compressed";
+            if (format != TextureFormat.RGBA32)
+            {
+                EditorUtility.CompressTexture(
+                    copy, format, TextureCompressionQuality.Normal);
+            }
+            ObjectRegistry.RegisterReplacedObject(source, copy);
+            return copy;
         }
 
         // --- shared-class boundary guard ---
