@@ -168,9 +168,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
         /// <summary>
         /// Proves a sampled alpha of exactly one: the source carries no alpha
-        /// channel and the importer imports none, or an admitted replacement
-        /// copy's format names no alpha component. Input or grayscale-derived
-        /// alpha is not one and is therefore not proven.
+        /// channel and the importer imports none, or an attested route texture
+        /// (a container-backed generated texture or an admitted replacement
+        /// copy) has a format that names no alpha component. Input or
+        /// grayscale-derived alpha is not one and is therefore not proven.
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)
         {

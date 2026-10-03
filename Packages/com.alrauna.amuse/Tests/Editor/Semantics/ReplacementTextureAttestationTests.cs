@@ -138,6 +138,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void VersionReadCachesOneProviderCallPerSession()
+        {
+            var calls = 0;
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull = _ =>
+            {
+                calls++;
+                return "0.9.0";
+            };
+            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
+            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
+            Assert.That(calls, Is.EqualTo(1),
+                "the read caches once per capture session");
+            ReplacementTextureAttestation.ClearVersionCacheForSession();
+            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
+            Assert.That(calls, Is.EqualTo(2),
+                "a session reset reads again");
+        }
+
+        [Test]
         public void ResetForTestsRestoresTheEmptySetAndTheProductionProvider()
         {
             ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");

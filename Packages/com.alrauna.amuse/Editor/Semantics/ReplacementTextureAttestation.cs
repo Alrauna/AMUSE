@@ -44,18 +44,33 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
+        private static string CachedVersion;
+        private static bool VersionReadCompleted;
+
         internal static void ResetForTests()
         {
             Admitted.Clear();
             ReadInstalledPackageVersionOrNull = ReadVersionFromPackageManager;
+            ClearVersionCacheForSession();
         }
 
         internal static bool TryReadInstalledProducerVersion(
             out string version)
         {
-            version = ReadInstalledPackageVersionOrNull?.Invoke(
-                ProducerPackageName);
+            if (!VersionReadCompleted)
+            {
+                CachedVersion = ReadInstalledPackageVersionOrNull?.Invoke(
+                    ProducerPackageName);
+                VersionReadCompleted = true;
+            }
+            version = CachedVersion;
             return !string.IsNullOrEmpty(version);
+        }
+
+        internal static void ClearVersionCacheForSession()
+        {
+            VersionReadCompleted = false;
+            CachedVersion = null;
         }
 
         internal static bool IsVersionAdmitted(string version)

@@ -30,7 +30,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 return false;
             }
-            var value = Prefix + guid.ToLowerInvariant() + ":" + localId;
+            var value = Prefix + guid.ToLowerInvariant() + ":" +
+                localId.ToString(System.Globalization.CultureInfo.InvariantCulture);
             if (Poisoned.Contains(value))
             {
                 return false;
