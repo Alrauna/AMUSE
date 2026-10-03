@@ -130,7 +130,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Selects linear or sRGB color interpretation for a texture.
         /// Reads the import flag for imported textures.
-        /// Reads the graphics format for characterized generated textures.
+        /// Reads the graphics format for characterized generated textures and
+        /// admitted replacement copies.
         /// Other textures cannot prove a color meaning.
         /// </summary>
         internal static bool TryGetColorInterpretation(
@@ -151,7 +152,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return true;
             }
 
-            if (GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+            if (texture is Texture2D texture2D &&
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(
+                    texture2D, out _))
             {
                 var isSrgb = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(texture.graphicsFormat) ||
                              texture.isDataSRGB;
@@ -165,18 +168,32 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
         /// <summary>
         /// Proves a sampled alpha of exactly one: the source carries no alpha
-        /// channel and the importer imports none. Input or grayscale-derived
+        /// channel and the importer imports none, or an admitted replacement
+        /// copy's format names no alpha component. Input or grayscale-derived
         /// alpha is not one and is therefore not proven.
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)
         {
-            if (!TryGetTextureImporter(texture, out var importer))
+            if (TryGetTextureImporter(texture, out var importer))
             {
-                return false;
+                return !importer.DoesSourceTextureHaveAlpha() &&
+                       importer.alphaSource == TextureImporterAlphaSource.None;
             }
 
-            return !importer.DoesSourceTextureHaveAlpha() &&
-                   importer.alphaSource == TextureImporterAlphaSource.None;
+            // A replacement copy has no importer. Its format names the sampled
+            // channels: a format with no alpha component samples exactly one, the
+            // same fact the RGB24 exemption rests on. This covers DXT1 and RGB24
+            // copies, and is equally sound for a BC5 copy, because missing channels
+            // sample as one at runtime; the capture allowlist still refuses BC5 for
+            // chain-based facts, which is a separate question.
+            if (texture is Texture2D copy &&
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(copy, out _) &&
+                !UnityEngine.Experimental.Rendering.GraphicsFormatUtility
+                    .HasAlphaChannel(copy.graphicsFormat))
+            {
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

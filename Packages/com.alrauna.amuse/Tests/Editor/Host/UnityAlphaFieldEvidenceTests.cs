@@ -1883,6 +1883,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void Bc5ReplacementCopyRefusesCaptureWithUnsupportedFormat()
+        {
+            // --- Falsifier 5: BC5 refuses with UnsupportedFormat even when every
+            // other conjunct holds. ---
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var source = ImportSourceAsset("bc5");
+            var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            copy.name = source.name + "_compressed";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, copy);
+                EditorUtility.CompressTexture(
+                    copy, TextureFormat.BC5, TextureCompressionQuality.Normal);
+                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "0.9.0";
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    copy, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out _, out var refusal);
+                Assert.That(captured, Is.False);
+                Assert.That(
+                    refusal, Is.EqualTo(TextureCaptureRefusalReason.UnsupportedFormat));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+                ReplacementTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
         public void StreamingResidencyRuleCharacterization()
         {
             // Characterization: pins the existing pure predicate, passes on
