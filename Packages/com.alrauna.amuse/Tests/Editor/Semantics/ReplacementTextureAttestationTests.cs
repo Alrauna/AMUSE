@@ -282,6 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                         copy, out _),
                     Is.False,
                     "the shipped-empty set refuses every copy");
+                ReplacementTextureAttestation.ClearVersionCacheForSession();
                 ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                     _ => null;
                 ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
