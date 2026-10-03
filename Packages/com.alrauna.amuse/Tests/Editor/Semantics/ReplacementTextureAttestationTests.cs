@@ -7,6 +7,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
     public sealed class ReplacementTextureAttestationTests
     {
+        [SetUp]
+        public void ResetAttestationStateBeforeEachTest()
+        {
+            ReplacementTextureAttestation.ResetForTests();
+        }
+
         [Test]
         public void ShippedAdmittedSetIsEmptyAndRefusesEveryVersion()
         {
@@ -75,13 +81,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             ReplacementTextureAttestation.ResetForTests();
             Assert.That(
                 ReplacementTextureAttestation.AdmittedVersions, Is.Empty);
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
-                null;
             // With the production provider restored, the delegate no
-            // longer answers "9.9.9" for every name.
-            ReplacementTextureAttestation.TryReadInstalledProducerVersion(
-                out var version);
-            Assert.That(version, Is.Not.EqualTo("9.9.9"));
+            // longer answers "9.9.9" for every name. A plan-conformant
+            // environment never installs LAC, so the restored provider
+            // refuses the read outright.
+            Assert.That(
+                ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                    out var version),
+                Is.False);
+            Assert.That(version, Is.Null);
         }
     }
 }
