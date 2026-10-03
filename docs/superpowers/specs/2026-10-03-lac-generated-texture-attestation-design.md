@@ -142,8 +142,9 @@ where the guid and local id come from the resolved source asset texture.
 - One LAC pass produces one copy per source texture, and the pass repoints
   every reference at that one copy. So one source id maps to one copy object
   per build. The capture layer enforces the invariant: when a second
-  distinct object mints an already-used replacement id, the capture refuses
-  every object that carries that id with `UnavailableCapture`.
+  distinct object mints an already-used replacement id, the second claimant
+  refuses at mint, and every object carrying that id fails closed at the
+  resolution gate through the caller's existing missing-evidence path.
 - The id repeats across builds by design. The evidence cache is build-scoped
   and cleared per build, and nothing persists, so the repeat is harmless.
 
@@ -160,14 +161,11 @@ VRCFury), replacement copy (LAC), or none.
 - The route order already places the generated route before the streaming
   route, so the forced streaming flag on a copy never reaches the clone
   route.
-- Open characterization task, fail-closed by default: the forced streaming
-  flag on a non-persistent copy makes the route's residency predicate read
-  `streamingMipmaps == true`. The predicate demands the requested level
-  loaded and the loaded level equal to zero. Whether a runtime copy with a
-  forced flag satisfies that is unmeasured. If it refuses, the plan must
-  measure and then pin a residency rule for copies. Until measured, copies
-  refuse with `UnavailableCapture`. That refusal is the behavior observed on
-  2026-10-02, and it is safe.
+- Characterized on 2026-10-03 by a live probe on a runtime RGBA32 mipmapped
+  copy carrying the forced flag: the requested level reads loaded and the
+  loaded level reads 0, so the route's residency predicate passes and
+  admitted copies capture through the generated route. The earlier
+  fail-closed default for this shape is superseded by this measurement.
 - Capability gates, mip residency degradation, dimension gates, and the
   session cache keys are unchanged.
 
@@ -181,10 +179,13 @@ VRCFury), replacement copy (LAC), or none.
 - Sampling facts: filter, wrap, and anisotropy read live object state and
   need no extension. The shipped refusal of mirror wrap stays.
 - Sampled alpha exactly one is importer-only in the shipped code. The
-  design extends it to
-  replacement copies whose graphics format has no alpha component, measured
-  through the same route, initially DXT1 and RGB24. A copy in a no-alpha
-  format feeds a provable all-opaque answer instead of Unknown.
+  design extends it to attested route textures, meaning container-backed
+  generated textures and replacement copies, whose graphics format has no
+  alpha component, measured through the same route, initially DXT1 and
+  RGB24. A container-backed clone in a no-alpha format gains a provable
+  answer it lacked, and the sampling fact is the same one the RGB24
+  exemption rests on. This widening past replacement copies was ruled
+  deliberate during the final review on 2026-10-03.
 - Format allowlist: unchanged. The copy's `TextureFormat` must be in the
   existing admitted set, so BC5 and ASTC copies refuse with
   `UnsupportedFormat`.
@@ -248,7 +249,7 @@ Falsifiers, each a case a plausible wrong implementation must fail:
 3. Falsifier 3: a registered, suffixed copy with the package absent, or at
    an unlisted or unreadable version, refuses.
 4. Falsifier 4: two distinct objects claiming the same source refuse both,
-   and the refusal names the identity fact.
+   failing closed through the missing-evidence path at the resolution gate.
 5. Falsifier 5: a BC5 or ASTC copy refuses with `UnsupportedFormat` even
    when every other conjunct holds.
 6. Falsifier 6: a copy whose residency cannot be proven never blits a
