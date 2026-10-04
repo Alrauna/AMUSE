@@ -201,6 +201,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
             AssetDatabase.SaveAssets();
             ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull = _ => null;
 
             var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
                 copy, out var producer);
