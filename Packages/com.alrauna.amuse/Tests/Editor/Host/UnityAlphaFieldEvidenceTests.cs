@@ -20,6 +20,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     public sealed class UnityAlphaFieldEvidenceTests
     {
         private const string TempFolder = "Assets/AmuseTests_AlphaField";
+        private const string CaptureContainerPath = "Assets/AmuseTests_PersistedCapture.asset";
         private const int Size = 4;
 
         [SetUp]
@@ -34,6 +35,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TearDown]
         public void TearDown()
         {
+            if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(CaptureContainerPath) != null)
+            {
+                AssetDatabase.DeleteAsset(CaptureContainerPath);
+            }
+
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
@@ -1936,6 +1942,44 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
                     false, false, 0), Is.True);
+        }
+
+        [Test]
+        public void PersistedStreamingCompressedCopy_CapturesThroughGeneratedRoute()
+        {
+            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
+            var container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(container, CaptureContainerPath);
+            var copy = new Texture2D(64, 64, TextureFormat.RGBA32, true, true);
+            var colors = new Color32[64 * 64];
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = new Color32(255, 255, 255, 255);
+            }
+            copy.SetPixels32(colors);
+            copy.Apply(false, false);
+            EditorUtility.CompressTexture(copy, TextureFormat.DXT5, TextureCompressionQuality.Normal);
+            copy.name = "BodyTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, CaptureContainerPath);
+            AssetDatabase.SaveAssets();
+            var serialized = new SerializedObject(copy);
+            serialized.FindProperty("m_StreamingMipmaps").boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            copy.requestedMipmapLevel = 0;
+
+            var captured = UnityAlphaFieldEvidence.TryCapture(
+                copy, out _, out var chain);
+            var levelZeroHasEvidence = captured && chain != null &&
+                !chain.IsLevelWithoutEvidence(0);
+            var levelCount = chain?.Count ?? 0;
+            var mipCount = copy.mipmapCount;
+            AssetDatabase.DeleteAsset(CaptureContainerPath);
+
+            Assert.That(captured, Is.True);
+            Assert.That(levelZeroHasEvidence, Is.True);
+            Assert.That(levelCount, Is.EqualTo(mipCount));
         }
 
         private static void AssertSameField(

@@ -18,7 +18,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     public sealed class UnityTextureEvidenceTests
     {
         private const string TempFolder = "Assets/AmuseTests_TexEvidence";
+        private const string TestContainerPath = "Assets/AmuseTests_PersistedIdentity.asset";
 
+        private ScriptableObject _container;
         private nadena.dev.ndmf.IObjectRegistry previousRegistry;
 
         [SetUp]
@@ -28,6 +30,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 AssetDatabase.CreateFolder("Assets", "AmuseTests_TexEvidence");
             }
+
+            _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
+            AssetDatabase.CreateAsset(_container, TestContainerPath);
 
             // Shared fixture seam: admission requires an injected admitted
             // version and an isolated registry, so every test starts from the
@@ -45,6 +50,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             ReplacementTextureAttestation.ResetForTests();
             ObjectRegistry.ActiveRegistry = previousRegistry;
+            if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
+            {
+                AssetDatabase.DeleteAsset(TestContainerPath);
+            }
+
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
@@ -211,6 +221,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 UnityTextureEvidence.TryGetSourceId(characterized, out var sourceId),
                 Is.True);
             Assert.That(sourceId.Value, Does.StartWith("unity-asset:"));
+        }
+
+        [Test]
+        public void PersistedCompressedCopyResolvesOrdinaryAssetIdentityForm()
+        {
+            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            copy.name = "MainTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var resolved = UnityTextureEvidence.TryGetSourceId(copy, out var sourceId);
+
+            Assert.That(resolved, Is.True);
+            Assert.That(sourceId.Value, Does.StartWith("unity-asset:"));
+            Assert.That(sourceId.Value.Contains("unity-replacement"), Is.False);
         }
 
         [Test]
@@ -472,6 +500,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 UnityEngine.Object.DestroyImmediate(copy);
             }
+        }
+
+        [Test]
+        public void PersistedCompressedCopyColorInterpretation_ReadsTheGraphicsFormat()
+        {
+            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true, true);
+            copy.name = "MainTex_compressed";
+            EditorUtility.CompressTexture(copy, TextureFormat.DXT5, TextureCompressionQuality.Normal);
+            AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var proven = UnityTextureEvidence.TryGetColorInterpretation(
+                copy, out var interpretation);
+
+            Assert.That(proven, Is.True);
+            Assert.That(interpretation, Is.EqualTo(TextureColorInterpretation.Linear));
         }
 
         // --- TryProveSampledAlphaIsOne ---
