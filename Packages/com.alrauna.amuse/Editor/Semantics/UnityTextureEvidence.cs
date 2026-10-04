@@ -28,7 +28,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// </summary>
         internal static bool TryGetSourceId(
             Texture texture,
-            out TextureSourceId sourceId)
+            out TextureSourceId sourceId,
+            Material originMaterial = null)
         {
             sourceId = default;
             if (texture == null)
@@ -44,6 +45,21 @@ namespace Alrauna.Amuse.Editor.Semantics
                 {
                     return ReplacementTextureIdentity.TryMint(
                         replacementSource, copy.GetInstanceID(), out sourceId);
+                }
+                // The in-memory Avatar Optimizer atlas admits only with a
+                // corroborated origin material (spec 2026-10-04, section
+                // 4.1). The route-level shape predicate stays weaker on
+                // purpose; this gate is the stricter one every capture
+                // passes first.
+                // Upstream path (spec 2026-10-04, section 8): an atlas
+                // that Avatar Optimizer registers in the NDMF object
+                // registry, or persists into a build container, retires
+                // this arm and the corroboration threading with it.
+                if (texture is Texture2D atlas &&
+                    AaoAtlasTextureAttestation.TryIdentifyAtlas(
+                        atlas, originMaterial))
+                {
+                    return AaoAtlasIdentity.TryMint(atlas, out sourceId);
                 }
                 return false;
             }
