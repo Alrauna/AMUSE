@@ -911,6 +911,7 @@ namespace Alrauna.Amuse.Editor.Build
             UnityGeneratedTextureEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
+            AaoAtlasTextureAttestation.ClearVersionCacheForSession();
         }
     }
 }
