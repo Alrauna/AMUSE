@@ -322,6 +322,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "A version of that package joins the admitted set only " +
                 "after a dated characterization, so a copy from an " +
                 "uncharacterized version still has no proof here. " +
+                "The build saver persists these copies, and a persisted copy reads " +
+                "only under the same version rule. " +
                 "AMUSE kept the affected triangles on the original " +
                 "material. When the report says the texture has a source " +
                 "identity, make sure that the texture is a real " +
