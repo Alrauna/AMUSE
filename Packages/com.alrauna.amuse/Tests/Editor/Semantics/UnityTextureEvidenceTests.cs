@@ -218,9 +218,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
                 Assert.That(resolved, Is.True);
                 Assert.That(
-                    id.Value.StartsWith(
-                        "unity-aao-atlas:", StringComparison.Ordinal),
-                    Is.True,
+                    id.Value,
+                    Is.EqualTo(
+                        "unity-aao-atlas:" + atlas.GetInstanceID().ToString(
+                            System.Globalization.CultureInfo.InvariantCulture)),
                     "an admitted atlas mints the per-build atlas identity");
             }
             finally
@@ -662,6 +663,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(copy);
+            }
+        }
+
+        [Test]
+        public void AdmittedDxt1AtlasProvesSampledAlphaExactlyOne()
+        {
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            atlas.Apply(false, false);
+            try
+            {
+                EditorUtility.CompressTexture(
+                    atlas, TextureFormat.DXT1,
+                    TextureCompressionQuality.Normal);
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+                Assert.That(
+                    UnityTextureEvidence.TryProveSampledAlphaIsOne(atlas),
+                    Is.True,
+                    "a DXT1 atlas the route admits carries no alpha " +
+                    "channel, so the sampler answers exactly one");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                AaoAtlasTextureAttestation.ResetForTests();
             }
         }
 

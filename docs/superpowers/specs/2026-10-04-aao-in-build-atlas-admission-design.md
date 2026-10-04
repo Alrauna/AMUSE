@@ -88,6 +88,8 @@ The route selector gains one arm after the LAC arm: a shape-admitted `Texture2D`
 
 The `amuse.texture.UnavailableCapture:hint` gains one sentence after the uncharacterized-version sentence: an atlas from a characterized version of Avatar Optimizer reads through the generated route, so its slot keeps its proof. The sentence separates the remaining refusals, which name uncharacterized versions or foreign shapes, from the admitted path.
 
+Note dated 2026-10-04: the hint sentence states the corroborated-slot case. A foreign material consuming an admitted atlas still refuses, because the corroboration conjunct binds to the slot material.
+
 ## 5. Gates that keep refusing
 
 - The format allowlist refuses a mirrored BC5, ASTC, or crunched format with `UnsupportedFormat`.
