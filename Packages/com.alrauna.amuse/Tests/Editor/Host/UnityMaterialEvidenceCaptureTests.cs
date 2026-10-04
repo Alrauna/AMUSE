@@ -225,6 +225,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     assignment.Texture.HasAlphaChannel, Is.False,
                     "without a registry pair the slot material corroborates " +
                     "nothing, so the region stays unproven");
+                Assert.That(
+                    assignment.Texture.AlphaCaptureRefusal,
+                    Is.EqualTo(TextureCaptureRefusalReason.UnavailableCapture),
+                    "the identity gate is the first gate that refuses, so " +
+                    "the capture records the unavailable-capture family");
             }
             finally
             {

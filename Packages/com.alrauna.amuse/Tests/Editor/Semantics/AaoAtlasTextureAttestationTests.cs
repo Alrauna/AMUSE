@@ -142,6 +142,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void AtlasShapeRefusesAnUnreadableVersion()
+        {
+            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => null;
+            var atlas = NewAtlas("MainTex (AAO UV Packed)");
+            try
+            {
+                Assert.That(
+                    AaoAtlasTextureAttestation.TryIdentifyAtlasShape(atlas),
+                    Is.False,
+                    "an unreadable or absent producer version keeps the " +
+                    "gate closed");
+            }
+            finally
+            {
+                Object.DestroyImmediate(atlas);
+            }
+        }
+
+        [Test]
         public void CorroborationAcceptsARegisteredAssetBackedOriginMaterial()
         {
             InstallAdmittedAaoVersion();
