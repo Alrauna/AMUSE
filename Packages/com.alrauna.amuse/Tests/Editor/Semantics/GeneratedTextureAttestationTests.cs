@@ -16,6 +16,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void SetUp()
         {
+            AaoAtlasTextureAttestation.ResetForTests();
             _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(_container, TestContainerPath);
 
@@ -29,6 +30,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void TearDown()
         {
             ReplacementTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.ResetForTests();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
@@ -272,6 +274,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
             Assert.That(isReplacement, Is.False);
             Assert.That(source, Is.Null);
+        }
+
+        [Test]
+        public void LooseAtlasWithAdmittedVersion_TakesTheGeneratedRoute()
+        {
+            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "1.9.17";
+            var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            loose.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(
+                    loose, out var producer);
+
+                Assert.That(routed, Is.True);
+                Assert.That(
+                    producer,
+                    Is.EqualTo(GeneratedTextureProducer.Anatawa12AvatarOptimizer));
+            }
+            finally
+            {
+                Object.DestroyImmediate(loose);
+                AaoAtlasTextureAttestation.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void LooseAtlasWithUnadmittedVersion_RefusesTheRoute()
+        {
+            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "1.9.18";
+            var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            loose.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(
+                    loose, out var producer);
+
+                Assert.That(routed, Is.False);
+                Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+            }
+            finally
+            {
+                Object.DestroyImmediate(loose);
+                AaoAtlasTextureAttestation.ResetForTests();
+            }
         }
     }
 }

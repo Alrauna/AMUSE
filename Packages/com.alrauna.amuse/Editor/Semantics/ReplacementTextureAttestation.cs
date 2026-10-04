@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Semantics
@@ -44,7 +43,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             get;
             set;
-        } = ReadVersionFromPackageManager;
+        } = PackageVersionReader.ReadInstalledOrNull;
 
         internal static IReadOnlyList<string> AdmittedVersions => Admitted;
 
@@ -65,7 +64,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             Admitted.Clear();
             Admitted.AddRange(ProductionAdmittedVersions);
-            ReadInstalledPackageVersionOrNull = ReadVersionFromPackageManager;
+            ReadInstalledPackageVersionOrNull =
+                PackageVersionReader.ReadInstalledOrNull;
             ClearVersionCacheForSession();
         }
 
@@ -128,34 +128,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
             source = resolved;
             return true;
-        }
-
-        private static string ReadVersionFromPackageManager(string packageName)
-        {
-            // Offline listing never touches the network, so blocking inside
-            // an editor build pass is safe. Unity 2022.3 has no
-            // Request.WaitForCompletion, so block on IsCompleted; the wait
-            // is bounded so an unresponsive package manager refuses rather
-            // than wedging the editor.
-            var request = Client.List(true);
-            var spins = 0;
-            while (!request.IsCompleted && spins < 30000)
-            {
-                spins++;
-                System.Threading.Thread.Sleep(1);
-            }
-            if (request.Status != StatusCode.Success || request.Result == null)
-            {
-                return null;
-            }
-            foreach (var package in request.Result)
-            {
-                if (package.name == packageName)
-                {
-                    return package.version;
-                }
-            }
-            return null;
         }
     }
 }

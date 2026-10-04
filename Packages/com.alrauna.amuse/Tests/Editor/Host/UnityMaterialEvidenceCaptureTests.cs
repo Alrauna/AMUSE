@@ -12,6 +12,7 @@ using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
+using nadena.dev.ndmf;
 using UnityEditor;
 using UnityEngine;
 
@@ -131,6 +132,110 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(ClassifyIsolationRegion(captured[reverse ? 0 : 1], 0.4f),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void RegisteredCloneOverAdmittedAtlas_ProvesOpaqueAtItsOwnCutoff()
+        {
+            var originSource = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            AssetDatabase.CreateAsset(
+                originSource, TempFolder + "/atlas-batch-source.mat");
+            var clone = new Material(originSource.shader)
+            {
+                name = originSource.name + " build copy",
+            };
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            var colors = new Color32[16 * 16];
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = new Color32(255, 255, 255, 255);
+            }
+            atlas.SetPixels32(colors);
+            atlas.Apply(false);
+            clone.SetTexture("_MainTex", atlas);
+            clone.SetFloat("_Cutoff", 0.75f);
+            var previous = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(originSource, clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                var captured = UnityMaterialEvidenceCapture.Capture(
+                    new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            clone,
+                            LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                    })[0];
+
+                Assert.That(
+                    ClassifyIsolationRegion(captured, 0.75f),
+                    Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                    "a registered clone over an admitted opaque atlas " +
+                    "proves its region opaque");
+            }
+            finally
+            {
+                ObjectRegistry.ActiveRegistry = previous;
+                AaoAtlasTextureAttestation.ResetForTests();
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+            }
+        }
+
+        [Test]
+        public void UnregisteredCloneOverAdmittedAtlas_StaysUnknown()
+        {
+            var clone = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            var colors = new Color32[16 * 16];
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = new Color32(255, 255, 255, 255);
+            }
+            atlas.SetPixels32(colors);
+            atlas.Apply(false);
+            clone.SetTexture("_MainTex", atlas);
+            clone.SetFloat("_Cutoff", 0.75f);
+            try
+            {
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                var captured = UnityMaterialEvidenceCapture.Capture(
+                    new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            clone,
+                            LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                    })[0];
+
+                Assert.That(
+                    captured.TryGetTexture("_MainTex", out var assignment),
+                    Is.True);
+                Assert.That(
+                    assignment.Texture.HasAlphaChannel, Is.False,
+                    "without a registry pair the slot material corroborates " +
+                    "nothing, so the region stays unproven");
+                Assert.That(
+                    assignment.Texture.AlphaCaptureRefusal,
+                    Is.EqualTo(TextureCaptureRefusalReason.UnavailableCapture),
+                    "the identity gate is the first gate that refuses, so " +
+                    "the capture records the unavailable-capture family");
+            }
+            finally
+            {
+                AaoAtlasTextureAttestation.ResetForTests();
+                UnityEngine.Object.DestroyImmediate(atlas);
+            }
         }
 
         private static Texture2D CreateIsolationTexture()

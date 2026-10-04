@@ -69,3 +69,6 @@ Assets/PackageMakerWindowData.asset*
 Thumbs.db
 Desktop.ini
 *~
+
+# Agent execution scratch (plans, ledgers, review packages)
+.superpowers/
