@@ -28,6 +28,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [TearDown]
         public void TearDown()
         {
+            ReplacementTextureAttestation.ResetForTests();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
@@ -37,6 +38,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 AssetDatabase.DeleteAsset(ArbitraryContainerPath);
             }
+        }
+
+        private static void InstallAdmittedCompressorVersion()
+        {
+            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
         }
 
         [Test]
@@ -164,6 +172,105 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 UnityTextureEvidence.TryGetColorInterpretation(_subTexture, out var colorInterp),
                 Is.True);
             Assert.That(colorInterp, Is.EqualTo(TextureColorInterpretation.Srgb));
+        }
+
+        [Test]
+        public void PersistedCopyWithUnadmittedProducerVersion_IsRefused()
+        {
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            copy.name = "MainTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
+            AssetDatabase.SaveAssets();
+            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "0.9.0";
+            ReplacementTextureAttestation.SetAdmittedVersionsForTests();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                copy, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
+        public void PersistedCopyWithUninstalledProducer_IsRefused()
+        {
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            copy.name = "MainTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
+            AssetDatabase.SaveAssets();
+            ReplacementTextureAttestation.ResetForTests();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                copy, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
+        public void PersistedCompressedCopyInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
+        {
+            InstallAdmittedCompressorVersion();
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            copy.name = "MainTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                copy, out var producer);
+
+            Assert.That(isCharacterized, Is.True);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.LimitexTextureCompressor));
+        }
+
+        [Test]
+        public void PersistedBakedCopyInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
+        {
+            InstallAdmittedCompressorVersion();
+            var baked = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            baked.name = "MainTex_baked";
+            AssetDatabase.AddObjectToAsset(baked, TestContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                baked, out var producer);
+
+            Assert.That(isCharacterized, Is.True);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.LimitexTextureCompressor));
+        }
+
+        [Test]
+        public void PersistedCompressedCopyInDerivedContainer_IsRefused()
+        {
+            InstallAdmittedCompressorVersion();
+            var derived = ScriptableObject.CreateInstance<ForeignNamespace.DerivedSubAssetContainer>();
+            AssetDatabase.CreateAsset(derived, ArbitraryContainerPath);
+            var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            copy.name = "MainTex_compressed";
+            AssetDatabase.AddObjectToAsset(copy, ArbitraryContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
+                copy, out var producer);
+
+            Assert.That(isCharacterized, Is.False);
+            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
+        }
+
+        [Test]
+        public void InBuildBakedOutputWithoutRegistration_StaysRefused()
+        {
+            InstallAdmittedCompressorVersion();
+            var baked = new Texture2D(8, 8, TextureFormat.RGBA32, false);
+            baked.name = "MainTex_baked";
+
+            var isReplacement = ReplacementTextureAttestation.TryIdentifyReplacement(
+                baked, out var source);
+
+            Assert.That(isReplacement, Is.False);
+            Assert.That(source, Is.Null);
         }
     }
 }

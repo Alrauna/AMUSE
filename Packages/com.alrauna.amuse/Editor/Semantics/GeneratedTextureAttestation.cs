@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -68,6 +69,28 @@ namespace Alrauna.Amuse.Editor.Semantics
                 if (isAaoTexture)
                 {
                     producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
+                    return true;
+                }
+
+                // Persisted replacement copies (spec 2026-10-04, section 6). NDMF
+                // persists every in-memory copy of the attested compressor as a
+                // sub-asset of one of these containers after every plugin phase.
+                // The copy keeps the source name plus a pinned output suffix, so
+                // the suffix plus the admitted producer version characterizes the
+                // shape. Bake outputs named "_baked" persist the same way.
+                var isPersistedReplacement =
+                    textureName.EndsWith(
+                        ReplacementTextureAttestation.ReplacementNameSuffix,
+                        StringComparison.Ordinal) ||
+                    textureName.EndsWith(
+                        ReplacementTextureAttestation.BakedOutputSuffix,
+                        StringComparison.Ordinal);
+                if (isPersistedReplacement &&
+                    ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                        out var version) &&
+                    ReplacementTextureAttestation.IsVersionAdmitted(version))
+                {
+                    producer = GeneratedTextureProducer.LimitexTextureCompressor;
                     return true;
                 }
 
