@@ -91,6 +91,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             return loaded;
         }
 
+        private static Material ImportFixtureMaterialAsset(string marker)
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", Path.GetFileName(TempFolder));
+            }
+            var material = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            AssetDatabase.CreateAsset(
+                material, $"{TempFolder}/{marker}.mat");
+            return material;
+        }
+
         // --- TryGetSourceId ---
 
         [Test]
@@ -177,6 +191,95 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                     previousVersion;
                 ObjectRegistry.ActiveRegistry = previousRegistry;
+            }
+        }
+
+        [Test]
+        public void AdmittedAtlasWithCorroboratedOrigin_MintsTheAtlasIdentity()
+        {
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var source = ImportFixtureMaterialAsset("atlas-origin");
+            var clone = new Material(source.shader)
+            {
+                name = source.name + " build copy",
+            };
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                var resolved = UnityTextureEvidence.TryGetSourceId(
+                    atlas, out var id, originMaterial: clone);
+
+                Assert.That(resolved, Is.True);
+                Assert.That(
+                    id.Value.StartsWith(
+                        "unity-aao-atlas:", StringComparison.Ordinal),
+                    Is.True,
+                    "an admitted atlas mints the per-build atlas identity");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+            }
+        }
+
+        [Test]
+        public void AdmittedAtlasWithoutOriginMaterial_IsRefused()
+        {
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(
+                        atlas, out _, originMaterial: null),
+                    Is.False,
+                    "the shape alone never mints an identity");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                AaoAtlasTextureAttestation.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void AdmittedAtlasWithUnregisteredOrigin_IsRefused()
+        {
+            var clone = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                Assert.That(
+                    UnityTextureEvidence.TryGetSourceId(
+                        atlas, out _, originMaterial: clone),
+                    Is.False,
+                    "an unregistered slot material corroborates nothing");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+                AaoAtlasTextureAttestation.ResetForTests();
             }
         }
 
