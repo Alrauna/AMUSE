@@ -192,6 +192,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void UnavailableCaptureHint_NamesTheCharacterizedAtlasRule()
+        {
+            var hint = AmuseReportStrings.Get(
+                "amuse.texture.UnavailableCapture:hint");
+
+            Assert.That(hint, Does.Contain(
+                "characterized version of Avatar Optimizer"),
+                "the hint separates admitted atlases from the refusals " +
+                "that remain");
+            Assert.That(hint, Does.Contain("generated route"));
+        }
+
+        [Test]
         public void UnavailableCaptureHint_DropsTheFalseImportAdvice()
         {
             var hint = AmuseReportStrings.Get(
