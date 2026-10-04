@@ -10,19 +10,20 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// Attests the Limitex Avatar Compressor replacement-copy shape.
     /// Every conjunct must hold; any miss refuses.
     /// </summary>
-    // Upstream path (spec 2026-10-03, section 12). This admission is a
-    // special case a future LAC release could delete. It retires when LAC
-    // persists each copy as a sub-asset of a dedicated container asset, as
-    // NDMF already does for AAO outputs, keeps registering source-and-copy
-    // pairs in the object registry, publishes stable package versions, and
-    // documents its per-release output shape. Until then this class, the
-    // unity-replacement identity form, and the duplicate guard carry the
-    // contract.
+    // Upstream path (spec 2026-10-03, section 12; premise corrected
+    // 2026-10-04). Persistence of each copy as a container sub-asset would
+    // retire the unity-replacement identity form and the duplicate guard.
+    // It would not retire producer admission: the container basis checks a
+    // producer name marker, and a "_compressed" copy carries no admitted
+    // marker. A name marker plus a version admission remains either way
+    // (spec 2026-10-04). The same release registering bake pairs would let
+    // AMUSE admit the in-build "_baked" output and retire its refusal.
     internal static class ReplacementTextureAttestation
     {
         internal const string ProducerPackageName =
             "dev.limitex.avatar-compressor";
         internal const string ReplacementNameSuffix = "_compressed";
+        internal const string BakedOutputSuffix = "_baked";
 
         // The admitted set is pinned, characterized data, never grown at
         // runtime. 0.9.0 joined on 2026-10-03: the installed Census Lab
