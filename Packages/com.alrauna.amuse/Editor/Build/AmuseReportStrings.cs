@@ -317,9 +317,13 @@ namespace Alrauna.Amuse.Editor.Build
                 "identity, an upstream build step replaced the " +
                 "material texture with an in-memory copy. The known " +
                 "producer is the texture-atlas setting of the Trace " +
-                "and Optimize component of Avatar Optimizer. AMUSE " +
-                "kept the affected triangles on the original material. " +
-                "When the report says the texture has a source " +
+                "and Optimize component of Avatar Optimizer. The LAC " +
+                "Texture Compressor component produces the same shape. " +
+                "A version of that package joins the admitted set only " +
+                "after a dated characterization, so a copy from an " +
+                "uncharacterized version still has no proof here. " +
+                "AMUSE kept the affected triangles on the original " +
+                "material. When the report says the texture has a source " +
                 "identity, make sure that the texture is a real " +
                 "imported asset and that the project supports texture " +
                 "capture.",

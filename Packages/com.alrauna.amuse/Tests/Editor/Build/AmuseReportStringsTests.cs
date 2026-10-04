@@ -187,6 +187,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(hint, Does.Contain(
                 "replaced the material texture with an in-memory copy"));
             Assert.That(hint, Does.Contain("Trace and Optimize"));
+            Assert.That(hint, Does.Contain("LAC Texture Compressor"),
+                "the hint names both known producers of in-memory copies");
         }
 
         [Test]

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
@@ -908,6 +909,8 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             UnityGeneratedTextureEvidence.ClearCache();
+            ReplacementTextureIdentity.ClearSession();
+            ReplacementTextureAttestation.ClearVersionCacheForSession();
         }
     }
 }

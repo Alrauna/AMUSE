@@ -401,6 +401,8 @@ namespace Alrauna.Amuse.Editor.Build
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
             UnityGeneratedTextureEvidence.ClearCache();
+            ReplacementTextureIdentity.ClearSession();
+            ReplacementTextureAttestation.ClearVersionCacheForSession();
             if (!lifecycle.MayUsePositiveMutation)
             {
                 // V7: a lifecycle refusal is never silent. One plain

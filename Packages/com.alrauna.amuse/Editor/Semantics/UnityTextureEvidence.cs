@@ -19,7 +19,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Resolves the stable project identity of an assigned texture as
         /// <c>unity-asset:&lt;lowercase-guid&gt;:&lt;invariant-decimal-local-id&gt;</c>.
-        /// Scene-only or unidentifiable textures fail.
+        /// Scene-only or unidentifiable textures fail, except an admitted
+        /// replacement copy, which resolves as
+        /// <c>unity-replacement:&lt;lowercase-source-guid&gt;:&lt;source-local-id&gt;</c>
+        /// when the session ledger names it usable.
         /// Characterized sub-assets resolve through their container asset identity.
         /// Identity is never fabricated from instance id, path, name, pixels, or reference equality.
         /// </summary>
@@ -30,6 +33,18 @@ namespace Alrauna.Amuse.Editor.Semantics
             sourceId = default;
             if (texture == null)
             {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(AssetDatabase.GetAssetPath(texture)))
+            {
+                if (texture is Texture2D copy &&
+                    ReplacementTextureAttestation.TryIdentifyReplacement(
+                        copy, out var replacementSource))
+                {
+                    return ReplacementTextureIdentity.TryMint(
+                        replacementSource, copy.GetInstanceID(), out sourceId);
+                }
                 return false;
             }
 
@@ -115,7 +130,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Selects linear or sRGB color interpretation for a texture.
         /// Reads the import flag for imported textures.
-        /// Reads the graphics format for characterized generated textures.
+        /// Reads the graphics format for characterized generated textures and
+        /// admitted replacement copies.
         /// Other textures cannot prove a color meaning.
         /// </summary>
         internal static bool TryGetColorInterpretation(
@@ -136,7 +152,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return true;
             }
 
-            if (GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+            if (texture is Texture2D texture2D &&
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(
+                    texture2D, out _))
             {
                 var isSrgb = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(texture.graphicsFormat) ||
                              texture.isDataSRGB;
@@ -150,18 +168,33 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
         /// <summary>
         /// Proves a sampled alpha of exactly one: the source carries no alpha
-        /// channel and the importer imports none. Input or grayscale-derived
-        /// alpha is not one and is therefore not proven.
+        /// channel and the importer imports none, or an attested route texture
+        /// (a container-backed generated texture or an admitted replacement
+        /// copy) has a format that names no alpha component. Input or
+        /// grayscale-derived alpha is not one and is therefore not proven.
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)
         {
-            if (!TryGetTextureImporter(texture, out var importer))
+            if (TryGetTextureImporter(texture, out var importer))
             {
-                return false;
+                return !importer.DoesSourceTextureHaveAlpha() &&
+                       importer.alphaSource == TextureImporterAlphaSource.None;
             }
 
-            return !importer.DoesSourceTextureHaveAlpha() &&
-                   importer.alphaSource == TextureImporterAlphaSource.None;
+            // A replacement copy has no importer. Its format names the sampled
+            // channels: a format with no alpha component samples exactly one, the
+            // same fact the RGB24 exemption rests on. This covers DXT1 and RGB24
+            // copies, and is equally sound for a BC5 copy, because missing channels
+            // sample as one at runtime; the capture allowlist still refuses BC5 for
+            // chain-based facts, which is a separate question.
+            if (texture is Texture2D copy &&
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(copy, out _) &&
+                !UnityEngine.Experimental.Rendering.GraphicsFormatUtility
+                    .HasAlphaChannel(copy.graphicsFormat))
+            {
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

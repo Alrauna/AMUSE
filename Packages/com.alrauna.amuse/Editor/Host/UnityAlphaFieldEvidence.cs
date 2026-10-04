@@ -237,7 +237,7 @@ namespace Alrauna.Amuse.Editor.Host
 
                 // Attested generated textures lack an importer. They are captured
                 // directly from the live resident object via RenderTexture blit.
-                if (GeneratedTextureAttestation.TryIdentifyProducer(texture2D, out _))
+                if (GeneratedTextureAttestation.TryIdentifyRouteTexture(texture2D, out _))
                 {
                     if (!UnityGeneratedTextureEvidence.TryCapture(
                             texture2D, channel, cutoffThreshold, bounds,
