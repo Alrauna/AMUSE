@@ -1,7 +1,7 @@
 using nadena.dev.ndmf;
 using UnityEngine;
 
-namespace Alrauna.Amuse.Editor.Build
+namespace Alrauna.Amuse.Editor.Semantics
 {
     /// <summary>
     /// Resolves a build-copy object to the source object a producer

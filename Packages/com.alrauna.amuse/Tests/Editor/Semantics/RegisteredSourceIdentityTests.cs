@@ -1,9 +1,9 @@
 using nadena.dev.ndmf;
 using NUnit.Framework;
-using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Semantics;
 using UnityEngine;
 
-namespace Alrauna.Amuse.Tests.Editor.Build
+namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
     public sealed class RegisteredSourceIdentityTests
     {

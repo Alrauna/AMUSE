@@ -11,6 +11,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         None,
         Anatawa12AvatarOptimizer,
         VrcFuryBuildContainer,
+        LimitexTextureCompressor,
     }
 
     /// <summary>
@@ -80,6 +81,34 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return true;
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Attempts to identify any texture the generated capture route may
+        /// serve: a container-backed producer texture, or an admitted
+        /// replacement copy minted by Limitex Texture Compressor.
+        /// </summary>
+        internal static bool TryIdentifyRouteTexture(
+            Texture texture, out GeneratedTextureProducer producer)
+        {
+            producer = GeneratedTextureProducer.None;
+            if (texture == null)
+            {
+                return false;
+            }
+            if (TryIdentifyProducer(texture, out producer))
+            {
+                return true;
+            }
+            if (texture is Texture2D copy &&
+                ReplacementTextureAttestation.TryIdentifyReplacement(
+                    copy, out _))
+            {
+                producer = GeneratedTextureProducer.LimitexTextureCompressor;
+                return true;
+            }
+            producer = GeneratedTextureProducer.None;
             return false;
         }
     }

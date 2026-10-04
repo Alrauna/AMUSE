@@ -87,7 +87,7 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            if (!GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+            if (!GeneratedTextureAttestation.TryIdentifyRouteTexture(texture, out _))
             {
                 return false;
             }

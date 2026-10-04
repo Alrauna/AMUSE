@@ -5,6 +5,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
+using nadena.dev.ndmf;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -1822,6 +1823,119 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(fileCount, Is.GreaterThan(0));
             Assert.That(hits, Is.GreaterThan(0), "Editor/Semantics is known to use UnityEditor.");
+        }
+
+        private static Texture2D ImportSourceAsset(string name)
+        {
+            return Import(
+                name, UniformPixels(16, 16, 255), 16, 16,
+                importer => importer.mipmapEnabled = true);
+        }
+
+        private static void DeleteTempFolder()
+        {
+            if (AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.DeleteAsset(TempFolder);
+            }
+        }
+
+        [Test]
+        public void AdmittedReplacementCopyCapturesThroughTheGeneratedRoute()
+        {
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var source = ImportSourceAsset("route");
+            var copy = new Texture2D(16, 16, TextureFormat.RGBA32, true);
+            copy.name = source.name + "_compressed";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, copy);
+                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "0.9.0";
+                // Fill so the chain is nontrivial, then mark the copy admitted by
+                // minting through the identity path TryCapture consults.
+                var colors = new Color32[16 * 16];
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    colors[i] = new Color32(255, 255, 255, 255);
+                }
+                copy.SetPixels32(colors);
+                copy.Apply(true);
+
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    copy, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out var chain, out var refusal);
+                Assert.That(
+                    captured, Is.True,
+                    "an admitted copy captures through the generated route, " +
+                    "refusal was " + refusal);
+                Assert.That(chain, Is.Not.Null);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+                ReplacementTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
+        public void Bc5ReplacementCopyRefusesCaptureWithUnsupportedFormat()
+        {
+            // --- Falsifier 5: BC5 refuses with UnsupportedFormat even when every
+            // other conjunct holds. ---
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var source = ImportSourceAsset("bc5");
+            var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            copy.name = source.name + "_compressed";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(source, copy);
+                EditorUtility.CompressTexture(
+                    copy, TextureFormat.BC5, TextureCompressionQuality.Normal);
+                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "0.9.0";
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    copy, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out _, out var refusal);
+                Assert.That(captured, Is.False);
+                Assert.That(
+                    refusal, Is.EqualTo(TextureCaptureRefusalReason.UnsupportedFormat));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(copy);
+                ReplacementTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
+        public void StreamingResidencyRuleCharacterization()
+        {
+            // Characterization: pins the existing pure predicate, passes on
+            // first run, and guards the route against reading a non-resident
+            // level.
+            // --- Falsifier 6: a copy whose residency cannot be proven never
+            // blits a non-resident level. ---
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
+                    true, true, 0), Is.True);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
+                    true, false, 0), Is.False);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
+                    true, true, 2), Is.False);
+            Assert.That(
+                UnityGeneratedTextureEvidence.IsStreamingMipmapResident(
+                    false, false, 0), Is.True);
         }
 
         private static void AssertSameField(
