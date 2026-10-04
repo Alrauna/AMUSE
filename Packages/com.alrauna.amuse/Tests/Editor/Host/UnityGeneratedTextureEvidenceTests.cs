@@ -723,5 +723,41 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 chain[0].GetAlpha(0, 0),
                 Is.EqualTo(byte.MaxValue));
         }
+
+        [Test]
+        public void AdmittedAtlasShape_CapturesDirectlyThroughTheRoute()
+        {
+            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                _ => "1.9.17";
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            var colors = new Color32[16 * 16];
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = new Color32(255, 255, 255, 255);
+            }
+            atlas.SetPixels32(colors);
+            atlas.Apply(false);
+            try
+            {
+                var ok = UnityGeneratedTextureEvidence.TryCapture(
+                    atlas,
+                    TextureChannel.Alpha,
+                    1.0f,
+                    null,
+                    AlphaPolicyBounds.Inert,
+                    0,
+                    out var chain);
+
+                Assert.That(ok, Is.True);
+                Assert.That(chain, Is.Not.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(atlas);
+                AaoAtlasTextureAttestation.ResetForTests();
+            }
+        }
     }
 }

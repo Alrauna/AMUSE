@@ -947,7 +947,8 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (texture.Texture == null ||
                         !UnityTextureEvidence.TryGetSourceId(
-                            texture.Texture, out var source))
+                            texture.Texture, out var source,
+                            input.SourceMaterial))
                     {
                         continue;
                     }
@@ -963,7 +964,8 @@ namespace Alrauna.Amuse.Editor.Host
                             texture.CutoutThreshold, out var shared))
                     {
                         shared = new SharedTextureBuilder(
-                            texture.Texture, source, texture.CutoutThreshold);
+                            texture.Texture, source, texture.CutoutThreshold,
+                            input.SourceMaterial);
                         sharedByThreshold.Add(
                             texture.CutoutThreshold, shared);
                     }
@@ -998,6 +1000,7 @@ namespace Alrauna.Amuse.Editor.Host
                         true,
                         shared.Source,
                         bounds,
+                        shared.OriginMaterial,
                         shared.CutoutThreshold);
                 }
             }
@@ -1033,6 +1036,7 @@ namespace Alrauna.Amuse.Editor.Host
                                 false,
                                 default,
                                 bounds,
+                                material.SourceMaterial,
                                 texture.CutoutThreshold);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
@@ -1104,6 +1108,7 @@ namespace Alrauna.Amuse.Editor.Host
             var builder = new MaterialBuilder
             {
                 HasShaderName = isLive && request.ShaderName,
+                SourceMaterial = input.SourceMaterial,
                 ShaderName = isLive && request.ShaderName
                     ? material.shader.name
                     : null,
@@ -1339,6 +1344,7 @@ namespace Alrauna.Amuse.Editor.Host
             bool hasKnownSource,
             TextureSourceId knownSource,
             AlphaPolicyBounds bounds,
+            Material originMaterial,
             float cutoffThreshold = 1.0f)
         {
             var hasSource = hasKnownSource &&
@@ -1375,7 +1381,8 @@ namespace Alrauna.Amuse.Editor.Host
                     bounds,
                     out _,
                     out alphaChannel,
-                    out alphaRefusal);
+                    out alphaRefusal,
+                    originMaterial: originMaterial);
             AlphaMipChain redChannel = null;
             var redRefusal = TextureCaptureRefusalReason.None;
             var hasRedChannel =
@@ -1387,7 +1394,8 @@ namespace Alrauna.Amuse.Editor.Host
                     bounds,
                     out _,
                     out redChannel,
-                    out redRefusal);
+                    out redRefusal,
+                    originMaterial: originMaterial);
             // The alpha arm's predicate rides beside the chain: the routes
             // binarize a declared cutoff into the stored verdicts, so the
             // field's key must carry the threshold the bytes mean. Clamped
@@ -1476,6 +1484,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         private sealed class MaterialBuilder
         {
+            internal Material SourceMaterial;
             internal bool HasShaderName;
             internal string ShaderName;
             internal bool HasActiveColorSpace;
@@ -1506,17 +1515,20 @@ namespace Alrauna.Amuse.Editor.Host
             internal readonly Texture Texture;
             internal readonly TextureSourceId Source;
             internal readonly float CutoutThreshold;
+            internal readonly Material OriginMaterial;
             internal TextureEvidenceKinds Evidence;
             internal CapturedTextureEvidence Captured;
 
             internal SharedTextureBuilder(
                 Texture texture,
                 TextureSourceId source,
-                float cutoutThreshold)
+                float cutoutThreshold,
+                Material originMaterial)
             {
                 Texture = texture;
                 Source = source;
                 CutoutThreshold = cutoutThreshold;
+                OriginMaterial = originMaterial;
             }
         }
     }

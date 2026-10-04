@@ -64,8 +64,13 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (mainAsset.GetType() == typeof(nadena.dev.ndmf.runtime.SubAssetContainer))
             {
                 var textureName = texture.name ?? string.Empty;
-                var isAaoTexture = textureName.EndsWith(" (AAO UV Packed)") ||
-                                   textureName.StartsWith("AAO Monotone ");
+                var isAaoTexture =
+                    textureName.EndsWith(
+                        AaoAtlasTextureAttestation.AtlasNameSuffix,
+                        StringComparison.Ordinal) ||
+                    textureName.StartsWith(
+                        AaoAtlasTextureAttestation.MonotoneNamePrefix,
+                        StringComparison.Ordinal);
                 if (isAaoTexture)
                 {
                     producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
@@ -109,8 +114,9 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         /// <summary>
         /// Attempts to identify any texture the generated capture route may
-        /// serve: a container-backed producer texture, or an admitted
-        /// replacement copy minted by Limitex Texture Compressor.
+        /// serve: a container-backed producer texture, an admitted
+        /// replacement copy minted by Limitex Texture Compressor, or a
+        /// shape-admitted in-memory Avatar Optimizer atlas.
         /// </summary>
         internal static bool TryIdentifyRouteTexture(
             Texture texture, out GeneratedTextureProducer producer)
@@ -129,6 +135,22 @@ namespace Alrauna.Amuse.Editor.Semantics
                     copy, out _))
             {
                 producer = GeneratedTextureProducer.LimitexTextureCompressor;
+                return true;
+            }
+            // The in-memory Avatar Optimizer atlas takes the generated
+            // route on the texture-only shape predicate. Every capture
+            // reaches a route only after the identity gate admitted the
+            // same object under the stricter corroborated conjunct
+            // (spec 2026-10-04, section 4.2), so this arm cannot widen
+            // the gate.
+            // Upstream path (spec 2026-10-04, section 8): an atlas that
+            // Avatar Optimizer registers in the NDMF object registry, or
+            // persists into a build container, is served by the persisted
+            // branch above and retires this arm.
+            if (texture is Texture2D atlas &&
+                AaoAtlasTextureAttestation.TryIdentifyAtlasShape(atlas))
+            {
+                producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
                 return true;
             }
             producer = GeneratedTextureProducer.None;

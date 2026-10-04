@@ -25,10 +25,14 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// when the session ledger names it usable.
         /// Characterized sub-assets resolve through their container asset identity.
         /// Identity is never fabricated from instance id, path, name, pixels, or reference equality.
+        /// Exception, dated 2026-10-04 (spec section 4.3): an admitted
+        /// in-build Avatar Optimizer atlas mints a per-build instance-id
+        /// identity.
         /// </summary>
         internal static bool TryGetSourceId(
             Texture texture,
-            out TextureSourceId sourceId)
+            out TextureSourceId sourceId,
+            Material originMaterial = null)
         {
             sourceId = default;
             if (texture == null)
@@ -44,6 +48,21 @@ namespace Alrauna.Amuse.Editor.Semantics
                 {
                     return ReplacementTextureIdentity.TryMint(
                         replacementSource, copy.GetInstanceID(), out sourceId);
+                }
+                // The in-memory Avatar Optimizer atlas admits only with a
+                // corroborated origin material (spec 2026-10-04, section
+                // 4.1). The route-level shape predicate stays weaker on
+                // purpose; this gate is the stricter one every capture
+                // passes first.
+                // Upstream path (spec 2026-10-04, section 8): an atlas
+                // that Avatar Optimizer registers in the NDMF object
+                // registry, or persists into a build container, retires
+                // this arm and the corroboration threading with it.
+                if (texture is Texture2D atlas &&
+                    AaoAtlasTextureAttestation.TryIdentifyAtlas(
+                        atlas, originMaterial))
+                {
+                    return AaoAtlasIdentity.TryMint(atlas, out sourceId);
                 }
                 return false;
             }
@@ -130,8 +149,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Selects linear or sRGB color interpretation for a texture.
         /// Reads the import flag for imported textures.
-        /// Reads the graphics format for characterized generated textures and
-        /// admitted replacement copies.
+        /// Reads the graphics format for characterized generated textures,
+        /// admitted replacement copies, and in-memory admitted Avatar
+        /// Optimizer atlases.
         /// Other textures cannot prove a color meaning.
         /// </summary>
         internal static bool TryGetColorInterpretation(
@@ -169,8 +189,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Proves a sampled alpha of exactly one: the source carries no alpha
         /// channel and the importer imports none, or an attested route texture
-        /// (a container-backed generated texture or an admitted replacement
-        /// copy) has a format that names no alpha component. Input or
+        /// (a container-backed generated texture, an admitted replacement
+        /// copy, or an in-memory admitted Avatar Optimizer atlas) has a
+        /// format that names no alpha component. Input or
         /// grayscale-derived alpha is not one and is therefore not proven.
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)

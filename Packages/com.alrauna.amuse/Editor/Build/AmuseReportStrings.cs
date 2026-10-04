@@ -322,6 +322,9 @@ namespace Alrauna.Amuse.Editor.Build
                 "A version of that package joins the admitted set only " +
                 "after a dated characterization, so a copy from an " +
                 "uncharacterized version still has no proof here. " +
+                "An atlas from a characterized version of Avatar " +
+                "Optimizer reads through the generated route, so its " +
+                "slot keeps its proof. " +
                 "The build saver persists these copies, and a persisted copy reads " +
                 "only under the same version rule. " +
                 "AMUSE kept the affected triangles on the original " +

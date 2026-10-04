@@ -403,6 +403,7 @@ namespace Alrauna.Amuse.Editor.Build
             UnityGeneratedTextureEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
+            AaoAtlasTextureAttestation.ClearVersionCacheForSession();
             if (!lifecycle.MayUsePositiveMutation)
             {
                 // V7: a lifecycle refusal is never silent. One plain
