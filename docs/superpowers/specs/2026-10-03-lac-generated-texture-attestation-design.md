@@ -231,6 +231,16 @@ AMUSE code that fact would let AMUSE delete.
    already does for AAO outputs. This retires the replacement class, the
    replacement identity form, and the duplicate guard, because the existing
    container basis admits the copy unchanged.
+   Correction 2026-10-04: the stated premise is false. The existing
+   container basis does not admit every sub-asset of an NDMF container.
+   `GeneratedTextureAttestation.TryIdentifyProducer` also checks a
+   producer name marker inside the container, and a `_compressed` copy
+   carries no admitted marker. A live probe on a persisted copy answered
+   producer refused, and the capture answered `UnavailableCapture`. An
+   upstream persistence change would retire the replacement identity form
+   and the duplicate guard. It would not retire producer admission. A
+   persisted copy still needs a name marker and a version admission. The
+   2026-10-04 persisted-copy admission design covers that shape.
 2. Continued registration of source-and-copy pairs in the object registry.
    The admission reads that contract.
 3. Stable package versions, one line per release. Stable versions keep the
