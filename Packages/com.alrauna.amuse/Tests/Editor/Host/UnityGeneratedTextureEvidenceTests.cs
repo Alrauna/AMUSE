@@ -640,5 +640,88 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 gateOnChain[0].GetAlpha(0, 0),
                 Is.EqualTo(AlphaTextureData.ErasedFlag));
         }
+
+        /// <summary>
+        /// A texel between the noise bound and the opaque bound is a
+        /// witness, not noise. The shader emits the three-state verdict
+        /// under the active policy bounds, and this route must store that
+        /// verdict verbatim, exactly as the GPU route stores its bytes.
+        /// A plausible wrong implementation re-derives the flags from the
+        /// verdict byte with a noise-bound comparison. Byte 0, the mid
+        /// band, then falls below the noise byte and turns into the
+        /// erased flag, so genuine partial transparency substitutes as
+        /// noise and triangles over it prove opaque.
+        /// </summary>
+        [Test]
+        public void AnActiveNoisePolicyKeepsMidBandTexelsWitnessesOnTheGeneratedRoute()
+        {
+            var midTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                // Alpha 128 sits above the noise byte 26 of a 10 percent
+                // gate and below the opaque byte 255, so the policy calls
+                // it a witness.
+                pixels[i] = new Color32(255, 255, 255, 128);
+            }
+
+            midTex.SetPixels32(pixels);
+            midTex.Apply(false, false);
+            midTex.name = "AlphaMask (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(midTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var ok = UnityGeneratedTextureEvidence.TryCapture(
+                midTex,
+                TextureChannel.Alpha,
+                1.0f,
+                AlphaPolicyBounds.From(100, 10),
+                out var chain);
+
+            Assert.That(ok, Is.True);
+            Assert.That(chain, Is.Not.Null);
+            Assert.That(
+                chain[0].GetAlpha(0, 0),
+                Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// A lowered opaque bound must lower the bar on this route the
+        /// same way it does on the GPU route. Alpha byte 240 sits at or
+        /// above the policy's opaque byte 230 of a 90 percent bound, so
+        /// the captured evidence reads opaque. A plausible wrong
+        /// implementation blits with the shader's inert default bounds,
+        /// which keep testing at exact one and cannot produce byte 255
+        /// for a texel below it.
+        /// </summary>
+        [Test]
+        public void AnActiveOpaqueBoundLowersTheOpaqueBarOnTheGeneratedRoute()
+        {
+            var nearTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(255, 255, 255, 240);
+            }
+
+            nearTex.SetPixels32(pixels);
+            nearTex.Apply(false, false);
+            nearTex.name = "AlphaMask (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(nearTex, ContainerPath);
+            AssetDatabase.SaveAssets();
+
+            var ok = UnityGeneratedTextureEvidence.TryCapture(
+                nearTex,
+                TextureChannel.Alpha,
+                1.0f,
+                AlphaPolicyBounds.From(90, 10),
+                out var chain);
+
+            Assert.That(ok, Is.True);
+            Assert.That(chain, Is.Not.Null);
+            Assert.That(
+                chain[0].GetAlpha(0, 0),
+                Is.EqualTo(byte.MaxValue));
+        }
     }
 }

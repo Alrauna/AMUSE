@@ -131,6 +131,22 @@ namespace Alrauna.Amuse.Editor.Host
                 }
 
                 var material = new Material(shader);
+
+                // The shader owns the three-state verdict, so the active
+                // policy must reach it exactly as on the GPU route. A
+                // shader cutoff keeps the policy inert on this route,
+                // exactly as on the other three: the route re-derives the
+                // cutoff arm from the raw value, so bounds would not
+                // touch it, and the shader must not erase with them
+                // either.
+                var effectiveBounds = threshold < 1.0f
+                    ? AlphaPolicyBounds.Inert
+                    : bounds;
+                material.SetFloat(
+                    "_OpaqueBound", effectiveBounds.OpaqueBound / 255f);
+                material.SetFloat(
+                    "_NoiseBound", effectiveBounds.NoiseBound / 255f);
+
                 var levels = new AlphaTextureData[mipCount];
                 var withoutEvidence = new bool[mipCount];
 
@@ -191,25 +207,40 @@ namespace Alrauna.Amuse.Editor.Host
                             }
 
                             var flags = new byte[data.Length];
-                            for (var i = 0; i < data.Length; i++)
+                            if (threshold >= 1.0f)
                             {
-                                // The generated route's proof channel is
-                                // .r at the exact arm and .g under a
-                                // shader cutoff; that packing is pinned
-                                // by the existing blit shader. Erasure
-                                // reads the same byte the opaque test
-                                // reads, and only in the exact arm,
-                                // because shader-cutoff sources are
-                                // gate-inert.
-                                var isErased = threshold >= 1.0f &&
-                                    bounds.NoiseBound > 0 &&
-                                    data[i].r < bounds.NoiseBound;
-                                var isOpaque = threshold >= 1.0f
-                                    ? data[i].r >= bounds.OpaqueBound
-                                    : (data[i].g / 255f) >= threshold;
-                                flags[i] = isErased
-                                    ? AlphaTextureData.ErasedFlag
-                                    : isOpaque ? byte.MaxValue : (byte)0;
+                                // The shader already emitted the exact
+                                // three-state verdict under the active
+                                // bounds, so the red byte stores verbatim,
+                                // byte for byte, as the GPU route stores
+                                // its readback. Re-deriving the flags from
+                                // the verdict byte would compare the mid
+                                // band's 0 against the noise bound and
+                                // turn every below-exact-one texel into
+                                // erasable noise.
+                                for (var i = 0; i < data.Length; i++)
+                                {
+                                    flags[i] = data[i].r;
+                                }
+
+                                if (!UnityAlphaFieldEvidence
+                                        .IsPredicateFlagBuffer(flags))
+                                {
+                                    return false;
+                                }
+                            }
+                            else
+                            {
+                                // A shader cutoff source stays gate-inert:
+                                // binarize the raw value the shader
+                                // returns in green, with no erasure and
+                                // no policy bounds.
+                                for (var i = 0; i < data.Length; i++)
+                                {
+                                    flags[i] = (data[i].g / 255f) >= threshold
+                                        ? byte.MaxValue
+                                        : (byte)0;
+                                }
                             }
 
                             levels[m] = new AlphaTextureData(width, height, flags);
