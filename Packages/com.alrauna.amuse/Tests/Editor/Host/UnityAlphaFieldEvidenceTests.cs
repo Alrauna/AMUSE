@@ -1889,6 +1889,184 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void AdmittedAtlasCapturesWithCorroboratedOriginMaterial()
+        {
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var originSource = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            AssetDatabase.CreateAsset(
+                originSource, TempFolder + "/atlas-origin.mat");
+            var clone = new Material(originSource.shader)
+            {
+                name = originSource.name + " build copy",
+            };
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, true);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(originSource, clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+                var colors = new Color32[16 * 16];
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    colors[i] = new Color32(255, 255, 255, 255);
+                }
+                atlas.SetPixels32(colors);
+                atlas.Apply(true);
+
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out var source, out var chain, out var refusal,
+                    originMaterial: clone);
+
+                Assert.That(
+                    captured, Is.True,
+                    "an admitted atlas captures through the generated route, " +
+                    "refusal was " + refusal);
+                Assert.That(chain, Is.Not.Null);
+                Assert.That(
+                    source.Value.StartsWith(
+                        "unity-aao-atlas:", StringComparison.Ordinal),
+                    Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
+        public void AdmittedAtlasWithoutOriginMaterial_RefusesAtTheGate()
+        {
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out _, out var refusal);
+
+                Assert.That(captured, Is.False);
+                Assert.That(
+                    refusal,
+                    Is.EqualTo(TextureCaptureRefusalReason.UnavailableCapture));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                AaoAtlasTextureAttestation.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void StreamingFlagOnAdmittedAtlasStillTakesTheGeneratedRoute()
+        {
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var originSource = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            AssetDatabase.CreateAsset(
+                originSource, TempFolder + "/atlas-streaming.mat");
+            var clone = new Material(originSource.shader);
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, true);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(originSource, clone);
+                // AAO mirrors the source streaming flag onto the atlas
+                // through the serialized property; do the same here.
+                var serialized = new SerializedObject(atlas);
+                serialized.FindProperty("m_StreamingMipmaps").boolValue = true;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+                var colors = new Color32[16 * 16];
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    colors[i] = new Color32(255, 255, 255, 255);
+                }
+                atlas.SetPixels32(colors);
+                atlas.Apply(true);
+
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out var chain, out var refusal,
+                    originMaterial: clone);
+
+                Assert.That(
+                    captured, Is.True,
+                    "the generated route precedes the streaming route, so a " +
+                    "mirrored streaming flag never blocks an admitted atlas; " +
+                    "refusal was " + refusal);
+                Assert.That(chain, Is.Not.Null);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
+        public void Bc5AdmittedAtlasRefusesWithUnsupportedFormat()
+        {
+            // --- Falsifier 7 (spec 2026-10-04, section 6): BC5 refuses
+            // with UnsupportedFormat even when every admission conjunct
+            // holds. ---
+            var previousRegistry = ObjectRegistry.ActiveRegistry;
+            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var originSource = new Material(
+                Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
+            AssetDatabase.CreateAsset(
+                originSource, TempFolder + "/atlas-bc5.mat");
+            var clone = new Material(originSource.shader);
+            var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            atlas.name = "MainTex (AAO UV Packed)";
+            try
+            {
+                ObjectRegistry.RegisterReplacedObject(originSource, clone);
+                EditorUtility.CompressTexture(
+                    atlas, TextureFormat.BC5, TextureCompressionQuality.Normal);
+                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                    _ => "1.9.17";
+
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
+                    out _, out _, out var refusal,
+                    originMaterial: clone);
+
+                Assert.That(captured, Is.False);
+                Assert.That(
+                    refusal,
+                    Is.EqualTo(TextureCaptureRefusalReason.UnsupportedFormat));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(atlas);
+                UnityEngine.Object.DestroyImmediate(clone);
+                AaoAtlasTextureAttestation.ResetForTests();
+                ObjectRegistry.ActiveRegistry = previousRegistry;
+                DeleteTempFolder();
+            }
+        }
+
+        [Test]
         public void Bc5ReplacementCopyRefusesCaptureWithUnsupportedFormat()
         {
             // --- Falsifier 5: BC5 refuses with UnsupportedFormat even when every

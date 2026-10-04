@@ -153,7 +153,8 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaPolicyBounds bounds,
             out TextureSourceId source,
             out AlphaMipChain chain,
-            out TextureCaptureRefusalReason refusal)
+            out TextureCaptureRefusalReason refusal,
+            Material originMaterial = null)
         {
             source = default;
             chain = null;
@@ -182,7 +183,8 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            if (!UnityTextureEvidence.TryGetSourceId(texture2D, out source))
+            if (!UnityTextureEvidence.TryGetSourceId(
+                    texture2D, out source, originMaterial))
             {
                 refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 return false;
