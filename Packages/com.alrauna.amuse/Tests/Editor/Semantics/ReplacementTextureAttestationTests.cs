@@ -79,14 +79,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void ShippedAdmittedSetIsEmptyAndRefusesEveryVersion()
+        public void ShippedAdmittedSetContainsOnlyTheCharacterizedVersion()
         {
             Assert.That(
-                ReplacementTextureAttestation.AdmittedVersions, Is.Empty,
-                "the set ships empty; a version joins only after a " +
-                "dated characterization");
+                ReplacementTextureAttestation.AdmittedVersions,
+                Is.EqualTo(new[] { "0.9.0" }),
+                "0.9.0 joined on 2026-10-03 through the dated " +
+                "characterization; any other version stays refused");
             Assert.That(
                 ReplacementTextureAttestation.IsVersionAdmitted("0.9.0"),
+                Is.True);
+            Assert.That(
+                ReplacementTextureAttestation.IsVersionAdmitted("0.1.0"),
                 Is.False);
         }
 
@@ -157,14 +161,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void ResetForTestsRestoresTheEmptySetAndTheProductionProvider()
+        public void ResetForTestsRestoresTheCharacterizedSetAndTheProductionProvider()
         {
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.1.0");
             ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                 _ => "9.9.9";
             ReplacementTextureAttestation.ResetForTests();
             Assert.That(
-                ReplacementTextureAttestation.AdmittedVersions, Is.Empty);
+                ReplacementTextureAttestation.AdmittedVersions,
+                Is.EqualTo(new[] { "0.9.0" }),
+                "the reset restores the characterized production set");
             // With the production provider restored, the delegate no
             // longer answers "9.9.9" for every name. A plan-conformant
             // environment never installs LAC, so the restored provider

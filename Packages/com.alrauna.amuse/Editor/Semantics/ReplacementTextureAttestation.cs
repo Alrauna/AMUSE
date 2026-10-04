@@ -24,7 +24,20 @@ namespace Alrauna.Amuse.Editor.Semantics
             "dev.limitex.avatar-compressor";
         internal const string ReplacementNameSuffix = "_compressed";
 
-        private static readonly List<string> Admitted = new List<string>();
+        // The admitted set is pinned, characterized data, never grown at
+        // runtime. 0.9.0 joined on 2026-10-03: the installed Census Lab
+        // copy's source shows the admitted shape (copies named source plus
+        // "_compressed", registered source-and-copy pairs in the object
+        // registry, forced streaming mipmaps flag, desktop formats
+        // DXT1/DXT5/BC7/BC5), and a Lab build exercised the refusal path
+        // end to end before admission (spec section 6).
+        private static readonly string[] ProductionAdmittedVersions =
+        {
+            "0.9.0",
+        };
+
+        private static readonly List<string> Admitted =
+            new List<string>(ProductionAdmittedVersions);
 
         internal static Func<string, string> ReadInstalledPackageVersionOrNull
         {
@@ -50,6 +63,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal static void ResetForTests()
         {
             Admitted.Clear();
+            Admitted.AddRange(ProductionAdmittedVersions);
             ReadInstalledPackageVersionOrNull = ReadVersionFromPackageManager;
             ClearVersionCacheForSession();
         }

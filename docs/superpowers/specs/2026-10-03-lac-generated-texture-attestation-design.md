@@ -125,10 +125,16 @@ replacement when every fact below holds. Any unmet fact refuses.
 4. The producer package `dev.limitex.avatar-compressor` is installed, its
    version is readable, and the version is in the admitted set.
 
-The admitted version set starts empty. A version joins the set only after
-its output shape is characterized, and the attestation file dates each
-admission. A version that cannot be read refuses, following the lilToon
-baker precedent for an unreadable version constant.
+The admitted version set is pinned, characterized data. It started empty.
+On 2026-10-03, 0.9.0 joined it through the dated characterization: the
+installed Census Lab copy's source shows the admitted shape, meaning copies
+named with the source name plus the `_compressed` suffix, registered
+source-and-copy pairs in the object registry, the forced streaming mipmaps
+flag, and desktop formats DXT1, DXT5, BC7, and BC5; and a Lab build
+exercised the refusal path end to end before admission. Any other version
+refuses until it is characterized and dated the same way. A version that
+cannot be read refuses, following the lilToon baker precedent for an
+unreadable version constant.
 
 ## 7. Identity for replacement copies
 
