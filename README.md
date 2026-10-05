@@ -21,6 +21,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
 - **Disable AMUSE** on the component makes the build treat it as absent: nothing runs, nothing is reported.
+- **Alpha Separator** is on by default. Turn it off to skip alpha separation for that avatar.
 - Combining AMUSE with d4rkAvatarOptimizer is not validated in 0.1.0.
 
 ## What 0.1.0 does
