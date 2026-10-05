@@ -91,3 +91,13 @@ The first release placed the Advanced Settings toggle at the bottom of Settings.
 5. Alpha Separator Settings, shown only while Advanced Settings is on (unchanged)
 
 Hiding is draw-time only. No serialized field changes, so saved avatars keep their stored consent values, and a hidden consent still applies at build time. The toggle tooltip now names both hidden groups. Validation mirrors section 6: compile, the editor test class, and the structural smoke check. No test draws the inspector.
+
+## 9. Follow-up, 2026-10-05: the reveal toggle stores on the component
+
+The defect: after the engine Reset command, the Advanced Settings toggle stayed checked until the user selected another object and selected the avatar again.
+
+The cause: the reveal flag lived as a plain bool on the editor instance. Reset restores serialized data only, so the flag kept its value. Selecting away destroyed the editor, and selecting back created a fresh editor with the default. The same staleness would have applied to Undo.
+
+The decision: the flag moved to the component as the serialized field `_advancedSettingsRevealed`, default false. Reset and Undo now treat it like every other control, and the inspector reads it from serialized data each repaint. This supersedes the session-only wording in sections 4 and 8: the toggle persists with the component instead of hiding after a script reload, and the tooltip no longer claims otherwise. The two foldout open states stay editor-session state, because they are navigation, not consent, and a Reset need not collapse them.
+
+Validation: RED first. Two field-pin tests failed before the field existed: 2 tests, 2 failed, both on the named pin. After the change the same filter ran 3 tests, 3 passed, 0 failed. A smoke check set the flag true, applied a default-state copy in the manner of Reset, and read it back false; the editor-side field is gone. The engine Reset menu item itself cannot be clicked by tooling, so the menu path stays a manual check.

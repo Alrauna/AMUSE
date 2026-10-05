@@ -226,5 +226,54 @@ namespace Alrauna.Amuse.Tests.Editor
                 UnityEngine.Object.DestroyImmediate(go);
             }
         }
+
+        // The reveal toggle stores on the component, so the engine Reset
+        // command clears it like every other control. A missing field
+        // would leave the reveal stuck on across a Reset.
+        [Test]
+        public void DefaultAdvancedSettingsRevealedIsFalse()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property =
+                    serializedObject.FindProperty("_advancedSettingsRevealed");
+                Assert.That(property, Is.Not.Null,
+                    "AmuseAvatarOptimizer._advancedSettingsRevealed field pin");
+                Assert.That(property.boolValue, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void AdvancedSettingsRevealedSerializedPropertyCanBeToggled()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property =
+                    serializedObject.FindProperty("_advancedSettingsRevealed");
+                Assert.That(property, Is.Not.Null,
+                    "AmuseAvatarOptimizer._advancedSettingsRevealed field pin");
+                property.boolValue = true;
+                serializedObject.ApplyModifiedProperties();
+
+                var reread =
+                    new SerializedObject(optimizer).FindProperty(
+                        "_advancedSettingsRevealed");
+                Assert.That(reread.boolValue, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
     }
 }

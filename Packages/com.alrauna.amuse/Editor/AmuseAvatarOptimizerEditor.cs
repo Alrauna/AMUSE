@@ -14,7 +14,6 @@ namespace Alrauna.Amuse.Editor
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
         private bool _settingsOpen;
-        private bool _advancedSettingsRevealed;
         private bool _alphaSeparatorOpen;
 
         public override void OnInspectorGUI()
@@ -50,8 +49,7 @@ namespace Alrauna.Amuse.Editor
                     "switch beside this one."));
             serializedObject.ApplyModifiedProperties();
 
-            DrawSettings();
-            if (_advancedSettingsRevealed)
+            if (DrawSettings())
             {
                 DrawAlphaSeparatorSettings();
             }
@@ -313,15 +311,16 @@ namespace Alrauna.Amuse.Editor
         /// "what does AMUSE do on this avatar". The two tolerance
         /// consents and the alpha policy menu stay hidden until
         /// Advanced Settings is on, because most users never change
-        /// them.
+        /// them. The reveal toggle stores on the component, so Reset
+        /// and Undo treat it like every other control.
         /// </summary>
-        private void DrawSettings()
+        private bool DrawSettings()
         {
             _settingsOpen = EditorGUILayout.Foldout(
                 _settingsOpen, "Settings", EditorStyles.foldoutHeader);
             if (!_settingsOpen)
             {
-                return;
+                return false;
             }
 
             EditorGUILayout.PropertyField(
@@ -331,15 +330,16 @@ namespace Alrauna.Amuse.Editor
                     "build, in Play mode, or anywhere else, and nothing " +
                     "is reported."));
 
-            _advancedSettingsRevealed = EditorGUILayout.Toggle(
+            var reveal = serializedObject.FindProperty(
+                "_advancedSettingsRevealed");
+            EditorGUILayout.PropertyField(
+                reveal,
                 new GUIContent("Advanced Settings",
                     "Shows the two tolerance consents and the Alpha " +
                     "Separator Settings menu below. Most users never " +
-                    "need them. They hide again after Unity reloads " +
-                    "scripts."),
-                _advancedSettingsRevealed);
+                    "need them."));
 
-            if (_advancedSettingsRevealed)
+            if (reveal.boolValue)
             {
                 EditorGUILayout.PropertyField(
                     serializedObject.FindProperty(
@@ -370,6 +370,7 @@ namespace Alrauna.Amuse.Editor
             }
 
             serializedObject.ApplyModifiedProperties();
+            return reveal.boolValue;
         }
 
         /// <summary>
