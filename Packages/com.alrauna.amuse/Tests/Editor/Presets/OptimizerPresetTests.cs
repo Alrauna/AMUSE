@@ -32,21 +32,51 @@ namespace Alrauna.Amuse.Tests.Editor
         [Test]
         public void FlippingAnyOneFieldValueBreaksTheMatch()
         {
-            var go = new GameObject("Root");
-            try
+            var preset = ShippedDefaults();
+            var fields = new (string name, object value)[]
             {
-                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                ("_alphaSeparatorEnabled", false),
+                ("_preserveTransparencyMaxMipLevel", 5),
+                ("_preserveTransparencyMinTextureSize", 256),
+                ("_minimumOpaqueCoveragePercent", 30),
+                ("_minimumOpaqueAlphaPercent", 90),
+                ("_polygonAlphaUpperClampPercent", 80),
+                ("_polygonMinimumOpaqueCoveragePercent", 70),
+                ("_allowDepthTestChange", false),
+                ("_ignoreOutOfRangeMaterialSlots", false),
+            };
 
-                var serialized = new UnityEditor.SerializedObject(optimizer);
-                serialized.FindProperty("_minimumOpaqueCoveragePercent")
-                    .intValue = 30;
-                serialized.ApplyModifiedProperties();
-
-                Assert.That(ShippedDefaults().Matches(optimizer), Is.False);
-            }
-            finally
+            foreach (var field in fields)
             {
-                Object.DestroyImmediate(go);
+                var go = new GameObject("Probe " + field.name);
+                try
+                {
+                    var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                    Assert.That(preset.Matches(optimizer), Is.True,
+                        field.name + " starts matching");
+
+                    var serialized =
+                        new UnityEditor.SerializedObject(optimizer);
+                    var property = serialized.FindProperty(field.name);
+                    Assert.That(property, Is.Not.Null, field.name);
+                    if (property.propertyType ==
+                        UnityEditor.SerializedPropertyType.Boolean)
+                    {
+                        property.boolValue = (bool)field.value;
+                    }
+                    else
+                    {
+                        property.intValue = (int)field.value;
+                    }
+                    serialized.ApplyModifiedProperties();
+
+                    Assert.That(preset.Matches(optimizer), Is.False,
+                        "flipping " + field.name + " breaks the match");
+                }
+                finally
+                {
+                    Object.DestroyImmediate(go);
+                }
             }
         }
     }
