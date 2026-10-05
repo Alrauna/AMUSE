@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Presets;
 
 namespace Alrauna.Amuse.Editor
 {
@@ -15,6 +17,9 @@ namespace Alrauna.Amuse.Editor
     {
         private bool _settingsOpen;
         private bool _alphaSeparatorOpen;
+        private List<OptimizerPreset> _presets;
+        private string _presetProblemFile;
+        private PresetLoadRefusal _presetProblem;
 
         /// <summary>
         /// The full product name under the title. A proper name, not a
@@ -27,6 +32,7 @@ namespace Alrauna.Amuse.Editor
         public override void OnInspectorGUI()
         {
             DrawHeader();
+            DrawPresetRow();
 
             var component = (AmuseAvatarOptimizer)target;
             if (component.transform.parent == null)
@@ -68,6 +74,55 @@ namespace Alrauna.Amuse.Editor
             }
         }
 
+
+        /// <summary>
+        /// The preset row. One button per shipped preset file, in the
+        /// fixed order safe, normal, aggressive. A button presses only
+        /// while the component matches that preset on all nine fields,
+        /// so the pressed state is always honest and never stored. A
+        /// broken preset file turns the row off with a warning,
+        /// because a row over a partial preset universe could claim a
+        /// match it cannot prove.
+        /// </summary>
+        private void DrawPresetRow()
+        {
+            if (_presets == null)
+            {
+                PresetFileStore.TryLoadAll(
+                    out _presets, out _presetProblemFile,
+                    out _presetProblem);
+            }
+            if (_presets == null
+                || _presetProblem != PresetLoadRefusal.None)
+            {
+                EditorGUILayout.HelpBox(
+                    "The preset file " + _presetProblemFile + " is not " +
+                    "valid: " + _presetProblem + ". The preset row " +
+                    "stays off. Fix the file or reinstall the package.",
+                    MessageType.Warning);
+                return;
+            }
+
+            var component = (AmuseAvatarOptimizer)target;
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(
+                    "Presets", EditorStyles.boldLabel, GUILayout.Width(50));
+                foreach (var preset in _presets)
+                {
+                    var matched = preset.Matches(component);
+                    var clicked = GUILayout.Toggle(
+                        matched,
+                        new GUIContent(preset.Name, preset.Description),
+                        GUI.skin.button);
+                    if (clicked && !matched)
+                    {
+                        serializedObject.Update();
+                        PresetApplier.Apply(preset, serializedObject);
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// The Alpha Separator Settings foldout. It holds the user's
