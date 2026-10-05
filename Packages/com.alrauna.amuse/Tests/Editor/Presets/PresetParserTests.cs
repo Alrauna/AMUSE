@@ -205,6 +205,37 @@ namespace Alrauna.Amuse.Tests.Editor
                 Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
         }
 
+        private static string WithMipCap(int value)
+        {
+            return ValidJson.Replace(
+                "\"preserveTransparencyMaxMipLevel\": 4",
+                "\"preserveTransparencyMaxMipLevel\": " + value);
+        }
+
+        private static string WithMinTextureSize(int value)
+        {
+            return ValidJson.Replace(
+                "\"preserveTransparencyMinTextureSize\": 128",
+                "\"preserveTransparencyMinTextureSize\": " + value);
+        }
+
+        [Test]
+        public void AcceptedEdgeValuesParseSuccessfully()
+        {
+            foreach (var mipCap in new[] { -1, 0, 10 })
+            {
+                Assert.That(PresetParser.TryParse(
+                    WithMipCap(mipCap), out _, out var refusal),
+                    Is.True, "mip cap " + mipCap + ": " + refusal);
+            }
+            foreach (var size in new[] { -1, 2, 8192 })
+            {
+                Assert.That(PresetParser.TryParse(
+                    WithMinTextureSize(size), out _, out var refusal),
+                    Is.True, "texture size " + size + ": " + refusal);
+            }
+        }
+
         [Test]
         public void PercentAboveHundredRefuses()
         {
