@@ -16,6 +16,14 @@ namespace Alrauna.Amuse.Editor
         private bool _settingsOpen;
         private bool _alphaSeparatorOpen;
 
+        /// <summary>
+        /// The full product name under the title. A proper name, not a
+        /// sentence, so the plain-English sentence rules do not
+        /// rewrite it.
+        /// </summary>
+        internal const string ProductSubtext =
+            "Alrauna's Material Understanding and Simplification Engine";
+
         public override void OnInspectorGUI()
         {
             DrawHeader();
@@ -401,6 +409,12 @@ namespace Alrauna.Amuse.Editor
                 };
                 GUI.Label(row, "v" + version, right);
             }
+
+            var subtextStyle = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+            {
+                wordWrap = true,
+            };
+            EditorGUILayout.LabelField(ProductSubtext, subtextStyle);
 
             if (GUILayout.Button("Report a bug"))
             {
