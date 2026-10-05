@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -156,8 +157,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             atlas.Apply(false);
             clone.SetTexture("_MainTex", atlas);
             clone.SetFloat("_Cutoff", 0.75f);
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 ObjectRegistry.RegisterReplacedObject(originSource, clone);
@@ -181,7 +181,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 AaoAtlasTextureAttestation.ResetForTests();
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
@@ -262,7 +262,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             texture.Apply(false, false);
             AssetDatabase.SaveAssets();
             Assert.That(
-                GeneratedTextureAttestation.TryIdentifyProducer(texture, out _),
+                GeneratedTextureAttestation.TryIdentifyProducer(texture),
                 Is.True,
                 "The fixture must enter the generated capture route.");
             return texture;
@@ -282,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return TriangleAlphaClassifier.Classify(
                 triangle,
                 assignment.Texture.AlphaChannel[0],
-                new AlphaSamplingSettings(TextureFilterMode.Point, TextureWrapMode.Clamp),
+                new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp),
                 AlphaUvEnvelope.Zero);
         }
 
@@ -1231,48 +1231,35 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// </summary>
         private static Texture2D ImportRefusedFormat(string path)
         {
-            var staging = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            staging.SetPixels32(UniformPixels(255));
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            importer.isReadable = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            var settings = importer.GetPlatformTextureSettings("Standalone");
-            settings.overridden = true;
-            settings.format = TextureImporterFormat.RGBAHalf;
-            importer.SetPlatformTextureSettings(settings);
-            importer.SaveAndReimport();
-            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            return TestTextureImport.WritePng(
+                path, 4, 4, UniformPixels(255), importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = true;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    var settings = importer.GetPlatformTextureSettings("Standalone");
+                    settings.overridden = true;
+                    settings.format = TextureImporterFormat.RGBAHalf;
+                    importer.SetPlatformTextureSettings(settings);
+                });
         }
 
         private static Texture2D ImportAsymmetric(string path)
         {
-            var staging = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             var pixels = UniformPixels(255);
             pixels[0] = new Color32(64, 32, 16, 128);
             pixels[pixels.Length - 1] = new Color32(64, 32, 16, 254);
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            importer.isReadable = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Bilinear;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-            importer.sRGBTexture = true;
-            importer.alphaSource = TextureImporterAlphaSource.FromInput;
-            importer.SaveAndReimport();
-            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            return TestTextureImport.WritePng(
+                path, 4, 4, pixels, importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = true;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Bilinear;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                    importer.sRGBTexture = true;
+                    importer.alphaSource = TextureImporterAlphaSource.FromInput;
+                });
         }
 
         private static Color32[] UniformPixels(byte alpha)

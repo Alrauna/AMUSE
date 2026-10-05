@@ -14,53 +14,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         Unknown
     }
 
-    /// <summary>
-    /// The sampling shape the classifier proves under, in the semantics
-    /// layer's own closed vocabulary. Construction validates every mode,
-    /// so an undefined value fails at the construction site instead of
-    /// inside the proof.
-    /// </summary>
-    internal readonly struct AlphaSamplingSettings
-    {
-        private const TextureAnisoMode DefaultAniso = TextureAnisoMode.None;
-
-        internal TextureFilterMode FilterMode { get; }
-        internal TextureWrapMode WrapMode { get; }
-        internal TextureAnisoMode AnisoMode { get; }
-
-        /// <summary>
-        /// The common sampling shape: no anisotropy.
-        /// </summary>
-        internal AlphaSamplingSettings(
-            TextureFilterMode filterMode,
-            TextureWrapMode wrapMode)
-            : this(filterMode, wrapMode, DefaultAniso)
-        {
-        }
-
-        internal AlphaSamplingSettings(
-            TextureFilterMode filterMode,
-            TextureWrapMode wrapMode,
-            TextureAnisoMode anisoMode)
-        {
-            if (!Enum.IsDefined(typeof(TextureFilterMode), filterMode))
-            {
-                throw new ArgumentOutOfRangeException(nameof(filterMode));
-            }
-            if (!Enum.IsDefined(typeof(TextureWrapMode), wrapMode))
-            {
-                throw new ArgumentOutOfRangeException(nameof(wrapMode));
-            }
-            if (!Enum.IsDefined(typeof(TextureAnisoMode), anisoMode))
-            {
-                throw new ArgumentOutOfRangeException(nameof(anisoMode));
-            }
-
-            FilterMode = filterMode;
-            WrapMode = wrapMode;
-            AnisoMode = anisoMode;
-        }
-    }
 
     internal readonly struct TriangleAlphaInput
     {
@@ -299,7 +252,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaSamplingSettings sampling,
+            TextureSampling sampling,
             AlphaUvEnvelope envelope)
         {
             return Classify(triangle, texture, sampling, envelope, 0);
@@ -315,7 +268,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaSamplingSettings sampling,
+            TextureSampling sampling,
             AlphaUvEnvelope envelope,
             int maxNoiseTexelPercent)
         {
@@ -356,28 +309,28 @@ namespace Alrauna.Amuse.Editor.Analysis
             // unknown, and the chain conjunction then admits an anisotropic
             // triangle only when every level is fully opaque, which is
             // exactly the anisotropic soundness condition.
-            if (sampling.AnisoMode == TextureAnisoMode.Anisotropic)
+            if (sampling.Aniso == TextureAnisoMode.Anisotropic)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
 
-            if (sampling.FilterMode == TextureFilterMode.Point &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Point &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return ClassifyPointClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == TextureFilterMode.Point &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Point &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return ClassifyPointRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Bilinear &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Bilinear &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
@@ -386,13 +339,13 @@ namespace Alrauna.Amuse.Editor.Analysis
             // between-level blend of the two adjacent selected levels is
             // monotone, and the chain conjunction in the resolver proves both
             // operands, so the bilinear per-level verdict carries over.
-            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Trilinear &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return ClassifyBilinearClamp(triangle, texture, envelope, maxNoiseTexelPercent);
             }
-            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Trilinear &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return ClassifyBilinearRepeat(triangle, texture, envelope, maxNoiseTexelPercent);
             }
@@ -417,7 +370,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static TriangleAlphaOutcome ClassifyMapped(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
-            AlphaSamplingSettings sampling,
+            TextureSampling sampling,
             AlphaUvEnvelope envelope,
             AffineAlphaMap map)
         {
@@ -460,48 +413,48 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return DecideMapped(map, witness: true);
             }
 
-            if (sampling.AnisoMode == TextureAnisoMode.Anisotropic)
+            if (sampling.Aniso == TextureAnisoMode.Anisotropic)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
 
-            if (sampling.FilterMode == TextureFilterMode.Point &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Point &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return DecideMapped(
                     map,
                     HasMappedWitnessPointClamp(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Point &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Point &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return DecideMapped(
                     map,
                     HasMappedWitnessPointRepeat(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Bilinear &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return DecideMapped(
                     map,
                     HasMappedWitnessBilinearClamp(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Bilinear &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Bilinear &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return DecideMapped(
                     map,
                     HasMappedWitnessBilinearRepeat(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
-                sampling.WrapMode == TextureWrapMode.Clamp)
+            if (sampling.Filter == TextureFilterMode.Trilinear &&
+                sampling.Wrap == TextureWrapMode.Clamp)
             {
                 return DecideMapped(
                     map,
                     HasMappedWitnessBilinearClamp(triangle, texture, envelope));
             }
-            if (sampling.FilterMode == TextureFilterMode.Trilinear &&
-                sampling.WrapMode == TextureWrapMode.Repeat)
+            if (sampling.Filter == TextureFilterMode.Trilinear &&
+                sampling.Wrap == TextureWrapMode.Repeat)
             {
                 return DecideMapped(
                     map,

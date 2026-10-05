@@ -24,12 +24,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// </summary>
     public sealed class PoiyomiAdversarialTests : PoiyomiFixtureTestBase
     {
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private static ColorSemanticValue BaseColor(PoiyomiSemanticResult result)
         {
             Assert.That(result.Semantics.BaseColor.IsComplete, Is.True);

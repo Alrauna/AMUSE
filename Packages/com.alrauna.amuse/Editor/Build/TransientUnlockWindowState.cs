@@ -68,9 +68,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var pair in openPairs)
             {
-                if (ReferenceEquals(pair.LockedOriginal, material) ||
-                    (material is Material asMaterial &&
-                        asMaterial == pair.LockedOriginal))
+                if (material == pair.LockedOriginal)
                 {
                     return pair.UnlockedClone;
                 }

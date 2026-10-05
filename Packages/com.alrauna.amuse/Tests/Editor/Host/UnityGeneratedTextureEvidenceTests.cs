@@ -525,12 +525,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void IsExpectedTargetFormat_RequiresExactFormatMatch()
         {
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedTargetFormat(
+                UnityAlphaFieldEvidence.IsExpectedTargetFormat(
                     UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm,
                     UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm),
                 Is.True);
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedTargetFormat(
+                UnityAlphaFieldEvidence.IsExpectedTargetFormat(
                     UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_SRGB,
                     UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm),
                 Is.False);
@@ -540,10 +540,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void IsExpectedLevelSize_RequiresMatchingDimensions()
         {
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedLevelSize(8, 8, 8, 8),
+                UnityAlphaFieldEvidence.IsExpectedLevelSize(8, 8, 8, 8),
                 Is.True);
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedLevelSize(8, 4, 8, 8),
+                UnityAlphaFieldEvidence.IsExpectedLevelSize(8, 4, 8, 8),
                 Is.False);
         }
 
@@ -551,10 +551,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void IsExpectedBufferLength_RequiresExactProduct()
         {
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedBufferLength(64, 8, 8),
+                UnityAlphaFieldEvidence.IsExpectedBufferLength(64, 8, 8),
                 Is.True);
             Assert.That(
-                UnityGeneratedTextureEvidence.IsExpectedBufferLength(32, 8, 8),
+                UnityAlphaFieldEvidence.IsExpectedBufferLength(32, 8, 8),
                 Is.False);
         }
 

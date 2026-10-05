@@ -7,6 +7,7 @@ using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -21,7 +22,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private const string TestContainerPath = "Assets/AmuseTests_PersistedIdentity.asset";
 
         private ScriptableObject _container;
-        private nadena.dev.ndmf.IObjectRegistry previousRegistry;
+        private ObjectRegistryGuard registryGuard;
 
         [SetUp]
         public void SetUp()
@@ -38,8 +39,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // version and an isolated registry, so every test starts from the
             // same admitted-session shape and nothing leaks between tests.
             ReplacementTextureAttestation.ResetForTests();
-            previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            registryGuard = new ObjectRegistryGuard();
             ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
             ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
@@ -49,7 +49,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void TearDown()
         {
             ReplacementTextureAttestation.ResetForTests();
-            ObjectRegistry.ActiveRegistry = previousRegistry;
+            registryGuard.Dispose();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
@@ -66,29 +66,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             bool sourceHasAlpha,
             Action<TextureImporter> configure = null)
         {
-            var path = TempFolder + "/" + name + ".png";
-            var format = sourceHasAlpha ? TextureFormat.RGBA32 : TextureFormat.RGB24;
-            var staging = new Texture2D(4, 4, format, false);
             var pixels = new Color32[16];
             for (var i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = new Color32(128, 64, 32, 200);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                TempFolder + "/" + name + ".png",
+                4,
+                4,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    configure?.Invoke(importer);
+                },
+                alpha: sourceHasAlpha);
         }
 
         private static Material ImportFixtureMaterialAsset(string marker)
@@ -163,8 +157,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AdmittedCopyCarriesTheReplacementFormThroughTryGetSourceId()
         {
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var previousVersion =
                 ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull;
             var source = Import("replacement-source", sourceHasAlpha: true);
@@ -190,15 +183,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 ReplacementTextureAttestation.ResetForTests();
                 ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                     previousVersion;
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
             }
         }
 
         [Test]
         public void AdmittedAtlasWithCorroboratedOrigin_MintsTheAtlasIdentity()
         {
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var source = ImportFixtureMaterialAsset("atlas-origin");
             var clone = new Material(source.shader)
             {
@@ -229,7 +221,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
                 AaoAtlasTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
             }
         }
 

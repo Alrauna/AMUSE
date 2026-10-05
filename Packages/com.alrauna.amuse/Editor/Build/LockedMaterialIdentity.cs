@@ -16,11 +16,10 @@ namespace Alrauna.Amuse.Editor.Build
     /// Locked identity demands two signals, and both must hold: the shader
     /// name starts with <see cref="LockedShaderNamePrefix"/>, and the
     /// <see cref="OptimizerEnabledPropertyName"/> float equals exactly one.
-    /// Stale identity tags alone are never lock evidence, and the name prefix
-    /// alone is never lock evidence. The classification also records the
-    /// <c>OriginalShader</c>, <c>OriginalShaderGUID</c>, and
-    /// <c>AllLockedGUIDS</c> tags and whether the generated shader asset is
-    /// present, because later increments restore against those facts.
+    /// Stale identity tags alone are never lock evidence, and the name
+    /// prefix alone is never lock evidence. The classification also
+    /// records the <c>OriginalShader</c> and <c>OriginalShaderGUID</c>
+    /// tags, because later increments restore against those facts.
     /// </para>
     /// </summary>
     internal sealed class LockedMaterialIdentity
@@ -46,21 +45,14 @@ namespace Alrauna.Amuse.Editor.Build
         internal bool IsLocked { get; }
         internal string OriginalShader { get; }
         internal string OriginalShaderGuid { get; }
-        internal string AllLockedGuids { get; }
-        internal bool HasGeneratedShaderAsset { get; }
-
         private LockedMaterialIdentity(
             bool isLocked,
             string originalShader,
-            string originalShaderGuid,
-            string allLockedGuids,
-            bool hasGeneratedShaderAsset)
+            string originalShaderGuid)
         {
             IsLocked = isLocked;
             OriginalShader = originalShader;
             OriginalShaderGuid = originalShaderGuid;
-            AllLockedGuids = allLockedGuids;
-            HasGeneratedShaderAsset = hasGeneratedShaderAsset;
         }
 
         /// <summary>
@@ -74,25 +66,19 @@ namespace Alrauna.Amuse.Editor.Build
             internal float OptimizerEnabled { get; }
             internal string OriginalShaderTag { get; }
             internal string OriginalShaderGuidTag { get; }
-            internal string AllLockedGuidsTag { get; }
-            internal bool GeneratedShaderAssetPresent { get; }
 
             internal Serialization(
                 string shaderName,
                 bool hasOptimizerEnabled,
                 float optimizerEnabled,
                 string originalShaderTag,
-                string originalShaderGuidTag,
-                string allLockedGuidsTag,
-                bool generatedShaderAssetPresent)
+                string originalShaderGuidTag)
             {
                 ShaderName = shaderName;
                 HasOptimizerEnabled = hasOptimizerEnabled;
                 OptimizerEnabled = optimizerEnabled;
                 OriginalShaderTag = originalShaderTag;
                 OriginalShaderGuidTag = originalShaderGuidTag;
-                AllLockedGuidsTag = allLockedGuidsTag;
-                GeneratedShaderAssetPresent = generatedShaderAssetPresent;
             }
         }
 
@@ -127,9 +113,7 @@ namespace Alrauna.Amuse.Editor.Build
             return new LockedMaterialIdentity(
                 isLocked,
                 serialization.OriginalShaderTag,
-                serialization.OriginalShaderGuidTag,
-                serialization.AllLockedGuidsTag,
-                serialization.GeneratedShaderAssetPresent);
+                serialization.OriginalShaderGuidTag);
         }
 
         /// <summary>
@@ -215,11 +199,10 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Reads the serialization facts of one live material: the shader
-        /// name, the lock flag float, the three identity tags, and the
-        /// generated shader asset presence. The tag read follows the
-        /// material first and the shader tags second, because the locked
-        /// generated shader carries the identity tags in its own tag block.
-        /// An absent tag reads as null.
+        /// name, the lock flag float, and the two identity tags. The tag
+        /// read follows the material first and the shader tags second,
+        /// because the locked generated shader carries the identity tags
+        /// in its own tag block. An absent tag reads as null.
         /// </summary>
         private static Serialization SerializationOf(Material material)
         {
@@ -233,9 +216,7 @@ namespace Alrauna.Amuse.Editor.Build
                     ? material.GetFloat(OptimizerEnabledPropertyName)
                     : 0f,
                 TagOrNull(material, OriginalShaderTagName),
-                TagOrNull(material, OriginalShaderGuidTagName),
-                TagOrNull(material, AllLockedGuidsTagName),
-                !string.IsNullOrEmpty(AssetDatabase.GetAssetPath(shader)));
+                TagOrNull(material, OriginalShaderGuidTagName));
         }
 
         private static string TagOrNull(Material material, string tagName)

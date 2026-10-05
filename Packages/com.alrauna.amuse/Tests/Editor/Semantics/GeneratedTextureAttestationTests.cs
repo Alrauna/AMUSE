@@ -52,11 +52,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void SubAssetInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
         {
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                _subTexture, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(_subTexture);
 
             Assert.That(isCharacterized, Is.True);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.Anatawa12AvatarOptimizer));
         }
 
         [Test]
@@ -67,11 +65,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(monotoneTexture, TestContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                monotoneTexture, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(monotoneTexture);
 
             Assert.That(isCharacterized, Is.True);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.Anatawa12AvatarOptimizer));
         }
 
         [Test]
@@ -81,11 +77,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             loose.name = "MainTex (AAO UV Packed)";
             try
             {
-                var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                    loose, out var producer);
+                var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(loose);
 
                 Assert.That(isCharacterized, Is.False);
-                Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
             }
             finally
             {
@@ -101,11 +95,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(uncharacterized, TestContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                uncharacterized, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(uncharacterized);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -119,11 +111,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(textureInArbitrary, ArbitraryContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                textureInArbitrary, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(textureInArbitrary);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -137,11 +127,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(textureInForeign, ArbitraryContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                textureInForeign, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(textureInForeign);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -155,11 +143,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(textureInDerived, ArbitraryContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                textureInDerived, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(textureInDerived);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -188,11 +174,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 _ => "0.9.0";
             ReplacementTextureAttestation.SetAdmittedVersionsForTests();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                copy, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -205,11 +189,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             ReplacementTextureAttestation.ResetForTests();
             ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull = _ => null;
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                copy, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -221,11 +203,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                copy, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
             Assert.That(isCharacterized, Is.True);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.LimitexTextureCompressor));
         }
 
         [Test]
@@ -237,11 +217,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(baked, TestContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                baked, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(baked);
 
             Assert.That(isCharacterized, Is.True);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.LimitexTextureCompressor));
         }
 
         [Test]
@@ -255,11 +233,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             AssetDatabase.AddObjectToAsset(copy, ArbitraryContainerPath);
             AssetDatabase.SaveAssets();
 
-            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(
-                copy, out var producer);
+            var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
             Assert.That(isCharacterized, Is.False);
-            Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
         }
 
         [Test]
@@ -286,13 +262,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             loose.name = "MainTex (AAO UV Packed)";
             try
             {
-                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(
-                    loose, out var producer);
+                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(loose);
 
                 Assert.That(routed, Is.True);
-                Assert.That(
-                    producer,
-                    Is.EqualTo(GeneratedTextureProducer.Anatawa12AvatarOptimizer));
             }
             finally
             {
@@ -311,11 +283,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             loose.name = "MainTex (AAO UV Packed)";
             try
             {
-                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(
-                    loose, out var producer);
+                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(loose);
 
                 Assert.That(routed, Is.False);
-                Assert.That(producer, Is.EqualTo(GeneratedTextureProducer.None));
             }
             finally
             {

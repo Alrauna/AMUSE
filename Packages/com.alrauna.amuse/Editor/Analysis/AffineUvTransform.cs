@@ -170,22 +170,37 @@ namespace Alrauna.Amuse.Editor.Analysis
             ExactRational error1,
             ExactRational error2)
         {
-            var p = Maximum(Abs(ToRational(p0)), Abs(ToRational(p1)), Abs(ToRational(p2)));
-            var m = Maximum(Abs(ToRational(t0)), Abs(ToRational(t1)), Abs(ToRational(t2)));
-            var encoding = Maximum(Abs(error0), Abs(error1), Abs(error2));
-            var relative = Multiply(new ExactRational(BigInteger.One, BigInteger.One << 22), Add(p, m));
+            var p = ExactRational.Maximum(
+                ExactRational.Abs(ToRational(p0)),
+                ExactRational.Abs(ToRational(p1)),
+                ExactRational.Abs(ToRational(p2)));
+            var m = ExactRational.Maximum(
+                ExactRational.Abs(ToRational(t0)),
+                ExactRational.Abs(ToRational(t1)),
+                ExactRational.Abs(ToRational(t2)));
+            var encoding = ExactRational.Maximum(
+                ExactRational.Abs(error0),
+                ExactRational.Abs(error1),
+                ExactRational.Abs(error2));
+            var relative = ExactRational.Multiply(
+                new ExactRational(BigInteger.One, BigInteger.One << 22),
+                ExactRational.Add(p, m));
             var flush = new ExactRational(BigInteger.One, BigInteger.One << 125);
-            var daz = Multiply(
+            var daz = ExactRational.Multiply(
                 new ExactRational(BigInteger.One, BigInteger.One << 126),
-                Add(
-                    Add(
-                        Abs(ToRational(scale)),
-                        Maximum(
-                            Abs(ToRational(c0)),
-                            Abs(ToRational(c1)),
-                            Abs(ToRational(c2)))),
+                ExactRational.Add(
+                    ExactRational.Add(
+                        ExactRational.Abs(ToRational(scale)),
+                        ExactRational.Maximum(
+                            ExactRational.Abs(ToRational(c0)),
+                            ExactRational.Abs(ToRational(c1)),
+                            ExactRational.Abs(ToRational(c2)))),
                     new ExactRational(BigInteger.One)));
-            return Add(Add(encoding, Add(relative, flush)), daz);
+            return ExactRational.Add(
+                ExactRational.Add(
+                    encoding,
+                    ExactRational.Add(relative, flush)),
+                daz);
         }
 
         private static bool SameNormalSide(ExactDyadic a, ExactDyadic b, ExactDyadic c)
@@ -243,33 +258,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             return value.Exponent >= 0
                 ? new ExactRational(value.Significand << value.Exponent)
                 : new ExactRational(value.Significand, BigInteger.One << -value.Exponent);
-        }
-
-        private static ExactRational Add(ExactRational left, ExactRational right)
-        {
-            return ExactRational.Add(left, right);
-        }
-
-        private static ExactRational Multiply(ExactRational left, ExactRational right)
-        {
-            return ExactRational.Multiply(left, right);
-        }
-
-        private static ExactRational Abs(ExactRational value)
-        {
-            return new ExactRational(BigInteger.Abs(value.Numerator), value.Denominator);
-        }
-
-        private static ExactRational Maximum(
-            ExactRational a,
-            ExactRational b,
-            ExactRational c)
-        {
-            return a.CompareTo(b) >= 0 && a.CompareTo(c) >= 0
-                ? a
-                : b.CompareTo(c) >= 0
-                    ? b
-                    : c;
         }
 
         // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.

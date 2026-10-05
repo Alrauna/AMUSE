@@ -1198,7 +1198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return AlphaResolution.Classified(
                 new AlphaMipChain(
                     new[] { new AlphaTextureData(1, 1, new[] { texel }) }),
-                new AlphaSamplingSettings(
+                new TextureSampling(
                     TextureFilterMode.Point, TextureWrapMode.Clamp),
                 new UvMapping(0, Vector2.one, Vector2.zero), 0);
         }

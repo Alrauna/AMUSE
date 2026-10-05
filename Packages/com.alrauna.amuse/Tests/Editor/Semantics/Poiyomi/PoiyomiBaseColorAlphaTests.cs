@@ -66,14 +66,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaPremultiply",
         };
 
-        private static PoiyomiSemanticResult Interpret(
-            Material material,
-            ColorSpace colorSpace = ColorSpace.Linear)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, colorSpace);
-        }
-
         private static ColorSemanticValue BaseColor(PoiyomiSemanticResult result)
         {
             Assert.That(
@@ -444,12 +436,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_EnableTouchGlow",
             "_MainVertexColoringEnabled",
         };
-
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
 
         private static ScalarSemanticValue Alpha(PoiyomiSemanticResult result)
         {

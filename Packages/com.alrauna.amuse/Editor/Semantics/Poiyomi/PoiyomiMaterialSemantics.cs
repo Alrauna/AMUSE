@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 {
@@ -1364,8 +1365,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // term performs over its layered chain.
             if (maskMultiplier != null)
             {
-                var multiplied = MultiplyAlphaValues(
-                    baseChain, maskMultiplier, diagnostics);
+                var multiplied = ScalarProductFold.Fold(
+                    baseChain,
+                    maskMultiplier,
+                    MainAlphaMaskModeProperty,
+                    property => AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        property),
+                    threadMaps: false);
                 if (multiplied == null)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -1434,13 +1443,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            var rgbOpaque = blendOp == 0f &&
-                ((src == 1f && dst == 0f) ||
-                    (src == 5f && dst == 10f) ||
-                    (src == 1f && dst == 10f));
-            var alphaForcedToOne = srcBlendAlpha == 1f &&
-                (dstBlendAlpha is 0f or 1f or 10f) &&
-                (blendOpAlpha is 0f or 4f);
+            var rgbOpaque = blendOp == (float)BlendOp.Add &&
+                ((src == (float)BlendMode.One && dst == (float)BlendMode.Zero) ||
+                    (src == (float)BlendMode.SrcAlpha && dst == (float)BlendMode.OneMinusSrcAlpha) ||
+                    (src == (float)BlendMode.One && dst == (float)BlendMode.OneMinusSrcAlpha));
+            var alphaForcedToOne = srcBlendAlpha == (float)BlendMode.One &&
+                (dstBlendAlpha == (float)BlendMode.Zero ||
+                    dstBlendAlpha == (float)BlendMode.One ||
+                    dstBlendAlpha == (float)BlendMode.OneMinusSrcAlpha) &&
+                (blendOpAlpha == (float)BlendOp.Add ||
+                    blendOpAlpha == (float)BlendOp.Max);
             return rgbOpaque && alphaForcedToOne;
         }
 
@@ -1822,138 +1834,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return false;
         }
 
-        /// <summary>
-        /// The exact product fold the Multiply mask mode shares with the
-        /// lilToon term. The exact-one predicate of a product of values
-        /// bounded in [0, 1] is association-invariant: every rounded chain of
-        /// sub-one factors stays strictly below one, and all-one factors
-        /// answer exactly one in every association, so the fold through the
-        /// constants and factor lists changes nothing provable. Returns null
-        /// after recording a refusal when either shape is a saturating sum or
-        /// difference, whose exact-one predicate is not
-        /// multiplication-invariant. The refusal names the mode property,
-        /// exactly like the lilToon fold.
-        /// </summary>
-        private static ScalarSemanticValue MultiplyAlphaValues(
-            ScalarSemanticValue baseChain,
-            ScalarSemanticValue maskFactor,
-            List<PoiyomiSemanticDiagnostic> diagnostics)
-        {
-            if (baseChain.Kind == ScalarSemanticValueKind.SaturatingSum ||
-                baseChain.Kind ==
-                    ScalarSemanticValueKind.SaturatingDifference ||
-                maskFactor.Kind == ScalarSemanticValueKind.SaturatingSum ||
-                maskFactor.Kind ==
-                    ScalarSemanticValueKind.SaturatingDifference)
-            {
-                AddDiagnostic(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    MainAlphaMaskModeProperty);
-                return null;
-            }
-
-            var samples = new List<TextureSample>();
-            var channels = new List<TextureChannel>();
-            var multiplier = 1f;
-            multiplier = CollectProductFactors(
-                baseChain, samples, channels, multiplier);
-            multiplier = CollectProductFactors(
-                maskFactor, samples, channels, multiplier);
-
-            if (samples.Count == 0)
-            {
-                return ScalarSemanticValue.Constant(multiplier);
-            }
-
-            if (samples.Count == 1)
-            {
-                return ScalarSemanticValue.TextureTimesConstant(
-                    samples[0], channels[0], multiplier);
-            }
-
-            return ScalarSemanticValue.ProductChain(
-                samples, channels, multiplier);
-        }
-
-        private static float CollectProductFactors(
-            ScalarSemanticValue value,
-            List<TextureSample> samples,
-            List<TextureChannel> channels,
-            float multiplier)
-        {
-            switch (value.Kind)
-            {
-                case ScalarSemanticValueKind.Constant:
-                    return multiplier * value.GetConstantValue();
-                case ScalarSemanticValueKind.TextureSample:
-                    samples.Add(value.GetTextureSample());
-                    channels.Add(value.GetChannel());
-                    return multiplier;
-                case ScalarSemanticValueKind.TextureSampleTimesConstant:
-                    samples.Add(value.GetTextureSample());
-                    channels.Add(value.GetChannel());
-                    return multiplier * value.GetMultiplier();
-                case ScalarSemanticValueKind
-                    .ProductChainOfTextureSamples:
-                    for (var index = 0;
-                         index < value.GetChainFactorCount();
-                         index++)
-                    {
-                        samples.Add(value.GetChainSample(index));
-                        channels.Add(value.GetChainChannel(index));
-                    }
-
-                    return multiplier * value.GetProductMultiplier();
-                default:
-                    throw new InvalidOperationException(
-                        "A saturating shape reached product factor " +
-                        "collection, which the caller must refuse first.");
-            }
-        }
-
-        /// <summary>
-        /// Reads a strictly binary (0 or 1) float flag. A missing, non-finite,
-        /// or non-binary value cannot be read as a proven on/off state.
-        /// </summary>
-        private static bool TryReadBinary(
-            Material material,
-            string property,
-            out bool isSet)
-        {
-            isSet = false;
-            if (!material.HasProperty(property))
-            {
-                return false;
-            }
-
-            var value = material.GetFloat(property);
-            if (!IsFinite(value) || (value != 0f && value != 1f))
-            {
-                return false;
-            }
-
-            isSet = value == 1f;
-            return true;
-        }
-
-        private static bool TryReadBinary(
-            CapturedMaterialEvidence evidence,
-            string property,
-            out bool isSet)
-        {
-            isSet = false;
-            if (!evidence.TryGetScalar(property, out var value) ||
-                !IsFinite(value) || (value != 0f && value != 1f))
-            {
-                return false;
-            }
-
-            isSet = value == 1f;
-            return true;
-        }
-
         // --- Emission equation (Task 6) -------------------------------------
 
         /// <summary>
@@ -2291,30 +2171,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         internal static string ComputeNormalizedSourceHash(string rawSource)
         {
-            if (rawSource == null)
-            {
-                throw new ArgumentNullException(nameof(rawSource));
-            }
-
-            if (rawSource.Length > 0 && rawSource[0] == '﻿')
-            {
-                rawSource = rawSource.Substring(1);
-            }
-
-            rawSource = rawSource.Replace("\r\n", "\n").Replace("\r", "\n");
-
-            var bytes = new UTF8Encoding(false).GetBytes(rawSource);
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(bytes);
-                var builder = new StringBuilder(hash.Length * 2);
-                foreach (var value in hash)
-                {
-                    builder.Append(value.ToString("x2"));
-                }
-
-                return builder.ToString();
-            }
+            return NormalizedSourceHash.Compute(rawSource);
         }
 
         /// <summary>
@@ -2699,60 +2556,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        /// <summary>
-        /// True only when every named property exists, is finite, and is
-        /// exactly zero. Used as the exact-off gate for mode flags and feature
-        /// toggles; a missing property cannot prove the feature is off.
-        /// </summary>
-        internal static bool AreExactlyZero(
-            Material material,
-            params string[] properties)
-        {
-            return FirstFailedZeroGate(material, properties) == null;
-        }
-
-        /// <summary>
-        /// Returns the first property that fails the exact-off gate — missing,
-        /// non-finite, or not exactly zero — or null when every property proves
-        /// off. Naming the offending property lets an output diagnostic point at
-        /// the exact enabled feature.
-        /// </summary>
-        private static string FirstFailedZeroGate(
-            Material material,
-            params string[] properties)
-        {
-            foreach (var property in properties)
-            {
-                if (!material.HasProperty(property))
-                {
-                    return property;
-                }
-
-                var value = material.GetFloat(property);
-                if (!IsFinite(value) || value != 0f)
-                {
-                    return property;
-                }
-            }
-
-            return null;
-        }
-
-        private static string FirstFailedZeroGate(
-            CapturedMaterialEvidence evidence,
-            params string[] properties)
-        {
-            foreach (var property in properties)
-            {
-                if (!evidence.TryGetScalar(property, out var value) ||
-                    !IsFinite(value) || value != 0f)
-                {
-                    return property;
-                }
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Extracts the sampler declared by <c>_MainTex</c>, which the pinned
@@ -2773,21 +2576,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return UnityTextureEvidence.TryGetSampling(mainTexture, out sampling);
         }
 
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
-        }
-
-        private static bool IsFinite(Vector2 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y);
-        }
-
-        private static bool IsFinite(Vector4 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y) &&
-                   IsFinite(value.z) && IsFinite(value.w);
-        }
 
         /// <summary>
         /// Selects a color texture's linear/sRGB import interpretation from its
@@ -2822,28 +2610,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
         }
 
-        private static void RequireAnalyzableMaterial(Material material)
-        {
-            if (ReferenceEquals(material, null))
-            {
-                throw new ArgumentNullException(nameof(material));
-            }
-
-            // Unity's overloaded equality reports a destroyed object as null.
-            if (material == null)
-            {
-                throw new ArgumentException(
-                    "The material has been destroyed and cannot be analyzed.",
-                    nameof(material));
-            }
-
-            if (material.shader == null)
-            {
-                throw new ArgumentException(
-                    "The material has no shader and cannot be analyzed.",
-                    nameof(material));
-            }
-        }
 
         private static PoiyomiSemanticDiagnostic MaterialDiagnostic(
             PoiyomiSemanticDiagnosticCode code,
@@ -2864,14 +2630,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new[] { diagnostic });
         }
 
-        private static MaterialSemantics AllUnknown()
-        {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<ScalarSemanticValue>.Unknown(),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
-        }
     }
 
     /// <summary>

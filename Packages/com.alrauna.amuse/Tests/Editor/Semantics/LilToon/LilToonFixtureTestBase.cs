@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -19,15 +20,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// </summary>
     public abstract class LilToonFixtureTestBase
     {
-        protected const string FixtureShaderName =
+        internal const string FixtureShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
         protected const string TempFolder = "Assets/AmuseTests_LilToon";
 
-        protected const string CutoutConversionShaderName =
+        internal const string CutoutConversionShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
-        protected const string OpaqueConversionShaderName =
+        internal const string OpaqueConversionShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonOpaqueConversionTest";
-        protected const string TransparentConversionShaderName =
+        internal const string TransparentConversionShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest";
 
         /// <summary>Every feature symbol a fully compiled lilToon exposes.</summary>
@@ -39,41 +40,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "LIL_FEATURE_EmissionMap",
         };
 
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(TempFolder);
 
         [SetUp]
         public void BaseSetUp()
         {
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder("Assets", "AmuseTests_LilToon");
-            }
+            _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void BaseTearDown()
         {
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
-
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
+            _scope.TearDown();
         }
 
         protected T Track<T>(T obj) where T : UnityEngine.Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         protected Material NewFixtureMaterial()
@@ -160,7 +144,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var path = tempFolder + "/" +
                 shaderName.Replace('/', '-') + ".shader";
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    Properties\n    {\n" +
@@ -298,10 +282,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "            ENDCG\n" +
                 "        }\n" +
                 "    }\n}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
-            Assert.That(shader, Is.Not.Null, path);
             var material = new Material(shader);
             material.shaderKeywords = keywords;
             return material;
@@ -364,30 +344,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Action<TextureImporter> configure = null,
             bool sourceHasAlpha = true)
         {
-            var path = TempFolder + "/" + name + ".png";
-            var format = sourceHasAlpha ? TextureFormat.RGBA32 : TextureFormat.RGB24;
-            var staging = new Texture2D(4, 4, format, false);
             var pixels = new Color32[16];
             for (var i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = new Color32(128, 64, 32, 200);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                TempFolder + "/" + name + ".png",
+                4,
+                4,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    configure?.Invoke(importer);
+                },
+                alpha: sourceHasAlpha);
         }
 
         /// <summary>
@@ -417,46 +390,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     nameof(baseLevelBottomToTop));
             }
 
-            var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            staging.SetPixels32(baseLevelBottomToTop);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = true;
-            importer.filterMode = filterMode;
-            importer.wrapMode = wrapMode;
-            importer.streamingMipmaps = false;
-            // Uncompressed keeps the imported GPU format RGBA32: the
-            // alpha-evidence format allowlist admits RGBA32 exactly, while
-            // platform compression would collapse an all-opaque source to
-            // DXT1, which has no alpha channel to prove and refuses.
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
-        }
-
-        /// <summary>The mip count the importer actually produced.</summary>
-        protected static int MipCount(Texture2D texture)
-        {
-            return texture.mipmapCount;
-        }
-
-        /// <summary>
-        /// Reads one mip level of a loaded texture as RGBA32 texels,
-        /// bottom-to-top, for chain-shape assertions.
-        /// </summary>
-        protected static Color32[] ReadMipLevel(Texture2D texture, int mipLevel)
-        {
-            return texture.GetPixels32(mipLevel);
+            return TestTextureImport.WritePng(
+                TempFolder + "/" + name + ".png",
+                width,
+                height,
+                baseLevelBottomToTop,
+                importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.filterMode = filterMode;
+                    importer.wrapMode = wrapMode;
+                    importer.streamingMipmaps = false;
+                    // Uncompressed keeps the imported GPU format RGBA32: the
+                    // alpha-evidence format allowlist admits RGBA32 exactly,
+                    // while platform compression would collapse an
+                    // all-opaque source to DXT1, which has no alpha channel
+                    // to prove and refuses.
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    configure?.Invoke(importer);
+                });
         }
 
         protected Texture2D ImportNormalMap(string name)
@@ -531,11 +484,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         protected Texture2D CreateNativeTextureAsset(string name)
         {
-            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            texture.Apply();
-            var path = TempFolder + "/" + name + ".asset";
-            AssetDatabase.CreateAsset(texture, path);
-            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            return TestTextureImport.ImportNative(
+                TempFolder + "/" + name + ".asset");
         }
     }
 }

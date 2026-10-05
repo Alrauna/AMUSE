@@ -6,6 +6,7 @@ using Alrauna.Amuse.Editor.Host;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -1139,124 +1140,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return true;
         }
 
-        private static SemanticOutput<T> RecordUnknown<T>(
-            List<LilToonSemanticDiagnostic> diagnostics,
-            LilToonSemanticOutput output,
-            LilToonSemanticDiagnosticCode code,
-            string detail)
-            where T : class
-        {
-            diagnostics.Add(new LilToonSemanticDiagnostic(output, code, detail));
-            return SemanticOutput<T>.Unknown();
-        }
-
-        /// <summary>
-        /// Returns the first property that fails the exact-off gate — missing,
-        /// non-finite, or not exactly zero — or null when every property proves
-        /// off. Naming the offending property lets an output diagnostic point at
-        /// the exact enabled feature.
-        /// </summary>
-        private static string FirstFailedZeroGate(
-            Material material,
-            params string[] properties)
-        {
-            foreach (var property in properties)
-            {
-                if (!material.HasProperty(property))
-                {
-                    return property;
-                }
-
-                var value = material.GetFloat(property);
-                if (!IsFinite(value) || value != 0f)
-                {
-                    return property;
-                }
-            }
-
-            return null;
-        }
-
-        private static string FirstFailedZeroGate(
-            CapturedMaterialEvidence evidence,
-            params string[] properties)
-        {
-            foreach (var property in properties)
-            {
-                if (!evidence.TryGetScalar(property, out var value) ||
-                    !IsFinite(value) || value != 0f)
-                {
-                    return property;
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Reads a strictly binary (0 or 1) float flag. A missing, non-finite,
-        /// or non-binary value cannot be read as a proven on/off state.
-        /// </summary>
-        private static bool TryReadBinary(
-            Material material,
-            string property,
-            out bool isSet)
-        {
-            isSet = false;
-            if (!material.HasProperty(property))
-            {
-                return false;
-            }
-
-            var value = material.GetFloat(property);
-            if (!IsFinite(value) || (value != 0f && value != 1f))
-            {
-                return false;
-            }
-
-            isSet = value == 1f;
-            return true;
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
-        }
-
-        private static bool IsFinite(Vector2 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y);
-        }
-
-        private static bool IsFinite(Vector4 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y) &&
-                   IsFinite(value.z) && IsFinite(value.w);
-        }
-
-        private static void RequireAnalyzableMaterial(Material material)
-        {
-            if (ReferenceEquals(material, null))
-            {
-                throw new ArgumentNullException(nameof(material));
-            }
-
-            // Unity's overloaded equality reports a destroyed object as null.
-            if (material == null)
-            {
-                throw new ArgumentException(
-                    "The material has been destroyed and cannot be analyzed.",
-                    nameof(material));
-            }
-
-            if (material.shader == null)
-            {
-                throw new ArgumentException(
-                    "The material has no shader and cannot be analyzed.",
-                    nameof(material));
-            }
-        }
-
         private static LilToonSemanticResult Unsupported(
             LilToonSemanticDiagnostic diagnostic)
         {
@@ -1264,15 +1147,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 false,
                 AllUnknown(),
                 new[] { diagnostic });
-        }
-
-        private static MaterialSemantics AllUnknown()
-        {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<ScalarSemanticValue>.Unknown(),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
         }
     }
 }

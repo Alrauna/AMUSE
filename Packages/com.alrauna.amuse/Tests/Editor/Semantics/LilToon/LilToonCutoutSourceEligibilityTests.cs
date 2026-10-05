@@ -1,6 +1,7 @@
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -191,7 +192,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         private static LilToonOpaqueConversionEligibility EvaluateFor(Material material)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility(
                 CaptureConversion(material), queue, renderType);
@@ -208,7 +209,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Material material, string property, float value,
             bool allowDepthTestChange = false)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility(
                 CaptureConversion(material).WithScalar(property, value),

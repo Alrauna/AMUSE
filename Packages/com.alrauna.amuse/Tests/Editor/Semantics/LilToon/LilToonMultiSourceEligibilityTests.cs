@@ -1,5 +1,6 @@
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -158,7 +159,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Material material,
             int mode)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonMultiSourceEligibility.EvaluateVerifiedEligibility(
                 CaptureMultiConversion(material), queue, renderType, mode);
@@ -175,7 +176,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private static LilToonOpaqueConversionEligibility
             EvaluateRegularCutoutTwin(Material material)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
@@ -200,7 +201,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private static LilToonOpaqueConversionEligibility
             EvaluateRegularTransparentTwin(Material material)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {

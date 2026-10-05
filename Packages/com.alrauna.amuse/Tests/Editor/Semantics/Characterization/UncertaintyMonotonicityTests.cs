@@ -91,12 +91,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     /// </summary>
     public sealed class PoiyomiUncertaintyMonotonicityTests : PoiyomiFixtureTestBase
     {
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private Texture2D _main;
         private Texture2D _bump;
         private Texture2D _emission;

@@ -87,7 +87,7 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            if (!GeneratedTextureAttestation.TryIdentifyRouteTexture(texture, out _))
+            if (!GeneratedTextureAttestation.TryIdentifyRouteTexture(texture))
             {
                 return false;
             }
@@ -150,6 +150,63 @@ namespace Alrauna.Amuse.Editor.Host
                 var levels = new AlphaTextureData[mipCount];
                 var withoutEvidence = new bool[mipCount];
 
+                // Loop-invariant decode and validate delegates: the
+                // closure captures only the clamped threshold, so one
+                // instance serves every mip level.
+                Func<AsyncGPUReadbackRequest, int, int, byte[]> decode =
+                    (request, width, height) =>
+                    {
+                        var data = request.GetData<Color32>();
+                        if (!UnityAlphaFieldEvidence
+                                .IsExpectedBufferLength(
+                                    data.Length, width, height))
+                        {
+                            return null;
+                        }
+
+                        var flags = new byte[data.Length];
+                        if (threshold >= 1.0f)
+                        {
+                            // The shader already emitted the
+                            // exact three-state verdict under the
+                            // active bounds, so the red byte
+                            // stores verbatim, byte for byte, as
+                            // the GPU route stores its readback.
+                            // Re-deriving the flags from the
+                            // verdict byte would compare the mid
+                            // band's 0 against the noise bound and
+                            // turn every below-exact-one texel
+                            // into erasable noise.
+                            for (var i = 0; i < data.Length; i++)
+                            {
+                                flags[i] = data[i].r;
+                            }
+                        }
+                        else
+                        {
+                            // A shader cutoff source stays
+                            // gate-inert: binarize the raw value
+                            // the shader returns in green, with
+                            // no erasure and no policy bounds.
+                            // Green-arm flags are synthesized
+                            // values, so predicate-flag validation
+                            // there would be vacuous and stays
+                            // absent, exactly as before the core.
+                            for (var i = 0; i < data.Length; i++)
+                            {
+                                flags[i] =
+                                    (data[i].g / 255f) >= threshold
+                                        ? byte.MaxValue
+                                        : (byte)0;
+                            }
+                        }
+
+                        return flags;
+                    };
+                Func<byte[], bool> validate = threshold >= 1.0f
+                    ? UnityAlphaFieldEvidence.IsPredicateFlagBuffer
+                    : null;
+
                 try
                 {
                     for (var m = 0; m < mipCount; m++)
@@ -169,85 +226,17 @@ namespace Alrauna.Amuse.Editor.Host
                             continue;
                         }
 
-                        var width = Mathf.Max(1, texture.width >> m);
-                        var height = Mathf.Max(1, texture.height >> m);
-                        material.SetInt("_Mip", m);
-
-                        var descriptor = new RenderTextureDescriptor(width, height, TargetFormat, 0)
+                        if (!UnityAlphaFieldEvidence.TryAcquireLevelCore(
+                                texture,
+                                m,
+                                material,
+                                TargetFormat,
+                                saveRestoreActiveTarget: false,
+                                decode: decode,
+                                validate: validate,
+                                level: out levels[m]))
                         {
-                            sRGB = false,
-                            useMipMap = false,
-                            autoGenerateMips = false
-                        };
-
-                        var rt = RenderTexture.GetTemporary(descriptor);
-
-                        try
-                        {
-                            if (!IsExpectedTargetFormat(rt.graphicsFormat, TargetFormat) ||
-                                !IsExpectedLevelSize(rt.width, rt.height, width, height))
-                            {
-                                return false;
-                            }
-
-                            Graphics.Blit(texture, rt, material);
-
-                            var request = AsyncGPUReadback.Request(rt, 0, TargetFormat);
-                            request.WaitForCompletion();
-                            if (request.hasError ||
-                                !IsExpectedLevelSize(request.width, request.height, width, height))
-                            {
-                                return false;
-                            }
-
-                            var data = request.GetData<Color32>();
-                            if (!IsExpectedBufferLength(data.Length, width, height))
-                            {
-                                return false;
-                            }
-
-                            var flags = new byte[data.Length];
-                            if (threshold >= 1.0f)
-                            {
-                                // The shader already emitted the exact
-                                // three-state verdict under the active
-                                // bounds, so the red byte stores verbatim,
-                                // byte for byte, as the GPU route stores
-                                // its readback. Re-deriving the flags from
-                                // the verdict byte would compare the mid
-                                // band's 0 against the noise bound and
-                                // turn every below-exact-one texel into
-                                // erasable noise.
-                                for (var i = 0; i < data.Length; i++)
-                                {
-                                    flags[i] = data[i].r;
-                                }
-
-                                if (!UnityAlphaFieldEvidence
-                                        .IsPredicateFlagBuffer(flags))
-                                {
-                                    return false;
-                                }
-                            }
-                            else
-                            {
-                                // A shader cutoff source stays gate-inert:
-                                // binarize the raw value the shader
-                                // returns in green, with no erasure and
-                                // no policy bounds.
-                                for (var i = 0; i < data.Length; i++)
-                                {
-                                    flags[i] = (data[i].g / 255f) >= threshold
-                                        ? byte.MaxValue
-                                        : (byte)0;
-                                }
-                            }
-
-                            levels[m] = new AlphaTextureData(width, height, flags);
-                        }
-                        finally
-                        {
-                            RenderTexture.ReleaseTemporary(rt);
+                            return false;
                         }
                     }
                 }
@@ -301,22 +290,5 @@ namespace Alrauna.Amuse.Editor.Host
             return asyncReadback && targetRenderable && sourceSampleable;
         }
 
-        internal static bool IsExpectedTargetFormat(
-            GraphicsFormat actual, GraphicsFormat expected)
-        {
-            return actual == expected;
-        }
-
-        internal static bool IsExpectedLevelSize(
-            int width, int height, int expectedWidth, int expectedHeight)
-        {
-            return width == expectedWidth && height == expectedHeight;
-        }
-
-        internal static bool IsExpectedBufferLength(
-            long actualLength, int width, int height)
-        {
-            return actualLength == (long)width * height;
-        }
     }
 }

@@ -294,20 +294,13 @@ namespace Alrauna.Amuse.Editor.Build
                     foreach (var objectBinding in
                                  clipEvidence.ObjectBindings)
                     {
-                        if (!string.Equals(
-                                objectBinding.Path,
-                                rendererPath,
-                                StringComparison.Ordinal) ||
-                            !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
-                                objectBinding.TypeName,
-                                rendererTypeName))
-                        {
-                            continue;
-                        }
-
-                        if (LiveAnimationObservation
-                                .TryParseMaterialSlotBinding(
+                        if (UnityAnimationEvidenceCapture
+                                .TryParseMaterialSlotBindingFor(
+                                    objectBinding.Path,
+                                    objectBinding.TypeName,
                                     objectBinding.PropertyName,
+                                    rendererPath,
+                                    rendererTypeName,
                                     out var markerSlot) &&
                             markerSlot == slotIndex)
                         {
@@ -620,48 +613,14 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     var isTransparent = captured.Family ==
                         CapturedAlphaMaterialFamily.LilToonTransparent;
-                    // Derived conversion evidence: the same group-and-admit
-                    // loop the alpha resolution uses, re-run against this
-                    // family's own conversion request, so conversion shares
-                    // one admission implementation rather than duplicating
-                    // it. A conversion-relevant animated property that is
-                    // not an exact singleton equal to this material's own
-                    // serialized default refuses here.
-                    if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
-                            captured,
-                            conversionBindings,
-                            ConversionRequestForFamily(captured.Family),
-                            out var derived,
-                            out _))
+                    var admission = TryAdmitConversionEvidence(
+                        captured,
+                        conversionBindings,
+                        conversionPropertyNames,
+                        out var derived);
+                    if (admission != AlphaSeparationSlotRefusal.None)
                     {
-                        return AlphaSeparationSlotRefusal
-                            .ConversionStateNotAdmitted;
-                    }
-
-                    // The renderer-wide runtime-overwrite rule runs BEFORE
-                    // the conversion step, against this family's own recipe:
-                    // a canonical recipe property that an admitted
-                    // conversion binding drives must already hold its
-                    // canonical value, because admission is exact-singleton
-                    // against the material's own serialized default. Failing
-                    // it is a slot-local refusal, not a defect — and no
-                    // material may be created for a slot already known to
-                    foreach (var (property, canonicalValue) in
-                                 CanonicalPropertiesForFamily(
-                                     captured.Family))
-                    {
-                        if (!conversionPropertyNames.Contains(property))
-                        {
-                            continue;
-                        }
-
-                        if (!derived.TryGetScalar(
-                                property, out var admitted) ||
-                            admitted != canonicalValue)
-                        {
-                            return AlphaSeparationSlotRefusal
-                                .ConversionPropertyOverwrittenAtRuntime;
-                        }
+                        return admission;
                     }
 
                     // A resolved Multi material attested once, at the one
@@ -679,7 +638,7 @@ namespace Alrauna.Amuse.Editor.Build
                         // Effective non-property facts, read in the barrier
                         // beside the evidence exactly as the regular route
                         // reads them: neither fact is animation-reachable.
-                        LilToonOpaqueTarget.ReadEffectiveRenderState(
+                        EffectiveRenderState.ReadEffectiveRenderState(
                             live, out var multiQueue,
                             out var multiRenderType);
                         if (!LilToonMultiResolution.TryReadCapturedMode(
@@ -749,7 +708,7 @@ namespace Alrauna.Amuse.Editor.Build
                         // beside the evidence: neither fact is
                         // animation-reachable, so reading them here is not a
                         // late live read of animation-relevant state.
-                        LilToonOpaqueTarget.ReadEffectiveRenderState(
+                        EffectiveRenderState.ReadEffectiveRenderState(
                             live, out var queue, out var renderType);
 
                         // Conversion attestation of the pinned cutout or
@@ -806,50 +765,14 @@ namespace Alrauna.Amuse.Editor.Build
                 }
                 case CapturedAlphaMaterialFamily.Poiyomi:
                 {
-                    // Derived conversion evidence: the same group-and-admit
-                    // loop the alpha resolution uses, re-run against this
-                    // family's own conversion request, so conversion shares
-                    // one admission implementation rather than duplicating
-                    // it. A conversion-relevant animated property that is
-                    // not an exact singleton equal to this material's own
-                    // serialized default refuses here.
-                    if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
-                            captured,
-                            conversionBindings,
-                            PoiyomiOpaqueConversion
-                                .ConversionEvidenceRequest,
-                            out var derived,
-                            out _))
+                    var admission = TryAdmitConversionEvidence(
+                        captured,
+                        conversionBindings,
+                        conversionPropertyNames,
+                        out var derived);
+                    if (admission != AlphaSeparationSlotRefusal.None)
                     {
-                        return AlphaSeparationSlotRefusal
-                            .ConversionStateNotAdmitted;
-                    }
-
-                    // The renderer-wide runtime-overwrite rule runs BEFORE
-                    // the conversion step, against this family's own recipe:
-                    // a canonical recipe property that an admitted
-                    // conversion binding drives must already hold its
-                    // canonical value, because admission is exact-singleton
-                    // against the material's own serialized default. Failing
-                    // it is a slot-local refusal, not a defect — and no
-                    // material may be created for a slot already known to
-                    // violate the rule the recipe depends on.
-                    foreach (var (property, canonicalValue) in
-                                 CanonicalPropertiesForFamily(
-                                     captured.Family))
-                    {
-                        if (!conversionPropertyNames.Contains(property))
-                        {
-                            continue;
-                        }
-
-                        if (!derived.TryGetScalar(
-                                property, out var admitted) ||
-                            admitted != canonicalValue)
-                        {
-                            return AlphaSeparationSlotRefusal
-                                .ConversionPropertyOverwrittenAtRuntime;
-                        }
+                        return admission;
                     }
 
                     if (poiyomiConversion != null)
@@ -888,7 +811,7 @@ namespace Alrauna.Amuse.Editor.Build
                         // beside the evidence: neither fact is
                         // animation-reachable, so reading them here is not a
                         // late live read of animation-relevant state.
-                        PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+                        EffectiveRenderState.ReadEffectiveRenderState(
                             live, out var queue, out var renderType);
 
                         // Conversion attestation of the pinned source, per
@@ -943,6 +866,63 @@ namespace Alrauna.Amuse.Editor.Build
                     return AlphaSeparationSlotRefusal
                         .OpaqueConversionUnsupportedFamily;
             }
+        }
+
+        /// <summary>
+        /// The shared admission prologue of every converting arm. Derived
+        /// conversion evidence: the same group-and-admit loop the alpha
+        /// resolution uses, re-run against this family's own conversion
+        /// request, so conversion shares one admission implementation
+        /// rather than duplicating it. A conversion-relevant animated
+        /// property that is not an exact singleton equal to this
+        /// material's own serialized default refuses here.
+        /// <para>
+        /// The renderer-wide runtime-overwrite rule runs BEFORE the
+        /// conversion step, against this family's own recipe: a canonical
+        /// recipe property that an admitted conversion binding drives must
+        /// already hold its canonical value, because admission is
+        /// exact-singleton against the material's own serialized default.
+        /// Failing it is a slot-local refusal, not a defect — and no
+        /// material may be created for a slot already known to violate the
+        /// rule the recipe depends on.
+        /// </para>
+        /// </summary>
+        private static AlphaSeparationSlotRefusal TryAdmitConversionEvidence(
+            CapturedAlphaMaterial captured,
+            IReadOnlyList<(CapturedFloatBinding Binding,
+                           AnimatedPropertyRef Reference)> conversionBindings,
+            IReadOnlyCollection<string> conversionPropertyNames,
+            out CapturedMaterialEvidence derived)
+        {
+            if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+                    captured,
+                    conversionBindings,
+                    ConversionRequestForFamily(captured.Family),
+                    out derived,
+                    out _))
+            {
+                return AlphaSeparationSlotRefusal
+                    .ConversionStateNotAdmitted;
+            }
+
+            foreach (var (property, canonicalValue) in
+                         CanonicalPropertiesForFamily(captured.Family))
+            {
+                if (!conversionPropertyNames.Contains(property))
+                {
+                    continue;
+                }
+
+                if (!derived.TryGetScalar(
+                        property, out var admitted) ||
+                    admitted != canonicalValue)
+                {
+                    return AlphaSeparationSlotRefusal
+                        .ConversionPropertyOverwrittenAtRuntime;
+                }
+            }
+
+            return AlphaSeparationSlotRefusal.None;
         }
 
         /// <summary>

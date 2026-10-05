@@ -27,9 +27,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     hasOptimizerEnabled: true,
                     optimizerEnabled: 0f,
                     originalShaderTag: ".poiyomi/Poiyomi Toon",
-                    originalShaderGuidTag: "0123456789abcdef0123456789abcdef",
-                    allLockedGuidsTag: "0123456789abcdef0123456789abcdef",
-                    generatedShaderAssetPresent: true));
+                    originalShaderGuidTag: "0123456789abcdef0123456789abcdef"));
 
             Assert.That(
                 identity.IsLocked,
@@ -52,9 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     hasOptimizerEnabled: true,
                     optimizerEnabled: 1f,
                     originalShaderTag: null,
-                    originalShaderGuidTag: null,
-                    allLockedGuidsTag: null,
-                    generatedShaderAssetPresent: true));
+                    originalShaderGuidTag: null));
 
             Assert.That(
                 identity.IsLocked,
@@ -66,9 +62,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void LockedIdentityRecordsTheOriginalShaderFacts()
         {
-            // The classification records the three tags and the generated
-            // shader asset presence verbatim, because later increments
-            // restore against exactly these facts.
+            // The classification records the two identity tags verbatim,
+            // because later increments restore against exactly these
+            // facts.
             var identity = LockedMaterialIdentity.Classify(
                 new LockedMaterialIdentity.Serialization(
                     LockedMaterialIdentity.LockedShaderNamePrefix +
@@ -76,11 +72,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     hasOptimizerEnabled: true,
                     optimizerEnabled: 1f,
                     originalShaderTag: ".poiyomi/Poiyomi Toon",
-                    originalShaderGuidTag: "0123456789abcdef0123456789abcdef",
-                    allLockedGuidsTag:
-                        "0123456789abcdef0123456789abcdef," +
-                        "fedcba9876543210fedcba9876543210",
-                    generatedShaderAssetPresent: true));
+                    originalShaderGuidTag: "0123456789abcdef0123456789abcdef"));
 
             Assert.That(identity.IsLocked, Is.True);
             Assert.That(
@@ -88,12 +80,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 identity.OriginalShaderGuid,
                 Is.EqualTo("0123456789abcdef0123456789abcdef"));
-            Assert.That(
-                identity.AllLockedGuids,
-                Is.EqualTo(
-                    "0123456789abcdef0123456789abcdef," +
-                    "fedcba9876543210fedcba9876543210"));
-            Assert.That(identity.HasGeneratedShaderAsset, Is.True);
         }
 
         [Test]
@@ -107,15 +93,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     hasOptimizerEnabled: false,
                     optimizerEnabled: 0f,
                     originalShaderTag: null,
-                    originalShaderGuidTag: null,
-                    allLockedGuidsTag: null,
-                    generatedShaderAssetPresent: false));
+                    originalShaderGuidTag: null));
 
             Assert.That(identity.IsLocked, Is.False);
             Assert.That(identity.OriginalShader, Is.Null);
             Assert.That(identity.OriginalShaderGuid, Is.Null);
-            Assert.That(identity.AllLockedGuids, Is.Null);
-            Assert.That(identity.HasGeneratedShaderAsset, Is.False);
         }
     }
 }

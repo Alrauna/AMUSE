@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 using Census = Alrauna.Amuse.Research.Census;
 
@@ -107,18 +106,16 @@ namespace Alrauna.Amuse.Research.Collection
                 segments.Add(node.name);
             }
 
-            var path = new StringBuilder();
-            for (var index = segments.Count - 1; index >= 0; index--)
+            segments.Reverse();
+            // The old StringBuilder loop appended no separator while the
+            // path was still empty, so empty names at the top of the chain
+            // contributed nothing. Drop leading empty segments to match.
+            while (segments.Count > 0 && segments[0].Length == 0)
             {
-                if (path.Length > 0)
-                {
-                    path.Append('/');
-                }
-
-                path.Append(segments[index]);
+                segments.RemoveAt(0);
             }
 
-            return path.ToString();
+            return string.Join("/", segments);
         }
     }
 }

@@ -383,32 +383,29 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// NDMF and VRChat SDK admission policy, one rule applied twice:
         /// admits when the parsed version sits in
-        /// <c>[floor, exclusiveUpperBound)</c> and carries no prerelease
-        /// suffix. Unparseable input, a prerelease suffix, and null refuse
-        /// with the caller's named cause.
+        /// <c>[floor, exclusiveUpperBound)</c>. Unparseable input and null
+        /// refuse with the caller's named cause; a prerelease suffix
+        /// parses as unparseable input and refuses the same way.
         /// </summary>
         private static bool PackageVersionAdmitted(
             string version, int[] floor, int[] exclusiveUpperBound)
         {
-            return TryParsePackageVersion(version, out var components, out var hasPrereleaseSuffix)
-                && !hasPrereleaseSuffix
+            return TryParsePackageVersion(version, out var components)
                 && PackageVersionInRange(components, floor, exclusiveUpperBound);
         }
 
         /// <summary>
-        /// Parses the package grammar <c>M.m.p</c> with an optional
-        /// <c>-</c> prerelease suffix. Exactly three dot-separated digit
-        /// runs are valid; one component, a fourth component, a missing
-        /// separator, an empty part, and any foreign character (including
-        /// <c>+</c>) are unparseable. The <c>-</c> suffix is reported
-        /// separately because it refuses as a prerelease rather than as
-        /// unparseable input.
+        /// Parses the package grammar <c>M.m.p</c>. Exactly three
+        /// dot-separated digit runs are valid; one component, a fourth
+        /// component, a missing separator, an empty part, a prerelease
+        /// suffix, and any foreign character (including <c>+</c>) are
+        /// unparseable, and a prerelease suffix refuses with that same
+        /// named cause as any other unparseable input.
         /// </summary>
         private static bool TryParsePackageVersion(
-            string version, out int[] components, out bool hasPrereleaseSuffix)
+            string version, out int[] components)
         {
             components = null;
-            hasPrereleaseSuffix = false;
             if (string.IsNullOrEmpty(version))
             {
                 return false;
@@ -435,13 +432,7 @@ namespace Alrauna.Amuse.Editor.Build
                 return true;
             }
 
-            if (version[pos] == '-')
-            {
-                hasPrereleaseSuffix = true;
-                return true;
-            }
-
-            return false; // a fourth component or a foreign character, including '+'
+            return false; // a fourth component or a foreign character, including '+' and '-'
         }
 
         /// <summary>
@@ -474,17 +465,16 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// True when the version parses cleanly, carries no prerelease, and
-        /// has reached or passed the declared exclusive upper bound: the
-        /// untested-major territory that V8 routes through user consent
-        /// instead of a hard refusal.
+        /// True when the version parses cleanly and has reached or passed
+        /// the declared exclusive upper bound: the untested-major
+        /// territory that V8 routes through user consent instead of a
+        /// hard refusal. A prerelease suffix parses as unparseable input
+        /// and never reaches consent.
         /// </summary>
         private static bool PackageVersionBeyondMajorBound(
             string version, int[] floor, int[] exclusiveUpperBound)
         {
-            return TryParsePackageVersion(
-                version, out var components, out var hasPrerelease)
-                && !hasPrerelease
+            return TryParsePackageVersion(version, out var components)
                 && CompareComponents(components, floor) >= 0
                 && CompareComponents(components, exclusiveUpperBound) >= 0;
         }
@@ -552,13 +542,12 @@ namespace Alrauna.Amuse.Editor.Build
             int[] attestedMax,
             string displayName)
         {
-            if (!TryParsePackageVersion(
-                version, out var components, out var hasPrerelease))
+            if (!TryParsePackageVersion(version, out var components))
             {
                 return null;
             }
 
-            if (hasPrerelease || CompareComponents(components, floor) < 0)
+            if (CompareComponents(components, floor) < 0)
             {
                 return null;
             }

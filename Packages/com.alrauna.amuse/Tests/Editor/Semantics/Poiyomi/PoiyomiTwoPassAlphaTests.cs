@@ -23,12 +23,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string ForceOpaque2 = "_AlphaForceOpaque2";
         private const string IgnoreMainTexAlpha = "_MainIgnoreTexAlpha";
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedTwoPassMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private static void AssertExactlyOne(PoiyomiSemanticResult result)
         {
             AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
@@ -62,7 +56,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // reads only _AlphaForceOpaque claims a proven one and lets the
             // second family writer slip into it, so the unknown assertion is
             // the one that fails against that shape.
-            var result = Interpret(DivergentFixture(0.5f));
+            var result = InterpretTwoPass(DivergentFixture(0.5f));
 
             Assert.That(
                 IsComplete(result, PoiyomiSemanticOutput.Alpha),
@@ -88,7 +82,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat(ForceOpaque2, 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
 
-            var result = Interpret(material);
+            var result = InterpretTwoPass(material);
 
             Assert.That(
                 IsComplete(result, PoiyomiSemanticOutput.Alpha),
@@ -109,7 +103,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat(ForceOpaque, 1f);
             material.SetFloat(ForceOpaque2, 1f);
 
-            AssertExactlyOne(Interpret(material));
+            AssertExactlyOne(InterpretTwoPass(material));
         }
 
         [Test]
@@ -124,7 +118,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
             material.SetColor(TwoPassColor, new Color(1f, 1f, 1f, 1f));
 
-            AssertExactlyOne(Interpret(material));
+            AssertExactlyOne(InterpretTwoPass(material));
         }
 
         [Test]
@@ -140,7 +134,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
             material.SetColor(TwoPassColor, new Color(1f, 1f, 1f, 0.5f));
 
-            var result = Interpret(material);
+            var result = InterpretTwoPass(material);
 
             Assert.That(
                 IsComplete(result, PoiyomiSemanticOutput.Alpha),
@@ -164,7 +158,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat(ForceOpaque2, 0.5f);
 
             AssertUnsupportedOutput(
-                Interpret(material),
+                InterpretTwoPass(material),
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 ForceOpaque2);
@@ -185,7 +179,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetColor(TwoPassColor, new Color(1f, 1f, 1f, 1f));
             material.SetTexture("_MainTex", ImportTexture("twopass_ignored"));
 
-            AssertExactlyOne(Interpret(material));
+            AssertExactlyOne(InterpretTwoPass(material));
         }
     }
 }

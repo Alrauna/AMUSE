@@ -68,7 +68,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             if (AssetDatabase.IsSubAsset(texture) &&
-                !GeneratedTextureAttestation.TryIdentifyProducer(texture, out _))
+                !GeneratedTextureAttestation.TryIdentifyProducer(texture))
             {
                 return false;
             }
@@ -173,8 +173,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             if (texture is Texture2D texture2D &&
-                GeneratedTextureAttestation.TryIdentifyRouteTexture(
-                    texture2D, out _))
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(texture2D))
             {
                 var isSrgb = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.IsSRGBFormat(texture.graphicsFormat) ||
                              texture.isDataSRGB;
@@ -209,7 +208,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             // sample as one at runtime; the capture allowlist still refuses BC5 for
             // chain-based facts, which is a separate question.
             if (texture is Texture2D copy &&
-                GeneratedTextureAttestation.TryIdentifyRouteTexture(copy, out _) &&
+                GeneratedTextureAttestation.TryIdentifyRouteTexture(copy) &&
                 !UnityEngine.Experimental.Rendering.GraphicsFormatUtility
                     .HasAlphaChannel(copy.graphicsFormat))
             {
