@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Runtime;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
-using UnityEditor.Animations;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
@@ -34,92 +32,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// slot that satisfies its band's expectation. The soundness contract
     /// does not depend on which optimizer merged first.
     /// </para>
+    /// <para>
+    /// The fixture itself - the band model, the authored-triangle
+    /// registry, the texture imports, the material builders, the animation
+    /// fixture, the optimizer configuration, and the renderer factory -
+    /// lives in <see cref="MergedConsumptionFixture"/> and is shared with
+    /// the Avatar Optimizer merged-consumption suite. The expectation
+    /// enum keeps the fixture's AAO member names:
+    /// <see cref="MergedConsumptionFixture.TriangleExpectation.ConvertsToOpaque"/>
+    /// carries this suite's former MovesToGeneratedShader meaning and
+    /// <see cref="MergedConsumptionFixture.TriangleExpectation.StaysTransparent"/>
+    /// the former StaysOnSourceShader meaning, because the shared factory
+    /// registers the same band-to-expectation mapping.
+    /// </para>
     /// </summary>
     public sealed class DaoMergedConsumptionTests
+        : MergedConsumptionFixture
     {
-        private const string TempFolder = "Assets/AmuseTests_DaoMerge";
-        private const string LilToonTransparentShaderName =
-            "Hidden/lilToonTransparent";
-        private const string LilToonCutoutShaderName =
-            "Hidden/lilToonCutout";
-        private const string DaoComponentTypeName =
-            "d4rkAvatarOptimizer, d4rkpl4y3r.d4rkavataroptimizer.Editor";
-        private const string TraceAndOptimizeTypeName =
-            "Anatawa12.AvatarOptimizer.TraceAndOptimize,"
-            + "com.anatawa12.avatar-optimizer.runtime";
         private const string DaoIntegrationEnvironmentVariable =
             "AMUSE_DAO_INTEGRATION";
 
-        private enum Band
-        {
-            Transparent,
-            Partial,
-            Opaque,
-        }
-
-        private enum TriangleExpectation
-        {
-            StaysOnSourceShader,
-            MovesToGeneratedShader,
-        }
-
-        private sealed class AuthoredTriangle
-        {
-            internal string Key;
-            internal TriangleExpectation Expectation;
-            internal int Remaining;
-        }
-
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
-        private readonly Dictionary<string, AuthoredTriangle> authored =
-            new Dictionary<string, AuthoredTriangle>();
-
-        private static readonly Vector2[] TransparentBandUv =
-        {
-            new Vector2(0.02f, 0.25f),
-            new Vector2(0.12f, 0.25f),
-            new Vector2(0.02f, 0.45f),
-        };
-
-        private static readonly Vector2[] PartialBandUv =
-        {
-            new Vector2(0.28f, 0.25f),
-            new Vector2(0.44f, 0.25f),
-            new Vector2(0.28f, 0.45f),
-        };
-
-        private static readonly Vector2[] OpaqueBandUv =
-        {
-            new Vector2(0.56f, 0.25f),
-            new Vector2(0.94f, 0.25f),
-            new Vector2(0.56f, 0.45f),
-        };
-
-        private T Track<T>(T asset) where T : UnityEngine.Object
-        {
-            tracked.Add(asset);
-            return asset;
-        }
+        protected override string TempFolder =>
+            "Assets/AmuseTests_DaoMerge";
 
         [TearDown]
-        public void TearDown()
+        public void TearDownDaoOutput()
         {
-            OptimizerMergeObservation.Reset();
-            foreach (var asset in tracked)
-            {
-                if (asset == null) continue;
-                if (AssetDatabase.Contains(asset)) continue;
-                UnityEngine.Object.DestroyImmediate(asset);
-            }
-
-            tracked.Clear();
-            authored.Clear();
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
-
             // d4rkAvatarOptimizer writes generated output under this
             // project-level folder during optimization; a disposable
             // integration project owns every byte of it.
@@ -204,7 +142,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         root.AddComponent(traceAndOptimizeType);
                     ConfigureTraceAndOptimize(
                         traceAndOptimize, mergeSkinnedMesh: true,
-                        optimizeTexture: false);
+                        optimizeTexture: false,
+                        allowShuffleMaterialSlots: true);
                 }
 
                 root.AddComponent(daoType);
@@ -226,12 +165,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     {
                         Band.Transparent, Band.Partial, Band.Opaque,
                     },
+                    new[] { 0, 0, 0 },
                     firstTriangleIndex: 0);
                 CreateSkinnedRenderer(
                     root, "AMUSE dao cutout renderer",
                     "AMUSE dao cutout mesh",
                     new[] { cutout },
                     new[] { Band.Partial },
+                    new[] { 0 },
                     firstTriangleIndex: 3);
 
                 OptimizerMergeObservation.Reset();
@@ -265,277 +206,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 UnityEngine.Object.DestroyImmediate(root);
             }
-        }
-
-        private static void RequireLilToonEnvironment(
-            out Shader transparentShader, out Shader cutoutShader)
-        {
-            transparentShader = Shader.Find(LilToonTransparentShaderName);
-            cutoutShader = Shader.Find(LilToonCutoutShaderName);
-            if (transparentShader != null && cutoutShader != null) return;
-            Assert.Ignore(
-                "The jp.lilxyzw.liltoon package is not installed in this"
-                + " project; the vendor shader fixtures cannot resolve."
-                + " Install it to run them.");
-        }
-
-        private void ConfigureTraceAndOptimize(
-            Component traceAndOptimize,
-            bool mergeSkinnedMesh,
-            bool optimizeTexture)
-        {
-            var serialized = new SerializedObject(traceAndOptimize);
-            var merge = serialized.FindProperty("mergeSkinnedMesh");
-            var texture = serialized.FindProperty("optimizeTexture");
-            Assert.That(merge, Is.Not.Null,
-                "TraceAndOptimize.mergeSkinnedMesh field (AAO version pin)");
-            Assert.That(texture, Is.Not.Null,
-                "TraceAndOptimize.optimizeTexture field (AAO version pin)");
-            merge.boolValue = mergeSkinnedMesh;
-            texture.boolValue = optimizeTexture;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private void AttachAnimationFixture(
-            GameObject root, string assetSuffix)
-        {
-            var anchor = new GameObject("ProbeAnchor");
-            anchor.transform.SetParent(root.transform, false);
-            var clip = Track(new AnimationClip
-            {
-                name = "probe-clip-" + assetSuffix,
-            });
-            clip.SetCurve(
-                "ProbeAnchor", typeof(Transform), "m_LocalPosition.z",
-                AnimationCurve.Constant(0f, 1f, 1f));
-
-            var controller = AnimatorController.CreateAnimatorControllerAtPath(
-                TempFolder + "/probe-" + assetSuffix + ".controller");
-            var stateMachine = controller.layers[0].stateMachine;
-            var state = stateMachine.AddState("Probe");
-            state.motion = clip;
-            stateMachine.defaultState = state;
-
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-
-#if AMUSE_VRCSDK3_AVATARS
-            var descriptor = root.GetComponent<
-                VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
-            if (descriptor == null) return;
-            descriptor.customizeAnimationLayers = true;
-            var baseLayer =
-                new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                    .CustomAnimLayer
-            {
-                type = VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                    .AnimLayerType.Base,
-                animatorController = controller,
-                isDefault = false,
-                isEnabled = true,
-            };
-            var layers = descriptor.baseAnimationLayers;
-            if (layers == null || layers.Length == 0)
-            {
-                descriptor.baseAnimationLayers = new[] { baseLayer };
-            }
-            else
-            {
-                layers[0] = baseLayer;
-                descriptor.baseAnimationLayers = layers;
-            }
-
-            if (descriptor.specialAnimationLayers == null)
-            {
-                descriptor.specialAnimationLayers = new[]
-                {
-                    FallbackLayer(VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                        .AnimLayerType.Sitting),
-                    FallbackLayer(VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                        .AnimLayerType.TPose),
-                    FallbackLayer(VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                        .AnimLayerType.IKPose),
-                };
-            }
-#endif
-        }
-
-        private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-            .CustomAnimLayer FallbackLayer(
-            VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.AnimLayerType type)
-        {
-            return new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                .CustomAnimLayer
-            {
-                type = type,
-                isDefault = true,
-                isEnabled = true,
-            };
-        }
-
-        private void CreateSkinnedRenderer(
-            GameObject root,
-            string holderName,
-            string meshName,
-            Material[] materials,
-            Band[] bands,
-            int firstTriangleIndex)
-        {
-            var holder = new GameObject(holderName);
-            holder.transform.SetParent(root.transform, false);
-            var renderer = holder.AddComponent<SkinnedMeshRenderer>();
-            var mesh = new Mesh { name = meshName };
-            Track(mesh);
-
-            var vertices = new Vector3[bands.Length * 3];
-            var uvs = new Vector2[bands.Length * 3];
-            var submeshTriangles = new List<int>[materials.Length];
-            for (var submesh = 0; submesh < materials.Length; submesh++)
-            {
-                submeshTriangles[submesh] = new List<int>();
-            }
-
-            for (var i = 0; i < bands.Length; i++)
-            {
-                var index = firstTriangleIndex + i;
-                var v0 = i * 3;
-                vertices[v0] = new Vector3(4 * index, 0f, 0f);
-                vertices[v0 + 1] = new Vector3(4 * index + 1, 0f, 0f);
-                vertices[v0 + 2] = new Vector3(4 * index, 1f, 0f);
-                var triplet = BandUv(bands[i]);
-                uvs[v0] = triplet[0];
-                uvs[v0 + 1] = triplet[1];
-                uvs[v0 + 2] = triplet[2];
-                submeshTriangles[0].AddRange(new[] { v0, v0 + 1, v0 + 2 });
-                var authoredKey = OptimizerMergeObservation.TriangleKey(
-                    vertices[v0], vertices[v0 + 1], vertices[v0 + 2],
-                    root.transform);
-                if (!authored.TryGetValue(authoredKey, out var entry))
-                {
-                    entry = new AuthoredTriangle
-                    {
-                        Key = authoredKey,
-                        Expectation = bands[i] == Band.Opaque
-                            ? TriangleExpectation.MovesToGeneratedShader
-                            : TriangleExpectation.StaysOnSourceShader,
-                    };
-                    authored.Add(authoredKey, entry);
-                }
-
-                entry.Remaining++;
-            }
-
-            mesh.vertices = vertices;
-            mesh.uv = uvs;
-            mesh.subMeshCount = materials.Length;
-            for (var submesh = 0; submesh < materials.Length; submesh++)
-            {
-                mesh.SetTriangles(submeshTriangles[submesh], submesh);
-            }
-
-            mesh.bindposes = new[] { Matrix4x4.identity };
-            var weights = new BoneWeight[mesh.vertexCount];
-            var normals = new Vector3[mesh.vertexCount];
-            for (var i = 0; i < mesh.vertexCount; i++)
-            {
-                weights[i] = new BoneWeight { boneIndex0 = 0, weight0 = 1f };
-                normals[i] = Vector3.forward;
-            }
-
-            mesh.boneWeights = weights;
-            mesh.normals = normals;
-            mesh.RecalculateBounds();
-
-            // d4rkAvatarOptimizer merges renderers with matching
-            // renderer properties too; one shared bound box keeps the
-            // two source renderers in the same merge candidate set.
-            var sharedBounds = new Bounds(
-                new Vector3(2f, 0.5f, 0f), new Vector3(64f, 8f, 8f));
-            mesh.bounds = sharedBounds;
-
-            renderer.sharedMesh = mesh;
-            renderer.sharedMaterials = materials;
-            renderer.bones = new[] { root.transform };
-            renderer.rootBone = root.transform;
-            renderer.probeAnchor = root.transform;
-            renderer.localBounds = sharedBounds;
-        }
-
-        private static Vector2[] BandUv(Band band)
-        {
-            switch (band)
-            {
-                case Band.Transparent: return TransparentBandUv;
-                case Band.Partial: return PartialBandUv;
-                case Band.Opaque: return OpaqueBandUv;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(band));
-            }
-        }
-
-        private Material NewTransparentMaterial(
-            Shader shader, Texture texture)
-        {
-            var material = new Material(shader);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
-            material.SetFloat("_Cutoff", 0.01f);
-            material.SetFloat("_AlphaMaskMode", 2f);
-            material.SetFloat("_AlphaMaskScale", 1f);
-            material.SetFloat("_AlphaMaskValue", 1f);
-            material.SetTexture("_AlphaMask", texture);
-            material.SetTexture("_MainTex", texture);
-            return Track(material);
-        }
-
-        private Material NewCutoutMaterial(
-            Shader shader, Texture texture, float cutoff)
-        {
-            var material = new Material(shader);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
-            material.SetFloat("_Cutoff", cutoff);
-            material.SetFloat("_AlphaMaskMode", 2f);
-            material.SetFloat("_AlphaMaskScale", 1f);
-            material.SetFloat("_AlphaMaskValue", 1f);
-            material.SetTexture("_AlphaMask", texture);
-            material.SetTexture("_MainTex", texture);
-            return Track(material);
-        }
-
-        private Texture2D ImportBandedAlphaTexture(string assetName)
-        {
-            const int size = 128;
-            var pixels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            {
-                for (var x = 0; x < size; x++)
-                {
-                    var alpha = x < size / 4
-                        ? (byte)0
-                        : x < size / 2 ? (byte)128 : (byte)255;
-                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
-                }
-            }
-
-            var cpu = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            cpu.SetPixels32(pixels);
-            cpu.Apply(false, false);
-            var encoded = cpu.EncodeToPNG();
-            UnityEngine.Object.DestroyImmediate(cpu);
-
-            var path = TempFolder + "/" + assetName + ".png";
-            File.WriteAllBytes(path, encoded);
-            AssetDatabase.ImportAsset(path);
-
-            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-            importer.mipmapEnabled = true;
-            importer.isReadable = true;
-            importer.textureCompression =
-                TextureImporterCompression.Uncompressed;
-            importer.SaveAndReimport();
-
-            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(texture, Is.Not.Null, "fixture precondition");
-            return texture;
         }
 
         private static void AssertMergedFinalRenderer(GameObject root)
@@ -617,7 +287,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                         match.Remaining--;
                         var expectGenerated = match.Expectation
-                            == TriangleExpectation.MovesToGeneratedShader;
+                            == TriangleExpectation.ConvertsToOpaque;
                         Assert.That(
                             onGenerated,
                             Is.EqualTo(expectGenerated),

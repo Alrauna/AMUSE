@@ -245,16 +245,14 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     foreach (var binding in clip.GetObjectCurveBindings())
                     {
-                        if (!LiveAnimationObservation
-                                .TryParseMaterialSlotBinding(
-                                    binding.propertyName, out var slotIndex) ||
-                            !string.Equals(
-                                binding.path,
-                                prepared.RendererPath,
-                                StringComparison.Ordinal) ||
-                            !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
-                                binding.type.FullName,
-                                prepared.RendererTypeName))
+                        if (!UnityAnimationEvidenceCapture
+                                .TryParseMaterialSlotBindingFor(
+                                    binding.path,
+                                    binding.type.FullName,
+                                    binding.propertyName,
+                                    prepared.RendererPath,
+                                    prepared.RendererTypeName,
+                                    out var slotIndex))
                         {
                             continue;
                         }

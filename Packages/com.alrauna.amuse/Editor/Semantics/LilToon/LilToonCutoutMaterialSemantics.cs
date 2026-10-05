@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -26,11 +27,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string UdimDiscardModeProperty = "_UDIMDiscardMode";
         private const string ShiftBackfaceUvProperty = "_ShiftBackfaceUV";
         private const string UseParallaxProperty = "_UseParallax";
-        private const string UseMain2ndTexProperty = "_UseMain2ndTex";
-        private const string UseMain3rdTexProperty = "_UseMain3rdTex";
-        private const string AlphaMaskModeProperty = "_AlphaMaskMode";
-        private const string AlphaMaskScaleProperty = "_AlphaMaskScale";
-        private const string AlphaMaskValueProperty = "_AlphaMaskValue";
         private const string UseDitherProperty = "_UseDither";
         private const string IdMask1Property = "_IDMask1";
         private const string IdMask2Property = "_IDMask2";
@@ -42,12 +38,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string IdMask8Property = "_IDMask8";
         private const string IdMaskControlsDissolveProperty =
             "_IDMaskControlsDissolve";
-        private const string CutoffProperty = "_Cutoff";
-        private const string ColorProperty = "_Color";
-        private const string MainTextureProperty = "_MainTex";
-        private const string MainTexStProperty = "_MainTex_ST";
-        private const string DissolveParamsProperty = "_DissolveParams";
-        private const string MainTexScrollRotateProperty = "_MainTex_ScrollRotate";
 
         /// <summary>
         /// The controller-fixed twice-margin cutoff bound (spec §8.1 clause 2
@@ -55,7 +45,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// clip <c>1 - c</c> keeps every fully covered fragment; above it no
         /// triangle is provable, so the classification layer refuses before
         /// any triangle is called proven. A non-finite cutoff fails the
-        /// finite check first.
+        /// finite check first. The shared interpreter receives this bound as
+        /// an input; it never derives it.
         /// </summary>
         private const float MaxProvableCutoff = 0.9999f;
 
@@ -66,7 +57,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// refuses. <see cref="IdMaskControlsDissolveProperty"/> is the
         /// adversarial-review gate: with it set, the vertex IDMask path can
         /// force the sampled alpha chain to zero even at dissolve mode zero
-        /// (B2 §3.3.8, §5 clause 2). The gates are runtime captured facts —
+        /// (B2 §3.3.8, §5 clause 2). <c>_UseDither</c> is a gate here, unlike
+        /// the transparent family, whose render mode compiles the runtime
+        /// dither path out entirely. The gates are runtime captured facts —
         /// never the compiled feature set.
         /// </summary>
         private static readonly string[] AlphaCoverageGates =
@@ -87,130 +80,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             IdMask8Property,
             IdMaskControlsDissolveProperty,
         };
+
         /// <summary>
-        /// The cutout alpha evidence request (spec §8.2). Exact by contract:
-        /// no fewer and no more. <c>_IDMaskPrior8</c> is deliberately absent
-        /// (it is a fixture-only vendor prior byte, not an AMUSE-proof fact),
-        /// and <c>_MainTex_ST</c> is deliberately not a vector request — it
-        /// rides the texture request's ScaleOffset kind, which also derives
-        /// the animatable binding name. <c>_Cutoff</c> rides here as a
-        /// captured theorem scalar even though conversion also reads it.
+        /// The cutout alpha evidence request (spec §8.2), built by the
+        /// shared builder from its cutout delta table. Exact by contract: no
+        /// fewer and no more; the contract doc lives on
+        /// <see cref="LilToonAlphaEvidenceRequests.CutoutRequest"/>.
         /// </summary>
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
-            new MaterialEvidenceRequest(
-                shaderName: true,
-                activeColorSpace: false,
-                presenceProperties: Array.Empty<string>(),
-                scalarProperties: new[]
-                {
-                    LilToonSourceAttestation.ShaderFormatVersionProperty,
-                    InvisibleProperty,
-                    UdimDiscardCompileProperty,
-                    UdimDiscardModeProperty,
-                    ShiftBackfaceUvProperty,
-                    UseParallaxProperty,
-                    UseMain2ndTexProperty,
-                    UseMain3rdTexProperty,
-                    AlphaMaskModeProperty,
-                    AlphaMaskScaleProperty,
-                    AlphaMaskValueProperty,
-                    UseDitherProperty,
-                    IdMask1Property,
-                    IdMask2Property,
-                    IdMask3Property,
-                    IdMask4Property,
-                    IdMask5Property,
-                    IdMask6Property,
-                    IdMask7Property,
-                    IdMask8Property,
-                    IdMaskControlsDissolveProperty,
-                    CutoffProperty,
-                    "_Main2ndTex_UVMode",
-                    "_Main3rdTex_UVMode",
-                    "_Main2ndTexAngle",
-                    "_Main3rdTexAngle",
-                    "_Main2ndTex_Cull",
-                    "_Main3rdTex_Cull",
-                    "_Main2ndTexAlphaMode",
-                    "_Main3rdTexAlphaMode",
-                    "_Main2ndTexIsDecal",
-                    "_Main3rdTexIsDecal",
-                    "_Main2ndTexIsLeftOnly",
-                    "_Main3rdTexIsLeftOnly",
-                    "_Main2ndTexIsRightOnly",
-                    "_Main3rdTexIsRightOnly",
-                    "_Main2ndTexShouldCopy",
-                    "_Main3rdTexShouldCopy",
-                    "_Main2ndTexShouldFlipMirror",
-                    "_Main3rdTexShouldFlipMirror",
-                    "_Main2ndTexShouldFlipCopy",
-                    "_Main3rdTexShouldFlipCopy",
-                    "_Main2ndTexIsMSDF",
-                    "_Main3rdTexIsMSDF",
-                    "_AudioLink2Main2nd",
-                    "_AudioLink2Main3rd",
-                },
-                colorProperties: new[] { ColorProperty, "_Color2nd", "_Color3rd" },
-                vectorProperties: new[]
-                {
-                    DissolveParamsProperty,
-                    MainTexScrollRotateProperty,
-                    "_DistanceFade",
-                    "_Main2ndTex_ScrollRotate",
-                    "_Main3rdTex_ScrollRotate",
-                    "_Main2ndDistanceFade",
-                    "_Main3rdDistanceFade",
-                    "_Main2ndDissolveParams",
-                    "_Main3rdDissolveParams",
-                },
-                textureProperties: new[]
-                {
-                    new TexturePropertyEvidenceRequest(
-                        "_Main2ndTex",
-                        TextureEvidenceKinds.ScaleOffset |
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel |
-                        TextureEvidenceKinds.SampledAlphaIsOne),
-                    new TexturePropertyEvidenceRequest(
-                        "_Main3rdTex",
-                        TextureEvidenceKinds.ScaleOffset |
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel |
-                        TextureEvidenceKinds.SampledAlphaIsOne),
-                    new TexturePropertyEvidenceRequest(
-                        "_Main2ndBlendMask",
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.RedChannel),
-                    new TexturePropertyEvidenceRequest(
-                        "_Main3rdBlendMask",
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.RedChannel),
-                    new TexturePropertyEvidenceRequest(
-                        MainTextureProperty,
-                        TextureEvidenceKinds.ScaleOffset |
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.Sampling |
-                        TextureEvidenceKinds.AlphaChannel |
-                        TextureEvidenceKinds.SampledAlphaIsOne,
-                        // The cutout runtime clips by the shader cutoff, so
-                        // the capture declares it: every route binarizes by
-                        // the cutoff and keeps the alpha policy inert for
-                        // this source (spec section 3).
-                        CutoffProperty),
-
-                    // The alpha mask rides _MainTex's sampler, so this
-                    // request deliberately asks for no sampling facts of
-                    // its own: wrap, filter, and anisotropy evidence comes
-                    // from the _MainTex assignment. The red field, not
-                    // alpha, is the mask channel.
-                    new TexturePropertyEvidenceRequest(
-                        "_AlphaMask",
-                        TextureEvidenceKinds.ScaleOffset |
-                        TextureEvidenceKinds.SourceIdentity |
-                        TextureEvidenceKinds.RedChannel),
-                });
+            LilToonAlphaEvidenceRequests.CutoutRequest();
 
         /// <summary>
         /// Interprets the alpha of evidence already admitted against
@@ -290,547 +168,21 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 diagnostics);
         }
 
+        /// <summary>
+        /// Binds the cutout family inputs to the shared interpreter: this
+        /// file's pinned cutoff bound, this file's coverage-gate array (with
+        /// the dither membership), and no transparent-only bounded gate.
+        /// </summary>
         private static SemanticOutput<ScalarSemanticValue> InterpretCutoutAlpha(
             CapturedMaterialEvidence evidence,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
-            // (1) Every optional alpha/coverage feature exactly off. The
-            // first failure names the offending property.
-            var gate = FirstFailedZeroGate(evidence, AlphaCoverageGates);
-            if (gate != null)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    gate);
-            }
-
-            // (1a) Alpha mask interpretation (shared with the transparent
-            // frontend; pinned equation and admitted cases in
-            // LilToonAlphaMaskTerm). A refusal records its own
-            // diagnostic; the sample outcome defers to the texture arm,
-            // which owns the shared-sampler and UV0 gates. The mask
-            // composes before the cutout coverage transform in the source.
-            var maskTerm = LilToonAlphaMaskTerm.Interpret(
-                evidence, diagnostics);
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Refused)
-            {
-                return SemanticOutput<ScalarSemanticValue>.Unknown();
-            }
-
-
-            // (2) Dissolve mode zero, exactly. The shader rounds the mode
-            // before branching; the proof cannot, so anything but exact zero
-            // — and any non-finite component — refuses (B2 §10).
-            if (!evidence.TryGetVector(
-                    DissolveParamsProperty, out var dissolveParams) ||
-                !IsFinite(dissolveParams) ||
-                dissolveParams.x != 0f)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    DissolveParamsProperty);
-            }
-
-            // (3) Main UV scroll/rotate must be the exact identity; any
-            // nonzero component scrolls or rotates the sampling coordinate.
-            // Compared per binary32 component: Unity's aggregate vector
-            // equality is epsilon-based and is intentionally excluded from
-            // semantic proof decisions, because lilRotateUV applies
-            // uv_sr.z + uv_sr.w * LIL_TIME and adds frac(uv_sr.xy * LIL_TIME),
-            // where no nonzero value is inert. -0.0f stays admitted:
-            // -0.0f != 0f is false.
-            if (!evidence.TryGetVector(
-                    MainTexScrollRotateProperty, out var scrollRotate) ||
-                !IsFinite(scrollRotate) ||
-                scrollRotate.x != 0f ||
-                scrollRotate.y != 0f ||
-                scrollRotate.z != 0f ||
-                scrollRotate.w != 0f)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTexScrollRotateProperty);
-            }
-
-            // (4) Cutoff: non-finite refuses, and above the twice-margin
-            // bound clip(1 - c) discards unit alpha, so no triangle is
-            // provable and the classification layer refuses (B2 §10).
-            if (!evidence.TryGetScalar(CutoffProperty, out var cutoff) ||
-                !IsFinite(cutoff) ||
-                cutoff > MaxProvableCutoff)
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    CutoffProperty);
-            }
-
-            // The distance fade strength. The vendor block scales every arm by
-            // the .z strength, so a finite zero strength is an exact no-op. At
-            // LIL_RENDER 1 the color arm still runs, and the dither path lerps
-            // alpha before the coverage transform, so a finite nonzero strength
-            // retains the material.
-            switch (LilToonDistanceFadeSemantics.Evaluate(evidence))
-            {
-                case LilToonDistanceFadeAnswer.Inert:
-                    break;
-                case LilToonDistanceFadeAnswer.Retained:
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.FeatureRetention,
-                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
-                default:
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
-            }
-
-            // (5) The tint multiplier must be present with a finite alpha.
-            // A non-finite multiplier is an interpretation refusal, never the
-            // resolver's uniform-transparent fallthrough (mirrors the
-            // Poiyomi frontend's finite check).
-            if (!evidence.TryGetColor(ColorProperty, out var color) ||
-                !IsFinite(color.a))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    LilToonSemanticOutput.Alpha,
-                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ColorProperty);
-            }
-            var colorAlpha = color.a;
-
-            // Replace mode with a constant term samples nothing at all:
-            // the alpha is that constant, so no texture gate applies.
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Constant)
-            {
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(maskTerm.Constant));
-            }
-
-            // Texture-backed arm (B2 basis). An unassigned _MainTex takes
-            // the declared-default arm first; an assigned texture keeps
-            // every captured-fact gate below, in the same order as before.
-            // The cutout source executes a runtime rotation path even at
-            // zero scroll/rotate, so C4 keeps non-identity ST at this
-            // family boundary rather than delegating it to the
-            // family-blind affine resolver.
-            var hasMainSampler = false;
-            ScalarSemanticValue alphaChain;
-            if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var assignment) ||
-                !assignment.IsAssigned)
-            {
-                // Declared-default arm (design 2026-09-26): every attested
-                // lilToon source declares _MainTex = "white" {}, and the
-                // canonical digests pin that Properties block. Playback
-                // binds the declared default when a material assigns no
-                // texture, so the sample is exactly one at every texel and
-                // coordinate-independent: the main sample collapses to its
-                // constant exactly as the importer theorem does for the
-                // assigned case. The digest is the enforcement: a vendor
-                // change to the default breaks attestation before this arm
-                // can run.
-                alphaChain = ScalarSemanticValue.Constant(colorAlpha);
-            }
-            else
-            {
-                if (!assignment.Texture.HasSampling)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
-                }
-
-                if (!assignment.HasScaleOffset)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        MainTextureProperty);
-                }
-
-                // Identity is tested exactly, per binary32 component. Unity's
-                // Vector2 ==/!= is deliberately not used here: it is epsilon-based
-                // (equal when the difference magnitude is under 1e-5), so it would
-                // let near-identity ST past this C4 boundary and into the
-                // family-blind affine resolver, whose own identity test is exact.
-                // -0.0f stays admitted: -0.0f != 0f is false, and +-0 are
-                // equivalent for this coordinate model.
-                if (assignment.Scale.x != 1f ||
-                    assignment.Scale.y != 1f ||
-                    assignment.Offset.x != 0f ||
-                    assignment.Offset.y != 0f)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedUv,
-                        MainTexStProperty);
-                }
-
-                hasMainSampler = true;
-
-                // The shader composes, in order: main alpha, second layer,
-                // third layer, alpha mask, dissolve, clip. The base below is
-                // the main alpha; the layers compose onto it; the mask term
-                // composes last. The cutout clip by _Cutoff applies after
-                // everything and is the classifier's declared cutoff, so it
-                // composes nowhere here.
-                if (assignment.Texture.SampledAlphaIsProvenOne)
-                {
-                    // The importer theorem: a source without an alpha channel
-                    // and an import that writes none samples alpha exactly one
-                    // at every texel of every level, so the main sample
-                    // collapses to its constant and no main field is read.
-                    alphaChain = ScalarSemanticValue.Constant(colorAlpha);
-                }
-                else
-                {
-                    if (!assignment.Texture.HasSourceIdentity)
-                    {
-                        return RecordUnknown<ScalarSemanticValue>(
-                            diagnostics,
-                            LilToonSemanticOutput.Alpha,
-                            LilToonSemanticDiagnosticCode
-                                .UnstableTextureIdentity,
-                            MainTextureProperty);
-                    }
-
-                    // uvMain is UV0 under the identity gates above.
-                    var mainSample = new TextureSample(
-                        assignment.Texture.SourceIdentity,
-                        new UvMapping(0, assignment.Scale, assignment.Offset),
-                        assignment.Texture.Sampling);
-                    alphaChain = colorAlpha == 1f
-                        ? ScalarSemanticValue.Texture(
-                            mainSample, TextureChannel.Alpha)
-                        : ScalarSemanticValue.TextureTimesConstant(
-                            mainSample, TextureChannel.Alpha, colorAlpha);
-                }
-            }
-
-            TextureSample maskSample = null;
-            AffineAlphaMap? maskMap = null;
-            if (maskTerm.Kind == LilToonAlphaMaskTermKind.Sample ||
-                maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
-            {
-                // The mask borrows _MainTex's captured sampler facts. An
-                // unassigned main has none, so a sampled or mapped mask
-                // refuses by name instead of proving through borrowed facts.
-                if (!hasMainSampler)
-                {
-                    return RecordUnknown<ScalarSemanticValue>(
-                        diagnostics,
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
-                }
-
-                maskSample = new TextureSample(
-                    maskTerm.Source,
-                    maskTerm.Mapping,
-                    assignment.Texture.Sampling);
-                if (maskTerm.Kind == LilToonAlphaMaskTermKind.MappedSample)
-                {
-                    maskMap = AffineAlphaMap.FromBinary32(
-                        maskTerm.Scale, maskTerm.Value);
-                }
-
-                // A replace mask runs after the layers, so the mask term is
-                // the whole alpha: neither _MainTex's texels nor _Color.a nor
-                // any layer reaches the value.
-                if (maskTerm.ReplacesMainAlpha)
-                {
-                    return SemanticOutput<ScalarSemanticValue>.Complete(
-                        maskMap == null
-                            ? ScalarSemanticValue.Texture(
-                                maskSample, TextureChannel.Red)
-                            : ScalarSemanticValue.MappedTexture(
-                                maskSample, TextureChannel.Red, maskMap));
-                }
-            }
-
-            // The layers, in shader order. Their writers sit before the mask.
-            alphaChain = ComposeLayer(
-                alphaChain, evidence, third: false, diagnostics);
-            if (alphaChain == null)
-            {
-                return SemanticOutput<ScalarSemanticValue>.Unknown();
-            }
-
-            alphaChain = ComposeLayer(
-                alphaChain, evidence, third: true, diagnostics);
-            if (alphaChain == null)
-            {
-                return SemanticOutput<ScalarSemanticValue>.Unknown();
-            }
-
-            if (maskSample != null)
-            {
-                // Multiply mode: the term composes over the layered value.
-                // The multiply cannot fold into a saturating sum or
-                // difference below it, so those shapes refuse.
-                var maskFactor = maskMap == null
-                    ? ScalarSemanticValue.TextureTimesConstant(
-                        maskSample, TextureChannel.Red, 1f)
-                    : ScalarSemanticValue.MappedTexture(
-                        maskSample, TextureChannel.Red, maskMap);
-                var multiplied = Multiply(
-                    alphaChain, maskFactor, AlphaMaskModeProperty, diagnostics);
-                if (multiplied == null)
-                {
-                    return SemanticOutput<ScalarSemanticValue>.Unknown();
-                }
-
-                alphaChain = multiplied;
-            }
-
-            return SemanticOutput<ScalarSemanticValue>.Complete(alphaChain);
-        }
-
-        /// <summary>
-        /// Composes one layer onto the running alpha by its writer mode.
-        /// Returns null after recording the layer's refusal or the
-        /// composition refusal. The multiply-over-saturating-shape refusal
-        /// is exact, not laziness: a product with a sum changes the
-        /// evaluated rounding chain, and the exact-one predicate of a
-        /// product is association-invariant only over pure factors.
-        /// </summary>
-        private static ScalarSemanticValue ComposeLayer(
-            ScalarSemanticValue baseValue,
-            CapturedMaterialEvidence evidence,
-            bool third,
-            List<LilToonSemanticDiagnostic> diagnostics)
-        {
-            var term = LilToonLayerAlphaTerm.Interpret(
-                evidence, third, diagnostics);
-            if (term.Kind == LilToonLayerAlphaTermKind.Refused)
-            {
-                return null;
-            }
-
-            if (term.Kind == LilToonLayerAlphaTermKind.Inert)
-            {
-                return baseValue;
-            }
-
-            ScalarSemanticValue layerValue =
-                term.Kind == LilToonLayerAlphaTermKind.Constant
-                    ? ScalarSemanticValue.Constant(term.Constant)
-                    : term.Value;
-            var modeProperty =
-                (third ? "_Main3rdTexAlphaMode" : "_Main2ndTexAlphaMode");
-
-            switch (term.AlphaMode)
-            {
-                case 1f:
-                    return layerValue;
-                case 2f:
-                    return Multiply(
-                        baseValue, layerValue, modeProperty, diagnostics);
-                case 3f:
-                    return ScalarSemanticValue.SaturatingSum(
-                        baseValue, layerValue);
-                case 4f:
-                    return ScalarSemanticValue.SaturatingDifference(
-                        baseValue, layerValue);
-                default:
-                    throw new InvalidOperationException(
-                        "A layer term carried a writer mode outside one to " +
-                        "four, which the term contract excludes.");
-            }
-        }
-
-        /// <summary>
-        /// The product of two closed forms, folded through their constants.
-        /// The exact-one predicate of a product of values bounded in [0,1] is
-        /// association-invariant: every rounded chain of sub-one factors
-        /// stays strictly below one, and all-one factors answer exactly one
-        /// in every association, so the fold changes nothing provable.
-        /// Returns null after recording a refusal when either shape is a
-        /// saturating sum or difference, whose exact-one predicate is not
-        /// multiplication-invariant.
-        /// </summary>
-        private static ScalarSemanticValue Multiply(
-            ScalarSemanticValue baseValue,
-            ScalarSemanticValue factor,
-            string refusalProperty,
-            List<LilToonSemanticDiagnostic> diagnostics)
-        {
-            if (baseValue.Kind == ScalarSemanticValueKind.SaturatingSum ||
-                baseValue.Kind ==
-                    ScalarSemanticValueKind.SaturatingDifference ||
-                factor.Kind == ScalarSemanticValueKind.SaturatingSum ||
-                factor.Kind == ScalarSemanticValueKind.SaturatingDifference)
-            {
-                diagnostics.Add(
-                    new LilToonSemanticDiagnostic(
-                        LilToonSemanticOutput.Alpha,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        refusalProperty));
-                return null;
-            }
-
-            var samples = new List<TextureSample>();
-            var channels = new List<TextureChannel>();
-            var maps = new List<AffineAlphaMap?>();
-            var multiplier = 1f;
-            multiplier = CollectFactors(
-                baseValue, samples, channels, maps, multiplier);
-            multiplier = CollectFactors(
-                factor, samples, channels, maps, multiplier);
-
-            if (samples.Count == 0)
-            {
-                return ScalarSemanticValue.Constant(multiplier);
-            }
-
-            if (samples.Count == 1 && !HasAnyMap(maps))
-            {
-                return ScalarSemanticValue.TextureTimesConstant(
-                    samples[0], channels[0], multiplier);
-            }
-
-            return ScalarSemanticValue.ProductChain(
-                samples, channels, multiplier, maps);
-        }
-
-        private static bool HasAnyMap(List<AffineAlphaMap?> maps)
-        {
-            for (var index = 0; index < maps.Count; index++)
-            {
-                if (maps[index] != null)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static float CollectFactors(
-            ScalarSemanticValue value,
-            List<TextureSample> samples,
-            List<TextureChannel> channels,
-            List<AffineAlphaMap?> maps,
-            float multiplier)
-        {
-            switch (value.Kind)
-            {
-                case ScalarSemanticValueKind.Constant:
-                    return multiplier * value.GetConstantValue();
-                case ScalarSemanticValueKind.TextureSample:
-                    samples.Add(value.GetTextureSample());
-                    channels.Add(value.GetChannel());
-                    maps.Add(null);
-                    return multiplier;
-                case ScalarSemanticValueKind.TextureSampleTimesConstant:
-                    samples.Add(value.GetTextureSample());
-                    channels.Add(value.GetChannel());
-                    maps.Add(null);
-                    return multiplier * value.GetMultiplier();
-                case ScalarSemanticValueKind.MappedTextureSample:
-                    samples.Add(value.GetTextureSample());
-                    channels.Add(value.GetChannel());
-                    maps.Add(value.GetMap());
-                    return multiplier;
-                case ScalarSemanticValueKind
-                    .ProductChainOfTextureSamples:
-                    for (var index = 0;
-                         index < value.GetChainFactorCount();
-                         index++)
-                    {
-                        samples.Add(value.GetChainSample(index));
-                        channels.Add(value.GetChainChannel(index));
-                        maps.Add(value.GetChainMap(index));
-                    }
-
-                    return multiplier * value.GetProductMultiplier();
-                default:
-                    throw new InvalidOperationException(
-                        "A saturating shape reached factor collection, " +
-                        "which the caller must refuse first.");
-            }
-        }
-
-        /// <summary>
-        /// Returns the first property that fails the exact-off gate — absent
-        /// from the capture, non-finite, or not exactly zero — or null when
-        /// every property proves off.
-        /// </summary>
-        private static string FirstFailedZeroGate(
-            CapturedMaterialEvidence evidence,
-            params string[] properties)
-        {
-            foreach (var property in properties)
-            {
-                if (!evidence.TryGetScalar(property, out var value) ||
-                    !IsFinite(value) || value != 0f)
-                {
-                    return property;
-                }
-            }
-
-            return null;
-        }
-
-        private static SemanticOutput<T> RecordUnknown<T>(
-            List<LilToonSemanticDiagnostic> diagnostics,
-            LilToonSemanticOutput output,
-            LilToonSemanticDiagnosticCode code,
-            string detail)
-            where T : class
-        {
-            diagnostics.Add(new LilToonSemanticDiagnostic(output, code, detail));
-            return SemanticOutput<T>.Unknown();
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
-        }
-
-        private static bool IsFinite(Vector4 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y) &&
-                   IsFinite(value.z) && IsFinite(value.w);
-        }
-
-        private static void RequireAnalyzableMaterial(Material material)
-        {
-            if (ReferenceEquals(material, null))
-            {
-                throw new ArgumentNullException(nameof(material));
-            }
-
-            // Unity's overloaded equality reports a destroyed object as null.
-            if (material == null)
-            {
-                throw new ArgumentException(
-                    "The material has been destroyed and cannot be analyzed.",
-                    nameof(material));
-            }
-
-            if (material.shader == null)
-            {
-                throw new ArgumentException(
-                    "The material has no shader and cannot be analyzed.",
-                    nameof(material));
-            }
+            return LilToonAlphaInterpreter.Interpret(
+                evidence,
+                diagnostics,
+                AlphaCoverageGates,
+                MaxProvableCutoff,
+                Array.Empty<LilToonAlphaGate>());
         }
     }
 }

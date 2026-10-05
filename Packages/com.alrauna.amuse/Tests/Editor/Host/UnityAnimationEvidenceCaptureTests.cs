@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf.animator;
@@ -97,14 +97,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             var path = UnattestedShaderFolder + "/" + fileName;
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    SubShader { Pass {} }\n}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
-            Assert.That(shader, Is.Not.Null, path);
             return shader;
         }
 

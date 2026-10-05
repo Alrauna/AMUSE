@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
@@ -50,8 +51,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             const int size = 8;
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(
-                size, size, TextureFormat.RGBA32, false);
             var pixels = new Color32[size * size];
             for (var index = 0; index < pixels.Length; index++)
             {
@@ -59,25 +58,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             pixels[0] = new Color32(255, 255, 255, 3);
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = true;
-            importer.isReadable = true;
-            importer.textureCompression =
-                TextureImporterCompression.Uncompressed;
-            importer.streamingMipmaps = true;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(
-                loaded, Is.Not.Null,
-                $"Streaming texture '{path}' must load.");
+            var loaded = TestTextureImport.WritePng(
+                path, size, size, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.streamingMipmaps = true;
+                });
             Assert.That(
                 loaded.streamingMipmaps, Is.True,
                 "fixture precondition: the imported texture must be " +
@@ -92,6 +81,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// exercises. Four vertical alpha bands of 0, 32, 64, and 255
         /// keep the cutoff verdicts separated per texel band.
         /// </summary>
+        // This EXR staging stays local: it is the single occurrence of an
+        // EXR fixture, and EncodeToEXR differs from the PNG builder's encoder.
         private Texture2D ImportExrStreamingBandTexture(string name)
         {
             const int size = 64;

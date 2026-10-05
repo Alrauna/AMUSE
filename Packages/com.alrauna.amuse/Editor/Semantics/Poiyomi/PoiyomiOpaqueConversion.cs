@@ -356,9 +356,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    policy that write is a no-op. With the policy it is the
             //    reported normalization.
             var depthComparison = Read(values, "_ZTest");
-            if (depthComparison != LEqualDepthComparison &&
+            if (depthComparison !=
+                    OpaqueConversionFactors.LEqualDepthComparison &&
                 !(allowDepthTestChange &&
-                  depthComparison == LessDepthComparison))
+                  depthComparison ==
+                    OpaqueConversionFactors.LessDepthComparison))
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -368,9 +370,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    evaluate to 1 and both accepted destination factors to 0, so
             //    the blend degenerates to `dst := src` and normalizing to
             //    One/Zero is an identity there.
-            if (Read(values, "_BlendOp") != BlendOpAdd ||
-                !IsUnitSourceFactorAtAlphaOne(Read(values, "_SrcBlend")) ||
-                !IsZeroDestinationFactorAtAlphaOne(Read(values, "_DstBlend")))
+            if (Read(values, "_BlendOp") !=
+                    OpaqueConversionFactors.BlendOpAdd ||
+                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+                    Read(values, "_SrcBlend")) ||
+                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
+                    Read(values, "_DstBlend")))
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.UnsupportedBlendEquation);
@@ -382,8 +387,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    states are equivalent to the canonical tuple. The blend
             //    OPERATION is deliberately unconstrained - the recipe never
             //    writes it, so it cancels (see the recipe's remarks).
-            if (!IsUnitSourceFactorAtAlphaOne(Read(values, "_AddSrcBlend")) ||
-                Read(values, "_AddDstBlend") != BlendFactorOne)
+            if (!OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+                    Read(values, "_AddSrcBlend")) ||
+                Read(values, "_AddDstBlend") !=
+                    OpaqueConversionFactors.BlendFactorOne)
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal
@@ -403,38 +410,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return PoiyomiOpaqueConversionEligibility.Convertible(
-                depthComparison == LessDepthComparison,
+                depthComparison == OpaqueConversionFactors.LessDepthComparison,
                 premultiplied);
-        }
-
-        private const float BlendOpAdd =
-            (float)UnityEngine.Rendering.BlendOp.Add;
-        private const float BlendFactorZero =
-            (float)UnityEngine.Rendering.BlendMode.Zero;
-        private const float BlendFactorOne =
-            (float)UnityEngine.Rendering.BlendMode.One;
-        private const float BlendFactorSrcAlpha =
-            (float)UnityEngine.Rendering.BlendMode.SrcAlpha;
-        private const float BlendFactorOneMinusSrcAlpha =
-            (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha;
-
-        private const float LEqualDepthComparison =
-            (float)UnityEngine.Rendering.CompareFunction.LessEqual;
-
-        private const float LessDepthComparison =
-            (float)UnityEngine.Rendering.CompareFunction.Less;
-
-        /// <summary>One and SrcAlpha both evaluate to 1 at alpha 1.</summary>
-        private static bool IsUnitSourceFactorAtAlphaOne(float factor)
-        {
-            return factor == BlendFactorOne || factor == BlendFactorSrcAlpha;
-        }
-
-        /// <summary>Zero and OneMinusSrcAlpha both evaluate to 0 at alpha 1.</summary>
-        private static bool IsZeroDestinationFactorAtAlphaOne(float factor)
-        {
-            return factor == BlendFactorZero ||
-                   factor == BlendFactorOneMinusSrcAlpha;
         }
 
         /// <summary>
@@ -489,27 +466,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // --- Effective render state and canonical-fact comparison -----------
 
         /// <summary>
-        /// The two canonical facts that are not shader properties. Neither is
-        /// animation-reachable - Unity's material binding syntax is
-        /// <c>material.&lt;PropertyName&gt;</c>, and no binding form addresses a
-        /// material's render queue or an override tag - so neither belongs in
-        /// the evidence request, whose job is to close the animation-relevant
-        /// set. <c>renderQueue</c> already resolves an absent override to the
-        /// shader's declared queue, so "an override exists" is an
-        /// implementation detail this design does not model.
-        /// </summary>
-        internal static void ReadEffectiveRenderState(
-            UnityEngine.Material material,
-            out int renderQueue,
-            out string renderType)
-        {
-            if (material == null) throw new ArgumentNullException(nameof(material));
-
-            renderQueue = material.renderQueue;
-            renderType = material.GetTag(RenderTypeTagName, false);
-        }
-
-        /// <summary>
         /// Reports the first of the 25 canonical facts the candidate disagrees
         /// with, in a deterministic order: recipe order, then the render queue,
         /// then the <c>RenderType</c> tag. A property the material does not
@@ -532,7 +488,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            ReadEffectiveRenderState(candidate, out var queue, out var renderType);
+            EffectiveRenderState.ReadEffectiveRenderState(
+                candidate, out var queue, out var renderType);
             if (queue != CanonicalOpaqueRenderQueue)
             {
                 factName = nameof(UnityEngine.Material.renderQueue);

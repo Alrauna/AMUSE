@@ -176,9 +176,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 var current = live[slot.SlotIndex];
-                var holdsLocked = ReferenceEquals(current, pair.LockedOriginal) ||
-                    (current is Material lockedMaterial &&
-                        lockedMaterial == pair.LockedOriginal);
+                var holdsLocked = current == pair.LockedOriginal;
                 if (!holdsLocked)
                 {
                     continue;
@@ -322,20 +320,25 @@ namespace Alrauna.Amuse.Editor.Build
                              .GetObjectReferenceCurveBindings(clip))
                 {
                     if (!rendererTypesByPath.TryGetValue(
-                            binding.path, out var rendererTypes) ||
-                        !LiveAnimationObservation
-                            .TryParseMaterialSlotBinding(
-                                binding.propertyName, out _))
+                            binding.path, out var rendererTypes))
                     {
                         continue;
                     }
 
+                    // Path membership is resolved by the dictionary above;
+                    // the helper re-checks it against the resolved path and
+                    // gates each candidate renderer type.
                     var compatibleRenderer = false;
                     foreach (var rendererType in rendererTypes)
                     {
                         if (UnityAnimationEvidenceCapture
-                            .IsCompatibleRendererType(
-                                binding.type.FullName, rendererType))
+                                .TryParseMaterialSlotBindingFor(
+                                    binding.path,
+                                    binding.type.FullName,
+                                    binding.propertyName,
+                                    binding.path,
+                                    rendererType,
+                                    out _))
                         {
                             compatibleRenderer = true;
                             break;

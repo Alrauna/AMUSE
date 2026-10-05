@@ -8,6 +8,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Host
 {
@@ -132,8 +133,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             };
             // The clone stays in memory, so its own project path is empty;
             // only the registry can name the authoring asset.
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
@@ -153,7 +153,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 Object.DestroyImmediate(clone);
             }
         }
@@ -1208,7 +1208,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         });
         var resolution = AlphaResolution.Classified(
             chain,
-            new AlphaSamplingSettings(
+            new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp),
             mapping, 0);
 

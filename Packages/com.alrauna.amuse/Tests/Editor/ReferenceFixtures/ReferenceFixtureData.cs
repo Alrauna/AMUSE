@@ -280,7 +280,7 @@ namespace Alrauna.Amuse.Tests.Editor.ReferenceFixtures
 
             for (var index = 0; index < mesh.positions.Length; index++)
             {
-                Require(IsFinite(mesh.positions[index]),
+                Require(float.IsFinite(mesh.positions[index]),
                     $"Mesh {mesh.id} has a non-finite position.");
                 if (index % 3 == 2)
                 {
@@ -299,7 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.ReferenceFixtures
                     $"Mesh {mesh.id} has the wrong UV0 value count.");
                 foreach (var value in mesh.uv0)
                 {
-                    Require(IsFinite(value), $"Mesh {mesh.id} has a non-finite UV0 value.");
+                    Require(float.IsFinite(value), $"Mesh {mesh.id} has a non-finite UV0 value.");
                 }
             }
             else
@@ -419,11 +419,6 @@ namespace Alrauna.Amuse.Tests.Editor.ReferenceFixtures
         {
             Require(!string.IsNullOrEmpty(id), $"{kind} ID is empty.");
             Require(ids.Add(id), $"Duplicate {kind} ID: {id}");
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static void Require(bool condition, string message)

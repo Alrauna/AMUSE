@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -368,7 +369,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out bool depthTestDivergence)
         {
             if (live != null && live.shader == Shader.Find(
-                    LilToonConversionShaderNames.Transparent))
+                    LilToonFixtureTestBase.TransparentConversionShaderName))
             {
                 return VerifiedLilToonTestSeams
                     .VerifiedTransparentConversionStep(
@@ -696,26 +697,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return null;
         }
 
-        private static string DescribeAuthoredCurve(
-            AnimationClip clip,
-            string rendererPath,
-            string propertyName)
-        {
-            var curve = AnimationUtility.GetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath, typeof(SkinnedMeshRenderer),
-                    propertyName));
-            if (curve == null)
-            {
-                return "<null>";
-            }
-
-            return string.Join("|", curve.Select(key =>
-                key.time.ToString("R") + "=>" +
-                (key.value == null ? "null" : key.value.name)));
-        }
-
         private static string CommittedCurve(
             GameObject root,
             string rendererPath,
@@ -725,7 +706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, rendererPath, propertyName);
             Assert.That(committed, Is.Not.Null,
                 "no committed clip carried the binding under test");
-            return DescribeAuthoredCurve(committed, rendererPath,
+            return CurveDescription.DescribeAuthoredCurve(committed, rendererPath,
                 propertyName);
         }
 
@@ -1222,7 +1203,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 controller = NewController(
                     root, "AMUSE marker graph", markedClip, ordinaryClip);
 
-                var authoredMarked = DescribeAuthoredCurve(
+                var authoredMarked = CurveDescription.DescribeAuthoredCurve(
                     markedClip, "marked", "m_Materials.Array.data[0]");
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -1273,7 +1254,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(authoredMarked),
                     "the marker clip's own committed curve must be unchanged");
                 Assert.That(
-                    DescribeAuthoredCurve(
+                    CurveDescription.DescribeAuthoredCurve(
                         markedClip, "marked", "m_Materials.Array.data[0]"),
                     Is.EqualTo(authoredMarked),
                     "the source clip asset must be unchanged");
@@ -2691,7 +2672,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         (0f, cutout), (1f, swap)));
                     controller = NewController(
                         root, "AMUSE cutout appended graph", clip);
-                    var authoredOwn = DescribeAuthoredCurve(
+                    var authoredOwn = CurveDescription.DescribeAuthoredCurve(
                         clip, "split", "m_Materials.Array.data[0]");
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -2730,7 +2711,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the committed clip must " +
                         "carry the slot's own binding");
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedOwn, "split",
                             "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredOwn),
@@ -2772,7 +2753,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     // The source clip asset is unchanged.
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             clip, "split", "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredOwn),
                         "the source clip must be unchanged");
@@ -3516,7 +3497,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     PoiyomiCloneFacts =
                         DigestMaterialWithoutTextures(poiClone);
                     PoiyomiName = poiClone.name;
-                    CutoutOwnCurve = DescribeAuthoredCurve(
+                    CutoutOwnCurve = CurveDescription.DescribeAuthoredCurve(
                         clip, "cutoutBody",
                         "m_Materials.Array.data[0]");
                     CutoutMeshIndices = DescribeSubmeshIndices(
@@ -3529,10 +3510,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var appendedClip = CommittedClipWithObjectBinding(
                         root, "cutoutBody",
                         "m_Materials.Array.data[2]");
-                    CutoutOwnCurve = DescribeAuthoredCurve(
+                    CutoutOwnCurve = CurveDescription.DescribeAuthoredCurve(
                         clip, "cutoutBody",
                         "m_Materials.Array.data[1]");
-                    CutoutAppendedCurve = DescribeAuthoredCurve(
+                    CutoutAppendedCurve = CurveDescription.DescribeAuthoredCurve(
                         appendedClip, "cutoutBody",
                         "m_Materials.Array.data[2]");
                 }
@@ -3726,32 +3707,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal Texture2D ImportRefusedFormatMipmap(string name)
             {
                 var path = TempFolder + "/" + name + ".png";
-                var staging = new Texture2D(
-                    4, 4, TextureFormat.RGBA32, false);
-                staging.SetPixels32(FullyOpaquePixels());
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                importer.textureCompression =
-                    TextureImporterCompression.Uncompressed;
-                var settings = importer.GetPlatformTextureSettings(
-                    "Standalone");
-                settings.overridden = true;
-                settings.format = TextureImporterFormat.RGBAHalf;
-                importer.SetPlatformTextureSettings(settings);
-                importer.SaveAndReimport();
-
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                return loaded;
+                return TestTextureImport.WritePng(
+                    path, 4, 4, FullyOpaquePixels(), importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                        var settings = importer.GetPlatformTextureSettings(
+                            "Standalone");
+                        settings.overridden = true;
+                        settings.format = TextureImporterFormat.RGBAHalf;
+                        importer.SetPlatformTextureSettings(settings);
+                    });
             }
 
             private Texture2D ImportMipmapTexture(
@@ -3761,32 +3728,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Color32[] baseLevelBottomToTop)
             {
                 var path = TempFolder + "/" + name + ".png";
-                var staging = new Texture2D(
-                    width, height, TextureFormat.RGBA32, false);
-                staging.SetPixels32(baseLevelBottomToTop);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-                importer.streamingMipmaps = false;
-                // Uncompressed keeps the imported GPU format RGBA32, a
-                // format the alpha-evidence allowlist admits.
-                importer.textureCompression =
-                    TextureImporterCompression.Uncompressed;
-                importer.SaveAndReimport();
-
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                return loaded;
+                return TestTextureImport.WritePng(
+                    path, width, height, baseLevelBottomToTop, importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.filterMode = FilterMode.Bilinear;
+                        importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                        importer.streamingMipmaps = false;
+                        // Uncompressed keeps the imported GPU format RGBA32, a
+                        // format the alpha-evidence allowlist admits.
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                    });
             }
 
             private static Color32[] FullyOpaquePixels()
@@ -3799,16 +3752,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 return pixels;
             }
-        }
-
-        private sealed class LilToonConversionShaderNames
-            : LilToonFixtureTestBase
-        {
-            /// <summary>The tuple-carrying attested opaque stand-in.</summary>
-            internal const string OpaqueTarget = OpaqueConversionShaderName;
-
-            /// <summary>The schema-complete transparent source stand-in.</summary>
-            internal const string Transparent = TransparentConversionShaderName;
         }
 
         /// <summary>
@@ -3869,7 +3812,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "every canonical fact must read back on the clone");
             Assert.That(clone.shader,
                 Is.SameAs(Shader.Find(
-                    LilToonConversionShaderNames.OpaqueTarget)),
+                    LilToonFixtureTestBase.OpaqueConversionShaderName)),
                 "the clone must carry the attested opaque stand-in " +
                 "target");
         }

@@ -39,61 +39,76 @@ namespace Alrauna.Amuse.Editor.Semantics
             "1.9.17",
         };
 
-        private static readonly List<string> Admitted =
-            new List<string>(ProductionAdmittedVersions);
+        private static readonly AdmittedProducerVersions Versions =
+            new AdmittedProducerVersions(
+                ProducerPackageName,
+                ProductionAdmittedVersions);
 
-        internal static Func<string, string> ReadInstalledPackageVersionOrNull
+        /// <summary>
+        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
+        /// UnityAlphaFieldEvidenceTests, UnityGeneratedTextureEvidenceTests,
+        /// and UnityMaterialEvidenceCaptureTests.
+        /// </summary>
+        internal static Func<string, string>
+            ReadInstalledPackageVersionOrNull
         {
-            get;
-            set;
-        } = PackageVersionReader.ReadInstalledOrNull;
+            get => Versions.ReadInstalledPackageVersionOrNull;
+            set => Versions.ReadInstalledPackageVersionOrNull = value;
+        }
 
-        internal static IReadOnlyList<string> AdmittedVersions => Admitted;
+        /// <summary>
+        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests.
+        /// </summary>
+        internal static IReadOnlyList<string> AdmittedVersions =>
+            Versions.AdmittedVersions;
 
+        /// <summary>
+        /// Forwarded seam. Kept for parity with the sibling attestation's
+        /// seam; currently addressed by no test.
+        /// </summary>
         internal static void SetAdmittedVersionsForTests(
             params string[] versions)
         {
-            Admitted.Clear();
-            if (versions != null)
-            {
-                Admitted.AddRange(versions);
-            }
+            Versions.SetAdmittedVersionsForTests(versions);
         }
 
-        private static string CachedVersion;
-        private static bool VersionReadCompleted;
-
+        /// <summary>
+        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
+        /// UnityAlphaFieldEvidenceTests, UnityGeneratedTextureEvidenceTests,
+        /// and UnityMaterialEvidenceCaptureTests.
+        /// </summary>
         internal static void ResetForTests()
         {
-            Admitted.Clear();
-            Admitted.AddRange(ProductionAdmittedVersions);
-            ReadInstalledPackageVersionOrNull =
-                PackageVersionReader.ReadInstalledOrNull;
-            ClearVersionCacheForSession();
+            Versions.ResetForTests();
         }
 
+        /// <summary>
+        /// Forwarded seam. Addressed through the admission and refusal
+        /// tests in AaoAtlasTextureAttestationTests.
+        /// </summary>
         internal static bool TryReadInstalledProducerVersion(
             out string version)
         {
-            if (!VersionReadCompleted)
-            {
-                CachedVersion = ReadInstalledPackageVersionOrNull?.Invoke(
-                    ProducerPackageName);
-                VersionReadCompleted = true;
-            }
-            version = CachedVersion;
-            return !string.IsNullOrEmpty(version);
+            return Versions.TryReadInstalledProducerVersion(out version);
         }
 
+        /// <summary>
+        /// Forwarded seam. The production session resets in
+        /// AlphaSeparationApply and AmusePlatformFinishPlugin call it.
+        /// </summary>
         internal static void ClearVersionCacheForSession()
         {
-            VersionReadCompleted = false;
-            CachedVersion = null;
+            Versions.ClearVersionCacheForSession();
         }
 
+        /// <summary>
+        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests.
+        /// </summary>
         internal static bool IsVersionAdmitted(string version)
         {
-            return !string.IsNullOrEmpty(version) && Admitted.Contains(version);
+            return Versions.IsVersionAdmitted(version);
         }
 
         /// <summary>

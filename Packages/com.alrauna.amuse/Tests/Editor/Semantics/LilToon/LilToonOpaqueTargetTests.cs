@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -595,24 +596,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// authoring a .meta (Unity generates it on import). The caller owns
         /// the folder cleanup.
         /// </summary>
-        private static Shader ImportTempShader(
-            string shaderName, string fileName, string shaderText)
+        private static Shader ImportTempShader(string fileName, string shaderText)
         {
             if (!AssetDatabase.IsValidFolder(ConversionTempFolder))
             {
                 AssetDatabase.CreateFolder("Assets", "AmuseTests_LilToonConversion");
             }
 
-            var path = ConversionTempFolder + "/" + fileName;
-            File.WriteAllText(path, shaderText);
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-
-            var shader = Shader.Find(shaderName);
-            Assert.That(
-                shader, Is.Not.Null,
-                $"Temp shader '{shaderName}' must import.");
-            return shader;
+            // Resolves by asset path, never by shader name: several stand-ins
+            // carry the vendor's own name, and a name lookup could answer
+            // with the installed vendor asset instead of this temp file.
+            return TestShaderWriter.WriteTestShader(
+                ConversionTempFolder + "/" + fileName, shaderText);
         }
 
         private static void DeleteConversionTempFolder()
@@ -677,7 +672,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             try
             {
                 var target = ImportTempShader(
-                    "Hidden/Alrauna/AmuseTests/LilToonConversionMissingBlendOpFA",
                     "LilToonConversionMissingBlendOpFA.shader",
                     missingBlendOpFa);
                 var source = Track(new Material(target));
@@ -753,7 +747,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             try
             {
-                ImportTempShader("lilToon", "lilToon.shader", wrongGuidLilToon);
+                ImportTempShader("lilToon.shader", wrongGuidLilToon);
                 var source = Track(ConversionEligibleStandIn());
                 var captured = UnityMaterialEvidenceCapture.Capture(new[]
                 {
@@ -825,7 +819,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 };
 
                 var targetShader = ImportTempShader(
-                    "lilToon",
                     "lilToon.shader",
                     ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
 
@@ -888,7 +881,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // the material and refuse on the pass the profile names, which
             // nothing in this project then resolves.
             ImportTempShader(
-                "lilToon",
                 "lilToon.shader",
                 ValidStandInLilToonSource(LilToonSourceAttestation.SupportedShaderGuid));
             try

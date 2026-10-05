@@ -108,7 +108,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                 material =>
                 {
                     observedCutoff = material.GetFloat("_Cutoff");
-                    return UnityMaterialSemantics.AllUnknown();
+                    return EvidenceGates.AllUnknown();
                 });
 
             Assert.That(observed.Refusal, Is.EqualTo(RendererRefusal.None));

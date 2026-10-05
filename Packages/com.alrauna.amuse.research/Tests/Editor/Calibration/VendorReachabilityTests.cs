@@ -138,6 +138,20 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         }
 
         /// <summary>
+        /// The shared absence preamble: a family that reports absent must
+        /// carry a null shader, and the caller decides how to discharge the
+        /// absent case - the Poiyomi gates return, the lilToon gate ignores.
+        /// </summary>
+        private static CensusVendorPresence ProbeInstalled(
+            CensusVendorFamily family)
+        {
+            var presence = CensusVendorProbe.Probe(family);
+            if (!presence.IsInstalled)
+                Assert.That(presence.Shader, Is.Null);
+            return presence;
+        }
+
+        /// <summary>
         /// Gate case 2, the decisive one. If the production path cannot reach
         /// ProvenOpaque, no census result means anything, because the success
         /// path is unreachable in the environment being measured.
@@ -152,12 +166,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void PoiyomiReachesProvenOpaqueThroughTheProductionPath()
         {
-            var presence = CensusVendorProbe.Probe(CensusVendorFamily.Poiyomi);
+            var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-            {
-                Assert.That(presence.Shader, Is.Null);
                 return;
-            }
 
             var forced = _scene.NewMaterial(presence.Shader, "GateForcedOpaque");
             var forcedSubmesh = ObserveSingleSubmesh(forced);
@@ -199,12 +210,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void PoiyomiReachesMustRemainTransparentThroughTheProductionPath()
         {
-            var presence = CensusVendorProbe.Probe(CensusVendorFamily.Poiyomi);
+            var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-            {
-                Assert.That(presence.Shader, Is.Null);
                 return;
-            }
 
             var material = NewUnforcedPoiyomiMaterial(
                 presence.Shader, "GateTransparent");
@@ -250,12 +258,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void ANonAssetTextureIsRefusedBySemanticsBeforeTheResolverSeesIt()
         {
-            var presence = CensusVendorProbe.Probe(CensusVendorFamily.Poiyomi);
+            var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-            {
-                Assert.That(presence.Shader, Is.Null);
                 return;
-            }
 
             var texture = new Texture2D(4, 4) { name = "GateRuntimeTexture" };
             try
@@ -307,12 +312,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void ALockedPoiyomiMaterialIsUnattestedAndReportsSemanticsUnknown()
         {
-            var presence = CensusVendorProbe.Probe(CensusVendorFamily.Poiyomi);
+            var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-            {
-                Assert.That(presence.Shader, Is.Null);
                 return;
-            }
 
             var material = _scene.NewMaterial(presence.Shader, "GateLocked");
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -344,7 +346,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void LilToonReachesProvenOpaqueThroughTheProductionPath()
         {
-            var presence = CensusVendorProbe.Probe(CensusVendorFamily.LilToon);
+            var presence = ProbeInstalled(CensusVendorFamily.LilToon);
             if (!presence.IsInstalled)
             {
                 Assert.Ignore(

@@ -1,5 +1,5 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
@@ -819,8 +819,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixture = default(AnalyzableRendererFixture);
 
             const string fixtureFolder = "Assets/AmuseTests_LockedSource";
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 AmuseBuildStatusStore.Forget();
@@ -831,17 +830,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 var shaderPath = fixtureFolder + "/locked.shader";
-                File.WriteAllText(
+                var lockedShader = TestShaderWriter.WriteTestShader(
                     shaderPath,
                     "Shader \"Hidden/Locked/AmuseTestLocked\"\n" +
                     "{\n    Properties\n    {\n" +
                     "        _ShaderOptimizerEnabled (\"\", Float) = 0\n" +
                     "    }\n    SubShader { Pass {} }\n}\n");
-                AssetDatabase.ImportAsset(
-                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
-                var lockedShader =
-                    AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
-                Assert.That(lockedShader, Is.Not.Null, shaderPath);
 
                 // The authoring asset carries the project path. The live
                 // build copy stays in memory, so its own project path is
@@ -894,7 +888,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 DisposeAnalyzableRenderer(fixture);
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 if (AssetDatabase.IsValidFolder(fixtureFolder))
                 {
                     AssetDatabase.DeleteAsset(fixtureFolder);
@@ -3819,35 +3813,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static Texture2D ImportLowerMipTexture(string name, Color32[] pixels)
         {
             var path = LowerMipTempFolder + "/" + name + ".png";
-            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, false);
-            try
-            {
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-            }
-            finally
-            {
-                // Encoding or writing can throw; the in-memory staging texture must
-                // not survive that.
-                Object.DestroyImmediate(staging);
-            }
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = true;
-            importer.isReadable = false;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.mipMapBias = 0f;
-            importer.anisoLevel = 1;
-            importer.streamingMipmaps = false;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"'{path}' must import.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, 8, 8, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = false;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.mipMapBias = 0f;
+                    importer.anisoLevel = 1;
+                    importer.streamingMipmaps = false;
+                });
         }
 
         /// <summary>

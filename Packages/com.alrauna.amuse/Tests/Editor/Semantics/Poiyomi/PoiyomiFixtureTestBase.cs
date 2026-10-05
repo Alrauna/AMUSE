@@ -1,10 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -20,53 +19,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// </summary>
     public abstract class PoiyomiFixtureTestBase
     {
-        protected const string FixtureShaderName =
+        internal const string FixtureShaderName =
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
-        protected const string TwoPassFixtureShaderName =
+        internal const string TwoPassFixtureShaderName =
             "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest";
         protected const string TempFolder = "Assets/AmuseTests_Temp";
 
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(TempFolder);
 
         [SetUp]
         public void BaseSetUp()
         {
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder("Assets", "AmuseTests_Temp");
-            }
+            _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void BaseTearDown()
         {
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
-
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
+            _scope.TearDown();
         }
 
         /// <summary>Registers a transient object for teardown destruction.</summary>
         protected T Track<T>(T obj) where T : UnityEngine.Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         protected Material NewFixtureMaterial()
         {
             return Track(CreateVerifiedMaterial());
+        }
+
+        /// <summary>
+        /// Interprets through the verified-material seam, linear colour space
+        /// by default.
+        /// </summary>
+        internal static PoiyomiSemanticResult Interpret(
+            Material material,
+            ColorSpace colorSpace = ColorSpace.Linear)
+        {
+            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
+                material, colorSpace);
+        }
+
+        /// <summary>
+        /// Interprets the Two Pass stand-in through its verified-material
+        /// seam, linear colour space by default.
+        /// </summary>
+        internal static PoiyomiSemanticResult InterpretTwoPass(
+            Material material,
+            ColorSpace colorSpace = ColorSpace.Linear)
+        {
+            return PoiyomiMaterialSemantics.InterpretVerifiedTwoPassMaterial(
+                material, colorSpace);
         }
 
         internal static Material CreateVerifiedMaterial()
@@ -109,34 +115,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Action<TextureImporter> configure = null,
             bool sourceHasAlpha = true)
         {
-            var path = TempFolder + "/" + name + ".png";
-            var format = sourceHasAlpha
-                ? TextureFormat.RGBA32
-                : TextureFormat.RGB24;
-            var staging = new Texture2D(4, 4, format, false);
             var pixels = new Color32[16];
             for (var i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = new Color32(128, 64, 32, 200);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(
-                path,
-                ImportAssetOptions.ForceSynchronousImport);
-
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                TempFolder + "/" + name + ".png",
+                4,
+                4,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    configure?.Invoke(importer);
+                },
+                alpha: sourceHasAlpha);
         }
 
         /// <summary>
@@ -147,15 +142,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </summary>
         protected Texture2D NewNativeTextureAsset(string name)
         {
-            var path = TempFolder + "/" + name + ".asset";
-            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            AssetDatabase.CreateAsset(texture, path);
-            AssetDatabase.ImportAsset(
-                path,
-                ImportAssetOptions.ForceSynchronousImport);
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Native asset '{path}' must load.");
-            return loaded;
+            return TestTextureImport.ImportNative(
+                TempFolder + "/" + name + ".asset");
         }
 
         protected static string ExpectedToken(Texture texture)

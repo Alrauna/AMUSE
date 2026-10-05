@@ -5,17 +5,6 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Semantics
 {
     /// <summary>
-    /// Identifies a known producer of generated textures.
-    /// </summary>
-    internal enum GeneratedTextureProducer
-    {
-        None,
-        Anatawa12AvatarOptimizer,
-        VrcFuryBuildContainer,
-        LimitexTextureCompressor,
-    }
-
-    /// <summary>
     /// Attests whether a texture was created by a known generated texture producer.
     /// </summary>
     internal static class GeneratedTextureAttestation
@@ -34,11 +23,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// Attempts to identify the producer of a generated texture.
         /// </summary>
-        internal static bool TryIdentifyProducer(
-            Texture texture,
-            out GeneratedTextureProducer producer)
+        internal static bool TryIdentifyProducer(Texture texture)
         {
-            producer = GeneratedTextureProducer.None;
             if (texture == null)
             {
                 return false;
@@ -73,7 +59,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                         StringComparison.Ordinal);
                 if (isAaoTexture)
                 {
-                    producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
                     return true;
                 }
 
@@ -95,7 +80,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                         out var version) &&
                     ReplacementTextureAttestation.IsVersionAdmitted(version))
                 {
-                    producer = GeneratedTextureProducer.LimitexTextureCompressor;
                     return true;
                 }
 
@@ -105,7 +89,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (mainAsset.GetType().FullName == VrcFuryContainerTypeFullName &&
                 mainAsset.name == VrcFuryContainerObjectName)
             {
-                producer = GeneratedTextureProducer.VrcFuryBuildContainer;
                 return true;
             }
 
@@ -118,15 +101,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// replacement copy minted by Limitex Texture Compressor, or a
         /// shape-admitted in-memory Avatar Optimizer atlas.
         /// </summary>
-        internal static bool TryIdentifyRouteTexture(
-            Texture texture, out GeneratedTextureProducer producer)
+        internal static bool TryIdentifyRouteTexture(Texture texture)
         {
-            producer = GeneratedTextureProducer.None;
             if (texture == null)
             {
                 return false;
             }
-            if (TryIdentifyProducer(texture, out producer))
+            if (TryIdentifyProducer(texture))
             {
                 return true;
             }
@@ -134,7 +115,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 ReplacementTextureAttestation.TryIdentifyReplacement(
                     copy, out _))
             {
-                producer = GeneratedTextureProducer.LimitexTextureCompressor;
                 return true;
             }
             // The in-memory Avatar Optimizer atlas takes the generated
@@ -150,10 +130,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (texture is Texture2D atlas &&
                 AaoAtlasTextureAttestation.TryIdentifyAtlasShape(atlas))
             {
-                producer = GeneratedTextureProducer.Anatawa12AvatarOptimizer;
                 return true;
             }
-            producer = GeneratedTextureProducer.None;
             return false;
         }
     }

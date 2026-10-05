@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -84,23 +85,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Action<TextureImporter> configure = null)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            importer.isReadable = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, width, height, pixels, importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = true;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    configure?.Invoke(importer);
+                });
         }
 
         private static Texture2D ImportAsymmetric(
@@ -1728,7 +1720,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void TheHostCapabilityCheckPassesOnThisHost()
         {
-            Assert.That(UnityAlphaFieldEvidence.HostCapabilityCheckPasses(), Is.True);
+            Assert.That(UnityAlphaFieldEvidence.HostCapabilityCheckPasses(
+                TextureChannel.Alpha), Is.True);
         }
 
         [Test]
@@ -1849,8 +1842,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AdmittedReplacementCopyCapturesThroughTheGeneratedRoute()
         {
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var source = ImportSourceAsset("route");
             var copy = new Texture2D(16, 16, TextureFormat.RGBA32, true);
             copy.name = source.name + "_compressed";
@@ -1883,7 +1875,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 UnityEngine.Object.DestroyImmediate(copy);
                 ReplacementTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
                 DeleteTempFolder();
             }
         }
@@ -1891,8 +1883,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AdmittedAtlasCapturesWithCorroboratedOriginMaterial()
         {
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var originSource = new Material(
                 Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
             AssetDatabase.CreateAsset(
@@ -1937,7 +1928,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
                 AaoAtlasTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
                 DeleteTempFolder();
             }
         }
@@ -1972,8 +1963,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void StreamingFlagOnAdmittedAtlasStillTakesTheGeneratedRoute()
         {
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var originSource = new Material(
                 Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
             AssetDatabase.CreateAsset(
@@ -2017,7 +2007,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
                 AaoAtlasTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
                 DeleteTempFolder();
             }
         }
@@ -2028,8 +2018,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             // --- Falsifier 7 (spec 2026-10-04, section 6): BC5 refuses
             // with UnsupportedFormat even when every admission conjunct
             // holds. ---
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var originSource = new Material(
                 Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
             AssetDatabase.CreateAsset(
@@ -2061,7 +2050,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
                 AaoAtlasTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
                 DeleteTempFolder();
             }
         }
@@ -2071,8 +2060,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             // --- Falsifier 5: BC5 refuses with UnsupportedFormat even when every
             // other conjunct holds. ---
-            var previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             var source = ImportSourceAsset("bc5");
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
@@ -2095,7 +2083,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 UnityEngine.Object.DestroyImmediate(copy);
                 ReplacementTextureAttestation.ResetForTests();
-                ObjectRegistry.ActiveRegistry = previousRegistry;
+                registryGuard.Dispose();
                 DeleteTempFolder();
             }
         }

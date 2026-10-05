@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -894,7 +895,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static PoiyomiOpaqueConversionEligibility EvaluateFor(Material material)
         {
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
                 CaptureConversion(material), queue, renderType);
@@ -910,7 +911,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private static PoiyomiOpaqueConversionEligibility EvaluateWith(
             Material material, string property, float value)
         {
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
                 CaptureConversion(material).WithScalar(property, value),
@@ -924,7 +925,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             float value,
             bool allowDepthTestChange)
         {
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
                 CaptureConversion(material).WithScalar(property, value),
@@ -1062,7 +1063,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var shader = Shader.Find("Unlit/Color");
             var material = Track(new Material(shader));
 
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             var result = PoiyomiOpaqueConversion.EvaluateVerifiedEligibility(
                 CaptureConversion(material), queue, renderType);
@@ -1110,7 +1111,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var material = NewFixtureMaterial();
 
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
 
             Assert.That(queue, Is.Not.EqualTo(-1));

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Tests.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using nadena.dev.ndmf.platform;
@@ -199,7 +200,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     probe.ClipsForBindingInSecondWindow = clips.Count;
                     if (clips.Count == 1)
                     {
-                        probe.SecondWindowObservedCurve = DescribeObjectCurve(
+                        probe.SecondWindowObservedCurve = CurveDescription.DescribeObjectCurve(
                             clips[0].GetObjectCurve(binding));
                     }
 
@@ -265,15 +266,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
-        private static string DescribeObjectCurve(ObjectReferenceKeyframe[] curve)
-        {
-            if (curve == null) return "<null>";
-
-            return string.Join("|", curve.Select(key =>
-                key.time.ToString("R") + "=>" +
-                (key.value == null ? "null" : key.value.name)));
-        }
-
         private static string DescribeCommittedSlotCurve(
             GameObject avatarRoot,
             string rendererPath)
@@ -290,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         continue;
                     }
 
-                    descriptions.Add(DescribeObjectCurve(
+                    descriptions.Add(CurveDescription.DescribeObjectCurve(
                         AnimationUtility.GetObjectReferenceCurve(clip, binding)));
                 }
             }
@@ -410,10 +402,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 SetSwapCurve(
                     DecoyClip, OtherRendererPath, new[] { AlphaB, AlphaA, AlphaB });
 
-                SourceCurveDescription = DescribeAuthoredCurve(
-                    SwapClip, RendererPath);
-                DecoyCurveDescription = DescribeAuthoredCurve(
-                    DecoyClip, OtherRendererPath);
+                SourceCurveDescription = CurveDescription.DescribeAuthoredCurve(
+                    SwapClip, RendererPath, SlotZeroBinding);
+                DecoyCurveDescription = CurveDescription.DescribeAuthoredCurve(
+                    DecoyClip, OtherRendererPath, SlotZeroBinding);
 
                 SourceController =
                     Track(new AnimatorController { name = "source controller" });
@@ -448,21 +440,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     keyframes);
             }
 
-            private static string DescribeAuthoredCurve(
-                AnimationClip clip,
-                string path)
-            {
-                return DescribeObjectCurve(AnimationUtility.GetObjectReferenceCurve(
-                    clip,
-                    EditorCurveBinding.PPtrCurve(
-                        path, typeof(SkinnedMeshRenderer), SlotZeroBinding)));
-            }
 
             internal string CurrentSourceCurveDescription =>
-                DescribeAuthoredCurve(SwapClip, RendererPath);
+                CurveDescription.DescribeAuthoredCurve(
+                    SwapClip, RendererPath, SlotZeroBinding);
 
             internal string CurrentDecoyCurveDescription =>
-                DescribeAuthoredCurve(DecoyClip, OtherRendererPath);
+                CurveDescription.DescribeAuthoredCurve(
+                    DecoyClip, OtherRendererPath, SlotZeroBinding);
 
             public void Dispose()
             {
@@ -576,7 +561,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(committed, Is.Not.Null,
                 "no committed clip carried the slot-0 binding after the build");
 
-            var committedCurve = DescribeObjectCurve(
+            var committedCurve = CurveDescription.DescribeObjectCurve(
                 AnimationUtility.GetObjectReferenceCurve(
                     committed,
                     EditorCurveBinding.PPtrCurve(

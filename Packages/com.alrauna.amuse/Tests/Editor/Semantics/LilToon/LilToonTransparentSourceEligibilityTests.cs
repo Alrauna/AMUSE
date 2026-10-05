@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Editor.Semantics;
 using NUnit.Framework;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
@@ -51,7 +53,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private static LilToonOpaqueConversionEligibility EvaluateFor(
             Material material)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonTransparentSourceEligibility
                 .EvaluateVerifiedEligibility(
@@ -64,7 +66,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float value,
             bool allowDepthTestChange)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);
             return LilToonTransparentSourceEligibility
                 .EvaluateVerifiedEligibility(
@@ -91,19 +93,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 result.Outcome,
                 Is.EqualTo(LilToonOpaqueConversionOutcome.Convertible),
                 "refusal was " + result.Refusal);
-        }
-
-        /// <summary>
-        /// nextafter(value, +infinity) for binary32. MathF.BitIncrement does
-        /// not exist in this Editor's API profile, so the one-ulp step comes
-        /// from the bit pattern directly. The row below depends on the step
-        /// being exactly one ulp: a larger step would still refuse and would
-        /// stop falsifying the bound.
-        /// </summary>
-        private static float NextFloatAbove(float value)
-        {
-            return BitConverter.Int32BitsToSingle(
-                BitConverter.SingleToInt32Bits(value) + 1);
         }
 
         [Test]
@@ -435,7 +424,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void SubpassCutoffJustAboveOne_RefusesUnsupportedSubpassCutoff()
         {
             var material = NewTransparentFixtureMaterial();
-            var subpassCutoff = NextFloatAbove(1f);
+            var subpassCutoff = FloatUlp.NextFloatAbove(1f);
 
             // Degradation guard: the row depends on the step being exactly
             // one ulp, so a future runtime change must not silently turn
@@ -486,7 +475,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var cutout = NewCutoutFixtureMaterial();
             cutout.SetFloat("_Cutoff", 1f);
 
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 cutout, out var queue, out var renderType);
             var evidence = UnityMaterialEvidenceCapture.Capture(new[]
             {

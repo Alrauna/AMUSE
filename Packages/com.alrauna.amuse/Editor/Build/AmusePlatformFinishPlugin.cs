@@ -1425,12 +1425,14 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 foreach (var binding in clip.ObjectBindings)
                 {
-                    if (!string.Equals(
-                            binding.Path, rendererPath, StringComparison.Ordinal) ||
-                        !UnityAnimationEvidenceCapture.IsCompatibleRendererType(
-                            binding.TypeName, rendererTypeName) ||
-                        !LiveAnimationObservation.TryParseMaterialSlotBinding(
-                            binding.PropertyName, out var slot))
+                    if (!UnityAnimationEvidenceCapture
+                            .TryParseMaterialSlotBindingFor(
+                                binding.Path,
+                                binding.TypeName,
+                                binding.PropertyName,
+                                rendererPath,
+                                rendererTypeName,
+                                out var slot))
                         continue;
 
                     foreach (var material in binding.AdmittedMaterialIndices)
