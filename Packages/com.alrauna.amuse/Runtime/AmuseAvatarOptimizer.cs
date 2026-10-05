@@ -109,6 +109,7 @@ namespace Alrauna.Amuse.Runtime
 
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots = true;
+
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
         /// treats a disabled component exactly like an absent one: nothing

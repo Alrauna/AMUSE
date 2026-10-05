@@ -290,8 +290,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var serialized = new UnityEditor.SerializedObject(component);
-                serialized.FindProperty("_alphaSeparatorEnabled")
-                    .boolValue = false;
+                var switchProperty =
+                    serialized.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(switchProperty, Is.Not.Null,
+                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+                switchProperty.boolValue = false;
                 serialized.ApplyModifiedProperties();
 
                 var context = AvatarProcessor.ProcessAvatar(
