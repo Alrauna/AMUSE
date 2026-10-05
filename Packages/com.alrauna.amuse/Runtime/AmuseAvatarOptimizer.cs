@@ -111,6 +111,15 @@ namespace Alrauna.Amuse.Runtime
         private bool _ignoreOutOfRangeMaterialSlots = true;
 
         /// <summary>
+        /// True when the user opened the advanced options. This is
+        /// inspector-only state: the build never reads it. It is
+        /// serialized so Reset and Undo treat it like every other
+        /// control.
+        /// </summary>
+        [SerializeField]
+        private bool _advancedSettingsRevealed;
+
+        /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
         /// treats a disabled component exactly like an absent one: nothing
         /// runs, nothing is reported.
