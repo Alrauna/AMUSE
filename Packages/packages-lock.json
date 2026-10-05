@@ -4,7 +4,9 @@
       "version": "file:com.alrauna.amuse",
       "depth": 0,
       "source": "embedded",
-      "dependencies": {}
+      "dependencies": {
+        "com.unity.nuget.newtonsoft-json": "3.2.1"
+      }
     },
     "com.alrauna.amuse.research": {
       "version": "file:com.alrauna.amuse.research",
