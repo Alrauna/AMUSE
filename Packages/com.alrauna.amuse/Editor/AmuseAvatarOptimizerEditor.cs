@@ -306,10 +306,14 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// The Settings foldout. It holds the master switch, the two
-        /// tolerance consents, and the reveal toggle for the alpha
-        /// policy menu. Every switch a user must find lives here, so
-        /// one menu answers "what does AMUSE do on this avatar".
+        /// The Settings foldout. It holds the master switch, the reveal
+        /// toggle for the advanced options, the two tolerance consents,
+        /// and the reveal toggle for the alpha policy menu. Every
+        /// switch a user must find lives here, so one menu answers
+        /// "what does AMUSE do on this avatar". The two tolerance
+        /// consents and the alpha policy menu stay hidden until
+        /// Advanced Settings is on, because most users never change
+        /// them.
         /// </summary>
         private void DrawSettings()
         {
@@ -327,38 +331,44 @@ namespace Alrauna.Amuse.Editor
                     "build, in Play mode, or anywhere else, and nothing " +
                     "is reported."));
 
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
-                new GUIContent(
-                    "Ignore Out-of-Range Material Slots",
-                    "Some animation files animate material slots that do not exist on this mesh. " +
-                    "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
-                    "Turn this setting off to refuse meshes with extra slot animations."));
-
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_allowDepthTestChange"),
-                new GUIContent(
-                    "Allow Depth Test Change on Moved Triangles",
-                    "Some materials set a special depth rule: draw a " +
-                    "pixel only when it is strictly closer than " +
-                    "everything already drawn. When AMUSE moves solid " +
-                    "triangles of such a material onto an opaque copy, " +
-                    "those triangles use the normal depth rule, which " +
-                    "also draws pixels at the same distance. On rare " +
-                    "layered parts, surfaces at exactly the same " +
-                    "distance can swap their draw order or flicker." +
-                    "\n\n" +
-                    "By default, AMUSE accepts this stated change and " +
-                    "moves the triangles. Turn this setting off to keep " +
-                    "materials with a special depth rule on their " +
-                    "original material."));
-
             _advancedSettingsRevealed = EditorGUILayout.Toggle(
                 new GUIContent("Advanced Settings",
-                    "Shows the Alpha Separator Settings menu below. " +
-                    "Most users never need it. The menu hides again " +
-                    "after Unity reloads scripts."),
+                    "Shows the two tolerance consents and the Alpha " +
+                    "Separator Settings menu below. Most users never " +
+                    "need them. They hide again after Unity reloads " +
+                    "scripts."),
                 _advancedSettingsRevealed);
+
+            if (_advancedSettingsRevealed)
+            {
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(
+                        "_ignoreOutOfRangeMaterialSlots"),
+                    new GUIContent(
+                        "Ignore Out-of-Range Material Slots",
+                        "Some animation files animate material slots that do not exist on this mesh. " +
+                        "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
+                        "Turn this setting off to refuse meshes with extra slot animations."));
+
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty("_allowDepthTestChange"),
+                    new GUIContent(
+                        "Allow Depth Test Change on Moved Triangles",
+                        "Some materials set a special depth rule: draw a " +
+                        "pixel only when it is strictly closer than " +
+                        "everything already drawn. When AMUSE moves solid " +
+                        "triangles of such a material onto an opaque copy, " +
+                        "those triangles use the normal depth rule, which " +
+                        "also draws pixels at the same distance. On rare " +
+                        "layered parts, surfaces at exactly the same " +
+                        "distance can swap their draw order or flicker." +
+                        "\n\n" +
+                        "By default, AMUSE accepts this stated change and " +
+                        "moves the triangles. Turn this setting off to keep " +
+                        "materials with a special depth rule on their " +
+                        "original material."));
+            }
+
             serializedObject.ApplyModifiedProperties();
         }
 

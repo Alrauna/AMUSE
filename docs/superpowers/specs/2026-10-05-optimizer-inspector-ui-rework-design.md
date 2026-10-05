@@ -79,3 +79,15 @@ No default behavior changes. The switch ships on. Builds behave exactly as today
 ## 7. Documentation
 
 The README "Use" section gains one bullet for the "Alpha Separator" toggle beside the "Disable AMUSE" bullet. The "Disable AMUSE" bullet stays correct, because only the control's location changes.
+
+## 8. Follow-up, 2026-10-05: the advanced options gate
+
+The first release placed the Advanced Settings toggle at the bottom of Settings. The follow-up request moves it directly under Disable AMUSE and hides the two tolerance consents behind it. On 2026-10-05 the Settings order became:
+
+1. Disable AMUSE
+2. Advanced Settings toggle (default off)
+3. Ignore Out-of-Range Material Slots, shown only while Advanced Settings is on
+4. Allow Depth Test Change on Moved Triangles, shown only while Advanced Settings is on
+5. Alpha Separator Settings, shown only while Advanced Settings is on (unchanged)
+
+Hiding is draw-time only. No serialized field changes, so saved avatars keep their stored consent values, and a hidden consent still applies at build time. The toggle tooltip now names both hidden groups. Validation mirrors section 6: compile, the editor test class, and the structural smoke check. No test draws the inspector.
