@@ -425,6 +425,16 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
+            // Feature switch: the alpha separator runs only with its
+            // toggle on. The component stays present for later sibling
+            // features. Off mirrors the Disable AMUSE contract for this
+            // one feature: nothing analyzed, nothing mutated, nothing
+            // reported, and the consent layer below never asks.
+            if (AlphaSeparatorSwitchedOff(context))
+            {
+                return;
+            }
+
             // D8 consent layer: one consolidated click-through per build
             // covers host versions beyond the attested maxima and shader
             // names collected from the avatar's assigned materials whose
@@ -850,6 +860,21 @@ namespace Alrauna.Amuse.Editor.Build
             var component =
                 root.GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             return component != null && !component.AmuseDisabled;
+        }
+
+        /// <summary>
+        /// True when the avatar root carries the optimizer with its
+        /// alpha separator switch off. The barrier then stops between
+        /// the V1 trigger and the consent layer, so the feature runs
+        /// nothing and reports nothing while later sibling features
+        /// keep their own switches on the same component.
+        /// </summary>
+        private static bool AlphaSeparatorSwitchedOff(BuildContext context)
+        {
+            var component =
+                context.AvatarRootObject
+                    .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            return component != null && !component.AlphaSeparatorEnabled;
         }
 
         /// <summary>

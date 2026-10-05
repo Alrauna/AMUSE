@@ -277,6 +277,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AlphaSeparatorSwitchedOffDoesNotActivateThePipeline()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE alpha-switch-off fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                serialized.FindProperty("_alphaSeparatorEnabled")
+                    .boolValue = false;
+                serialized.ApplyModifiedProperties();
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
+                    "a switched-off alpha separator must not activate"
+                    + " the pipeline");
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "a switched-off alpha separator must not turn the"
+                    + " loop into refusals");
+                Assert.That(amuse.ReachedRendererAnalysis, Is.False,
+                    "a switched-off alpha separator must stop before"
+                    + " the renderer loop");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void DeclinedConsentStopsThePipelineWithoutAnalysis()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
