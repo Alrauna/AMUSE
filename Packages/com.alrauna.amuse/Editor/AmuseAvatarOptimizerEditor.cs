@@ -13,7 +13,8 @@ namespace Alrauna.Amuse.Editor
     [CustomEditor(typeof(AmuseAvatarOptimizer))]
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
-        private bool _advancedOpen;
+        private bool _settingsOpen;
+        private bool _advancedSettingsRevealed;
         private bool _alphaSeparatorOpen;
 
         public override void OnInspectorGUI()
@@ -41,14 +42,19 @@ namespace Alrauna.Amuse.Editor
 
             serializedObject.Update();
             EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_amuseDisabled"),
-                new GUIContent("Disable AMUSE",
-                    "Treats this component as absent: nothing runs on build, " +
-                    "in Play mode, or anywhere else, and nothing is reported."));
+                serializedObject.FindProperty("_alphaSeparatorEnabled"),
+                new GUIContent("Alpha Separator",
+                    "Turn this off to skip alpha separation on this " +
+                    "avatar. Nothing is analyzed, moved, or reported " +
+                    "for the feature. A later feature adds its own " +
+                    "switch beside this one."));
             serializedObject.ApplyModifiedProperties();
 
-            DrawAlphaSeparator();
-            DrawAdvancedSettings();
+            DrawSettings();
+            if (_advancedSettingsRevealed)
+            {
+                DrawAlphaSeparatorSettings();
+            }
 
             if (AmuseBuildStatusStore.TryGet(out var status))
             {
@@ -58,15 +64,17 @@ namespace Alrauna.Amuse.Editor
 
 
         /// <summary>
-        /// The Alpha Separator foldout. It holds the user's policy for
-        /// the alpha separation feature: which texture levels the
-        /// opacity proof consults, and how big a split must be before
-        /// AMUSE pays a draw call for it.
+        /// The Alpha Separator Settings foldout. It holds the user's
+        /// policy for the alpha separation feature: which texture
+        /// levels the opacity proof consults, and how big a split must
+        /// be before AMUSE pays a draw call for it. It stays hidden
+        /// until the Advanced Settings reveal in Settings is on,
+        /// because most users never change this policy.
         /// </summary>
-        private void DrawAlphaSeparator()
+        private void DrawAlphaSeparatorSettings()
         {
             _alphaSeparatorOpen = EditorGUILayout.Foldout(
-                _alphaSeparatorOpen, "Alpha Separator",
+                _alphaSeparatorOpen, "Alpha Separator Settings",
                 EditorStyles.foldoutHeader);
             if (!_alphaSeparatorOpen)
             {
@@ -298,21 +306,26 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// The Advanced Settings foldout. It holds two settings. The
-        /// animation-closure tolerance sets the rule for animations
-        /// that name material slots this mesh does not have. The
-        /// depth-test-change consent permits AMUSE to move triangles
-        /// of materials with a special depth rule onto an opaque copy.
-        /// Most users never touch these settings.
+        /// The Settings foldout. It holds the master switch, the two
+        /// tolerance consents, and the reveal toggle for the alpha
+        /// policy menu. Every switch a user must find lives here, so
+        /// one menu answers "what does AMUSE do on this avatar".
         /// </summary>
-        private void DrawAdvancedSettings()
+        private void DrawSettings()
         {
-            _advancedOpen = EditorGUILayout.Foldout(
-                _advancedOpen, "Advanced Settings", EditorStyles.foldoutHeader);
-            if (!_advancedOpen)
+            _settingsOpen = EditorGUILayout.Foldout(
+                _settingsOpen, "Settings", EditorStyles.foldoutHeader);
+            if (!_settingsOpen)
             {
                 return;
             }
+
+            EditorGUILayout.PropertyField(
+                serializedObject.FindProperty("_amuseDisabled"),
+                new GUIContent("Disable AMUSE",
+                    "Treats this component as absent: nothing runs on " +
+                    "build, in Play mode, or anywhere else, and nothing " +
+                    "is reported."));
 
             EditorGUILayout.PropertyField(
                 serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
@@ -339,6 +352,13 @@ namespace Alrauna.Amuse.Editor
                     "moves the triangles. Turn this setting off to keep " +
                     "materials with a special depth rule on their " +
                     "original material."));
+
+            _advancedSettingsRevealed = EditorGUILayout.Toggle(
+                new GUIContent("Advanced Settings",
+                    "Shows the Alpha Separator Settings menu below. " +
+                    "Most users never need it. The menu hides again " +
+                    "after Unity reloads scripts."),
+                _advancedSettingsRevealed);
             serializedObject.ApplyModifiedProperties();
         }
 
