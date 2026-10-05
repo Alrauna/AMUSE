@@ -194,6 +194,18 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void TextureSizeOfOneRefuses()
+        {
+            var json = WithSettings(
+                "\"preserveTransparencyMinTextureSize\": 128",
+                "\"preserveTransparencyMinTextureSize\": 1");
+            Assert.That(PresetParser.TryParse(
+                json, out _, out var refusal), Is.False);
+            Assert.That(refusal,
+                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+        }
+
+        [Test]
         public void PercentAboveHundredRefuses()
         {
             var json = WithSettings(

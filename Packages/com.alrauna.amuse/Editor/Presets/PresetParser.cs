@@ -251,7 +251,7 @@ namespace Alrauna.Amuse.Editor.Presets
             {
                 return false;
             }
-            var powerOfTwo = value > 0 && (value & (value - 1)) == 0;
+            var powerOfTwo = value >= 2 && (value & (value - 1)) == 0;
             if (value != -1 && (!powerOfTwo || value > 8192))
             {
                 refusal = PresetLoadRefusal.ValueOutOfRange;
