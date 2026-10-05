@@ -538,7 +538,7 @@ namespace Alrauna.Amuse.Editor.Host
                                 material, out var semantics))
                         {
                             semantics = legacySemanticsProvider(material)
-                                ?? UnityMaterialSemantics.AllUnknown();
+                                ?? EvidenceGates.AllUnknown();
                             byLiveMaterial.Add(material, semantics);
                         }
 

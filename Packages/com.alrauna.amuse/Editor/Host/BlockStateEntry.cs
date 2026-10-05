@@ -11,7 +11,7 @@ namespace Alrauna.Amuse.Editor.Host
     /// the texture reference, so comparing two snapshots is exact for every
     /// value the materialization could copy.
     /// </summary>
-    internal readonly struct BlockStateEntry
+    internal readonly struct BlockStateEntry : IEquatable<BlockStateEntry>
     {
         internal BlockStateEntry(
             int slotIndex,

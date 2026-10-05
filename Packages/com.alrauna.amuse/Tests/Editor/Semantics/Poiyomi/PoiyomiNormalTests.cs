@@ -33,12 +33,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_PoiParallax",
         };
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private static NormalSemanticValue Normal(PoiyomiSemanticResult result)
         {
             Assert.That(

@@ -1,7 +1,7 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine.Rendering;
-using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -95,7 +95,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             int height = Size)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(width, height, TextureFormat.RGBA32, false);
             if (pixels == null)
             {
                 pixels = new Color32[width * height];
@@ -107,24 +106,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 pixels[0] = new Color32(64, 32, 16, 128);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = mipmapped;
-            importer.isReadable = readable;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"'{path}' must import.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, width, height, pixels, importer =>
+                {
+                    importer.mipmapEnabled = mipmapped;
+                    importer.isReadable = readable;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
         }
 
         /// <summary>

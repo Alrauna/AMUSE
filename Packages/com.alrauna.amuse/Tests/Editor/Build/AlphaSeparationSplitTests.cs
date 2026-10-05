@@ -1,6 +1,6 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
@@ -61,45 +61,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static Texture2D ImportSplitAlphaTexture(string name)
         {
             var path = SplitTempFolder + "/" + name + ".png";
-            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, false);
-            try
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
             {
-                var pixels = new Color32[64];
-                for (var y = 0; y < 8; y++)
+                for (var x = 0; x < 8; x++)
                 {
-                    for (var x = 0; x < 8; x++)
-                    {
-                        pixels[y * 8 + x] = new Color32(
-                            64, 32, 16, (byte)(x < 4 ? 255 : 200));
-                    }
+                    pixels[y * 8 + x] = new Color32(
+                        64, 32, 16, (byte)(x < 4 ? 255 : 200));
                 }
-
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(staging);
             }
 
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            importer.isReadable = false;
-            importer.textureCompression =
-                TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.mipMapBias = 0f;
-            importer.anisoLevel = 1;
-            importer.streamingMipmaps = false;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"'{path}' must import.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, 8, 8, pixels, importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = false;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.mipMapBias = 0f;
+                    importer.anisoLevel = 1;
+                    importer.streamingMipmaps = false;
+                });
         }
 
         /// <summary>
@@ -442,44 +426,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             root.AddComponent<Animator>().runtimeAnimatorController =
                 controller;
             return controller;
-        }
-
-        private static string DescribeObjectCurve(ObjectReferenceKeyframe[] curve)
-        {
-            if (curve == null)
-            {
-                return "<null>";
-            }
-
-            return string.Join("|", curve.Select(key =>
-                key.time.ToString("R") + "=>" +
-                (key.value == null
-                    ? "null"
-                    : key.value.name)));
-        }
-
-        private static string DescribeCommittedCurve(
-            AnimationClip clip,
-            string rendererPath,
-            string propertyName)
-        {
-            return DescribeObjectCurve(AnimationUtility.GetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath, typeof(SkinnedMeshRenderer),
-                    propertyName)));
-        }
-
-        private static string DescribeAuthoredCurve(
-            AnimationClip clip,
-            string rendererPath,
-            string propertyName)
-        {
-            return DescribeObjectCurve(AnimationUtility.GetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath, typeof(SkinnedMeshRenderer),
-                    propertyName)));
         }
 
         private static IEnumerable<AnimationClip> CommittedClips(
@@ -903,13 +849,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // A decoy binding at another slot of the same renderer.
                     SetCurve(secondClip, "body", 2, (0f, transparent));
 
-                    var authoredFirst = DescribeAuthoredCurve(
+                    var authoredFirst = CurveDescription.DescribeAuthoredCurve(
                         firstClip, "body", "m_Materials.Array.data[0]");
-                    var authoredDecoyPath = DescribeAuthoredCurve(
+                    var authoredDecoyPath = CurveDescription.DescribeAuthoredCurve(
                         secondClip, "decoy", "m_Materials.Array.data[0]");
-                    var authoredDecoySlot = DescribeAuthoredCurve(
+                    var authoredDecoySlot = CurveDescription.DescribeAuthoredCurve(
                         secondClip, "body", "m_Materials.Array.data[2]");
-                    var authoredSecond = DescribeAuthoredCurve(
+                    var authoredSecond = CurveDescription.DescribeAuthoredCurve(
                         secondClip, "body", "m_Materials.Array.data[1]");
 
                     controller = NewController(
@@ -967,7 +913,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "no committed clip carried the first appended " +
                         "binding");
                     Assert.That(
-                        DescribeCommittedCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedFirst, "body",
                             "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredFirst),
@@ -975,7 +921,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "and unchanged; only the appended opaque slot " +
                         "receives the mapped curve");
                     Assert.That(
-                        DescribeCommittedCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedFirst, "body",
                             "m_Materials.Array.data[3]"),
                         Is.EqualTo(MapNames(
@@ -1002,7 +948,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "two clips sharing a display name must remain " +
                         "distinct objects through the rewrite");
                     Assert.That(
-                        DescribeCommittedCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedSecond, "body",
                             "m_Materials.Array.data[1]"),
                         Is.EqualTo(authoredSecond),
@@ -1012,14 +958,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     // Decoy bindings stay untouched.
                     Assert.That(
-                        DescribeCommittedCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedSecond, "decoy",
                             "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredDecoyPath),
                         "a binding at another renderer path must stay " +
                         "untouched");
                     Assert.That(
-                        DescribeCommittedCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             committedSecond, "body",
                             "m_Materials.Array.data[2]"),
                         Is.EqualTo(authoredDecoySlot),
@@ -1027,24 +973,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     // Source clips are unchanged.
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             firstClip, "body",
                             "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredFirst),
                         "the first source clip must be unchanged");
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             secondClip, "body",
                             "m_Materials.Array.data[1]"),
                         Is.EqualTo(authoredSecond),
                         "the second source clip must be unchanged");
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             secondClip, "decoy",
                             "m_Materials.Array.data[0]"),
                         Is.EqualTo(authoredDecoyPath));
                     Assert.That(
-                        DescribeAuthoredCurve(
+                        CurveDescription.DescribeAuthoredCurve(
                             secondClip, "body",
                             "m_Materials.Array.data[2]"),
                         Is.EqualTo(authoredDecoySlot));

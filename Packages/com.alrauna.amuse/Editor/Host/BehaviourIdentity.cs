@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEditor.PackageManager;
 
 namespace Alrauna.Amuse.Editor.Host
@@ -49,16 +48,6 @@ namespace Alrauna.Amuse.Editor.Host
                 "VRC.SDK3.Avatars.Components.VRCAvatarParameterDriver",
             };
 
-        private static readonly string[] AllowedIdentityValues =
-            Array.Empty<string>();
-
-        /// <summary>
-        /// Identities pinned per exact string. The task-7 table stays for
-        /// future non-VRChat admissions; it is empty today.
-        /// </summary>
-        internal static readonly IReadOnlyCollection<string> AllowedIdentities =
-            Array.AsReadOnly(AllowedIdentityValues);
-
         internal static string Of(Type type)
         {
             if (type == null) throw new ArgumentNullException(nameof(type));
@@ -78,13 +67,6 @@ namespace Alrauna.Amuse.Editor.Host
         internal static bool IsAllowed(string identity)
         {
             if (string.IsNullOrEmpty(identity)) return false;
-
-            foreach (var allowedIdentity in AllowedIdentityValues)
-            {
-                if (string.Equals(
-                        identity, allowedIdentity, StringComparison.Ordinal))
-                    return true;
-            }
 
             // The VRChat neutral set is matched on the owning SDK package
             // and the type's full name, never on the package version: a

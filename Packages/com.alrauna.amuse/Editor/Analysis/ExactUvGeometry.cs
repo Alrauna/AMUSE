@@ -86,6 +86,26 @@ namespace Alrauna.Amuse.Editor.Analysis
                 left.Numerator * right.Denominator,
                 left.Denominator * right.Numerator);
         }
+
+        /// <summary>The absolute value; the denominator is already positive.</summary>
+        internal static ExactRational Abs(ExactRational value)
+        {
+            return new ExactRational(
+                BigInteger.Abs(value.Numerator), value.Denominator);
+        }
+
+        /// <summary>The largest of three rationals.</summary>
+        internal static ExactRational Maximum(
+            ExactRational a,
+            ExactRational b,
+            ExactRational c)
+        {
+            return a.CompareTo(b) >= 0 && a.CompareTo(c) >= 0
+                ? a
+                : b.CompareTo(c) >= 0
+                    ? b
+                    : c;
+        }
     }
 
     internal readonly struct AlphaUvEnvelope

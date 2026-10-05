@@ -8,6 +8,7 @@ using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -18,12 +19,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// </summary>
     public sealed class LilToonAttestationTests
     {
-        // Path arithmetic only; nothing here touches the filesystem.
-        private static readonly string ProjectRoot =
-            Path.Combine(Path.GetTempPath(), "AmuseTests", "Project");
-
-        private static readonly string ShaderDir = Path.Combine(
-            ProjectRoot, "Packages", "jp.lilxyzw.liltoon", "Shader");
 
         /// <summary>
         /// Sentinel meaning "use the valid pin". A plain null default would make
@@ -31,30 +26,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// be coalesced back to the pin.
         /// </summary>
         private const string UsePin = "\0use-pinned-digest";
+        private static readonly (string RelativePath, string Stamp)[]
+            AdditionalIncludes =
+            {
+                ("VRC Light Volumes/LightVolumes.cginc", "22"),
+            };
 
         private static LilToonIncludeTree Tree()
         {
-            return LilToonIncludeTree.ForTests(
-                Path.Combine(ShaderDir, "Includes"),
-                new[]
-                {
-                    ("lil_common.hlsl", "11"),
-                    ("VRC Light Volumes/LightVolumes.cginc", "22"),
-                });
+            return AttestationEnvironment.Tree(AdditionalIncludes);
         }
 
         private static string Canon(string source)
         {
-            // The project root is an explicit argument; canonicalization must
-            // never consult the process working directory.
-            return LilToonSourceAttestation.Canonicalize(
-                source, ShaderDir, ProjectRoot, Tree());
+            return AttestationEnvironment.Canon(
+                source, AdditionalIncludes);
         }
 
         private static LilToonCanonicalizationAnalysis Analyze(string source)
         {
             return LilToonSourceAttestation.AnalyzeCanonicalization(
-                source, ShaderDir, ProjectRoot, Tree());
+                source,
+                AttestationEnvironment.ShaderDir,
+                AttestationEnvironment.ProjectRoot,
+                Tree());
         }
 
         private static LilToonCanonicalizationAnalysis EmptyShaderAnalysis()
@@ -288,13 +283,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 hasPassCanonicalization
                     ? passCanonicalization ?? PassAnalysis(DefaultStandaloneRecords())
                     : null);
-        }
-
-        /// <summary>Adds <paramref name="steps"/> ULPs to a float.</summary>
-        private static float Ulp(float value, int steps)
-        {
-            var bits = BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
-            return BitConverter.ToSingle(BitConverter.GetBytes(bits + steps), 0);
         }
 
         // --- normalized hashing ---
@@ -1500,8 +1488,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void Verify_NearbyVersionValues_AreRefused()
         {
-            var nextAbove = Ulp(45f, 1);
-            var nextBelow = Ulp(45f, -1);
+            var nextAbove = FloatUlp.Ulp(45f, 1);
+            var nextBelow = FloatUlp.Ulp(45f, -1);
 
             Assert.That(nextAbove, Is.Not.EqualTo(45f), "ULP step must differ");
             Assert.That(nextBelow, Is.Not.EqualTo(45f), "ULP step must differ");

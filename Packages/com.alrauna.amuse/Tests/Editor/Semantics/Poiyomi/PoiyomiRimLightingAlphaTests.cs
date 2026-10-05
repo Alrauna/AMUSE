@@ -7,12 +7,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     public sealed class PoiyomiRimLightingAlphaTests : PoiyomiFixtureTestBase
     {
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         // A material on the non-forced alpha path with the mask mode off, so
         // alpha is proven from _MainTex.a and/or _Color.a.
         private Material NonForcedMaterial()

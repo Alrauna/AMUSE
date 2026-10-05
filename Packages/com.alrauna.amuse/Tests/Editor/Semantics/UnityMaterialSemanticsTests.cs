@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
@@ -11,6 +10,7 @@ using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
@@ -102,7 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AllUnknownIsUnknownInEveryOutput()
         {
-            AssertAllUnknown(UnityMaterialSemantics.AllUnknown());
+            AssertAllUnknown(EvidenceGates.AllUnknown());
         }
 
         [Test]
@@ -1111,8 +1111,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             };
             // The clone stays in memory, so its own project path is
             // empty. Only the registry can name the authoring asset.
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
@@ -1127,7 +1126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 UnityEngine.Object.DestroyImmediate(clone);
             }
         }
@@ -1140,8 +1139,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 name = source.name + " build copy",
             };
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 // Falsifier: an implementation that resolves through
@@ -1157,7 +1155,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 UnityEngine.Object.DestroyImmediate(clone);
             }
         }
@@ -1173,8 +1171,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // The locked-identity route constructs its sentinel from the
             // live build copy; the registry is the only witness that names
             // the authoring asset.
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
@@ -1192,7 +1189,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 UnityEngine.Object.DestroyImmediate(clone);
             }
         }
@@ -1249,15 +1246,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             string properties)
         {
             var path = TempFolder + "/" + fileName;
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    Properties\n    {" + properties +
                 "\n    }\n    SubShader { Pass {} }\n}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
-            Assert.That(shader, Is.Not.Null, path);
             var material = new Material(shader);
             _batchMaterials.Add(material);
             return material;

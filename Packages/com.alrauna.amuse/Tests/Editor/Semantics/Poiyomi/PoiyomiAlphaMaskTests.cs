@@ -36,12 +36,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string Invert = "_AlphaMaskInvert";
         private const string Parallax = "_PoiParallax";
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private static ScalarSemanticValue Alpha(PoiyomiSemanticResult result)
         {
             AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);

@@ -176,62 +176,37 @@ namespace Alrauna.Amuse.Editor.Build
             // ones the fallback inverts; a slot array that does not hold L
             // simply never substitutes, because the substitution rechecks
             // the live array.
-            foreach (var renderer in context.AvatarRootObject
-                         .GetComponentsInChildren<Renderer>(true))
-            {
-                var rendererPath = AnimationUtility.CalculateTransformPath(
-                    renderer.transform, context.AvatarRootObject.transform);
-                var rendererTypeName = renderer.GetType().FullName;
-                foreach (var clip in animationIndex
-                             .ClipsWithObjectCurves
-                             .ToList())
+            ForEachRendererSlotBinding(
+                context,
+                animationIndex,
+                (renderer, clip, binding, slotIndex) =>
                 {
-                    foreach (var binding in clip.GetObjectCurveBindings())
+                    var values = clip.GetObjectCurve(binding);
+                    if (values == null)
                     {
-                        if (!LiveAnimationObservation
-                                .TryParseMaterialSlotBinding(
-                                    binding.propertyName,
-                                    out var slotIndex) ||
-                            !string.Equals(
-                                binding.path,
-                                rendererPath,
-                                StringComparison.Ordinal) ||
-                            !UnityAnimationEvidenceCapture
-                                .IsCompatibleRendererType(
-                                    binding.type.FullName,
-                                    rendererTypeName))
-                        {
-                            continue;
-                        }
-
-                        var values = clip.GetObjectCurve(binding);
-                        if (values == null)
-                        {
-                            continue;
-                        }
-
-                        foreach (var keyframe in values)
-                        {
-                            if (!(keyframe.value is Material closure) ||
-                                !LockedMaterialIdentity
-                                    .RecognizedLockedIdentity(closure))
-                            {
-                                continue;
-                            }
-
-                            var existing = lockedSlots.Find(found =>
-                                ReferenceEquals(found.Locked, closure));
-                            if (existing == null)
-                            {
-                                existing = new LockedSlots(closure);
-                                lockedSlots.Add(existing);
-                            }
-
-                            existing.Add(renderer, slotIndex);
-                        }
+                        return;
                     }
-                }
-            }
+
+                    foreach (var keyframe in values)
+                    {
+                        if (!(keyframe.value is Material closure) ||
+                            !LockedMaterialIdentity
+                                .RecognizedLockedIdentity(closure))
+                        {
+                            continue;
+                        }
+
+                        var existing = lockedSlots.Find(found =>
+                            ReferenceEquals(found.Locked, closure));
+                        if (existing == null)
+                        {
+                            existing = new LockedSlots(closure);
+                            lockedSlots.Add(existing);
+                        }
+
+                        existing.Add(renderer, slotIndex);
+                    }
+                });
 
             // Pass two: one clone per locked material, then the whole
             // substitution for it. Registration precedes mutation, exactly
@@ -321,7 +296,6 @@ namespace Alrauna.Amuse.Editor.Build
             if (outcome == TransientUnlockRestoreOutcome.Succeeded &&
                 mismatchReason == null)
             {
-                mismatchReason = null;
                 return clone;
             }
 
@@ -453,6 +427,26 @@ namespace Alrauna.Amuse.Editor.Build
             LockedSlots entry,
             TransientUnlockWindowState.SwappedPair pair)
         {
+            ForEachRendererSlotBinding(
+                context,
+                animationIndex,
+                (renderer, clip, binding, slotIndex) =>
+                    RewriteCurve(entry, pair, clip, binding, slotIndex));
+        }
+
+        /// <summary>
+        /// The shared renderer-and-clips walk behind both swap-in passes:
+        /// every renderer, every live clip with object curves, and every
+        /// binding that addresses that renderer's path, type and material
+        /// slot, in deterministic renderer-then-clip-then-binding order.
+        /// The closure discovery and the closure remap read the same
+        /// binding set, so one filter implementation serves both.
+        /// </summary>
+        private static void ForEachRendererSlotBinding(
+            BuildContext context,
+            AnimationIndex animationIndex,
+            Action<Renderer, VirtualClip, EditorCurveBinding, int> visit)
+        {
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
             {
@@ -467,24 +461,19 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     foreach (var binding in clip.GetObjectCurveBindings())
                     {
-                        if (!LiveAnimationObservation
-                                .TryParseMaterialSlotBinding(
-                                    binding.propertyName,
-                                    out var slotIndex) ||
-                            !string.Equals(
-                                binding.path,
-                                rendererPath,
-                                StringComparison.Ordinal) ||
-                            !UnityAnimationEvidenceCapture
-                                .IsCompatibleRendererType(
+                        if (!UnityAnimationEvidenceCapture
+                                .TryParseMaterialSlotBindingFor(
+                                    binding.path,
                                     binding.type.FullName,
-                                    rendererTypeName))
+                                    binding.propertyName,
+                                    rendererPath,
+                                    rendererTypeName,
+                                    out var slotIndex))
                         {
                             continue;
                         }
 
-                        RewriteCurve(entry, pair, clip, binding,
-                            slotIndex);
+                        visit(renderer, clip, binding, slotIndex);
                     }
                 }
             }
@@ -514,12 +503,7 @@ namespace Alrauna.Amuse.Editor.Build
             var changed = false;
             for (var index = 0; index < curve.Length; index++)
             {
-                // Unity equality, not managed identity: keyframe values
-                // can come back as a second managed wrapper of the same
-                // native material across the virtual clip boundary.
-                if (ReferenceEquals(curve[index].value, entry.Locked) ||
-                    (curve[index].value is Material keyframeMaterial &&
-                     keyframeMaterial == entry.Locked))
+                if (SameMaterial(curve[index].value, entry.Locked))
                 {
                     mapped[index] = new ObjectReferenceKeyframe
                     {
@@ -541,6 +525,19 @@ namespace Alrauna.Amuse.Editor.Build
 
             clip.SetObjectCurve(binding, mapped);
             pair.AddBinding(binding, slotIndex);
+        }
+
+        /// <summary>
+        /// Unity equality, not managed identity: keyframe values can come
+        /// back as a second managed wrapper of the same native material
+        /// across the virtual clip boundary.
+        /// </summary>
+        private static bool SameMaterial(
+            UnityEngine.Object candidate, Material material)
+        {
+            return ReferenceEquals(candidate, material) ||
+                (candidate is Material candidateMaterial &&
+                    candidateMaterial == material);
         }
 
         private static void RecordRefusal(

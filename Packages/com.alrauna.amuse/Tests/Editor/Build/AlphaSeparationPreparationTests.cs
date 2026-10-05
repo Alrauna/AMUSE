@@ -1,7 +1,7 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Analysis;
@@ -2256,7 +2256,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     0, 0, 0, 0,
                     0, 0, 0, 255,
                 });
-            var sampling = new AlphaSamplingSettings(
+            var sampling = new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
@@ -3456,8 +3456,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // elsewhere. The UV0 coordinate lands on the transparent
                 // texel. The named channel coordinate lands on an opaque one.
                 var size = 4;
-                var staging = new UnityEngine.Texture2D(
-                    size, size, UnityEngine.TextureFormat.RGBA32, false);
                 var pixels = new UnityEngine.Color32[size * size];
                 for (var index = 0; index < pixels.Length; index++)
                 {
@@ -3465,21 +3463,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 pixels[0] = new UnityEngine.Color32(255, 255, 255, 0);
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                System.IO.File.WriteAllBytes(
-                    path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-                UnityEditor.AssetDatabase.ImportAsset(
-                    path,
-                    UnityEditor.ImportAssetOptions
-                        .ForceSynchronousImport);
-                var unityImporter = (UnityEditor.TextureImporter)
-                    UnityEditor.AssetImporter.GetAtPath(path);
-                unityImporter.mipmapEnabled = false;
-                unityImporter.SaveAndReimport();
-                var layerTexture = UnityEditor.AssetDatabase
-                    .LoadAssetAtPath<UnityEngine.Texture2D>(path);
+                var layerTexture = TestTextureImport.WritePng(
+                    path, size, size, pixels,
+                    importer => importer.mipmapEnabled = false);
                 material.SetTexture("_Main2ndTex", layerTexture);
 
                 material.SetFloat("_UseMain2ndTex", 1f);
@@ -4499,7 +4485,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out bool depthTestDivergence)
         {
             if (live != null && live.shader == Shader.Find(
-                    LilToonFixtureNames.Transparent))
+                    LilToonFixtureTestBase.TransparentConversionShaderName))
             {
                 return VerifiedLilToonTestSeams
                     .VerifiedTransparentConversionStep(
@@ -5007,7 +4993,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.EqualTo(bound.CloneCount));
 
                     Assert.That(bound.CloneShaderName,
-                        Is.EqualTo(LilToonFixtureNames.OpaqueTarget),
+                        Is.EqualTo(LilToonFixtureTestBase.OpaqueConversionShaderName),
                         "the bound scenario's clone must carry the " +
                         "attested opaque target stand-in");
                     Assert.That(unbound.CloneShaderName,
@@ -6202,8 +6188,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var mainTexture = fixtures.ImportFullyOpaqueMipmap(
                     "dxt1_mask_main");
 
-                var staging = new Texture2D(
-                    128, 128, TextureFormat.RGBA32, true);
                 var pixels = new Color32[128 * 128];
                 for (var y = 0; y < 128; y++)
                 {
@@ -6215,27 +6199,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     }
                 }
 
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                importer.sRGBTexture = true;
-                importer.textureCompression =
-                    TextureImporterCompression.Compressed;
-                importer.isReadable = false;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-                importer.streamingMipmaps = false;
-                importer.SaveAndReimport();
-                var mask = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    mask,
-                    Is.Not.Null,
-                    "fixture precondition: the DXT1 sRGB mask must import");
+                var mask = TestTextureImport.WritePng(
+                    path, 128, 128, pixels, importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.sRGBTexture = true;
+                        importer.textureCompression =
+                            TextureImporterCompression.Compressed;
+                        importer.isReadable = false;
+                        importer.filterMode = FilterMode.Bilinear;
+                        importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                        importer.streamingMipmaps = false;
+                    });
                 Assert.That(
                     mask.format,
                     Is.EqualTo(TextureFormat.DXT1),
@@ -6350,8 +6325,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var mainTexture = fixtures.ImportFullyOpaqueMipmap(
                     "dxt1_mask_seam_main");
 
-                var staging = new Texture2D(
-                    128, 128, TextureFormat.RGBA32, true);
                 var pixels = new Color32[128 * 128];
                 for (var y = 0; y < 128; y++)
                 {
@@ -6363,27 +6336,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     }
                 }
 
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                importer.sRGBTexture = true;
-                importer.textureCompression =
-                    TextureImporterCompression.Compressed;
-                importer.isReadable = false;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-                importer.streamingMipmaps = false;
-                importer.SaveAndReimport();
-                var mask = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    mask,
-                    Is.Not.Null,
-                    "fixture precondition: the DXT1 sRGB mask must import");
+                var mask = TestTextureImport.WritePng(
+                    path, 128, 128, pixels, importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.sRGBTexture = true;
+                        importer.textureCompression =
+                            TextureImporterCompression.Compressed;
+                        importer.isReadable = false;
+                        importer.filterMode = FilterMode.Bilinear;
+                        importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                        importer.streamingMipmaps = false;
+                    });
                 Assert.That(
                     mask.format,
                     Is.EqualTo(TextureFormat.DXT1),
@@ -6500,7 +6464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var path = TransparentCloneContractTempFolder +
                        "/TransparentCloneContractMissingBlendOpFA.shader";
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" +
                 TransparentCloneContractMissingShaderName + "\"\n" +
@@ -6545,14 +6509,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "        }\n" +
                 "    }\n" +
                 "}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-
-            var shader = Shader.Find(
-                TransparentCloneContractMissingShaderName);
-            Assert.That(
-                shader, Is.Not.Null,
-                "The clone-contract target stand-in must import.");
             return shader;
         }
 
@@ -6590,7 +6546,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "every canonical fact must read back on the clone");
             Assert.That(
                 clone.shader,
-                Is.SameAs(Shader.Find(LilToonFixtureNames.OpaqueTarget)),
+                Is.SameAs(Shader.Find(LilToonFixtureTestBase.OpaqueConversionShaderName)),
                 "the clone must carry the attested opaque stand-in " +
                 "target");
         }
@@ -7809,7 +7765,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             if (material != null && material.shader != null &&
                 string.Equals(
                     material.shader.name,
-                    LilToonFixtureNames.ShaderName,
+                    LilToonFixtureTestBase.FixtureShaderName,
                     StringComparison.Ordinal))
             {
                 family = CapturedAlphaMaterialFamily.LilToon;
@@ -7839,17 +7795,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 default:
                     return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
             }
-        }
-
-        private sealed class LilToonFixtureNames : LilToonFixtureTestBase
-        {
-            internal const string ShaderName = FixtureShaderName;
-
-            /// <summary>The schema-complete transparent source stand-in.</summary>
-            internal const string Transparent = TransparentConversionShaderName;
-
-            /// <summary>The distinct canonical opaque target stand-in.</summary>
-            internal const string OpaqueTarget = OpaqueConversionShaderName;
         }
 
         /// <summary>
@@ -8154,35 +8099,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 var path = TempFolder + "/" + name + ".png";
-                var staging = new Texture2D(
-                    width, height, TextureFormat.RGBA32, false);
                 var pixels = new Color32[alphaBottomToTop.Length];
                 for (var index = 0; index < pixels.Length; index++)
                 {
                     pixels[index] = new Color32(
                         255, 255, 255, alphaBottomToTop[index]);
                 }
-                staging.SetPixels32(pixels);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = false;
-                importer.filterMode = FilterMode.Point;
-                importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-                importer.textureCompression =
-                    TextureImporterCompression.Uncompressed;
-                importer.SaveAndReimport();
-
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                return loaded;
+                return TestTextureImport.WritePng(
+                    path, width, height, pixels, importer =>
+                    {
+                        importer.mipmapEnabled = false;
+                        importer.filterMode = FilterMode.Point;
+                        importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                    });
             }
 
             /// <summary>
@@ -8198,40 +8129,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Color32[] baseLevelBottomToTop)
             {
                 var path = TempFolder + "/" + name + ".png";
-                var staging = new Texture2D(
-                    width, height, TextureFormat.RGBA32, false);
-                staging.SetPixels32(baseLevelBottomToTop);
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                // Readable so the source-preservation audit
-                // (PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged)
-                // can read pixels back directly via GetPixels32; production's
-                // own host provider does not require this.
-                importer.isReadable = true;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
-                importer.streamingMipmaps = false;
-                // Uncompressed keeps the imported GPU format RGBA32: the
-                // alpha-evidence format allowlist admits RGBA32 exactly,
-                // while platform compression would collapse an all-opaque
-                // source to DXT1, which has no alpha channel to prove and
-                // refuses.
-                importer.textureCompression =
-                    TextureImporterCompression.Uncompressed;
-                importer.SaveAndReimport();
-
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                return loaded;
+                return TestTextureImport.WritePng(
+                    path, width, height, baseLevelBottomToTop, importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        // Readable so the source-preservation audit
+                        // (PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged)
+                        // can read pixels back directly via GetPixels32; production's
+                        // own host provider does not require this.
+                        importer.isReadable = true;
+                        importer.filterMode = FilterMode.Bilinear;
+                        importer.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+                        importer.streamingMipmaps = false;
+                        // Uncompressed keeps the imported GPU format RGBA32: the
+                        // alpha-evidence format allowlist admits RGBA32 exactly,
+                        // while platform compression would collapse an all-opaque
+                        // source to DXT1, which has no alpha channel to prove and
+                        // refuses.
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                    });
             }
 
             /// <summary>
@@ -8244,32 +8161,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal Texture2D ImportRefusedFormatMipmap(string name)
             {
                 var path = TempFolder + "/" + name + ".png";
-                var staging = new Texture2D(
-                    4, 4, TextureFormat.RGBA32, false);
-                staging.SetPixels32(FullyOpaquePixels());
-                staging.Apply();
-                File.WriteAllBytes(path, staging.EncodeToPNG());
-                UnityEngine.Object.DestroyImmediate(staging);
-
-                AssetDatabase.ImportAsset(
-                    path, ImportAssetOptions.ForceSynchronousImport);
-
-                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                importer.mipmapEnabled = true;
-                importer.textureCompression =
-                    TextureImporterCompression.Uncompressed;
-                var settings = importer.GetPlatformTextureSettings(
-                    "Standalone");
-                settings.overridden = true;
-                settings.format = TextureImporterFormat.RGBAHalf;
-                importer.SetPlatformTextureSettings(settings);
-                importer.SaveAndReimport();
-
-                var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                Assert.That(
-                    loaded, Is.Not.Null,
-                    $"Imported texture '{path}' must load.");
-                return loaded;
+                return TestTextureImport.WritePng(
+                    path, 4, 4, FullyOpaquePixels(), importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                        var settings = importer.GetPlatformTextureSettings(
+                            "Standalone");
+                        settings.overridden = true;
+                        settings.format = TextureImporterFormat.RGBAHalf;
+                        importer.SetPlatformTextureSettings(settings);
+                    });
             }
 
             private static Color32[] FullyOpaquePixels()
@@ -8425,7 +8328,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var path = UnsupportedFamilyTempFolder +
                        "/LilToonCutoutOutline.shader";
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" + UnsupportedFamilyShaderName + "\"\n" +
                 "{\n" +
@@ -8446,13 +8349,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "        }\n" +
                 "    }\n" +
                 "}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-
-            var shader = Shader.Find(UnsupportedFamilyShaderName);
-            Assert.That(
-                shader, Is.Not.Null,
-                "The unsupported-family temp shader must import.");
             return shader;
         }
 

@@ -1,4 +1,4 @@
-using System.IO;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -54,7 +54,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private static Texture2D ImportFixture(string name, bool fullyOpaque)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(Size, Size, TextureFormat.RGBA32, false);
             var pixels = new Color32[Size * Size];
             for (var index = 0; index < pixels.Length; index++)
             {
@@ -66,23 +65,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 pixels[0] = new Color32(64, 32, 16, 128);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = false;
-            importer.isReadable = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, Size, Size, pixels, importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = true;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
         }
 
         /// <summary>
@@ -242,24 +233,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private static Texture2D ImportMippedOddBoundary(string name)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, false);
-            staging.SetPixels32(OddBoundaryPixels());
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = true;
-            importer.isReadable = false;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path, 8, 8, OddBoundaryPixels(), importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = false;
+                    importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
         }
 
         /// <summary>

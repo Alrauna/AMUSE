@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -46,34 +44,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         private const string TempFolder = "Assets/AmuseTests_MultiResolution";
 
-        private readonly List<Material> _materials = new List<Material>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(TempFolder);
 
         [SetUp]
         public void SetUp()
         {
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder(
-                    "Assets", "AmuseTests_MultiResolution");
-            }
+            _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var material in _materials)
-            {
-                if (material != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-            }
-
-            _materials.Clear();
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
+            _scope.TearDown();
         }
 
         // Mode 0 on the base container is the observed corpus state: the
@@ -501,7 +484,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var path = TempFolder + "/" +
                 shaderName.Replace('/', '-') + ".shader";
-            File.WriteAllText(
+            var shader = TestShaderWriter.WriteTestShader(
                 path,
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    Properties\n    {\n" +
@@ -513,12 +496,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "        _UDIMDiscardCompile" +
                 " (\"UDIMDiscardCompile\", Int) = 0\n" +
                 "    }\n    SubShader { Pass {} }\n}\n");
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
-            Assert.That(shader, Is.Not.Null, path);
             var material = new Material(shader);
-            _materials.Add(material);
+            _scope.Track(material);
             return material;
         }
 
@@ -535,7 +514,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
                 TempFolder, shaderName, transparentMode, keywords);
-            _materials.Add(material);
+            _scope.Track(material);
             return material;
         }
 

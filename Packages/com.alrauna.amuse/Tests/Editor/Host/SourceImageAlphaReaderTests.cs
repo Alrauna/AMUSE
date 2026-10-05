@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
@@ -35,23 +36,18 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void TryReadSourceAlphaChain_DecodesPngWithCutoutThresholdCorrectly()
         {
             var pngPath = Path.Combine(TestFolder, "cutout_test.png");
-            var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             // 4x4 image:
             // top half alpha 0.8 (204/255), bottom half alpha 0.2 (51/255)
-            var colors = new Color[16];
+            var pixels = new Color32[16];
             for (var y = 0; y < 4; y++)
             {
                 for (var x = 0; x < 4; x++)
                 {
-                    colors[y * 4 + x] = new Color(1f, 1f, 1f, y >= 2 ? 0.8f : 0.2f);
+                    pixels[y * 4 + x] =
+                        new Color32(255, 255, 255, (byte)(y >= 2 ? 204 : 51));
                 }
             }
-            tex.SetPixels(colors);
-            var bytes = tex.EncodeToPNG();
-            File.WriteAllBytes(pngPath, bytes);
-            AssetDatabase.ImportAsset(pngPath, ImportAssetOptions.ForceSynchronousImport);
-            var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(pngPath);
-            UnityEngine.Object.DestroyImmediate(tex);
+            var imported = TestTextureImport.WritePng(pngPath, 4, 4, pixels);
 
             // Test with cutoff 0.5f:
             // top half (alpha 0.8f >= 0.5f) should be 255
@@ -91,10 +87,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new Color(1f, 1f, 1f, 0.5f),
                 new Color(1f, 1f, 1f, 0.0f)
             });
-            var bytes = tex.EncodeToPNG();
-            File.WriteAllBytes(pngPath, bytes);
-            AssetDatabase.ImportAsset(pngPath, ImportAssetOptions.ForceSynchronousImport);
-            var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(pngPath);
+            var imported = TestTextureImport.WritePng(
+                pngPath, 2, 2, tex.GetPixels32());
             UnityEngine.Object.DestroyImmediate(tex);
 
             // Inert bounds at cutoff 1.0f still take the float

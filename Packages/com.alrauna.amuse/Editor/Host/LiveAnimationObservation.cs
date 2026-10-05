@@ -88,45 +88,13 @@ namespace Alrauna.Amuse.Editor.Host
         {
             if (clip == null) throw new ArgumentNullException(nameof(clip));
 
-            var floats = new List<LiveFloatObservation>();
-            foreach (var binding in AnimationUtility.GetCurveBindings(clip))
-            {
-                var curve = AnimationUtility.GetEditorCurve(clip, binding);
-                var keys = curve.keys;
-                var values = new float[keys.Length];
-                for (var index = 0; index < keys.Length; index++)
-                {
-                    values[index] = keys[index].value;
-                }
-
-                floats.Add(new LiveFloatObservation(
-                    binding.path,
-                    binding.type.FullName,
-                    binding.propertyName,
-                    IsFiniteExact(keys),
-                    values));
-            }
-
-            var objects = new List<LiveObjectObservation>();
-            foreach (var binding in
-                     AnimationUtility.GetObjectReferenceCurveBindings(clip))
-            {
-                var keys = AnimationUtility.GetObjectReferenceCurve(clip, binding);
-                var values = new UnityEngine.Object[keys.Length];
-                for (var index = 0; index < keys.Length; index++)
-                {
-                    values[index] = keys[index].value;
-                }
-
-                objects.Add(new LiveObjectObservation(
-                    binding.path,
-                    binding.type.FullName,
-                    binding.propertyName,
-                    values));
-            }
-
-            return new LiveClipObservation(
-                clip.name, isSpecialMotion, floats, objects);
+            return ObserveBindings(
+                clip.name,
+                isSpecialMotion,
+                AnimationUtility.GetCurveBindings(clip),
+                binding => AnimationUtility.GetEditorCurve(clip, binding).keys,
+                AnimationUtility.GetObjectReferenceCurveBindings(clip),
+                binding => AnimationUtility.GetObjectReferenceCurve(clip, binding));
         }
 
         /// <summary>
@@ -143,11 +111,33 @@ namespace Alrauna.Amuse.Editor.Host
         {
             if (clip == null) throw new ArgumentNullException(nameof(clip));
 
+            return ObserveBindings(
+                clip.Name,
+                isSpecialMotion,
+                clip.GetFloatCurveBindings(),
+                binding => clip.GetFloatCurve(binding).keys,
+                clip.GetObjectCurveBindings(),
+                binding => clip.GetObjectCurve(binding));
+        }
+
+        /// <summary>
+        /// The one observation core both clip kinds share: it walks the
+        /// float and object-reference binding sets and reads each curve's
+        /// keys through the caller's accessors, so real assets and
+        /// in-memory virtual clips produce identically ordered facts.
+        /// </summary>
+        private static LiveClipObservation ObserveBindings(
+            string clipName,
+            bool isSpecialMotion,
+            IEnumerable<EditorCurveBinding> floatBindings,
+            Func<EditorCurveBinding, Keyframe[]> readFloatKeys,
+            IEnumerable<EditorCurveBinding> objectBindings,
+            Func<EditorCurveBinding, ObjectReferenceKeyframe[]> readObjectKeys)
+        {
             var floats = new List<LiveFloatObservation>();
-            foreach (var binding in clip.GetFloatCurveBindings())
+            foreach (var binding in floatBindings)
             {
-                var curve = clip.GetFloatCurve(binding);
-                var keys = curve.keys;
+                var keys = readFloatKeys(binding);
                 var values = new float[keys.Length];
                 for (var index = 0; index < keys.Length; index++)
                 {
@@ -163,9 +153,9 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             var objects = new List<LiveObjectObservation>();
-            foreach (var binding in clip.GetObjectCurveBindings())
+            foreach (var binding in objectBindings)
             {
-                var keys = clip.GetObjectCurve(binding);
+                var keys = readObjectKeys(binding);
                 var values = new UnityEngine.Object[keys.Length];
                 for (var index = 0; index < keys.Length; index++)
                 {
@@ -180,7 +170,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return new LiveClipObservation(
-                clip.Name, isSpecialMotion, floats, objects);
+                clipName, isSpecialMotion, floats, objects);
         }
 
         internal static bool TryParseMaterialSlotBinding(

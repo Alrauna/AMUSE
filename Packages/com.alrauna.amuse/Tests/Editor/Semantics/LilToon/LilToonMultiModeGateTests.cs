@@ -4,6 +4,7 @@ using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Tests.Editor.Semantics.LilToon
 {
@@ -30,20 +31,13 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
         private const string LilToonFixtureShader =
             "Hidden/Alrauna/AmuseTests/LilToonMultiModeGateTest";
 
-        private readonly List<Material> _materials = new List<Material>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var material in _materials)
-            {
-                if (material != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-            }
-
-            _materials.Clear();
+            _scope.TearDown();
         }
 
         // The vendor writes UNITY_UI_ALPHACLIP only at mode one
@@ -271,7 +265,7 @@ namespace Alrauna.Tests.Editor.Semantics.LilToon
             var shader = Shader.Find(LilToonFixtureShader);
             Assert.That(shader, Is.Not.Null, LilToonFixtureShader);
             var material = new Material(shader);
-            _materials.Add(material);
+            _scope.Track(material);
             return material;
         }
 

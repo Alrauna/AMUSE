@@ -7,6 +7,7 @@ using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using UnityEditor;
 using UnityEngine;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics
 {
@@ -1168,13 +1169,5 @@ namespace Alrauna.Amuse.Editor.Semantics
                     : null);
         }
 
-        internal static MaterialSemantics AllUnknown()
-        {
-            return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<ScalarSemanticValue>.Unknown(),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
-        }
     }
 }

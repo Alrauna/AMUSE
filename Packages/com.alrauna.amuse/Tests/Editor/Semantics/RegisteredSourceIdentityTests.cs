@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using Alrauna.Amuse.Editor.Semantics;
@@ -12,8 +13,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             var source = new GameObject("source");
             var clone = new GameObject("clone");
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
@@ -24,7 +24,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 Object.DestroyImmediate(clone);
                 Object.DestroyImmediate(source);
             }
@@ -37,8 +37,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // entry here and later block a RegisterReplacedObject for
             // the same object. The read-only lookup must answer null.
             var loner = new GameObject("loner");
-            var previous = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            var registryGuard = new ObjectRegistryGuard();
             try
             {
                 Assert.That(
@@ -46,7 +45,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
             finally
             {
-                ObjectRegistry.ActiveRegistry = previous;
+                registryGuard.Dispose();
                 Object.DestroyImmediate(loner);
             }
         }
