@@ -842,6 +842,92 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The serialized alpha separator switch, set off before
+        /// processing. The barrier gates the feature after the pass
+        /// records execution, and every authored triangle stays on its
+        /// original material.
+        /// </summary>
+        [Test]
+        public void SerializedAlphaSeparatorSwitchKeepsTheBuildUntouched()
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out _);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE alpha switch control");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                var amuse = root.AddComponent<AmuseAvatarOptimizer>();
+                var serialized = new SerializedObject(amuse);
+                var toggle =
+                    serialized.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(toggle, Is.Not.Null,
+                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+                toggle.boolValue = false;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                AttachAnimationFixture(root, "alpha-switch");
+                var texture = Track(ImportBandedAlphaTexture(
+                    "banded_alpha_switch"));
+                var transparent = Track(NewTransparentMaterial(
+                    transparentShader, texture));
+                CreateSkinnedRenderer(
+                    root, "AMUSE alpha switch renderer",
+                    "AMUSE alpha switch mesh",
+                    new[] { transparent },
+                    new[] { Band.Transparent, Band.Partial, Band.Opaque },
+                    new[] { 0, 0, 0 },
+                    firstTriangleIndex: 0);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null);
+                Assert.That(
+                    context.Successful, Is.True,
+                    "a switched-off alpha separator must not fail the"
+                    + " build");
+
+                var state = context.GetState<AmusePlatformFinishState>();
+                Assert.That(state, Is.Not.Null);
+                Assert.That(
+                    state.HasExecuted, Is.True,
+                    "HasExecuted records that the barrier pass ran; the"
+                    + " feature switch gates the pipeline after it");
+                Assert.That(
+                    state.AnalyzedRendererCount, Is.EqualTo(0),
+                    "a switched-off run must not analyze renderers");
+
+                var generated = new HashSet<Material>(
+                    state.Separation?.CreatedClones
+                    ?? (IEnumerable<Material>)Array.Empty<Material>());
+                Assert.That(
+                    generated, Is.Empty,
+                    "a switched-off run must not create generated"
+                    + " materials");
+
+                foreach (var renderer in root.GetComponentsInChildren<
+                             SkinnedMeshRenderer>(true))
+                {
+                    var mesh = renderer.sharedMesh;
+                    if (mesh == null) continue;
+                    Assert.That(
+                        renderer.sharedMaterials,
+                        Has.All.Matches<Material>(material =>
+                            material == transparent),
+                        "a switched-off run must leave the original"
+                        + " material on every slot");
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// The swapped-state boundary: a committed material-swap curve
         /// flips one slot between a transparent material and a cutout
         /// material on one shared texture. The slot's admitted states
