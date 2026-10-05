@@ -1020,6 +1020,149 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
     }
 
+    /// <summary>
+    /// The exact product fold of two closed forms through their constants.
+    /// The exact-one predicate of a product of values bounded in [0, 1] is
+    /// association-invariant: every rounded chain of sub-one factors stays
+    /// strictly below one, and all-one factors answer exactly one in every
+    /// association, so the fold through the constants and factor lists
+    /// changes nothing provable. Returns null after invoking the refusal
+    /// recorder when either shape is a saturating sum or difference, whose
+    /// exact-one predicate is not multiplication-invariant.
+    /// </summary>
+    internal static class ScalarProductFold
+    {
+        /// <summary>
+        /// Folds <paramref name="left"/> and <paramref name="right"/> into
+        /// one closed form. <paramref name="recordRefusal"/> receives the
+        /// <paramref name="refusalProperty"/> name when a saturating shape
+        /// refuses. <paramref name="threadMaps"/> carries the affine map
+        /// list: the lilToon frontends thread one map per factor and keep a
+        /// single mapless factor in its own kind, while the Poiyomi frontend
+        /// has no mapped factors.
+        /// </summary>
+        internal static ScalarSemanticValue Fold(
+            ScalarSemanticValue left,
+            ScalarSemanticValue right,
+            string refusalProperty,
+            Action<string> recordRefusal,
+            bool threadMaps)
+        {
+            if (left == null)
+            {
+                throw new ArgumentNullException(nameof(left));
+            }
+            if (right == null)
+            {
+                throw new ArgumentNullException(nameof(right));
+            }
+            if (recordRefusal == null)
+            {
+                throw new ArgumentNullException(nameof(recordRefusal));
+            }
+
+            if (IsSaturating(left.Kind) || IsSaturating(right.Kind))
+            {
+                recordRefusal(refusalProperty);
+                return null;
+            }
+
+            var samples = new List<TextureSample>();
+            var channels = new List<TextureChannel>();
+            var maps = threadMaps
+                ? new List<AffineAlphaMap?>()
+                : null;
+            var multiplier = 1f;
+            multiplier = CollectFactors(
+                left, samples, channels, maps, multiplier);
+            multiplier = CollectFactors(
+                right, samples, channels, maps, multiplier);
+
+            if (samples.Count == 0)
+            {
+                return ScalarSemanticValue.Constant(multiplier);
+            }
+
+            if (samples.Count == 1 && !HasAnyMap(maps))
+            {
+                return ScalarSemanticValue.TextureTimesConstant(
+                    samples[0], channels[0], multiplier);
+            }
+
+            return ScalarSemanticValue.ProductChain(
+                samples, channels, multiplier, maps);
+        }
+
+        private static bool IsSaturating(ScalarSemanticValueKind kind)
+        {
+            return kind == ScalarSemanticValueKind.SaturatingSum ||
+                kind == ScalarSemanticValueKind.SaturatingDifference;
+        }
+
+        private static bool HasAnyMap(List<AffineAlphaMap?> maps)
+        {
+            if (maps == null)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < maps.Count; index++)
+            {
+                if (maps[index] != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static float CollectFactors(
+            ScalarSemanticValue value,
+            List<TextureSample> samples,
+            List<TextureChannel> channels,
+            List<AffineAlphaMap?> maps,
+            float multiplier)
+        {
+            switch (value.Kind)
+            {
+                case ScalarSemanticValueKind.Constant:
+                    return multiplier * value.GetConstantValue();
+                case ScalarSemanticValueKind.TextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    maps?.Add(null);
+                    return multiplier;
+                case ScalarSemanticValueKind.TextureSampleTimesConstant:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    maps?.Add(null);
+                    return multiplier * value.GetMultiplier();
+                case ScalarSemanticValueKind.MappedTextureSample:
+                    samples.Add(value.GetTextureSample());
+                    channels.Add(value.GetChannel());
+                    maps?.Add(value.GetMap());
+                    return multiplier;
+                case ScalarSemanticValueKind
+                    .ProductChainOfTextureSamples:
+                    for (var index = 0;
+                         index < value.GetChainFactorCount();
+                         index++)
+                    {
+                        samples.Add(value.GetChainSample(index));
+                        channels.Add(value.GetChainChannel(index));
+                        maps?.Add(value.GetChainMap(index));
+                    }
+
+                    return multiplier * value.GetProductMultiplier();
+                default:
+                    throw new InvalidOperationException(
+                        "A saturating shape reached factor collection, " +
+                        "which the caller must refuse first.");
+            }
+        }
+    }
+
     internal enum NormalSemanticValueKind
     {
         Unmodified,

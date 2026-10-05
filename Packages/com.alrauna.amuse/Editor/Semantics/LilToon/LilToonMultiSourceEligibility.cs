@@ -216,29 +216,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// but swept by neither.
         /// </summary>
         private static readonly string[] EligibilitySchema =
-            BuildEligibilitySchema(CutoutSourceSchema);
+            EvidenceGates.BuildEligibilitySchema(
+                LilToonOpaqueTarget.RecipeSchemaProperties,
+                CutoutSourceSchema);
 
         private static readonly string[] TransparentEligibilitySchema =
-            BuildEligibilitySchema(TransparentSourceSchema);
-
-        private static string[] BuildEligibilitySchema(string[] sourceSchema)
-        {
-            var recipe = LilToonOpaqueTarget.RecipeSchemaProperties;
-            var schema = new string[
-                recipe.Count + sourceSchema.Length];
-            var index = 0;
-            foreach (var property in recipe)
-            {
-                schema[index++] = property;
-            }
-
-            foreach (var property in sourceSchema)
-            {
-                schema[index++] = property;
-            }
-
-            return schema;
-        }
+            EvidenceGates.BuildEligibilitySchema(
+                LilToonOpaqueTarget.RecipeSchemaProperties,
+                TransparentSourceSchema);
 
         // --- Eligibility -----------------------------------------------------
 

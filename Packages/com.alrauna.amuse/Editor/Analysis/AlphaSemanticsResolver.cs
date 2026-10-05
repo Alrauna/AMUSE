@@ -53,7 +53,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private readonly bool _isUniform;
         private readonly TriangleAlphaOutcome _uniformOutcome;
         private readonly AlphaMipChain _chain;
-        private readonly AlphaSamplingSettings _sampling;
+        private readonly TextureSampling _sampling;
         // Only a classified resolution consults texture contents, so only it
         // carries the noise density percent. Uniform, product, and refused
         // resolutions store zero and ignore it: a constant alpha is not
@@ -76,7 +76,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             bool isUniform,
             TriangleAlphaOutcome uniformOutcome,
             AlphaMipChain chain,
-            AlphaSamplingSettings sampling,
+            TextureSampling sampling,
             int maxNoiseTexelPercent,
             UvMapping mapping,
             AlphaResolution firstFactor,
@@ -141,7 +141,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         internal static AlphaResolution Classified(
             AlphaMipChain chain,
-            AlphaSamplingSettings sampling,
+            TextureSampling sampling,
             UvMapping mapping,
             int maxNoiseTexelPercent,
             AffineAlphaMap? map = null)
@@ -618,10 +618,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return AlphaResolution.Classified(
                 chain,
-                new AlphaSamplingSettings(
-                    sample.Sampling.Filter,
-                    sample.Sampling.Wrap,
-                    sample.Sampling.Aniso),
+                sample.Sampling,
                 sample.Coordinates,
                 maxNoiseTexelPercent,
                 map);
@@ -851,10 +848,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                     AlphaResolutionFailure.UnsupportedUvMapping);
             }
 
-            var sampling = new AlphaSamplingSettings(
-                sample.Sampling.Filter,
-                sample.Sampling.Wrap,
-                sample.Sampling.Aniso);
+            var sampling = sample.Sampling;
 
             if (!fieldProvider(sample.Source, channel, out var chain) ||
                 chain == null)

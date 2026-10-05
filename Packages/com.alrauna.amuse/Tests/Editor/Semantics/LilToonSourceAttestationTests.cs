@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -23,27 +23,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// </summary>
     public sealed class LilToonSourceAttestationTests
     {
-        // Path arithmetic only. Nothing here touches the file system.
-        private static readonly string ProjectRoot =
-            Path.Combine(Path.GetTempPath(), "AmuseTests", "Project");
-
-        private static readonly string ShaderDir = Path.Combine(
-            ProjectRoot, "Packages", "jp.lilxyzw.liltoon", "Shader");
-
-        private static LilToonIncludeTree Tree()
-        {
-            return LilToonIncludeTree.ForTests(
-                Path.Combine(ShaderDir, "Includes"),
-                new[] { ("lil_common.hlsl", "11") });
-        }
-
-        private static string Canon(string source)
-        {
-            // The project root is an explicit argument. Canonicalization
-            // must never consult the process working directory.
-            return LilToonSourceAttestation.Canonicalize(
-                source, ShaderDir, ProjectRoot, Tree());
-        }
 
         private const string DefaultSettingsBlock =
             "            #define LIL_OPTIMIZE_APPLY_SHADOW_FA\n" +
@@ -126,10 +105,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             Assert.That(
                 LilToonSourceAttestation.ComputeNormalizedSourceHash(
-                    Canon(MultiContainerSource(DefaultSettingsBlock))),
+                    AttestationEnvironment.Canon(
+                        MultiContainerSource(DefaultSettingsBlock))),
                 Is.EqualTo(
                     LilToonSourceAttestation.ComputeNormalizedSourceHash(
-                        Canon(MultiContainerSource(ReducedSettingsBlock)))),
+                        AttestationEnvironment.Canon(
+                            MultiContainerSource(ReducedSettingsBlock)))),
                 "the Multi settings block is the only difference between " +
                 "the two sources, so the canonical digest must not move");
         }
@@ -148,12 +129,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             Assert.That(
                 LilToonSourceAttestation.ComputeNormalizedSourceHash(
-                    Canon(MultiContainerSource(
-                        DefaultSettingsBlock, adjacentToHlslInclude: true))),
+                    AttestationEnvironment.Canon(
+                        MultiContainerSource(
+                            DefaultSettingsBlock, adjacentToHlslInclude: true))),
                 Is.EqualTo(
                     LilToonSourceAttestation.ComputeNormalizedSourceHash(
-                        Canon(MultiContainerSource(
-                            ReducedSettingsBlock, adjacentToHlslInclude: true)))),
+                        AttestationEnvironment.Canon(
+                            MultiContainerSource(
+                                ReducedSettingsBlock,
+                                adjacentToHlslInclude: true)))),
                 "the adjacent Multi settings block is the only difference " +
                 "between the two sources, so the canonical digest must not " +
                 "move");
@@ -191,7 +175,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             string source)
         {
             return LilToonSourceAttestation.AnalyzeCanonicalization(
-                source, ShaderDir, ProjectRoot, Tree());
+                source,
+                AttestationEnvironment.ShaderDir,
+                AttestationEnvironment.ProjectRoot,
+                AttestationEnvironment.Tree());
         }
 
         /// <summary>
@@ -518,7 +505,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void MultiContainerCanonicalizationRetainsMultiDefines()
         {
             var canonical =
-                Canon(MultiContainerSource(DefaultSettingsBlock));
+                AttestationEnvironment.Canon(
+                    MultiContainerSource(DefaultSettingsBlock));
 
             Assert.That(
                 HasTrimmedLine(canonical, "#define LIL_MULTI"),

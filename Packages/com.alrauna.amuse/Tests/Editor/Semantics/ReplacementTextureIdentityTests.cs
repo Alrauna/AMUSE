@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -11,19 +12,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     {
         private const string FixtureFolder = "Assets/AmuseTests_LacIdentity";
 
-        private nadena.dev.ndmf.IObjectRegistry _previousRegistry;
+        private ObjectRegistryGuard _registryGuard;
 
         [SetUp]
         public void StoreRegistry()
         {
-            _previousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            _registryGuard = new ObjectRegistryGuard();
         }
 
         [TearDown]
         public void RestoreRegistry()
         {
-            ObjectRegistry.ActiveRegistry = _previousRegistry;
+            _registryGuard.Dispose();
             ReplacementTextureIdentity.ClearSession();
         }
 
@@ -147,7 +147,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// Imports a real texture asset so the source side of a
         /// registration is asset-backed, the shape the mint demands of
         /// every source. Mirrors the shared fixture shape of the
-        /// attestation tests.
+        /// attestation tests. Kept local: the deferred (non-forced)
+        /// import and the identity asserts do not fit the WritePng
+        /// callback shape.
         /// </summary>
         private static Texture2D ImportSourceAsset(string marker)
         {

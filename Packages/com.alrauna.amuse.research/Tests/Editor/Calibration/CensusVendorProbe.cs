@@ -22,8 +22,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
     /// </summary>
     internal sealed class CensusVendorPresence
     {
-        internal CensusVendorFamily Family { get; }
-
         /// <summary>Null when the family is not installed.</summary>
         internal Shader Shader { get; }
 
@@ -40,13 +38,11 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         internal bool IsInstalled => Shader != null;
 
         internal CensusVendorPresence(
-            CensusVendorFamily family,
             Shader shader,
             string expectedPackageName,
             string expectedPackageVersion,
             string installedPackageVersion)
         {
-            Family = family;
             Shader = shader;
             ExpectedPackageName = expectedPackageName;
             ExpectedPackageVersion = expectedPackageVersion;
@@ -100,7 +96,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
 
             var shader = Shader.Find(shaderName);
             return new CensusVendorPresence(
-                family,
                 shader,
                 packageName,
                 packageVersion,

@@ -32,11 +32,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 type.FullName));
         }
 
-        [Test]
-        public void AllowlistStartsEmpty()
-        {
-            Assert.That(BehaviourIdentity.AllowedIdentities, Is.Empty);
-        }
 
         [Test]
         public void UnknownIdentityIsNotAllowed()

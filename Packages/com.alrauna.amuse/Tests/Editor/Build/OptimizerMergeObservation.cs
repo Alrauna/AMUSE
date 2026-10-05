@@ -39,18 +39,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal sealed class RendererSnapshot
         {
             internal string RendererName;
-            internal string GameObjectName;
             internal List<string> TriangleKeys = new List<string>();
             internal List<string> SlotShaderNames = new List<string>();
-            internal List<string> SlotTextureNames = new List<string>();
-            internal bool HasUv0;
-
-            /// <summary>True when this renderer carries every triangle
-            /// key in the given set (its geometry is a superset).</summary>
-            internal bool ContainsAll(IEnumerable<string> keys)
-            {
-                return keys.All(key => TriangleKeys.Contains(key));
-            }
         }
 
         internal sealed class PhaseSnapshot
@@ -108,21 +98,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "0.###", CultureInfo.InvariantCulture);
         }
 
-        private static string MainTextureName(Material material)
-        {
-            if (material == null) return "<null-slot>";
-            if (material.shader == null) return "<null-shader>";
-            if (material.shader.FindPropertyIndex("_MainTex") < 0)
-            {
-                return "<no-main-tex>";
-            }
-
-            var texture = material.HasProperty("_MainTex")
-                ? material.GetTexture("_MainTex")
-                : null;
-            return texture == null ? "<unassigned>" : texture.name;
-        }
-
         internal static void Observe(
             BuildContext context, Phase phase)
         {
@@ -140,9 +115,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var entry = new RendererSnapshot
                 {
                     RendererName = renderer.name,
-                    GameObjectName = renderer.gameObject.name,
-                    HasUv0 = renderer.sharedMesh != null
-                        && renderer.sharedMesh.uv != null,
                 };
 
                 var mesh = renderer.sharedMesh;
@@ -155,8 +127,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             material != null && material.shader != null
                                 ? material.shader.name
                                 : "<null>");
-                        entry.SlotTextureNames.Add(
-                            MainTextureName(material));
                     }
                 }
 

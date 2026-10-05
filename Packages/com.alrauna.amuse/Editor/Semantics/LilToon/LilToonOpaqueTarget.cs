@@ -123,27 +123,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // --- Effective render state and canonical-fact comparison -----------
 
         /// <summary>
-        /// The two canonical facts that are not shader properties. Neither is
-        /// animation-reachable - Unity's material binding syntax is
-        /// <c>material.&lt;PropertyName&gt;</c>, and no binding form addresses a
-        /// material's render queue or an override tag - so neither belongs in
-        /// the evidence request, whose job is to close the animation-relevant
-        /// set. <c>renderQueue</c> already resolves an absent override to the
-        /// shader's declared queue, so "an override exists" is an
-        /// implementation detail this design does not model.
-        /// </summary>
-        internal static void ReadEffectiveRenderState(
-            Material material,
-            out int renderQueue,
-            out string renderType)
-        {
-            if (material == null) throw new ArgumentNullException(nameof(material));
-
-            renderQueue = material.renderQueue;
-            renderType = material.GetTag(RenderTypeTagName, false);
-        }
-
-        /// <summary>
         /// Reports the first of the 20 canonical facts the candidate disagrees
         /// with, in a deterministic order: recipe order, then the render
         /// queue, then the <c>RenderType</c> tag. A property the material does
@@ -166,7 +145,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            ReadEffectiveRenderState(candidate, out var queue, out var renderType);
+            EffectiveRenderState.ReadEffectiveRenderState(
+                candidate, out var queue, out var renderType);
             if (queue != CanonicalOpaqueRenderQueue)
             {
                 factName = nameof(Material.renderQueue);

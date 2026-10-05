@@ -5,6 +5,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -320,13 +321,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var withoutCutoff = renamed.Replace(cutoffLine, string.Empty);
 
             var path = TempFolder + "/PoiyomiCutoutNoCutoff.shader";
-            File.WriteAllText(path, withoutCutoff);
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
-            Assert.That(
-                shader, Is.Not.Null,
-                "the cutoff-less stand-in variant must import");
+            var shader = TestShaderWriter.WriteTestShader(path, withoutCutoff);
 
             // The shader is an imported asset, so it stays out of the
             // transient destroy list: the base teardown's folder deletion
@@ -353,34 +348,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private Texture2D UniformTexture(string name, byte alpha)
         {
             var path = TempFolder + "/" + name + ".png";
-            var staging = new Texture2D(8, 8, TextureFormat.RGBA32, true);
             var pixels = new Color32[64];
             for (var index = 0; index < pixels.Length; index++)
             {
                 pixels[index] = new Color32(255, 255, 255, alpha);
             }
 
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(
-                path, ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            importer.mipmapEnabled = true;
-            importer.streamingMipmaps = true;
-            importer.textureCompression =
-                TextureImporterCompression.Uncompressed;
-            importer.filterMode = FilterMode.Point;
-            importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(
-                loaded, Is.Not.Null,
-                $"Imported texture '{path}' must load.");
-            return loaded;
+            return TestTextureImport.WritePng(
+                path,
+                8,
+                8,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.streamingMipmaps = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
         }
 
         private static CapturedMaterialEvidence Capture(

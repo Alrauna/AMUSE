@@ -74,12 +74,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_EnableRimLighting",
         };
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         [Test]
         public void BaseColor_NoMainTex_WriterEnabled_IsNotClaimed(
             [ValueSource(nameof(BaseColorWriterSample))] string gate)

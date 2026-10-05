@@ -92,29 +92,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// render-state fact target evidence.
         /// </summary>
         private static readonly string[] EligibilitySchema =
-            BuildEligibilitySchema();
+            EvidenceGates.BuildEligibilitySchema(
+                LilToonOpaqueTarget.RecipeSchemaProperties,
+                SourceSchema);
 
         internal static IReadOnlyCollection<string>
             EligibilitySchemaProperties { get; } =
                 new ReadOnlyCollection<string>(EligibilitySchema);
-
-        private static string[] BuildEligibilitySchema()
-        {
-            var recipe = LilToonOpaqueTarget.RecipeSchemaProperties;
-            var schema = new string[recipe.Count + SourceSchema.Length];
-            var index = 0;
-            foreach (var property in recipe)
-            {
-                schema[index++] = property;
-            }
-
-            foreach (var property in SourceSchema)
-            {
-                schema[index++] = property;
-            }
-
-            return schema;
-        }
 
         // --- Eligibility -----------------------------------------------------
 
@@ -213,10 +197,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    With the policy it is the reported normalization.
             var depthComparison = Read(values, "_ZTest");
             if (depthComparison !=
-                    LilToonOpaqueConversionFactors.LEqualDepthComparison &&
+                    OpaqueConversionFactors.LEqualDepthComparison &&
                 !(allowDepthTestChange &&
                   depthComparison ==
-                  LilToonOpaqueConversionFactors.LessDepthComparison))
+                  OpaqueConversionFactors.LessDepthComparison))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -225,7 +209,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 6. Depth write. The canonical target writes depth; a cutout
             //    authored with ZWrite off expresses different visibility
             //    intent than the recipe preserves.
-            if (Read(values, "_ZWrite") != LilToonOpaqueConversionFactors.DepthWriteOn)
+            if (Read(values, "_ZWrite") != OpaqueConversionFactors.DepthWriteOn)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedDepthWrite);
@@ -234,7 +218,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 7. Color mask. The canonical target writes all channels; a
             //    masked material deliberately suppresses channel output the
             //    recipe would restore.
-            if (Read(values, "_ColorMask") != LilToonOpaqueConversionFactors.ColorMaskAll)
+            if (Read(values, "_ColorMask") != OpaqueConversionFactors.ColorMaskAll)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedColorMask);
@@ -257,10 +241,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    Add: the accepted Max operation in ForwardAdd does not
             //    carry over here, and any other operation changes how RGB
             //    is combined, not just how factors weigh it.
-            if (Read(values, "_BlendOp") != LilToonOpaqueConversionFactors.BlendOpAdd ||
-                !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+            if (Read(values, "_BlendOp") != OpaqueConversionFactors.BlendOpAdd ||
+                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
                     Read(values, "_SrcBlend")) ||
-                !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
+                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
                     Read(values, "_DstBlend")))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -269,10 +253,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // 10. Base alpha blend, same degeneracy argument as gate 9.
             if (Read(values, "_BlendOpAlpha") !=
-                    LilToonOpaqueConversionFactors.BlendOpAdd ||
-                !LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+                    OpaqueConversionFactors.BlendOpAdd ||
+                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
                     Read(values, "_SrcBlendAlpha")) ||
-                !LilToonOpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
+                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
                     Read(values, "_DstBlendAlpha")))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -290,14 +274,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    OPERATIONS are constrained too: lilToon's recipe writes
             //    Max into both, and an Add-kept ForwardAdd pass would
             //    double-composite against the base pass.
-            if (!LilToonOpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+            if (!OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
                     Read(values, "_SrcBlendFA")) ||
                 Read(values, "_DstBlendFA") !=
-                    LilToonOpaqueConversionFactors.BlendFactorOne ||
+                OpaqueConversionFactors.BlendFactorOne ||
                 Read(values, "_BlendOpFA") !=
-                    LilToonOpaqueConversionFactors.BlendOpMax ||
+                OpaqueConversionFactors.BlendOpMax ||
                 Read(values, "_BlendOpAlphaFA") !=
-                    LilToonOpaqueConversionFactors.BlendOpMax)
+                OpaqueConversionFactors.BlendOpMax)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -358,7 +342,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return LilToonOpaqueConversionEligibility.Convertible(
                 depthComparison ==
-                LilToonOpaqueConversionFactors.LessDepthComparison);
+                OpaqueConversionFactors.LessDepthComparison);
         }
 
         /// <summary>

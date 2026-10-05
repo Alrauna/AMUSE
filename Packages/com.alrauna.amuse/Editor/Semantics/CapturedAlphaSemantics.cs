@@ -28,7 +28,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal static CapturedAlphaSemantics AllUnknown()
         {
             return new CapturedAlphaSemantics(
-                UnityMaterialSemantics.AllUnknown(), null);
+                EvidenceGates.AllUnknown(), null);
         }
     }
 }

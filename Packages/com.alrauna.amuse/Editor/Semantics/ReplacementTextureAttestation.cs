@@ -36,61 +36,77 @@ namespace Alrauna.Amuse.Editor.Semantics
             "0.9.0",
         };
 
-        private static readonly List<string> Admitted =
-            new List<string>(ProductionAdmittedVersions);
+        private static readonly AdmittedProducerVersions Versions =
+            new AdmittedProducerVersions(
+                ProducerPackageName,
+                ProductionAdmittedVersions);
 
-        internal static Func<string, string> ReadInstalledPackageVersionOrNull
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests.
+        /// </summary>
+        internal static Func<string, string>
+            ReadInstalledPackageVersionOrNull
         {
-            get;
-            set;
-        } = PackageVersionReader.ReadInstalledOrNull;
+            get => Versions.ReadInstalledPackageVersionOrNull;
+            set => Versions.ReadInstalledPackageVersionOrNull = value;
+        }
 
-        internal static IReadOnlyList<string> AdmittedVersions => Admitted;
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests.
+        /// </summary>
+        internal static IReadOnlyList<string> AdmittedVersions =>
+            Versions.AdmittedVersions;
 
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests.
+        /// </summary>
         internal static void SetAdmittedVersionsForTests(
             params string[] versions)
         {
-            Admitted.Clear();
-            if (versions != null)
-            {
-                Admitted.AddRange(versions);
-            }
+            Versions.SetAdmittedVersionsForTests(versions);
         }
 
-        private static string CachedVersion;
-        private static bool VersionReadCompleted;
-
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests.
+        /// </summary>
         internal static void ResetForTests()
         {
-            Admitted.Clear();
-            Admitted.AddRange(ProductionAdmittedVersions);
-            ReadInstalledPackageVersionOrNull =
-                PackageVersionReader.ReadInstalledOrNull;
-            ClearVersionCacheForSession();
+            Versions.ResetForTests();
         }
 
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests
+        /// and GeneratedTextureAttestationTests.
+        /// </summary>
         internal static bool TryReadInstalledProducerVersion(
             out string version)
         {
-            if (!VersionReadCompleted)
-            {
-                CachedVersion = ReadInstalledPackageVersionOrNull?.Invoke(
-                    ProducerPackageName);
-                VersionReadCompleted = true;
-            }
-            version = CachedVersion;
-            return !string.IsNullOrEmpty(version);
+            return Versions.TryReadInstalledProducerVersion(out version);
         }
 
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests;
+        /// the production session resets in AlphaSeparationApply and
+        /// AmusePlatformFinishPlugin call it.
+        /// </summary>
         internal static void ClearVersionCacheForSession()
         {
-            VersionReadCompleted = false;
-            CachedVersion = null;
+            Versions.ClearVersionCacheForSession();
         }
 
+        /// <summary>
+        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests
+        /// and GeneratedTextureAttestationTests.
+        /// </summary>
         internal static bool IsVersionAdmitted(string version)
         {
-            return !string.IsNullOrEmpty(version) && Admitted.Contains(version);
+            return Versions.IsVersionAdmitted(version);
         }
 
         internal static bool TryIdentifyReplacement(Texture texture, out Texture2D source)

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
+using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf.animator;
@@ -124,6 +124,20 @@ namespace Alrauna.Amuse.Editor.Host
                 Array.Empty<string>(),
                 Array.Empty<TexturePropertyEvidenceRequest>());
 
+        private static ClosedAlphaMaterialCapturer DefaultCapturer(
+            RegisteredSourceLookup resolveRegisteredSource)
+        {
+            return (IReadOnlyList<Material> batchMaterials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                MaterialEvidenceRequest batchRequest,
+                AlphaPolicyBounds batchBounds,
+                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                    batchMaterials, batchFamilies, batchRequest,
+                    batchBounds, out batchCaptured,
+                    resolveRegisteredSource);
+        }
+
         /// <summary>
         /// Captures animation evidence for one renderer. <paramref name="rendererPath"/>
         /// is that renderer's Unity animation path and scopes material-slot
@@ -156,15 +170,7 @@ namespace Alrauna.Amuse.Editor.Host
             RegisteredSourceLookup resolveRegisteredSource = null)
         {
             ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
-                ((IReadOnlyList<Material> batchMaterials,
-                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
-                    MaterialEvidenceRequest batchRequest,
-                    AlphaPolicyBounds batchBounds,
-                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
-                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                        batchMaterials, batchFamilies, batchRequest,
-                        batchBounds, out batchCaptured,
-                        resolveRegisteredSource));
+                DefaultCapturer(resolveRegisteredSource);
             return CaptureGraph(
                 rendererPath,
                 currentSlots,
@@ -223,15 +229,7 @@ namespace Alrauna.Amuse.Editor.Host
             RegisteredSourceLookup resolveRegisteredSource = null)
         {
             ClosedAlphaMaterialCapturer defaultCapturer =
-                (IReadOnlyList<Material> batchMaterials,
-                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
-                    MaterialEvidenceRequest batchRequest,
-                    AlphaPolicyBounds batchBounds,
-                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
-                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                        batchMaterials, batchFamilies, batchRequest,
-                        batchBounds, out batchCaptured,
-                        resolveRegisteredSource);
+                DefaultCapturer(resolveRegisteredSource);
 
             // The closure-mechanics seam stays policy-free: it captures
             // under the inert bounds, which reproduce the base exact-255
@@ -350,15 +348,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
-                ((IReadOnlyList<Material> batchMaterials,
-                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
-                    MaterialEvidenceRequest batchRequest,
-                    AlphaPolicyBounds batchBounds,
-                    out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
-                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                        batchMaterials, batchFamilies, batchRequest,
-                        batchBounds, out batchCaptured,
-                        resolveRegisteredSource));
+                DefaultCapturer(resolveRegisteredSource);
 
             return CaptureObserved(
                 rendererPath,
@@ -488,7 +478,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             var admitted = new List<Material>();
             var materialIndices = new Dictionary<Material, int>(
-                ReferenceComparer<Material>.Instance);
+                ReferenceEqualityComparer<Material>.Instance);
 
             // The observed-material view. A caller whose build substituted
             // materials between the stored committed-graph enumeration and
@@ -799,6 +789,32 @@ namespace Alrauna.Amuse.Editor.Host
                        bindingShort, nameof(Renderer), StringComparison.Ordinal);
         }
 
+        /// <summary>
+        /// The shared material-slot binding filter: the property name
+        /// parses as a material-slot binding, the binding addresses the
+        /// analyzed renderer's path by ordinal comparison, and the
+        /// binding's type is compatible with the renderer's type. One
+        /// implementation of the three checks every caller of
+        /// <see cref="LiveAnimationObservation.TryParseMaterialSlotBinding"/>
+        /// in the build pipeline reads, so no site re-states them inline.
+        /// </summary>
+        internal static bool TryParseMaterialSlotBindingFor(
+            string bindingPath,
+            string bindingTypeFullName,
+            string propertyName,
+            string rendererPath,
+            string rendererTypeFullName,
+            out int slotIndex)
+        {
+            return LiveAnimationObservation.TryParseMaterialSlotBinding(
+                       propertyName, out slotIndex) &&
+                   string.Equals(
+                       bindingPath, rendererPath,
+                       StringComparison.Ordinal) &&
+                   IsCompatibleRendererType(
+                       bindingTypeFullName, rendererTypeFullName);
+        }
+
         private static string ShortName(string typeName)
         {
             var lastDot = typeName.LastIndexOf('.');
@@ -973,7 +989,7 @@ namespace Alrauna.Amuse.Editor.Host
         {
             reference = default;
             if (TrySplitComponent(property, "xyzw", out var stem, out var index) &&
-                ContainsOrdinal(scaleOffsetProperties, stem))
+                Enumerable.Contains(scaleOffsetProperties, stem, StringComparer.Ordinal))
             {
                 reference = new AnimatedPropertyRef(
                     stem,
@@ -983,7 +999,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             if (TrySplitComponent(property, "rgba", out stem, out index) &&
-                ContainsOrdinal(relevance.ColorProperties, stem))
+                Enumerable.Contains(relevance.ColorProperties, stem, StringComparer.Ordinal))
             {
                 reference = new AnimatedPropertyRef(
                     stem, AnimatedPropertyKind.ColorComponent, index);
@@ -991,7 +1007,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             if (TrySplitComponent(property, "xyzw", out stem, out index) &&
-                ContainsOrdinal(relevance.VectorProperties, stem))
+                Enumerable.Contains(relevance.VectorProperties, stem, StringComparer.Ordinal))
             {
                 reference = new AnimatedPropertyRef(
                     stem, AnimatedPropertyKind.VectorComponent, index);
@@ -999,7 +1015,7 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             if (HasCharacterizedComponentSuffix(property) ||
-                !ContainsOrdinal(relevance.ScalarProperties, property))
+                !Enumerable.Contains(relevance.ScalarProperties, property, StringComparer.Ordinal))
             {
                 return false;
             }
@@ -1067,19 +1083,6 @@ namespace Alrauna.Amuse.Editor.Host
                    TrySplitComponent(property, "xyzw", out _, out _);
         }
 
-        private static bool ContainsOrdinal(
-            IEnumerable<string> properties,
-            string property)
-        {
-            foreach (var candidate in properties)
-            {
-                if (string.Equals(candidate, property, StringComparison.Ordinal))
-                    return true;
-            }
-
-            return false;
-        }
-
         private static bool TryStripPrefix(
             string text,
             string prefix,
@@ -1119,21 +1122,5 @@ namespace Alrauna.Amuse.Editor.Host
             return true;
         }
 
-        private sealed class ReferenceComparer<T> : IEqualityComparer<T>
-            where T : class
-        {
-            internal static readonly ReferenceComparer<T> Instance =
-                new ReferenceComparer<T>();
-
-            public bool Equals(T x, T y)
-            {
-                return ReferenceEquals(x, y);
-            }
-
-            public int GetHashCode(T obj)
-            {
-                return RuntimeHelpers.GetHashCode(obj);
-            }
-        }
     }
 }

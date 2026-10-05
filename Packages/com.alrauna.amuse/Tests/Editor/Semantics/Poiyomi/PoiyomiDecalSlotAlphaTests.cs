@@ -27,12 +27,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private static readonly int[] OverrideAlphaModes =
             { 1, 2, 3, 4, 5, 6 };
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         // A material on the non-forced alpha path with the mask mode off,
         // so alpha is proven from _MainTex.a and/or _Color.a.
         private Material NonForcedMaterial()

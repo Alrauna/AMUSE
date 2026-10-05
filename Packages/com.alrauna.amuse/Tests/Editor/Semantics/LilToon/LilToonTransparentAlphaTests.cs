@@ -6,6 +6,7 @@ using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using UnityEditor;
 using UnityEngine;
 using TextureWrapMode = UnityEngine.TextureWrapMode;
@@ -311,19 +312,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentMaterial(
                     material, ColorSpace.Linear, AllFeatures);
-        }
-
-        /// <summary>
-        /// nextafter(value, +infinity) for binary32. MathF.BitIncrement does
-        /// not exist in this Editor's API profile, so the one-ulp step comes
-        /// from the bit pattern directly. The row below depends on the step
-        /// being exactly one ulp: a larger step would still refuse and would
-        /// stop falsifying the bound.
-        /// </summary>
-        private static float NextFloatAbove(float value)
-        {
-            return BitConverter.Int32BitsToSingle(
-                BitConverter.SingleToInt32Bits(value) + 1);
         }
 
         [Test]
@@ -1384,7 +1372,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 }, 0);
         }
 
-
         /// <summary>
         /// Resolves the transparent alpha against the evidence shape the
         /// texture evidence failure class produces: the mask's red field is
@@ -1996,7 +1983,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void SubpassCutoffJustAboveOne_IsUnknownNamingTheProperty()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("t_sub_eps");
-            var subpassCutoff = NextFloatAbove(1f);
+            var subpassCutoff = FloatUlp.NextFloatAbove(1f);
 
             // Degradation guard: the row depends on the step being exactly
             // one ulp, so a future runtime change must not silently turn

@@ -159,12 +159,7 @@ namespace Alrauna.Amuse.Research.Census
             if (triangleCount.HasValue)
                 CensusGuard.NotNegative(triangleCount.Value, nameof(triangleCount));
 
-            var copied = new ObservedSubmesh[submeshes.Count];
-            for (var index = 0; index < submeshes.Count; index++)
-            {
-                copied[index] = submeshes[index]
-                    ?? throw new ArgumentNullException(nameof(submeshes));
-            }
+            var copied = CensusCopy.CheckedCopy(submeshes, nameof(submeshes));
 
             if (refusal == RendererRefusal.None)
             {
@@ -244,12 +239,7 @@ namespace Alrauna.Amuse.Research.Census
             if (renderers == null)
                 throw new ArgumentNullException(nameof(renderers));
 
-            var copied = new ObservedRenderer[renderers.Count];
-            for (var index = 0; index < renderers.Count; index++)
-            {
-                copied[index] = renderers[index]
-                    ?? throw new ArgumentNullException(nameof(renderers));
-            }
+            var copied = CensusCopy.CheckedCopy(renderers, nameof(renderers));
 
             AvatarName = avatarName;
             CreatorName = creatorName;
@@ -272,12 +262,7 @@ namespace Alrauna.Amuse.Research.Census
             if (avatars == null)
                 throw new ArgumentNullException(nameof(avatars));
 
-            var copied = new ObservedAvatar[avatars.Count];
-            for (var index = 0; index < avatars.Count; index++)
-            {
-                copied[index] = avatars[index]
-                    ?? throw new ArgumentNullException(nameof(avatars));
-            }
+            var copied = CensusCopy.CheckedCopy(avatars, nameof(avatars));
 
             Avatars = Array.AsReadOnly(copied);
         }

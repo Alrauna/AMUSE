@@ -56,13 +56,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_EnableDissolve",
         };
 
-        private static PoiyomiSemanticResult Interpret(
-            Material material, ColorSpace colorSpace = ColorSpace.Linear)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, colorSpace);
-        }
-
         private static ColorSemanticValue Emission(PoiyomiSemanticResult result)
         {
             Assert.That(

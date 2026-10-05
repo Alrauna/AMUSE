@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -11,20 +12,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     {
         private const string FixtureFolder = "Assets/AmuseTests_AaoAttestation";
 
-        private nadena.dev.ndmf.IObjectRegistry PreviousRegistry { get; set; }
+        private ObjectRegistryGuard RegistryGuard { get; set; }
 
         [SetUp]
         public void ResetAttestationStateBeforeEachTest()
         {
             AaoAtlasTextureAttestation.ResetForTests();
-            PreviousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            RegistryGuard = new ObjectRegistryGuard();
         }
 
         [TearDown]
         public void RestoreRegistryAndCleanFixtureFolder()
         {
-            ObjectRegistry.ActiveRegistry = PreviousRegistry;
+            RegistryGuard.Dispose();
             if (AssetDatabase.IsValidFolder(FixtureFolder))
             {
                 AssetDatabase.DeleteAsset(FixtureFolder);

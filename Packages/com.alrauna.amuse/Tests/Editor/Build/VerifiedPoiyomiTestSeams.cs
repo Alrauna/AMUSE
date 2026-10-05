@@ -43,7 +43,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out bool depthTestDivergence,
             out bool premultiplyNormalization)
         {
-            PoiyomiOpaqueConversion.ReadEffectiveRenderState(
+            EffectiveRenderState.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
             var eligibility = PoiyomiOpaqueConversion
                 .EvaluateVerifiedEligibility(

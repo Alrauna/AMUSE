@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
@@ -53,7 +54,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out MaterialEvidenceRequest captureSchema)
         {
             if (UsesFixtureShader(
-                    material, LilToonFixtureShaderNames.Cutout))
+                    material, LilToonFixtureTestBase.CutoutConversionShaderName))
             {
                 family = CapturedAlphaMaterialFamily.LilToonCutout;
                 alphaRelevance =
@@ -65,7 +66,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             if (UsesFixtureShader(
-                    material, LilToonFixtureShaderNames.Transparent))
+                    material, LilToonFixtureTestBase.TransparentConversionShaderName))
             {
                 family = CapturedAlphaMaterialFamily.LilToonTransparent;
                 alphaRelevance =
@@ -77,9 +78,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return true;
             }
 
-            if (UsesFixtureShader(material, LilToonFixtureShaderNames.Opaque) ||
+            if (UsesFixtureShader(material, LilToonFixtureTestBase.FixtureShaderName) ||
                 UsesFixtureShader(
-                    material, LilToonFixtureShaderNames.OpaqueTarget))
+                    material, LilToonFixtureTestBase.OpaqueConversionShaderName))
             {
                 family = CapturedAlphaMaterialFamily.LilToon;
                 alphaRelevance = LilToonMaterialSemantics.AlphaEvidenceRequest;
@@ -88,7 +89,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             if (UsesFixtureShader(
-                    material, PoiyomiFixtureShaderNames.Fixture))
+                    material, PoiyomiFixtureTestBase.FixtureShaderName))
             {
                 return VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest(
                     material, out family, out alphaRelevance,
@@ -96,7 +97,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             if (UsesFixtureShader(
-                    material, PoiyomiFixtureShaderNames.TwoPassFixture))
+                    material, PoiyomiFixtureTestBase.TwoPassFixtureShaderName))
             {
                 family = CapturedAlphaMaterialFamily.PoiyomiTwoPass;
                 alphaRelevance =
@@ -296,7 +297,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // all-Unknown, and the report names the shader the
                     // capture recorded.
                     return new CapturedAlphaSemantics(
-                        UnityMaterialSemantics.AllUnknown(),
+                        EvidenceGates.AllUnknown(),
                         AlphaUnknownReason.UnsupportedShader(
                             material.ShaderName));
             }
@@ -333,30 +334,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out LilToonOpaqueConversionRefusal refusal,
             out bool depthTestDivergence)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
-                live, out var queue, out var renderType);
-            var eligibility = LilToonCutoutSourceEligibility
-                .EvaluateVerifiedEligibility(
-                    derived, queue, renderType, allowDepthTestChange);
-            if (eligibility.Outcome !=
-                LilToonOpaqueConversionOutcome.Convertible)
-            {
-                opaque = null;
-                refusal = eligibility.Refusal;
-                depthTestDivergence = false;
-                return false;
-            }
-
-            // An already-prepared artifact for this source is reused here;
-            // only a first conversion creates the canonical clone. The
-            // tuple-carrying opaque stand-in is the attested target.
-            opaque = preparedOpaque ??
-                LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
-                    live, Shader.Find(
-                        LilToonFixtureShaderNames.OpaqueTarget));
-            refusal = LilToonOpaqueConversionRefusal.None;
-            depthTestDivergence = eligibility.DepthTestDivergence;
-            return true;
+            return VerifiedOpaqueConversion(
+                LilToonCutoutSourceEligibility.EvaluateVerifiedEligibility,
+                live,
+                derived,
+                allowDepthTestChange,
+                preparedOpaque,
+                out opaque,
+                out refusal,
+                out depthTestDivergence);
         }
 
         /// <summary>
@@ -378,11 +364,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out LilToonOpaqueConversionRefusal refusal,
             out bool depthTestDivergence)
         {
-            LilToonOpaqueTarget.ReadEffectiveRenderState(
+            return VerifiedOpaqueConversion(
+                LilToonTransparentSourceEligibility.EvaluateVerifiedEligibility,
+                live,
+                derived,
+                allowDepthTestChange,
+                preparedOpaque,
+                out opaque,
+                out refusal,
+                out depthTestDivergence);
+        }
+
+        /// <summary>
+        /// The shared body of the two conversion seams: effective render
+        /// state, the caller's family eligibility evaluation, and the real
+        /// canonical clone recipe with the tuple-carrying opaque stand-in
+        /// shader passed as the attested target. Only the source-identity
+        /// check and the production target-asset resolution are skipped,
+        /// because no stand-in can pass the former and the vendor package
+        /// is absent from this project — exactly the reason the other
+        /// verified seams exist.
+        /// </summary>
+        private static bool VerifiedOpaqueConversion(
+            Func<
+                CapturedMaterialEvidence,
+                int,
+                string,
+                bool,
+                LilToonOpaqueConversionEligibility> evaluateEligibility,
+            Material live,
+            CapturedMaterialEvidence derived,
+            bool allowDepthTestChange,
+            Material preparedOpaque,
+            out Material opaque,
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
+        {
+            EffectiveRenderState.ReadEffectiveRenderState(
                 live, out var queue, out var renderType);
-            var eligibility = LilToonTransparentSourceEligibility
-                .EvaluateVerifiedEligibility(
-                    derived, queue, renderType, allowDepthTestChange);
+            var eligibility = evaluateEligibility(
+                derived, queue, renderType, allowDepthTestChange);
             if (eligibility.Outcome !=
                 LilToonOpaqueConversionOutcome.Convertible)
             {
@@ -398,7 +419,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             opaque = preparedOpaque ??
                 LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
                     live, Shader.Find(
-                        LilToonFixtureShaderNames.OpaqueTarget));
+                        LilToonFixtureTestBase.OpaqueConversionShaderName));
             refusal = LilToonOpaqueConversionRefusal.None;
             depthTestDivergence = eligibility.DepthTestDivergence;
             return true;
@@ -421,26 +442,5 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return fixture != null && fixture == material.shader;
         }
 
-        private sealed class LilToonFixtureShaderNames : LilToonFixtureTestBase
-        {
-
-            /// <summary>The legacy verified-opaque semantic stand-in.</summary>
-            internal const string Opaque = FixtureShaderName;
-
-            /// <summary>The schema-complete cutout source stand-in.</summary>
-            internal const string Cutout = CutoutConversionShaderName;
-
-            /// <summary>The schema-complete transparent source stand-in.</summary>
-            internal const string Transparent = TransparentConversionShaderName;
-
-            /// <summary>The distinct canonical opaque target stand-in.</summary>
-            internal const string OpaqueTarget = OpaqueConversionShaderName;
-        }
-
-        private sealed class PoiyomiFixtureShaderNames : PoiyomiFixtureTestBase
-        {
-            internal const string Fixture = FixtureShaderName;
-            internal const string TwoPassFixture = TwoPassFixtureShaderName;
-        }
     }
 }

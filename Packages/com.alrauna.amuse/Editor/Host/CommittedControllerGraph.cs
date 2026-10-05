@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Runtime.CompilerServices;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -181,9 +180,9 @@ namespace Alrauna.Amuse.Editor.Host
         {
             var clips = new List<AnimationClip>();
             var clipSet = new HashSet<AnimationClip>(
-                ReferenceComparer<AnimationClip>.Instance);
+                ReferenceEqualityComparer<AnimationClip>.Instance);
             var visitedMotions = new HashSet<Motion>(
-                ReferenceComparer<Motion>.Instance);
+                ReferenceEqualityComparer<Motion>.Instance);
             var behaviours = new List<StateMachineBehaviour>();
             var hasUnnormalizedDirectBlendTree = false;
 
@@ -290,21 +289,5 @@ namespace Alrauna.Amuse.Editor.Host
                 refusal, Array.Empty<CommittedLayer>());
         }
 
-        private sealed class ReferenceComparer<T> : IEqualityComparer<T>
-            where T : class
-        {
-            internal static readonly ReferenceComparer<T> Instance =
-                new ReferenceComparer<T>();
-
-            public bool Equals(T x, T y)
-            {
-                return ReferenceEquals(x, y);
-            }
-
-            public int GetHashCode(T obj)
-            {
-                return RuntimeHelpers.GetHashCode(obj);
-            }
-        }
     }
 }

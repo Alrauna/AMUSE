@@ -24,15 +24,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     {
         private readonly Dictionary<string, string> _byFullPath;
 
-        internal string RootFullPath { get; }
         internal IReadOnlyList<(string RelativePath, string Hash)> Files { get; }
 
         private LilToonIncludeTree(
-            string rootFullPath,
             IReadOnlyList<(string RelativePath, string Hash)> files,
             Dictionary<string, string> byFullPath)
         {
-            RootFullPath = rootFullPath;
             Files = files;
             _byFullPath = byFullPath;
         }
@@ -40,7 +37,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal static LilToonIncludeTree Empty()
         {
             return new LilToonIncludeTree(
-                null,
                 new (string, string)[0],
                 new Dictionary<string, string>(PathComparer));
         }
@@ -112,7 +108,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 byFullPath[full] = relative;
             }
 
-            return new LilToonIncludeTree(root, files, byFullPath);
+            return new LilToonIncludeTree(files, byFullPath);
         }
 
         /// <summary>Test seam: build a tree without touching the file system.</summary>
@@ -128,7 +124,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     file.RelativePath;
             }
 
-            return new LilToonIncludeTree(root, files, byFullPath);
+            return new LilToonIncludeTree(files, byFullPath);
         }
 
         internal bool TryGetRelativePath(string fullPath, out string relativePath)
@@ -941,16 +937,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Normalizes shader source (drop an optional leading UTF-8 BOM, then
         /// convert CRLF and lone CR to LF) and returns the lowercase-hex SHA-256
-        /// of its UTF-8 bytes. The rule matches the Poiyomi frontend exactly.
+        /// of its UTF-8 bytes.
         /// </summary>
         internal static string ComputeNormalizedSourceHash(string rawSource)
         {
-            if (rawSource == null)
-            {
-                throw new ArgumentNullException(nameof(rawSource));
-            }
-
-            return Sha256(Normalize(rawSource));
+            return NormalizedSourceHash.Compute(rawSource);
         }
 
         private static string Normalize(string rawSource)

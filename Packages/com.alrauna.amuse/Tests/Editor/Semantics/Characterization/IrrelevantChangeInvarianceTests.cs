@@ -79,12 +79,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_OutlineDstBlendAlpha",
         };
 
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         private Material FullyProvenMaterial()
         {
             var material = NewFixtureMaterial();

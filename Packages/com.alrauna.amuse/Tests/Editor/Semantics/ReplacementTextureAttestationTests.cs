@@ -6,6 +6,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -17,26 +18,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void ResetAttestationStateBeforeEachTest()
         {
             ReplacementTextureAttestation.ResetForTests();
-            PreviousRegistry = ObjectRegistry.ActiveRegistry;
-            ObjectRegistry.ActiveRegistry = new ObjectRegistry(null);
+            RegistryGuard = new ObjectRegistryGuard();
         }
 
         [TearDown]
         public void RestoreRegistryAndCleanFixtureFolder()
         {
-            ObjectRegistry.ActiveRegistry = PreviousRegistry;
+            RegistryGuard.Dispose();
             if (AssetDatabase.IsValidFolder(FixtureFolder))
             {
                 AssetDatabase.DeleteAsset(FixtureFolder);
             }
         }
 
-        private nadena.dev.ndmf.IObjectRegistry PreviousRegistry { get; set; }
+        private ObjectRegistryGuard RegistryGuard { get; set; }
 
         /// <summary>
         /// Imports a real texture asset so the source side of a
         /// registration is asset-backed, the shape the attestation
-        /// demands of every admitted copy.
+        /// demands of every admitted copy. Kept local: the deferred
+        /// (non-forced) import and the identity asserts do not fit the
+        /// WritePng callback shape.
         /// </summary>
         private static Texture2D ImportSourceAsset(string marker)
         {

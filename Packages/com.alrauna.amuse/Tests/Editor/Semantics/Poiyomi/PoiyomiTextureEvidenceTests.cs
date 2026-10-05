@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
@@ -19,103 +15,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// Poiyomi shader is required.
     /// </summary>
     public sealed class PoiyomiTextureEvidenceTests
+        : PoiyomiFixtureTestBase
     {
-        private const string ShaderName =
-            "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
-        private const string TempFolder = "Assets/AmuseTests_Temp";
-
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
-
-        [SetUp]
-        public void SetUp()
-        {
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder("Assets", "AmuseTests_Temp");
-            }
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
-
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
-        }
-
-        private Material NewFixtureMaterial()
-        {
-            var shader = Shader.Find(ShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{ShaderName}' must import.");
-            var material = new Material(shader);
-            _transient.Add(material);
-            return material;
-        }
-
-        private Texture2D ImportTexture(
-            string name,
-            Action<TextureImporter> configure = null,
-            bool sourceHasAlpha = true)
-        {
-            var path = TempFolder + "/" + name + ".png";
-            var format = sourceHasAlpha
-                ? TextureFormat.RGBA32
-                : TextureFormat.RGB24;
-            var staging = new Texture2D(4, 4, format, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(128, 64, 32, 200);
-            }
-
-            staging.SetPixels32(pixels);
-            staging.Apply();
-            File.WriteAllBytes(path, staging.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(staging);
-
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            // A supported default for sampler tests: no mipmaps so the base
-            // sampler is expressible unless a test opts into an unsupported mode.
-            importer.mipmapEnabled = false;
-            configure?.Invoke(importer);
-            importer.SaveAndReimport();
-
-            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(loaded, Is.Not.Null, $"Imported texture '{path}' must load.");
-            return loaded;
-        }
-
-        private static string ExpectedToken(Texture texture)
-        {
-            Assert.That(
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    texture,
-                    out var guid,
-                    out long localId),
-                Is.True,
-                "Test asset must have a stable GUID/local id.");
-            return "unity-asset:" + guid.ToLowerInvariant() + ":" +
-                   localId.ToString(CultureInfo.InvariantCulture);
-        }
-
-        // --- Source identity ------------------------------------------------
 
         [Test]
         public void SourceId_AssignedAsset_MatchesUnityAssetTokenFormat()
@@ -180,7 +81,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // A runtime texture with no backing asset must not be given an
             // identity from instance id, name, or reference; it is refused.
             var transient = new Texture2D(4, 4);
-            _transient.Add(transient);
+            Track(transient);
 
             var ok = PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
                 transient,
@@ -274,10 +175,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var material = NewFixtureMaterial();
 
-            var ok = PoiyomiMaterialSemantics.AreExactlyZero(
+            var failed = EvidenceGates.FirstFailedZeroGate(
                 material, "_MainTexStochastic", "_MainPixelMode");
 
-            Assert.That(ok, Is.True);
+            Assert.That(failed, Is.Null);
         }
 
         [Test]
@@ -286,10 +187,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var material = NewFixtureMaterial();
             material.SetFloat("_MainTexStochastic", 1f);
 
-            var ok = PoiyomiMaterialSemantics.AreExactlyZero(
+            var failed = EvidenceGates.FirstFailedZeroGate(
                 material, "_MainTexStochastic", "_MainPixelMode");
 
-            Assert.That(ok, Is.False);
+            Assert.That(failed, Is.EqualTo("_MainTexStochastic"));
         }
 
         [Test]
@@ -298,10 +199,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var material = NewFixtureMaterial();
             material.SetFloat("_MainPixelMode", 1f);
 
-            var ok = PoiyomiMaterialSemantics.AreExactlyZero(
+            var failed = EvidenceGates.FirstFailedZeroGate(
                 material, "_MainTexStochastic", "_MainPixelMode");
 
-            Assert.That(ok, Is.False);
+            Assert.That(failed, Is.EqualTo("_MainPixelMode"));
         }
 
         [Test]
@@ -309,10 +210,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var material = NewFixtureMaterial();
 
-            var ok = PoiyomiMaterialSemantics.AreExactlyZero(
+            var failed = EvidenceGates.FirstFailedZeroGate(
                 material, "_ThisPropertyDoesNotExist");
 
-            Assert.That(ok, Is.False);
+            Assert.That(failed, Is.EqualTo("_ThisPropertyDoesNotExist"));
         }
 
         // --- MainTex sampler ------------------------------------------------
@@ -484,7 +385,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Color_MissingImporter_IsRefused()
         {
             var transient = new Texture2D(4, 4);
-            _transient.Add(transient);
+            Track(transient);
 
             var ok = PoiyomiMaterialSemantics.TryGetColorInterpretation(
                 transient, out _);
@@ -526,7 +427,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Alpha_MissingImporter_IsNotProvenOne()
         {
             var transient = new Texture2D(4, 4);
-            _transient.Add(transient);
+            Track(transient);
 
             var proven =
                 PoiyomiMaterialSemantics.TryProveSampledAlphaIsOne(transient);
@@ -581,7 +482,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Normal_MissingImporter_IsNotCanonicalNormalMap()
         {
             var transient = new Texture2D(4, 4);
-            _transient.Add(transient);
+            Track(transient);
 
             var ok = PoiyomiMaterialSemantics.IsCanonicalNormalMapImport(transient);
 

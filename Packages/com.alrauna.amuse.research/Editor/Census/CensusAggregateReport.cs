@@ -180,9 +180,7 @@ namespace Alrauna.Amuse.Research.Census
             if (source == null)
                 throw new ArgumentNullException(nameof(source));
 
-            var copied = new Dictionary<TKey, TValue>(source.Count);
-            foreach (var entry in source)
-                copied.Add(entry.Key, entry.Value);
+            var copied = new Dictionary<TKey, TValue>(source);
 
             return new ReadOnlyDictionary<TKey, TValue>(copied);
         }

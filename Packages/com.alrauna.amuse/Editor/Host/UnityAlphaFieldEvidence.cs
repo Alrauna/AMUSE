@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
@@ -239,7 +240,7 @@ namespace Alrauna.Amuse.Editor.Host
 
                 // Attested generated textures lack an importer. They are captured
                 // directly from the live resident object via RenderTexture blit.
-                if (GeneratedTextureAttestation.TryIdentifyRouteTexture(texture2D, out _))
+                if (GeneratedTextureAttestation.TryIdentifyRouteTexture(texture2D))
                 {
                     if (!UnityGeneratedTextureEvidence.TryCapture(
                             texture2D, channel, cutoffThreshold, bounds,
@@ -468,10 +469,12 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// The one GPU acquisition core: Blit through the predicate shader into an
-        /// exact R8_UNorm target, read the bytes back synchronously, validate, and
-        /// build one grid. It writes the policy bounds to the material as
-        /// normalized floats, a bound byte over 255, so the shader's verdict
-        /// bands are the caller's policy at every level.
+        /// exact target of the caller's format, read the bytes back
+        /// synchronously, decode through the caller's delegate, validate, and
+        /// build one grid. The callers write the policy bounds to the
+        /// material as normalized floats, a bound byte over 255, so the
+        /// shader's verdict bands are the caller's policy at every level;
+        /// the core itself writes only the mip level.
         /// <para>
         /// It holds no identity, build-target, format-allowlist, mip-limit,
         /// streaming, or capability gate. Those belong to its callers, and repeating
@@ -482,12 +485,31 @@ namespace Alrauna.Amuse.Editor.Host
         /// allocated. None of them establishes that the requested source level was
         /// resident; that is what the declared-state gates are for.
         /// </para>
+        /// <para>
+        /// Validation arrives as a delegate and may be null. The
+        /// generated-texture route validates only its red arm: green-arm
+        /// flags are synthesized from the raw channel value, not read from
+        /// a predicate shader, so a predicate-flag validation there would
+        /// be vacuous. That gap is deliberate and stays.
+        /// </para>
+        /// <para>
+        /// The save-restore flag keeps the two routes' deliberate
+        /// divergence. This route (<see cref="TryAcquireLevel"/>) saves and
+        /// restores <c>RenderTexture.active</c> around its blit, because its
+        /// callers' captures must be invisible to the editor's render
+        /// state. The generated route passes false: it has never restored,
+        /// and no existing test can observe restoration there, so adopting
+        /// the save-restore on it was rejected in the review of 2026-10-04.
+        /// </para>
         /// </summary>
-        private static bool TryAcquireLevel(
+        internal static bool TryAcquireLevelCore(
             Texture2D texture,
             int mip,
             Material material,
-            AlphaPolicyBounds bounds,
+            GraphicsFormat targetFormat,
+            bool saveRestoreActiveTarget,
+            Func<AsyncGPUReadbackRequest, int, int, byte[]> decode,
+            Func<byte[], bool> validate,
             out AlphaTextureData level)
         {
             level = null;
@@ -497,13 +519,8 @@ namespace Alrauna.Amuse.Editor.Host
 
             material.SetInt("_Mip", mip);
 
-            // Normalized floats: a stored byte b samples exactly b/255 on
-            // every admitted decode, so the shaders' comparisons order the
-            // stored bytes exactly as the bytes order.
-            material.SetFloat("_OpaqueBound", bounds.OpaqueBound / 255f);
-            material.SetFloat("_NoiseBound", bounds.NoiseBound / 255f);
-
-            var descriptor = new RenderTextureDescriptor(width, height, PredicateTarget, 0)
+            var descriptor = new RenderTextureDescriptor(
+                width, height, targetFormat, 0)
             {
                 sRGB = false,
                 useMipMap = false,
@@ -513,23 +530,30 @@ namespace Alrauna.Amuse.Editor.Host
             var target = RenderTexture.GetTemporary(descriptor);
             try
             {
-                if (!IsExpectedTargetFormat(target.graphicsFormat, PredicateTarget) ||
+                if (!IsExpectedTargetFormat(target.graphicsFormat, targetFormat) ||
                     !IsExpectedLevelSize(target.width, target.height, width, height))
                 {
                     return false;
                 }
 
-                var previous = RenderTexture.active;
-                try
+                if (saveRestoreActiveTarget)
+                {
+                    var previous = RenderTexture.active;
+                    try
+                    {
+                        Graphics.Blit(texture, target, material);
+                    }
+                    finally
+                    {
+                        RenderTexture.active = previous;
+                    }
+                }
+                else
                 {
                     Graphics.Blit(texture, target, material);
                 }
-                finally
-                {
-                    RenderTexture.active = previous;
-                }
 
-                var request = AsyncGPUReadback.Request(target, 0, PredicateTarget);
+                var request = AsyncGPUReadback.Request(target, 0, targetFormat);
                 request.WaitForCompletion();
                 if (request.hasError ||
                     !IsExpectedLevelSize(request.width, request.height, width, height))
@@ -537,23 +561,13 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                // The NativeArray is owned by the request and must not outlive it,
-                // so the bytes are copied inside this scope. AlphaTextureData takes
-                // IReadOnlyList<byte>, which NativeArray does not implement, so the
-                // managed copy is forced by the existing type as well.
-                var data = request.GetData<byte>();
-
-                // Checked against the length Unity returned, BEFORE allocating,
-                // so the mismatch branch is genuinely reachable.
-                if (!IsExpectedBufferLength(data.Length, width, height))
+                var bytes = decode(request, width, height);
+                if (bytes == null)
                 {
                     return false;
                 }
 
-                var bytes = new byte[width * height];
-                data.CopyTo(bytes);
-
-                if (!IsPredicateFlagBuffer(bytes))
+                if (validate != null && !validate(bytes))
                 {
                     return false;
                 }
@@ -567,6 +581,48 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 RenderTexture.ReleaseTemporary(target);
             }
+        }
+
+        private static bool TryAcquireLevel(
+            Texture2D texture,
+            int mip,
+            Material material,
+            AlphaPolicyBounds bounds,
+            out AlphaTextureData level)
+        {
+            // Normalized floats: a stored byte b samples exactly b/255 on
+            // every admitted decode, so the shaders' comparisons order the
+            // stored bytes exactly as the bytes order.
+            material.SetFloat("_OpaqueBound", bounds.OpaqueBound / 255f);
+            material.SetFloat("_NoiseBound", bounds.NoiseBound / 255f);
+
+            return TryAcquireLevelCore(
+                texture,
+                mip,
+                material,
+                PredicateTarget,
+                saveRestoreActiveTarget: true,
+                decode: (request, width, height) =>
+                {
+                    // The NativeArray is owned by the request and must not outlive it,
+                    // so the bytes are copied inside this scope. AlphaTextureData takes
+                    // IReadOnlyList<byte>, which NativeArray does not implement, so the
+                    // managed copy is forced by the existing type as well.
+                    var data = request.GetData<byte>();
+
+                    // Checked against the length Unity returned, BEFORE allocating,
+                    // so the mismatch branch is genuinely reachable.
+                    if (!IsExpectedBufferLength(data.Length, width, height))
+                    {
+                        return null;
+                    }
+
+                    var bytes = new byte[width * height];
+                    data.CopyTo(bytes);
+                    return bytes;
+                },
+                validate: IsPredicateFlagBuffer,
+                level: out level);
         }
 
         /// <summary>The predicate target: one byte per texel.</summary>
@@ -632,11 +688,6 @@ namespace Alrauna.Amuse.Editor.Host
         /// the identity gate.
         /// </para>
         /// </summary>
-        internal static bool HostCapabilityCheckPasses()
-        {
-            return HostCapabilityCheckPasses(TextureChannel.Alpha);
-        }
-
         internal static bool HostCapabilityCheckPasses(TextureChannel channel)
         {
             if (channel != TextureChannel.Alpha &&
@@ -987,15 +1038,7 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            for (var index = 0; index < expected.Length; index++)
-            {
-                if (actual[index] != expected[index])
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return Enumerable.SequenceEqual(actual, expected);
         }
 
     }

@@ -26,12 +26,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     /// </summary>
     public sealed class PoiyomiSamplerBlastRadiusTests : PoiyomiFixtureTestBase
     {
-        private static PoiyomiSemanticResult Interpret(Material material)
-        {
-            return PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
-                material, ColorSpace.Linear);
-        }
-
         /// <summary>
         /// Every output populated and provable. Alpha is deliberately taken off
         /// the forced-opaque short-circuit, because a forced-opaque material
