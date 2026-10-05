@@ -18,6 +18,17 @@ namespace Alrauna.Amuse.Runtime
         [SerializeField] private bool _amuseDisabled;
 
         /// <summary>
+        /// The alpha separator switch. The alpha separator is the
+        /// first AMUSE feature with its own switch, and later features
+        /// add sibling switches beside it. The master "Disable AMUSE"
+        /// toggle stays above them and turns off the whole component.
+        /// Off here stops the alpha separator only: nothing is
+        /// analyzed, moved, or reported for it.
+        /// </summary>
+        [SerializeField]
+        private bool _alphaSeparatorEnabled = true;
+
+        /// <summary>
         /// The largest mip level the opacity proof consults. The value -1
         /// means every level. Mip levels above the cap are policy-ignored:
         /// the user accepts that the GPU may sample them when the avatar
@@ -104,6 +115,14 @@ namespace Alrauna.Amuse.Runtime
         /// runs, nothing is reported.
         /// </summary>
         public bool AmuseDisabled => _amuseDisabled;
+
+        /// <summary>
+        /// True when the alpha separator runs for this component. The
+        /// default of true keeps every avatar saved before this field
+        /// behaving as before, because Unity fills a missing serialized
+        /// field from the initializer.
+        /// </summary>
+        public bool AlphaSeparatorEnabled => _alphaSeparatorEnabled;
 
         /// <summary>
         /// The opacity proof's mip cap as stored: -1 for every level, else
