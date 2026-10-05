@@ -68,6 +68,45 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void DefaultAlphaSeparatorEnabledIsTrue()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void AlphaSeparatorEnabledSerializedPropertyCanBeToggled()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
+
+                var serializedObject = new SerializedObject(optimizer);
+                var property =
+                    serializedObject.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(property, Is.Not.Null);
+                property.boolValue = false;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(optimizer.AlphaSeparatorEnabled, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void DefaultPreserveTransparencyMinTextureSizeIs128()
         {
             var go = new GameObject("Root");
