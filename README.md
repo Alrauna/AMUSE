@@ -17,6 +17,8 @@ Then add the **AMUSE** package to your avatar project from the package manager. 
 
 Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usual.
 
+- The preset row under the header picks Safe, Normal, or Aggressive. All
+  three presets ship the same values for now, the shipped defaults.
 - The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules; declining is a total no-op for that build.
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
