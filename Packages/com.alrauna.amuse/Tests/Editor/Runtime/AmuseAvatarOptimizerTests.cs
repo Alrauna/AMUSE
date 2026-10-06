@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -67,14 +69,33 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
-        [Test]
-        public void DefaultAlphaSeparatorEnabledIsTrue()
+        private static IEnumerable<TestCaseData> SwitchFieldRows()
+        {
+            // The reveal toggle stores on the component, so the engine
+            // Reset command clears it like every other control. A missing
+            // field would leave the reveal stuck on across a Reset.
+            yield return new TestCaseData(
+                "_advancedSettingsRevealed", false, true,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    new SerializedObject(o)
+                        .FindProperty("_advancedSettingsRevealed")
+                        .boolValue));
+            yield return new TestCaseData(
+                "_alphaSeparatorEnabled", true, false,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    o.AlphaSeparatorEnabled));
+        }
+
+        [TestCaseSource(nameof(SwitchFieldRows))]
+        public void SwitchFieldReadsItsInitializerDefault(
+            string fieldName, bool defaultValue, bool toggledValue,
+            Func<AmuseAvatarOptimizer, bool> read)
         {
             var go = new GameObject("Root");
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
-                Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
+                Assert.That(read(optimizer), Is.EqualTo(defaultValue));
             }
             finally
             {
@@ -82,23 +103,23 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
-        [Test]
-        public void AlphaSeparatorEnabledSerializedPropertyCanBeToggled()
+        [TestCaseSource(nameof(SwitchFieldRows))]
+        public void SwitchFieldRoundTripsThroughTheSerializedProperty(
+            string fieldName, bool defaultValue, bool toggledValue,
+            Func<AmuseAvatarOptimizer, bool> read)
         {
             var go = new GameObject("Root");
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
-                Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
-
                 var serializedObject = new SerializedObject(optimizer);
-                var property =
-                    serializedObject.FindProperty("_alphaSeparatorEnabled");
-                Assert.That(property, Is.Not.Null);
-                property.boolValue = false;
+                var property = serializedObject.FindProperty(fieldName);
+                Assert.That(property, Is.Not.Null,
+                    "AmuseAvatarOptimizer." + fieldName + " field pin");
+                property.boolValue = toggledValue;
                 serializedObject.ApplyModifiedProperties();
 
-                Assert.That(optimizer.AlphaSeparatorEnabled, Is.False);
+                Assert.That(read(optimizer), Is.EqualTo(toggledValue));
             }
             finally
             {
@@ -220,55 +241,6 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(
                     optimizer.PolygonMinimumOpaqueCoveragePercent,
                     Is.EqualTo(10));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        // The reveal toggle stores on the component, so the engine Reset
-        // command clears it like every other control. A missing field
-        // would leave the reveal stuck on across a Reset.
-        [Test]
-        public void DefaultAdvancedSettingsRevealedIsFalse()
-        {
-            var go = new GameObject("Root");
-            try
-            {
-                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
-                var serializedObject = new SerializedObject(optimizer);
-                var property =
-                    serializedObject.FindProperty("_advancedSettingsRevealed");
-                Assert.That(property, Is.Not.Null,
-                    "AmuseAvatarOptimizer._advancedSettingsRevealed field pin");
-                Assert.That(property.boolValue, Is.False);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        [Test]
-        public void AdvancedSettingsRevealedSerializedPropertyCanBeToggled()
-        {
-            var go = new GameObject("Root");
-            try
-            {
-                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
-                var serializedObject = new SerializedObject(optimizer);
-                var property =
-                    serializedObject.FindProperty("_advancedSettingsRevealed");
-                Assert.That(property, Is.Not.Null,
-                    "AmuseAvatarOptimizer._advancedSettingsRevealed field pin");
-                property.boolValue = true;
-                serializedObject.ApplyModifiedProperties();
-
-                var reread =
-                    new SerializedObject(optimizer).FindProperty(
-                        "_advancedSettingsRevealed");
-                Assert.That(reread.boolValue, Is.True);
             }
             finally
             {
