@@ -57,8 +57,12 @@ namespace Alrauna.Amuse.Editor.Presets
                 return false;
             }
 
-            if (!TryReadObject(file, "features", ref refusal, out var features)
-                || !TryReadObject(file, "settings", ref refusal, out var settings))
+            if (!TryRead<JObject>(
+                    file, "features", JTokenType.Object,
+                    ref refusal, out var features)
+                || !TryRead<JObject>(
+                    file, "settings", JTokenType.Object,
+                    ref refusal, out var settings))
             {
                 return false;
             }
@@ -70,12 +74,14 @@ namespace Alrauna.Amuse.Editor.Presets
                 return false;
             }
 
-            if (!TryReadInt(file, "schemaVersion", ref refusal, out var version)
+            if (!TryRead<int>(
+                    file, "schemaVersion", JTokenType.Integer,
+                    ref refusal, out var version)
                 || !TryReadNonEmptyString(file, "name", ref refusal, out var name)
                 || !TryReadNonEmptyString(
                     file, "description", ref refusal, out var description)
-                || !TryReadBool(
-                    features, "alphaSeparator", ref refusal,
+                || !TryRead<bool>(
+                    features, "alphaSeparator", JTokenType.Boolean, ref refusal,
                     out var alphaSeparator)
                 || !TryReadMipCap(settings, ref refusal, out var mipCap)
                 || !TryReadMinTextureSize(settings, ref refusal, out var minSize)
@@ -91,12 +97,12 @@ namespace Alrauna.Amuse.Editor.Presets
                 || !TryReadPercent(
                     settings, "polygonMinimumOpaqueCoveragePercent",
                     ref refusal, out var polygonCoverage)
-                || !TryReadBool(
+                || !TryRead<bool>(
                     settings, "allowDepthTestChange",
-                    ref refusal, out var depthTest)
-                || !TryReadBool(
+                    JTokenType.Boolean, ref refusal, out var depthTest)
+                || !TryRead<bool>(
                     settings, "ignoreOutOfRangeMaterialSlots",
-                    ref refusal, out var ignoreOutOfRange))
+                    JTokenType.Boolean, ref refusal, out var ignoreOutOfRange))
             {
                 return false;
             }
@@ -111,7 +117,6 @@ namespace Alrauna.Amuse.Editor.Presets
                 name, description, alphaSeparator, mipCap, minSize,
                 coverage, alphaClamp, polygonClamp, polygonCoverage,
                 depthTest, ignoreOutOfRange);
-            refusal = PresetLoadRefusal.None;
             return true;
         }
 
@@ -131,92 +136,52 @@ namespace Alrauna.Amuse.Editor.Presets
             return true;
         }
 
-        private static bool TryReadObject(
+        // One reader for every typed leaf, so the presence and type
+        // refusals cannot drift apart between the schema branches.
+        private static bool TryRead<T>(
             JObject obj,
             string key,
+            JTokenType expected,
             ref PresetLoadRefusal refusal,
-            out JObject value)
+            out T value)
         {
             if (!obj.TryGetValue(key, out var token))
             {
                 refusal = PresetLoadRefusal.MissingField;
-                value = null;
+                value = default;
                 return false;
             }
-            if (!(token is JObject child))
+            if (token.Type != expected)
             {
                 refusal = PresetLoadRefusal.WrongValueType;
-                value = null;
+                value = default;
                 return false;
             }
-            value = child;
+            value = token.Value<T>();
             return true;
         }
 
-        private static bool TryReadInt(
-            JObject obj,
-            string key,
-            ref PresetLoadRefusal refusal,
-            out int value)
-        {
-            if (!obj.TryGetValue(key, out var token))
-            {
-                refusal = PresetLoadRefusal.MissingField;
-                value = 0;
-                return false;
-            }
-            if (token.Type != JTokenType.Integer)
-            {
-                refusal = PresetLoadRefusal.WrongValueType;
-                value = 0;
-                return false;
-            }
-            value = token.Value<int>();
-            return true;
-        }
-
+        // The shared reader answers the presence and type refusals;
+        // an empty string is still a wrong value, so the empty check
+        // stays here.
         private static bool TryReadNonEmptyString(
             JObject obj,
             string key,
             ref PresetLoadRefusal refusal,
             out string value)
         {
-            if (!obj.TryGetValue(key, out var token))
+            if (!TryRead<string>(
+                    obj, key, JTokenType.String,
+                    ref refusal, out value))
             {
-                refusal = PresetLoadRefusal.MissingField;
+                return false;
+            }
+            if (string.IsNullOrEmpty(value))
+            {
+                refusal = PresetLoadRefusal.WrongValueType;
                 value = null;
                 return false;
             }
-            if (token.Type != JTokenType.String || string.IsNullOrEmpty(
-                    token.Value<string>()))
-            {
-                refusal = PresetLoadRefusal.WrongValueType;
-                value = null;
-                return false;
-            }
-            value = token.Value<string>();
-            return true;
-        }
-
-        private static bool TryReadBool(
-            JObject obj,
-            string key,
-            ref PresetLoadRefusal refusal,
-            out bool value)
-        {
-            if (!obj.TryGetValue(key, out var token))
-            {
-                refusal = PresetLoadRefusal.MissingField;
-                value = false;
-                return false;
-            }
-            if (token.Type != JTokenType.Boolean)
-            {
-                refusal = PresetLoadRefusal.WrongValueType;
-                value = false;
-                return false;
-            }
-            value = token.Value<bool>();
             return true;
         }
 
@@ -225,9 +190,9 @@ namespace Alrauna.Amuse.Editor.Presets
             ref PresetLoadRefusal refusal,
             out int value)
         {
-            if (!TryReadInt(
+            if (!TryRead<int>(
                     obj, "preserveTransparencyMaxMipLevel",
-                    ref refusal, out value))
+                    JTokenType.Integer, ref refusal, out value))
             {
                 return false;
             }
@@ -244,9 +209,9 @@ namespace Alrauna.Amuse.Editor.Presets
             ref PresetLoadRefusal refusal,
             out int value)
         {
-            if (!TryReadInt(
+            if (!TryRead<int>(
                     obj, "preserveTransparencyMinTextureSize",
-                    ref refusal, out value))
+                    JTokenType.Integer, ref refusal, out value))
             {
                 return false;
             }
@@ -265,7 +230,8 @@ namespace Alrauna.Amuse.Editor.Presets
             ref PresetLoadRefusal refusal,
             out int value)
         {
-            if (!TryReadInt(obj, key, ref refusal, out value))
+            if (!TryRead<int>(
+                    obj, key, JTokenType.Integer, ref refusal, out value))
             {
                 return false;
             }
