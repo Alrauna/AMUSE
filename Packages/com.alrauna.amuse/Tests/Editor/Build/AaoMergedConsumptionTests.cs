@@ -757,7 +757,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static (GameObject root, Material transparent,
+        private (GameObject root, Material transparent,
             SkinnedMeshRenderer renderer) CreateGatedSwitchFixture(
                 string flipProperty,
                 bool flipValue,
@@ -783,7 +783,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             AttachAnimationFixture(root, animationTag);
             var texture = Track(ImportBandedAlphaTexture(textureTag));
-            transparent = Track(NewTransparentMaterial(
+            var transparent = Track(NewTransparentMaterial(
                 transparentShader, texture));
             var renderer = CreateSkinnedRenderer(
                 root, displayName + " renderer", displayName + " mesh",
