@@ -246,17 +246,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static IEnumerable<TestCaseData> GateSwitchRows()
         {
             yield return new TestCaseData(
-                "_amuseDisabled", true, "a disabled component")
+                "_amuseDisabled", true, "a disabled component",
+                false)
                 .SetName("DisabledComponentDoesNotActivateThePipeline");
             yield return new TestCaseData(
                 "_alphaSeparatorEnabled", false,
-                "a switched-off alpha separator")
+                "a switched-off alpha separator",
+                true)
                 .SetName("AlphaSeparatorSwitchedOffDoesNotActivateThePipeline");
         }
 
         [TestCaseSource(nameof(GateSwitchRows))]
         public void SwitchedGateKeepsThePipelineIdle(
-            string propertyName, bool flippedValue, string subject)
+            string propertyName, bool flippedValue, string subject,
+            bool expectRendererLoopStop)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE gated-switch fixture");
@@ -284,6 +287,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subject + " must not activate the pipeline");
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero,
                     subject + " must not turn the loop into refusals");
+                if (expectRendererLoopStop)
+                {
+                    Assert.That(amuse.ReachedRendererAnalysis, Is.False,
+                        subject + " must stop before the renderer loop");
+                }
             }
             finally
             {
