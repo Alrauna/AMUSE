@@ -140,7 +140,50 @@ Validation:
   The numbers in this spec are 2026-10-06 measurements for smoke
   expectations only.
 
-## 7. Out of scope
+## 7. Execution record, 2026-10-06
+
+This section supersedes the section 3 wording where the two differ, and
+records what shipped and what was observed on 2026-10-06.
+
+Shipped shape: the plan's parameterless struct constructor does not
+compile at the project's C# 9 language level. `SharedLabelWidthScope`
+shipped as a struct with a static `Begin()` factory and the same
+dispose-restore semantics. The `using` form still compiles to try and
+finally, so the load-bearing restore is unchanged.
+
+Observed validation, all on 2026-10-06 in the dev editor instance:
+
+- Compile: zero errors after refresh.
+- Both full EditMode suites: 2596 passed, 0 failed, 0 skipped. No test
+  file touched.
+- Non-GUI probe: widest label 237, shared column 239, override read
+  back 239, previous value restored.
+- Real-pass probe at four window widths: column 239 everywhere,
+  restore true everywhere, control areas 203 and 153 at 450 and 400
+  (track plus number field), 103 and 53 at 350 and 300 (bare number
+  field). The 350 case sits under the 105 pixel threshold by 2 pixels,
+  which the plan's borderline ruling allows either way.
+- Real-inspector smoke on a scratch object: zero drawing errors in the
+  console, scratch object removed afterwards.
+- Identifier sweep and `git diff --check`: clean.
+
+Manual residue for the owner: tooltip hover rendering, popup open and
+option selection, the readability impression at each width, and the
+editor font size preference change. These are not agent-observable.
+
+Deferred cosmetic finding: the `LabelWidthPadding` constant is
+declared but unused, because `SharedLabelWidth()` writes the padding
+as a literal. Parked by the final review. Fold the fix into the next
+commit that touches this file.
+
+## 8. Verification record
+
+`[MEASURED]` The section 2 numbers (239 pixel column, 346 and 294
+pixel thresholds) come from the 2026-10-06 skin measurements in the
+investigation. The section 7 record confirms the shipped code against
+them.
+
+## 9. Out of scope
 
 - The preset row and its fixed 50 pixel label.
 - The checkbox rows and the foldout headers.
