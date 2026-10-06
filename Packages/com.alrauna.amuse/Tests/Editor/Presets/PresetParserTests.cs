@@ -27,6 +27,13 @@ namespace Alrauna.Amuse.Tests.Editor
             return ValidJson.Replace(find, replace);
         }
 
+        private static void Refuses(string json, PresetLoadRefusal expected)
+        {
+            Assert.That(PresetParser.TryParse(
+                json, out _, out var refusal), Is.False);
+            Assert.That(refusal, Is.EqualTo(expected));
+        }
+
         [Test]
         public void ValidSchemaParsesAllNineValues()
         {
@@ -51,19 +58,13 @@ namespace Alrauna.Amuse.Tests.Editor
         [Test]
         public void BrokenJsonRefusesMalformed()
         {
-            Assert.That(PresetParser.TryParse(
-                "{ not json", out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.MalformedJson));
+            Refuses("{ not json", PresetLoadRefusal.MalformedJson);
         }
 
         [Test]
         public void JsonArrayRefusesMalformed()
         {
-            Assert.That(PresetParser.TryParse(
-                "[]", out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.MalformedJson));
+            Refuses("[]", PresetLoadRefusal.MalformedJson);
         }
 
         [Test]
@@ -71,10 +72,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             var json = WithSettings(
                 "\"schemaVersion\": 1", "\"schemaVersion\": 2");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.UnknownSchemaVersion));
+            Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
         [Test]
@@ -82,10 +80,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             var json = WithSettings(
                 "\"schemaVersion\": 1", "\"schemaVersion\": 1, \"extra\": 1");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.UnknownField));
+            Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
         [Test]
@@ -94,10 +89,7 @@ namespace Alrauna.Amuse.Tests.Editor
             var json = WithSettings(
                 "\"alphaSeparator\": true",
                 "\"alphaSeparator\": true, \"extra\": true");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.UnknownField));
+            Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
         [Test]
@@ -106,10 +98,7 @@ namespace Alrauna.Amuse.Tests.Editor
             var json = WithSettings(
                 "\"allowDepthTestChange\": true",
                 "\"allowDepthTestChange\": true, \"extra\": 1");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.UnknownField));
+            Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
         [Test]
@@ -117,10 +106,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             var json = WithSettings(
                 "  \"description\": \"Shipped defaults.\",\n", "");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.MissingField));
+            Refuses(json, PresetLoadRefusal.MissingField);
         }
 
         [Test]
@@ -128,10 +114,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             var json = WithSettings(
                 "\"schemaVersion\": 1", "\"schemaVersion\": \"1\"");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.WrongValueType));
+            Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
         [Test]
@@ -139,70 +122,39 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             var json = WithSettings(
                 "\"name\": \"Safe\"", "\"name\": \"\"");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.WrongValueType));
+            Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
         [Test]
         public void MipCapAboveTenRefuses()
         {
-            var json = WithSettings(
-                "\"preserveTransparencyMaxMipLevel\": 4",
-                "\"preserveTransparencyMaxMipLevel\": 11");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(WithMipCap(11), PresetLoadRefusal.ValueOutOfRange);
         }
 
         [Test]
         public void MipCapBelowMinusOneRefuses()
         {
-            var json = WithSettings(
-                "\"preserveTransparencyMaxMipLevel\": 4",
-                "\"preserveTransparencyMaxMipLevel\": -2");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(WithMipCap(-2), PresetLoadRefusal.ValueOutOfRange);
         }
 
         [Test]
         public void NonPowerOfTwoTextureSizeRefuses()
         {
-            var json = WithSettings(
-                "\"preserveTransparencyMinTextureSize\": 128",
-                "\"preserveTransparencyMinTextureSize\": 100");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(
+                WithMinTextureSize(100), PresetLoadRefusal.ValueOutOfRange);
         }
 
         [Test]
         public void TextureSizeAboveLimitRefuses()
         {
-            var json = WithSettings(
-                "\"preserveTransparencyMinTextureSize\": 128",
-                "\"preserveTransparencyMinTextureSize\": 16384");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(
+                WithMinTextureSize(16384), PresetLoadRefusal.ValueOutOfRange);
         }
 
         [Test]
         public void TextureSizeOfOneRefuses()
         {
-            var json = WithSettings(
-                "\"preserveTransparencyMinTextureSize\": 128",
-                "\"preserveTransparencyMinTextureSize\": 1");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(WithMinTextureSize(1), PresetLoadRefusal.ValueOutOfRange);
         }
 
         private static string WithMipCap(int value)
@@ -242,10 +194,7 @@ namespace Alrauna.Amuse.Tests.Editor
             var json = WithSettings(
                 "\"minimumOpaqueCoveragePercent\": 25",
                 "\"minimumOpaqueCoveragePercent\": 101");
-            Assert.That(PresetParser.TryParse(
-                json, out _, out var refusal), Is.False);
-            Assert.That(refusal,
-                Is.EqualTo(PresetLoadRefusal.ValueOutOfRange));
+            Refuses(json, PresetLoadRefusal.ValueOutOfRange);
         }
     }
 }
