@@ -12,7 +12,7 @@ namespace Alrauna.Amuse.Editor.Presets
     /// </summary>
     internal static class PresetFileStore
     {
-        internal static readonly string[] FileNames =
+        private static readonly string[] FileNames =
             { "safe", "normal", "aggressive" };
 
         internal static bool TryLoadAll(
