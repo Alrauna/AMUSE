@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Presets
 {
     /// <summary>
-    /// Loads the three shipped preset files from the installed package.
+    /// Loads the shipped preset files from the installed package.
     /// The file names are fixed, so "safe" always means safe.json. The
     /// folder resolves from the package metadata, the same pattern the
     /// header uses for the version, so no path is ever built by hand.
@@ -13,7 +13,7 @@ namespace Alrauna.Amuse.Editor.Presets
     internal static class PresetFileStore
     {
         private static readonly string[] FileNames =
-            { "safe", "normal", "aggressive" };
+            { "safe" };
 
         internal static bool TryLoadAll(
             out List<OptimizerPreset> presets,
