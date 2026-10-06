@@ -15,6 +15,7 @@ namespace Alrauna.Amuse.Runtime
     [HelpURL("https://github.com/Alrauna/AMUSE")]
     public sealed class AmuseAvatarOptimizer : MonoBehaviour, INDMFEditorOnly
     {
+        [ToggleLeft]
         [SerializeField] private bool _amuseDisabled;
 
         /// <summary>
@@ -25,6 +26,7 @@ namespace Alrauna.Amuse.Runtime
         /// Off here stops the alpha separator only: nothing is
         /// analyzed, moved, or reported for it.
         /// </summary>
+        [ToggleLeft]
         [SerializeField]
         private bool _alphaSeparatorEnabled = true;
 
@@ -104,9 +106,11 @@ namespace Alrauna.Amuse.Runtime
         [Range(0, 100)]
         private int _polygonMinimumOpaqueCoveragePercent = 100;
 
+        [ToggleLeft]
         [SerializeField]
         private bool _allowDepthTestChange = true;
 
+        [ToggleLeft]
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots = true;
 
@@ -116,6 +120,7 @@ namespace Alrauna.Amuse.Runtime
         /// serialized so Reset and Undo treat it like every other
         /// control.
         /// </summary>
+        [ToggleLeft]
         [SerializeField]
         private bool _advancedSettingsRevealed;
 
