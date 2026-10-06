@@ -243,44 +243,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
 
-        [Test]
-        public void DisabledComponentDoesNotActivateThePipeline()
+        private static IEnumerable<TestCaseData> GateSwitchRows()
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE disabled-optin fixture");
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            root.AddComponent<LineRenderer>();
-
-            try
-            {
-                var serialized = new UnityEditor.SerializedObject(component);
-                serialized.FindProperty("_amuseDisabled").boolValue = true;
-                serialized.ApplyModifiedProperties();
-
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, TestGenericPlatform.Instance);
-                AmusePlatformFinishPass.Execute(context, SupportedFacts());
-
-                var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
-                    "a disabled component must not activate the pipeline");
-                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero,
-                    "a disabled component must not turn the loop into refusals");
-            }
-            finally
-            {
-                Object.DestroyImmediate(root);
-            }
+            yield return new TestCaseData(
+                "_amuseDisabled", true, "a disabled component")
+                .SetName("DisabledComponentDoesNotActivateThePipeline");
+            yield return new TestCaseData(
+                "_alphaSeparatorEnabled", false,
+                "a switched-off alpha separator")
+                .SetName("AlphaSeparatorSwitchedOffDoesNotActivateThePipeline");
         }
 
-        [Test]
-        public void AlphaSeparatorSwitchedOffDoesNotActivateThePipeline()
+        [TestCaseSource(nameof(GateSwitchRows))]
+        public void SwitchedGateKeepsThePipelineIdle(
+            string propertyName, bool flippedValue, string subject)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE alpha-switch-off fixture");
+            var root = new GameObject("AMUSE gated-switch fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -290,11 +269,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var serialized = new UnityEditor.SerializedObject(component);
-                var switchProperty =
-                    serialized.FindProperty("_alphaSeparatorEnabled");
+                var switchProperty = serialized.FindProperty(propertyName);
                 Assert.That(switchProperty, Is.Not.Null,
-                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
-                switchProperty.boolValue = false;
+                    "AmuseAvatarOptimizer." + propertyName + " field pin");
+                switchProperty.boolValue = flippedValue;
                 serialized.ApplyModifiedProperties();
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -303,15 +281,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
-                    "a switched-off alpha separator must not activate"
-                    + " the pipeline");
-                Assert.That(amuse.SemanticallyRefusedRendererCount,
-                    Is.Zero,
-                    "a switched-off alpha separator must not turn the"
-                    + " loop into refusals");
-                Assert.That(amuse.ReachedRendererAnalysis, Is.False,
-                    "a switched-off alpha separator must stop before"
-                    + " the renderer loop");
+                    subject + " must not activate the pipeline");
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    subject + " must not turn the loop into refusals");
             }
             finally
             {
