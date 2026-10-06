@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
@@ -248,55 +249,6 @@ namespace Alrauna.Amuse.Editor
         };
 
         /// <summary>
-        /// Pins the label column of the Alpha Separator Settings rows to
-        /// the widest of the six labels and restores the previous
-        /// process-wide value on dispose. The restore is load-bearing:
-        /// EditorGUIUtility.labelWidth is process-wide static state, and
-        /// a missed restore leaks into later rows of the same GUI pass.
-        /// The pin exists so the controls give up width before the label
-        /// text: the column stays fixed while the window shrinks, so the
-        /// label text never truncates inside the row's fitting range.
-        /// </summary>
-        private struct SharedLabelWidthScope : IDisposable
-        {
-            private const float LabelWidthPadding = 2f;
-
-            private float _previous;
-
-            internal static SharedLabelWidthScope Begin()
-            {
-                // C# 9 forbids parameterless struct constructors, so
-                // construction goes through this factory.
-                var scope = default(SharedLabelWidthScope);
-                scope._previous = EditorGUIUtility.labelWidth;
-                EditorGUIUtility.labelWidth = SharedLabelWidth();
-                return scope;
-            }
-
-            public void Dispose()
-            {
-                EditorGUIUtility.labelWidth = _previous;
-            }
-        }
-
-        /// <summary>
-        /// Measures the shared label column live with the active skin,
-        /// so editor font size and skin changes are picked up. The 2
-        /// pixel padding is insurance for the native label paint inset.
-        /// </summary>
-        private static float SharedLabelWidth()
-        {
-            var widest = 0f;
-            foreach (var content in RowContents)
-            {
-                widest = Mathf.Max(
-                    widest, EditorStyles.label.CalcSize(content).x);
-            }
-
-            return Mathf.Ceil(widest) + 2f;
-        }
-
-        /// <summary>
         /// The Alpha Separator Settings foldout. It holds the user's
         /// policy for the alpha separation feature: which texture
         /// levels the opacity proof consults, and how big a split must
@@ -314,13 +266,15 @@ namespace Alrauna.Amuse.Editor
                 return;
             }
 
-            using (SharedLabelWidthScope.Begin())
-            {
-                DrawMipCapPopup();
-                DrawMinTextureSizePopup();
-                DrawCoverageSlider();
-                DrawAlphaPolicyControls();
-            }
+            var widest = RowContents.Max(
+                content => EditorStyles.label.CalcSize(content).x);
+            var previousWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = Mathf.Ceil(widest) + 2f;
+            DrawMipCapPopup();
+            DrawMinTextureSizePopup();
+            DrawCoverageSlider();
+            DrawAlphaPolicyControls();
+            EditorGUIUtility.labelWidth = previousWidth;
             serializedObject.ApplyModifiedProperties();
         }
 
