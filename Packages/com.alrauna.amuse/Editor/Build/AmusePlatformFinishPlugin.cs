@@ -420,8 +420,8 @@ namespace Alrauna.Amuse.Editor.Build
             // check precedes the bindings invariant because an unopted
             // avatar does no work at all. A component on a child does not
             // count; the avatar root is the only switch.
-            var optimizer = ActivatedOptimizer(context);
-            if (optimizer == null)
+            var activated = ActivatedOptimizer(context);
+            if (activated == null)
             {
                 return;
             }
@@ -431,7 +431,7 @@ namespace Alrauna.Amuse.Editor.Build
             // features. Off mirrors the Disable AMUSE contract for this
             // one feature: nothing analyzed, nothing mutated, nothing
             // reported, and the consent layer below never asks.
-            if (!optimizer.AlphaSeparatorEnabled)
+            if (!activated.AlphaSeparatorEnabled)
             {
                 return;
             }
