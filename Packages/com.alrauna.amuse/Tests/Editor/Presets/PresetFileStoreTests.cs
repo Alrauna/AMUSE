@@ -6,14 +6,16 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetFileStoreTests
     {
         [Test]
-        public void TheShippedFileParses()
+        public void TheThreeShippedFilesParseInTheFixedOrder()
         {
             Assert.That(PresetFileStore.TryLoadAll(
                 out var presets, out var failedFile, out var refusal),
                 Is.True, failedFile + ": " + refusal);
             Assert.That(refusal, Is.EqualTo(PresetLoadRefusal.None));
-            Assert.That(presets.Count, Is.EqualTo(1));
+            Assert.That(presets.Count, Is.EqualTo(3));
             Assert.That(presets[0].Name, Is.EqualTo("Safe"));
+            Assert.That(presets[1].Name, Is.EqualTo("Normal"));
+            Assert.That(presets[2].Name, Is.EqualTo("Aggressive"));
         }
 
         [Test]
