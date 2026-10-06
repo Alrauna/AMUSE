@@ -757,6 +757,43 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        private static (GameObject root, Material transparent,
+            SkinnedMeshRenderer renderer) CreateGatedSwitchFixture(
+                string flipProperty,
+                bool flipValue,
+                string animationTag,
+                string textureTag,
+                string displayName)
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out _);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject(displayName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var amuse = root.AddComponent<AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(amuse);
+            var toggle = serialized.FindProperty(flipProperty);
+            Assert.That(toggle, Is.Not.Null,
+                "AmuseAvatarOptimizer." + flipProperty + " field pin");
+            toggle.boolValue = flipValue;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            AttachAnimationFixture(root, animationTag);
+            var texture = Track(ImportBandedAlphaTexture(textureTag));
+            transparent = Track(NewTransparentMaterial(
+                transparentShader, texture));
+            var renderer = CreateSkinnedRenderer(
+                root, displayName + " renderer", displayName + " mesh",
+                new[] { transparent },
+                new[] { Band.Transparent, Band.Partial, Band.Opaque },
+                new[] { 0, 0, 0 },
+                firstTriangleIndex: 0);
+            return (root, transparent, renderer);
+        }
+
         /// <summary>
         /// The serialized disable control: with the component's Disable
         /// AMUSE toggle set, the build completes but the pipeline must
@@ -768,35 +805,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void SerializedDisableControlKeepsTheBuildUntouched()
         {
-            RequireIntegrationEnvironment(
-                out var traceAndOptimizeType,
-                out var transparentShader,
-                out _);
-            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
-
-            var root = new GameObject("AMUSE disable control");
+            var (root, transparent, renderer) =
+                CreateGatedSwitchFixture(
+                    "_amuseDisabled", true, "disabled",
+                    "banded_disabled", "AMUSE disabled");
             try
             {
-                FixtureAvatarIdentity.AttachVrcDescriptor(root);
-                var amuse = root.AddComponent<AmuseAvatarOptimizer>();
-                var serialized = new SerializedObject(amuse);
-                var toggle = serialized.FindProperty("_amuseDisabled");
-                Assert.That(toggle, Is.Not.Null,
-                    "AmuseAvatarOptimizer._amuseDisabled field pin");
-                toggle.boolValue = true;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-
-                AttachAnimationFixture(root, "disabled");
-                var texture = Track(ImportBandedAlphaTexture("banded_disabled"));
-                var transparent = Track(NewTransparentMaterial(
-                    transparentShader, texture));
-                CreateSkinnedRenderer(
-                    root, "AMUSE disabled renderer", "AMUSE disabled mesh",
-                    new[] { transparent },
-                    new[] { Band.Transparent, Band.Partial, Band.Opaque },
-                    new[] { 0, 0, 0 },
-                    firstTriangleIndex: 0);
-
                 var context = AvatarProcessor.ProcessAvatar(
                     root, AmbientPlatform.DefaultPlatform);
                 Assert.That(context, Is.Not.Null);
@@ -815,25 +829,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     state.AnalyzedRendererCount, Is.EqualTo(0),
                     "a disabled run must not analyze renderers");
 
-                var generated = new HashSet<Material>(
-                    state.Separation?.CreatedClones
-                    ?? (IEnumerable<Material>)Array.Empty<Material>());
                 Assert.That(
-                    generated, Is.Empty,
+                    state.Separation?.CreatedClones,
+                    Is.Null.Or.Empty,
                     "a disabled run must not create generated materials");
 
-                foreach (var renderer in root.GetComponentsInChildren<
-                             SkinnedMeshRenderer>(true))
-                {
-                    var mesh = renderer.sharedMesh;
-                    if (mesh == null) continue;
-                    Assert.That(
-                        renderer.sharedMaterials,
-                        Has.All.Matches<Material>(material =>
-                            material == transparent),
-                        "a disabled run must leave the original material"
-                        + " on every slot");
-                }
+                Assert.That(
+                    renderer.sharedMaterials,
+                    Has.All.Matches<Material>(material =>
+                        material == transparent),
+                    "a disabled run must leave the original material on every slot");
             }
             finally
             {
@@ -850,38 +855,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void SerializedAlphaSeparatorSwitchKeepsTheBuildUntouched()
         {
-            RequireIntegrationEnvironment(
-                out var traceAndOptimizeType,
-                out var transparentShader,
-                out _);
-            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
-
-            var root = new GameObject("AMUSE alpha switch control");
+            var (root, transparent, renderer) =
+                CreateGatedSwitchFixture(
+                    "_alphaSeparatorEnabled", false, "alpha-switch",
+                    "banded_alpha_switch", "AMUSE alpha switch");
             try
             {
-                FixtureAvatarIdentity.AttachVrcDescriptor(root);
-                var amuse = root.AddComponent<AmuseAvatarOptimizer>();
-                var serialized = new SerializedObject(amuse);
-                var toggle =
-                    serialized.FindProperty("_alphaSeparatorEnabled");
-                Assert.That(toggle, Is.Not.Null,
-                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
-                toggle.boolValue = false;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-
-                AttachAnimationFixture(root, "alpha-switch");
-                var texture = Track(ImportBandedAlphaTexture(
-                    "banded_alpha_switch"));
-                var transparent = Track(NewTransparentMaterial(
-                    transparentShader, texture));
-                var renderer = CreateSkinnedRenderer(
-                    root, "AMUSE alpha switch renderer",
-                    "AMUSE alpha switch mesh",
-                    new[] { transparent },
-                    new[] { Band.Transparent, Band.Partial, Band.Opaque },
-                    new[] { 0, 0, 0 },
-                    firstTriangleIndex: 0);
-
                 var context = AvatarProcessor.ProcessAvatar(
                     root, AmbientPlatform.DefaultPlatform);
                 Assert.That(context, Is.Not.Null);
