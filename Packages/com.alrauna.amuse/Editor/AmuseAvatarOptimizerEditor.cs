@@ -336,42 +336,34 @@ namespace Alrauna.Amuse.Editor
                 : Mathf.RoundToInt(Mathf.Pow(2, selectedSize));
         }
 
+        private int PercentSlider(string propertyPath, GUIContent content)
+        {
+            var property = serializedObject.FindProperty(propertyPath);
+            property.intValue = EditorGUILayout.IntSlider(
+                content,
+                Mathf.Clamp(property.intValue, 0, 100),
+                0, 100);
+            return property.intValue;
+        }
+
         private void DrawCoverageSlider()
         {
-            var coverageProperty = serializedObject.FindProperty(
-                "_minimumOpaqueCoveragePercent");
-            coverageProperty.intValue = EditorGUILayout.IntSlider(
-                MaterialCoverageRowContent,
-                Mathf.Clamp(coverageProperty.intValue, 0, 100),
-                0, 100);
+            PercentSlider("_minimumOpaqueCoveragePercent",
+                MaterialCoverageRowContent);
         }
 
         private void DrawAlphaPolicyControls()
         {
-            var alphaProperty = serializedObject.FindProperty(
-                "_minimumOpaqueAlphaPercent");
-            var minimumOpaqueAlpha = EditorGUILayout.IntSlider(
-                TextureClampRowContent,
-                Mathf.Clamp(alphaProperty.intValue, 0, 100),
-                0, 100);
-            alphaProperty.intValue = minimumOpaqueAlpha;
-
-            var coverageProperty = serializedObject.FindProperty(
-                "_polygonMinimumOpaqueCoveragePercent");
-            var polygonCoverage = EditorGUILayout.IntSlider(
-                PolygonCoverageRowContent,
-                Mathf.Clamp(coverageProperty.intValue, 0, 100),
-                0, 100);
-            coverageProperty.intValue = polygonCoverage;
-
+            var minimumOpaqueAlpha = PercentSlider(
+                "_minimumOpaqueAlphaPercent", TextureClampRowContent);
+            PercentSlider("_polygonMinimumOpaqueCoveragePercent",
+                PolygonCoverageRowContent);
+            var polygonClamp = PercentSlider(
+                "_polygonAlphaUpperClampPercent", PolygonClampRowContent);
             var clampProperty = serializedObject.FindProperty(
                 "_polygonAlphaUpperClampPercent");
-            var polygonClamp = EditorGUILayout.IntSlider(
-                PolygonClampRowContent,
-                Mathf.Clamp(clampProperty.intValue, 0, 100),
-                0, 100);
-            clampProperty.intValue =
-                NormalizePolygonClamp(minimumOpaqueAlpha, polygonClamp);
+            clampProperty.intValue = NormalizePolygonClamp(
+                minimumOpaqueAlpha, polygonClamp);
         }
 
         /// <summary>
