@@ -243,11 +243,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
 
-        [Test]
-        public void DisabledComponentDoesNotActivateThePipeline()
+        private static IEnumerable<TestCaseData> GateSwitchRows()
+        {
+            yield return new TestCaseData(
+                "_amuseDisabled", true, "a disabled component",
+                false)
+                .SetName("DisabledComponentDoesNotActivateThePipeline");
+            yield return new TestCaseData(
+                "_alphaSeparatorEnabled", false,
+                "a switched-off alpha separator",
+                true)
+                .SetName("AlphaSeparatorSwitchedOffDoesNotActivateThePipeline");
+        }
+
+        [TestCaseSource(nameof(GateSwitchRows))]
+        public void SwitchedGateKeepsThePipelineIdle(
+            string propertyName, bool flippedValue, string subject,
+            bool expectRendererLoopStop)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE disabled-optin fixture");
+            var root = new GameObject("AMUSE gated-switch fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -257,7 +272,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var serialized = new UnityEditor.SerializedObject(component);
-                serialized.FindProperty("_amuseDisabled").boolValue = true;
+                var switchProperty = serialized.FindProperty(propertyName);
+                Assert.That(switchProperty, Is.Not.Null,
+                    "AmuseAvatarOptimizer." + propertyName + " field pin");
+                switchProperty.boolValue = flippedValue;
                 serialized.ApplyModifiedProperties();
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -266,9 +284,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
-                    "a disabled component must not activate the pipeline");
+                    subject + " must not activate the pipeline");
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero,
-                    "a disabled component must not turn the loop into refusals");
+                    subject + " must not turn the loop into refusals");
+                if (expectRendererLoopStop)
+                {
+                    Assert.That(amuse.ReachedRendererAnalysis, Is.False,
+                        subject + " must stop before the renderer loop");
+                }
             }
             finally
             {
