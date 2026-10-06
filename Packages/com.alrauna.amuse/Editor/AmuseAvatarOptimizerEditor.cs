@@ -21,14 +21,6 @@ namespace Alrauna.Amuse.Editor
         private string _presetProblemFile;
         private PresetLoadRefusal _presetProblem;
 
-        /// <summary>
-        /// The full product name under the title. A proper name, not a
-        /// sentence, so the plain-English sentence rules do not
-        /// rewrite it.
-        /// </summary>
-        internal const string ProductSubtext =
-            "Alrauna's Material Understanding and Simplification Engine";
-
         public override void OnInspectorGUI()
         {
             DrawHeader();
@@ -92,8 +84,7 @@ namespace Alrauna.Amuse.Editor
                     out _presets, out _presetProblemFile,
                     out _presetProblem);
             }
-            if (_presets == null
-                || _presetProblem != PresetLoadRefusal.None)
+            if (_presetProblem != PresetLoadRefusal.None)
             {
                 EditorGUILayout.HelpBox(
                     "The preset file " + _presetProblemFile + " is not " +
@@ -469,7 +460,11 @@ namespace Alrauna.Amuse.Editor
             {
                 wordWrap = true,
             };
-            EditorGUILayout.LabelField(ProductSubtext, subtextStyle);
+            // A proper product name, so the plain-English sentence
+            // rules do not rewrite it.
+            EditorGUILayout.LabelField(
+                "Alrauna's Material Understanding and Simplification Engine",
+                subtextStyle);
 
             if (GUILayout.Button("Report a bug"))
             {
