@@ -15,7 +15,20 @@ namespace Alrauna.Amuse.Runtime
     [HelpURL("https://github.com/Alrauna/AMUSE")]
     public sealed class AmuseAvatarOptimizer : MonoBehaviour, INDMFEditorOnly
     {
+        [ToggleLeft]
         [SerializeField] private bool _amuseDisabled;
+
+        /// <summary>
+        /// The alpha separator switch. The alpha separator is the
+        /// first AMUSE feature with its own switch, and later features
+        /// add sibling switches beside it. The master "Disable AMUSE"
+        /// toggle stays above them and turns off the whole component.
+        /// Off here stops the alpha separator only: nothing is
+        /// analyzed, moved, or reported for it.
+        /// </summary>
+        [ToggleLeft]
+        [SerializeField]
+        private bool _alphaSeparatorEnabled = true;
 
         /// <summary>
         /// The largest mip level the opacity proof consults. The value -1
@@ -93,17 +106,38 @@ namespace Alrauna.Amuse.Runtime
         [Range(0, 100)]
         private int _polygonMinimumOpaqueCoveragePercent = 100;
 
+        [ToggleLeft]
         [SerializeField]
         private bool _allowDepthTestChange = true;
 
+        [ToggleLeft]
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots = true;
+
+        /// <summary>
+        /// True when the user opened the advanced options. This is
+        /// inspector-only state: the build never reads it. It is
+        /// serialized so Reset and Undo treat it like every other
+        /// control.
+        /// </summary>
+        [ToggleLeft]
+        [SerializeField]
+        private bool _advancedSettingsRevealed;
+
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build
         /// treats a disabled component exactly like an absent one: nothing
         /// runs, nothing is reported.
         /// </summary>
         public bool AmuseDisabled => _amuseDisabled;
+
+        /// <summary>
+        /// True when the alpha separator runs for this component. The
+        /// default of true keeps every avatar saved before this field
+        /// behaving as before, because Unity fills a missing serialized
+        /// field from the initializer.
+        /// </summary>
+        public bool AlphaSeparatorEnabled => _alphaSeparatorEnabled;
 
         /// <summary>
         /// The opacity proof's mip cap as stored: -1 for every level, else

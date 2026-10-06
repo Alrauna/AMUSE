@@ -17,10 +17,13 @@ Then add the **AMUSE** package to your avatar project from the package manager. 
 
 Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usual.
 
+- The preset row under the header picks the shipped Safe preset. It
+  holds the shipped defaults.
 - The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules; declining is a total no-op for that build.
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
 - **Disable AMUSE** on the component makes the build treat it as absent: nothing runs, nothing is reported.
+- **Alpha Separator** is on by default. Turn it off to skip alpha separation for that avatar.
 - Combining AMUSE with d4rkAvatarOptimizer is not validated in 0.1.0.
 
 ## What 0.1.0 does

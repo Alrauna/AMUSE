@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -60,6 +62,64 @@ namespace Alrauna.Amuse.Tests.Editor
                 serializedObject.ApplyModifiedProperties();
 
                 Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        private static IEnumerable<TestCaseData> SwitchFieldRows()
+        {
+            // The reveal toggle stores on the component, so the engine
+            // Reset command clears it like every other control. A missing
+            // field would leave the reveal stuck on across a Reset.
+            yield return new TestCaseData(
+                "_advancedSettingsRevealed", false, true,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    new SerializedObject(o)
+                        .FindProperty("_advancedSettingsRevealed")
+                        .boolValue));
+            yield return new TestCaseData(
+                "_alphaSeparatorEnabled", true, false,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    o.AlphaSeparatorEnabled));
+        }
+
+        [TestCaseSource(nameof(SwitchFieldRows))]
+        public void SwitchFieldReadsItsInitializerDefault(
+            string fieldName, bool defaultValue, bool toggledValue,
+            Func<AmuseAvatarOptimizer, bool> read)
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(read(optimizer), Is.EqualTo(defaultValue));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [TestCaseSource(nameof(SwitchFieldRows))]
+        public void SwitchFieldRoundTripsThroughTheSerializedProperty(
+            string fieldName, bool defaultValue, bool toggledValue,
+            Func<AmuseAvatarOptimizer, bool> read)
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(fieldName);
+                Assert.That(property, Is.Not.Null,
+                    "AmuseAvatarOptimizer." + fieldName + " field pin");
+                property.boolValue = toggledValue;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(read(optimizer), Is.EqualTo(toggledValue));
             }
             finally
             {

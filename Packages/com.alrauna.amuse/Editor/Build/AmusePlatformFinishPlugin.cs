@@ -420,7 +420,18 @@ namespace Alrauna.Amuse.Editor.Build
             // check precedes the bindings invariant because an unopted
             // avatar does no work at all. A component on a child does not
             // count; the avatar root is the only switch.
-            if (!TriggerActivated(context))
+            var activated = ActivatedOptimizer(context);
+            if (activated == null)
+            {
+                return;
+            }
+
+            // Feature switch: the alpha separator runs only with its
+            // toggle on. The component stays present for later sibling
+            // features. Off mirrors the Disable AMUSE contract for this
+            // one feature: nothing analyzed, nothing mutated, nothing
+            // reported, and the consent layer below never asks.
+            if (!activated.AlphaSeparatorEnabled)
             {
                 return;
             }
@@ -838,18 +849,23 @@ namespace Alrauna.Amuse.Editor.Build
         /// <see cref="Alrauna.Amuse.Runtime.AmuseAvatarOptimizer"/> with its
         /// Disable AMUSE toggle off. A component on any child transform does
         /// not activate the pipeline, and a disabled component activates
-        /// nothing at all - the build treats it exactly like an absent one.
+        /// nothing at all - the build treats it exactly like an absent
+        /// one. The return carries the component so downstream feature
+        /// switches read their own property.
         /// </summary>
-        private static bool TriggerActivated(BuildContext context)
+        private static Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
+            ActivatedOptimizer(BuildContext context)
         {
             var root = context.AvatarRootObject;
             if (root == null)
             {
-                return false;
+                return null;
             }
             var component =
                 root.GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            return component != null && !component.AmuseDisabled;
+            return component != null && !component.AmuseDisabled
+                ? component
+                : null;
         }
 
         /// <summary>

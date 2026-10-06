@@ -1,8 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Presets;
 
 namespace Alrauna.Amuse.Editor
 {
@@ -13,12 +17,16 @@ namespace Alrauna.Amuse.Editor
     [CustomEditor(typeof(AmuseAvatarOptimizer))]
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
-        private bool _advancedOpen;
+        private bool _settingsOpen;
         private bool _alphaSeparatorOpen;
+        private List<OptimizerPreset> _presets;
+        private string _presetProblemFile;
+        private PresetLoadRefusal _presetProblem;
 
         public override void OnInspectorGUI()
         {
             DrawHeader();
+            DrawPresetRow();
 
             var component = (AmuseAvatarOptimizer)target;
             if (component.transform.parent == null)
@@ -41,14 +49,18 @@ namespace Alrauna.Amuse.Editor
 
             serializedObject.Update();
             EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_amuseDisabled"),
-                new GUIContent("Disable AMUSE",
-                    "Treats this component as absent: nothing runs on build, " +
-                    "in Play mode, or anywhere else, and nothing is reported."));
+                serializedObject.FindProperty("_alphaSeparatorEnabled"),
+                new GUIContent("Alpha Separator",
+                    "Turn this off to skip alpha separation on this " +
+                    "avatar. Nothing is analyzed, moved, or reported " +
+                    "for the feature. A later feature adds its own " +
+                    "switch beside this one."));
             serializedObject.ApplyModifiedProperties();
 
-            DrawAlphaSeparator();
-            DrawAdvancedSettings();
+            if (DrawSettings())
+            {
+                DrawAlphaSeparatorSettings();
+            }
 
             if (AmuseBuildStatusStore.TryGet(out var status))
             {
@@ -58,25 +70,205 @@ namespace Alrauna.Amuse.Editor
 
 
         /// <summary>
-        /// The Alpha Separator foldout. It holds the user's policy for
-        /// the alpha separation feature: which texture levels the
-        /// opacity proof consults, and how big a split must be before
-        /// AMUSE pays a draw call for it.
+        /// One button per shipped preset file.
         /// </summary>
-        private void DrawAlphaSeparator()
+        private void DrawPresetRow()
+        {
+            if (_presets == null)
+            {
+                PresetFileStore.TryLoadAll(
+                    out _presets, out _presetProblemFile,
+                    out _presetProblem);
+            }
+            if (_presetProblem != PresetLoadRefusal.None)
+            {
+                EditorGUILayout.HelpBox(
+                    "The preset file " + _presetProblemFile + " is not " +
+                    "valid: " + _presetProblem + ". The preset row " +
+                    "stays off. Fix the file or reinstall the package.",
+                    MessageType.Warning);
+                return;
+            }
+
+            var component = (AmuseAvatarOptimizer)target;
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(
+                    "Presets", EditorStyles.boldLabel, GUILayout.Width(50));
+                foreach (var preset in _presets)
+                {
+                    var matched = preset.Matches(component);
+                    var clicked = GUILayout.Toggle(
+                        matched,
+                        new GUIContent(preset.Name, preset.Description),
+                        GUI.skin.button);
+                    if (clicked && !matched)
+                    {
+                        serializedObject.Update();
+                        PresetApplier.Apply(preset, serializedObject);
+                    }
+                }
+            }
+        }
+
+        private static readonly GUIContent MipCapRowContent = new GUIContent(
+            "Smallest Tested Mipmap",
+            "A mipmap is a smaller copy of a texture. Each " +
+            "copy is half the size of the copy before it. " +
+            "The GPU shows the small copies when the avatar " +
+            "is far away or small on screen.\n\n" +
+            "A transparent texture often fades at small " +
+            "copies, because averaging mixes transparent " +
+            "texels into solid ones. A texel is one pixel of " +
+            "a texture. AMUSE checks the copies before it " +
+            "moves a triangle onto an opaque material. One " +
+            "faded texel in a checked copy stops the move. " +
+            "Textures with transparency can fail at a small " +
+            "copy for this reason.\n\n" +
+            "This setting sets the smallest copy AMUSE " +
+            "checks. AMUSE ignores every smaller copy. " +
+            "Moving toward mip 0 can improve performance at " +
+            "the cost of quality at a distance. Moving away " +
+            "from mip 0 can improve quality at a distance at " +
+            "the cost of performance. Mip 0 is the full " +
+            "texture. A 2048 by 2048 texture renders at 128 " +
+            "by 128 at mip 4. The default of Mip 4 fits most " +
+            "viewing distances. Select All Mips to check " +
+            "every copy. This is the safest choice.\n\n" +
+            "Select a larger level when a part looks solid " +
+            "at long distance where it should show through. " +
+            "Select a smaller level when AMUSE moves too few " +
+            "triangles.");
+
+        private static readonly GUIContent MinTextureRowContent = new GUIContent(
+            "Smallest Tested Texture",
+            "This setting works like Smallest Tested " +
+            "Mipmap, but as an absolute size in texels " +
+            "instead of a mipmap number. A mipmap is a " +
+            "smaller copy of a texture. AMUSE stops checking " +
+            "a texture when a copy is smaller than this size " +
+            "on either side. A texture smaller than this " +
+            "size on either side is never checked, so its " +
+            "triangles never move.\n\n" +
+            "Select All Sizes to check every copy of every " +
+            "texture. Select a smaller size to check more " +
+            "copies when a part looks solid far away where " +
+            "it should show through. Select a larger size to " +
+            "check fewer copies when AMUSE moves too few " +
+            "triangles. The default of 128 fits most " +
+            "viewing distances.");
+
+        private static readonly GUIContent MaterialCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage (Per Material)",
+                "AMUSE moves proven opaque triangles of a mixed " +
+                "material onto a separate opaque material. Each " +
+                "split adds one draw call, and draw calls cost " +
+                "CPU time. This setting sets the smallest share " +
+                "of proven opaque triangles a mixed material " +
+                "needs before AMUSE does the split. The share " +
+                "counts every triangle of that material slot." +
+                "\n\n" +
+                "Use 0 to always split when at least one triangle " +
+                "is proven opaque. Raise the value to skip splits " +
+                "that move too little.");
+
+        private static readonly GUIContent TextureClampRowContent =
+            new GUIContent(
+                "Alpha Upper Clamp (Per Texture)",
+                "Alpha is how strong transparency is. A value " +
+                "of 100 is fully opaque. Some mixed transparent " +
+                "and opaque materials hold texels that are " +
+                "nearly opaque but not truly opaque. Alpha at " +
+                "or above this value counts as opaque evidence. " +
+                "Lowering this value admits more nearly opaque " +
+                "texels. A texel is one pixel of a texture." +
+                "\n\n" +
+                "Admitted texels render fully opaque after a " +
+                "move, so alpha gradients can show edges between " +
+                "the split materials. The default of 100 is the " +
+                "safest choice. Lower the value when a material " +
+                "holds nearly opaque texels that keep its solid " +
+                "parts on the transparent material.");
+
+        private static readonly GUIContent PolygonCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage (Per Polygon)",
+                "The minimum percentage of a polygon's texels " +
+                "that must stay at or above the per-polygon " +
+                "clamp before AMUSE moves the polygon onto an " +
+                "opaque material. Texels below the clamp are " +
+                "strays. This keeps a few stray texels from " +
+                "keeping an intentional opaque face on the " +
+                "transparent material, which wastes performance " +
+                "on overdraw." +
+                "\n\n" +
+                "Lowering this value lets AMUSE ignore denser " +
+                "strays. Ignored strays render fully opaque " +
+                "after a move. The default of 100 is the safest " +
+                "choice: no stray share is ever ignored.");
+
+        private static readonly GUIContent PolygonClampRowContent =
+            new GUIContent(
+                "Alpha Upper Clamp (Per Polygon)",
+                "Alpha below this value is a stray texel on the " +
+                "polygon. AMUSE ignores strays only while the " +
+                "coverage slider passes. Lowering this value " +
+                "admits higher alpha values as strays, including " +
+                "nearly opaque ones. A texel is one pixel of a " +
+                "texture." +
+                "\n\n" +
+                "Ignored strays render fully opaque after a " +
+                "move, so alpha gradients can lose their " +
+                "transparency. The default of 100 admits nothing " +
+                "and is the safest choice. Lower this value " +
+                "together with the coverage slider when faint " +
+                "strays keep an intentional opaque face on the " +
+                "transparent material.");
+
+        /// <summary>
+        /// The six Alpha Separator Settings row contents in draw order.
+        /// One source of truth feeds both the draw calls and the shared
+        /// label width, so a label change cannot drift away from its
+        /// measurement.
+        /// </summary>
+        private static readonly GUIContent[] RowContents =
+        {
+            MipCapRowContent,
+            MinTextureRowContent,
+            MaterialCoverageRowContent,
+            TextureClampRowContent,
+            PolygonCoverageRowContent,
+            PolygonClampRowContent,
+        };
+
+        /// <summary>
+        /// The Alpha Separator Settings foldout. It holds the user's
+        /// policy for the alpha separation feature: which texture
+        /// levels the opacity proof consults, and how big a split must
+        /// be before AMUSE pays a draw call for it. It stays hidden
+        /// until the Advanced Settings reveal in Settings is on,
+        /// because most users never change this policy.
+        /// </summary>
+        private void DrawAlphaSeparatorSettings()
         {
             _alphaSeparatorOpen = EditorGUILayout.Foldout(
-                _alphaSeparatorOpen, "Alpha Separator",
+                _alphaSeparatorOpen, "Alpha Separator Settings",
                 EditorStyles.foldoutHeader);
             if (!_alphaSeparatorOpen)
             {
                 return;
             }
 
+            var widest = RowContents.Max(
+                content => EditorStyles.label.CalcSize(content).x);
+            var previousWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = Mathf.Ceil(widest) + 2f;
             DrawMipCapPopup();
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
             DrawAlphaPolicyControls();
+            EditorGUIUtility.labelWidth = previousWidth;
             serializedObject.ApplyModifiedProperties();
         }
 
@@ -96,34 +288,7 @@ namespace Alrauna.Amuse.Editor
                 ? 0
                 : Mathf.Min(stored + 1, options.Length - 1);
             var selected = EditorGUILayout.Popup(
-                new GUIContent(
-                    "Smallest Tested Mipmap",
-                    "A mipmap is a smaller copy of a texture. Each " +
-                    "copy is half the size of the copy before it. " +
-                    "The GPU shows the small copies when the avatar " +
-                    "is far away or small on screen.\n\n" +
-                    "A transparent texture often fades at small " +
-                    "copies, because averaging mixes transparent " +
-                    "texels into solid ones. A texel is one pixel of " +
-                    "a texture. AMUSE checks the copies before it " +
-                    "moves a triangle onto an opaque material. One " +
-                    "faded texel in a checked copy stops the move. " +
-                    "Textures with transparency can fail at a small " +
-                    "copy for this reason.\n\n" +
-                    "This setting sets the smallest copy AMUSE " +
-                    "checks. AMUSE ignores every smaller copy. " +
-                    "Moving toward mip 0 can improve performance at " +
-                    "the cost of quality at a distance. Moving away " +
-                    "from mip 0 can improve quality at a distance at " +
-                    "the cost of performance. Mip 0 is the full " +
-                    "texture. A 2048 by 2048 texture renders at 128 " +
-                    "by 128 at mip 4. The default of Mip 4 fits most " +
-                    "viewing distances. Select All Mips to check " +
-                    "every copy. This is the safest choice.\n\n" +
-                    "Select a larger level when a part looks solid " +
-                    "at long distance where it should show through. " +
-                    "Select a smaller level when AMUSE moves too few " +
-                    "triangles."),
+                MipCapRowContent,
                 index,
                 options);
             property.intValue = selected == 0 ? -1 : selected - 1;
@@ -157,23 +322,7 @@ namespace Alrauna.Amuse.Editor
             }
 
             var selectedSize = EditorGUILayout.Popup(
-                new GUIContent(
-                    "Smallest Tested Texture",
-                    "This setting works like Smallest Tested " +
-                    "Mipmap, but as an absolute size in texels " +
-                    "instead of a mipmap number. A mipmap is a " +
-                    "smaller copy of a texture. AMUSE stops checking " +
-                    "a texture when a copy is smaller than this size " +
-                    "on either side. A texture smaller than this " +
-                    "size on either side is never checked, so its " +
-                    "triangles never move.\n\n" +
-                    "Select All Sizes to check every copy of every " +
-                    "texture. Select a smaller size to check more " +
-                    "copies when a part looks solid far away where " +
-                    "it should show through. Select a larger size to " +
-                    "check fewer copies when AMUSE moves too few " +
-                    "triangles. The default of 128 fits most " +
-                    "viewing distances."),
+                MinTextureRowContent,
                 sizeIndex,
                 sizeOptions);
             sizeProperty.intValue = selectedSize == 0
@@ -181,98 +330,34 @@ namespace Alrauna.Amuse.Editor
                 : Mathf.RoundToInt(Mathf.Pow(2, selectedSize));
         }
 
+        private int PercentSlider(string propertyPath, GUIContent content)
+        {
+            var property = serializedObject.FindProperty(propertyPath);
+            property.intValue = EditorGUILayout.IntSlider(
+                content,
+                Mathf.Clamp(property.intValue, 0, 100),
+                0, 100);
+            return property.intValue;
+        }
+
         private void DrawCoverageSlider()
         {
-            var coverageProperty = serializedObject.FindProperty(
-                "_minimumOpaqueCoveragePercent");
-            coverageProperty.intValue = EditorGUILayout.IntSlider(
-                new GUIContent(
-                    "Minimum Opaque Coverage (Per Material)",
-                    "AMUSE moves proven opaque triangles of a mixed " +
-                    "material onto a separate opaque material. Each " +
-                    "split adds one draw call, and draw calls cost " +
-                    "CPU time. This setting sets the smallest share " +
-                    "of proven opaque triangles a mixed material " +
-                    "needs before AMUSE does the split. The share " +
-                    "counts every triangle of that material slot." +
-                    "\n\n" +
-                    "Use 0 to always split when at least one triangle " +
-                    "is proven opaque. Raise the value to skip splits " +
-                    "that move too little."),
-                Mathf.Clamp(coverageProperty.intValue, 0, 100),
-                0, 100);
+            PercentSlider("_minimumOpaqueCoveragePercent",
+                MaterialCoverageRowContent);
         }
 
         private void DrawAlphaPolicyControls()
         {
-            var alphaProperty = serializedObject.FindProperty(
-                "_minimumOpaqueAlphaPercent");
-            var minimumOpaqueAlpha = EditorGUILayout.IntSlider(
-                new GUIContent(
-                    "Alpha Upper Clamp (Per Texture)",
-                    "Alpha is how strong transparency is. A value " +
-                    "of 100 is fully opaque. Some mixed transparent " +
-                    "and opaque materials hold texels that are " +
-                    "nearly opaque but not truly opaque. Alpha at " +
-                    "or above this value counts as opaque evidence. " +
-                    "Lowering this value admits more nearly opaque " +
-                    "texels. A texel is one pixel of a texture." +
-                    "\n\n" +
-                    "Admitted texels render fully opaque after a " +
-                    "move, so alpha gradients can show edges between " +
-                    "the split materials. The default of 100 is the " +
-                    "safest choice. Lower the value when a material " +
-                    "holds nearly opaque texels that keep its solid " +
-                    "parts on the transparent material."),
-                Mathf.Clamp(alphaProperty.intValue, 0, 100),
-                0, 100);
-            alphaProperty.intValue = minimumOpaqueAlpha;
-
-            var coverageProperty = serializedObject.FindProperty(
-                "_polygonMinimumOpaqueCoveragePercent");
-            var polygonCoverage = EditorGUILayout.IntSlider(
-                new GUIContent(
-                    "Minimum Opaque Coverage (Per Polygon)",
-                    "The minimum percentage of a polygon's texels " +
-                    "that must stay at or above the per-polygon " +
-                    "clamp before AMUSE moves the polygon onto an " +
-                    "opaque material. Texels below the clamp are " +
-                    "strays. This keeps a few stray texels from " +
-                    "keeping an intentional opaque face on the " +
-                    "transparent material, which wastes performance " +
-                    "on overdraw." +
-                    "\n\n" +
-                    "Lowering this value lets AMUSE ignore denser " +
-                    "strays. Ignored strays render fully opaque " +
-                    "after a move. The default of 100 is the safest " +
-                    "choice: no stray share is ever ignored."),
-                Mathf.Clamp(coverageProperty.intValue, 0, 100),
-                0, 100);
-            coverageProperty.intValue = polygonCoverage;
-
+            var minimumOpaqueAlpha = PercentSlider(
+                "_minimumOpaqueAlphaPercent", TextureClampRowContent);
+            PercentSlider("_polygonMinimumOpaqueCoveragePercent",
+                PolygonCoverageRowContent);
+            var polygonClamp = PercentSlider(
+                "_polygonAlphaUpperClampPercent", PolygonClampRowContent);
             var clampProperty = serializedObject.FindProperty(
                 "_polygonAlphaUpperClampPercent");
-            var polygonClamp = EditorGUILayout.IntSlider(
-                new GUIContent(
-                    "Alpha Upper Clamp (Per Polygon)",
-                    "Alpha below this value is a stray texel on the " +
-                    "polygon. AMUSE ignores strays only while the " +
-                    "coverage slider passes. Lowering this value " +
-                    "admits higher alpha values as strays, including " +
-                    "nearly opaque ones. A texel is one pixel of a " +
-                    "texture." +
-                    "\n\n" +
-                    "Ignored strays render fully opaque after a " +
-                    "move, so alpha gradients can lose their " +
-                    "transparency. The default of 100 admits nothing " +
-                    "and is the safest choice. Lower this value " +
-                    "together with the coverage slider when faint " +
-                    "strays keep an intentional opaque face on the " +
-                    "transparent material."),
-                Mathf.Clamp(clampProperty.intValue, 0, 100),
-                0, 100);
-            clampProperty.intValue =
-                NormalizePolygonClamp(minimumOpaqueAlpha, polygonClamp);
+            clampProperty.intValue = NormalizePolygonClamp(
+                minimumOpaqueAlpha, polygonClamp);
         }
 
         /// <summary>
@@ -298,48 +383,73 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// The Advanced Settings foldout. It holds two settings. The
-        /// animation-closure tolerance sets the rule for animations
-        /// that name material slots this mesh does not have. The
-        /// depth-test-change consent permits AMUSE to move triangles
-        /// of materials with a special depth rule onto an opaque copy.
-        /// Most users never touch these settings.
+        /// The Settings foldout. It holds the master switch, the reveal
+        /// toggle for the advanced options, the two tolerance consents,
+        /// and the reveal toggle for the alpha policy menu. Every
+        /// switch a user must find lives here, so one menu answers
+        /// "what does AMUSE do on this avatar". The two tolerance
+        /// consents and the alpha policy menu stay hidden until
+        /// Advanced Settings is on, because most users never change
+        /// them. The reveal toggle stores on the component, so Reset
+        /// and Undo treat it like every other control.
         /// </summary>
-        private void DrawAdvancedSettings()
+        private bool DrawSettings()
         {
-            _advancedOpen = EditorGUILayout.Foldout(
-                _advancedOpen, "Advanced Settings", EditorStyles.foldoutHeader);
-            if (!_advancedOpen)
+            _settingsOpen = EditorGUILayout.Foldout(
+                _settingsOpen, "Settings", EditorStyles.foldoutHeader);
+            if (!_settingsOpen)
             {
-                return;
+                return false;
             }
 
             EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
-                new GUIContent(
-                    "Ignore Out-of-Range Material Slots",
-                    "Some animation files animate material slots that do not exist on this mesh. " +
-                    "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
-                    "Turn this setting off to refuse meshes with extra slot animations."));
+                serializedObject.FindProperty("_amuseDisabled"),
+                new GUIContent("Disable AMUSE",
+                    "Treats this component as absent: nothing runs on " +
+                    "build, in Play mode, or anywhere else, and nothing " +
+                    "is reported."));
 
+            var reveal = serializedObject.FindProperty(
+                "_advancedSettingsRevealed");
             EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_allowDepthTestChange"),
-                new GUIContent(
-                    "Allow Depth Test Change on Moved Triangles",
-                    "Some materials set a special depth rule: draw a " +
-                    "pixel only when it is strictly closer than " +
-                    "everything already drawn. When AMUSE moves solid " +
-                    "triangles of such a material onto an opaque copy, " +
-                    "those triangles use the normal depth rule, which " +
-                    "also draws pixels at the same distance. On rare " +
-                    "layered parts, surfaces at exactly the same " +
-                    "distance can swap their draw order or flicker." +
-                    "\n\n" +
-                    "By default, AMUSE accepts this stated change and " +
-                    "moves the triangles. Turn this setting off to keep " +
-                    "materials with a special depth rule on their " +
-                    "original material."));
+                reveal,
+                new GUIContent("Advanced Settings",
+                    "Shows the two tolerance consents and the Alpha " +
+                    "Separator Settings menu below. Most users never " +
+                    "need them."));
+
+            if (reveal.boolValue)
+            {
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty(
+                        "_ignoreOutOfRangeMaterialSlots"),
+                    new GUIContent(
+                        "Ignore Out-of-Range Material Slots",
+                        "Some animation files animate material slots that do not exist on this mesh. " +
+                        "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
+                        "Turn this setting off to refuse meshes with extra slot animations."));
+
+                EditorGUILayout.PropertyField(
+                    serializedObject.FindProperty("_allowDepthTestChange"),
+                    new GUIContent(
+                        "Allow Depth Test Change on Moved Triangles",
+                        "Some materials set a special depth rule: draw a " +
+                        "pixel only when it is strictly closer than " +
+                        "everything already drawn. When AMUSE moves solid " +
+                        "triangles of such a material onto an opaque copy, " +
+                        "those triangles use the normal depth rule, which " +
+                        "also draws pixels at the same distance. On rare " +
+                        "layered parts, surfaces at exactly the same " +
+                        "distance can swap their draw order or flicker." +
+                        "\n\n" +
+                        "By default, AMUSE accepts this stated change and " +
+                        "moves the triangles. Turn this setting off to keep " +
+                        "materials with a special depth rule on their " +
+                        "original material."));
+            }
+
             serializedObject.ApplyModifiedProperties();
+            return reveal.boolValue;
         }
 
         /// <summary>
@@ -370,6 +480,16 @@ namespace Alrauna.Amuse.Editor
                 };
                 GUI.Label(row, "v" + version, right);
             }
+
+            var subtextStyle = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+            {
+                wordWrap = true,
+            };
+            // A proper product name, so the plain-English sentence
+            // rules do not rewrite it.
+            EditorGUILayout.LabelField(
+                "Alrauna's Material Understanding and Simplification Engine",
+                subtextStyle);
 
             if (GUILayout.Button("Report a bug"))
             {

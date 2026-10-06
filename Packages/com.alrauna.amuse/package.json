@@ -17,6 +17,9 @@
   "vpmDependencies": {
     "nadena.dev.ndmf": ">=1.14.4 <2.0.0-a"
   },
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
   "vrchatVersion": "2026.3.1",
   "author": {
     "name": "Alrauna",
