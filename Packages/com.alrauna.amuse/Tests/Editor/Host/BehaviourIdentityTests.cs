@@ -120,7 +120,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void IdenticallyNamedTypeFromAnotherAssemblyCannotBeSpoofed()
         {
             var first = typeof(
-                Alrauna.Amuse.TestFixtures.AMUSETask7StateMachineBehaviourProbe);
+                Alrauna.Amuse.TestFixtures.UnrecognizedBehaviourProbe);
             var second = RuntimeProbeType();
 
             Assert.That(first.FullName, Is.EqualTo(second.FullName),
@@ -136,7 +136,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             return Type.GetType(
                 "Alrauna.Amuse.TestFixtures." +
-                "AMUSETask7StateMachineBehaviourProbe, Assembly-CSharp",
+                "UnrecognizedBehaviourProbe, Assembly-CSharp",
                 true);
         }
     }
@@ -144,7 +144,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
 namespace Alrauna.Amuse.TestFixtures
 {
-    internal sealed class AMUSETask7StateMachineBehaviourProbe
+    internal sealed class UnrecognizedBehaviourProbe
     {
     }
 }

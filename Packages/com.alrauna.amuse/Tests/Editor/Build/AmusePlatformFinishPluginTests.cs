@@ -3771,7 +3771,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // return null once while the AssetDatabase settles, and the probe
             // must attach or the fixture precondition proves nothing.
             var probeType = System.Type.GetType(
-                "Alrauna.Amuse.TestFixtures.AMUSETask7StateMachineBehaviourProbe, " +
+                "Alrauna.Amuse.TestFixtures.UnrecognizedBehaviourProbe, " +
                 "Assembly-CSharp",
                 true);
             StateMachineBehaviour behaviour = null;

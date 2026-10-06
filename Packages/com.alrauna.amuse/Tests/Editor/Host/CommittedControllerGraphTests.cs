@@ -582,7 +582,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private static StateMachineBehaviour AttachBehaviour(Object owner)
         {
             var type = System.Type.GetType(
-                "Alrauna.Amuse.TestFixtures.AMUSETask7StateMachineBehaviourProbe, " +
+                "Alrauna.Amuse.TestFixtures.UnrecognizedBehaviourProbe, " +
                 "Assembly-CSharp",
                 true);
 
