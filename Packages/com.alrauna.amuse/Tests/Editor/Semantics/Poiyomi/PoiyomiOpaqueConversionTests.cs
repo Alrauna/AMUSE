@@ -217,6 +217,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Outline enable state is an alpha-request concern after the outline
+        /// cutover. An animated outline enable is relevant to alpha proof.
+        /// It is irrelevant to conversion evidence.
+        /// </summary>
+        [Test]
+        public void EnableOutlines_IsRelevantToAlphaEvidenceRequest()
+        {
+            Assert.That(
+                ResolveUnder("material._EnableOutlines", PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                ResolveUnder("material._EnableOutlines", PoiyomiOpaqueConversion.ConversionEvidenceRequest),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
+        }
+
+        /// <summary>
         /// Conversion depends on <c>_AddBlendOp</c> in neither direction, so a
         /// curve on it is irrelevant to both.
         /// </summary>
@@ -931,12 +947,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The outline hazard is a MUTATION hazard: writing <c>_Mode = 0</c>
-        /// would force unmodelled outline alpha to 1 before the outline clip. A
-        /// canonical material already has <c>_Mode == 0</c>, so that forcing is
-        /// the author's existing state and nothing would be written. Refusing
-        /// here would claim AMUSE declined to do something it was never going
-        /// to do.
+        /// A canonical material already has <c>_Mode == 0</c>.
+        /// Conversion returns <c>AlreadyOpaque</c> without writing changes.
+        /// Conversion no longer reads <c>_EnableOutlines</c> after the outline cutover.
+        /// Enabling outlines does not change the <c>AlreadyOpaque</c> outcome.
         /// </summary>
         [Test]
         public void AlreadyOpaque_EvenWithOutlinesEnabled()

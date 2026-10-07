@@ -1241,7 +1241,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             CollectionAssert.Contains(
                 RequestedNames(capturerSaw),
                 "_EnableOutlines",
-                "the capture schema lost Poiyomi's conversion evidence");
+                "the capture schema lost Poiyomi's outline evidence");
             foreach (var conversionOnly in ConversionOnlyProperties())
             {
                 CollectionAssert.DoesNotContain(
