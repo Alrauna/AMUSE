@@ -309,3 +309,26 @@ Four parallel adversarial reviews ran against the committed slices. All four ver
 4. The all-slots-failed renderer entry names its first failed slot's way again, instead of printing the bare refusal.
 5. Known scope, documented: an unconsented material that only an animation swap can bring into a slot is never assigned at build start, so the consent pre-scan never offers it a subject. It classifies to the Poiyomi family, fails the closed capture batch, and refuses renderer-wide, where base refused only its own slots. Fail-closed, never a false positive, and the same shape the consent layer already applies to every other unverified supported-family source. Extending the pre-scan to swap-curve materials is a future design decision.
 6. Review-fix pass, applied: a discriminating apply test deletes the live phantom curve in the probe pass, so only the slot-failure guard conjunct can produce the refusal; the lock attestation gate gained grant-composition tests including the window-eligibility pair; the mipmapped crunched fixture pins its imported format; the streaming crunched test is rescoped to the source-image route it actually exercises; the allowlist doc comment now states the clone-arm pin accurately.
+
+## 16. Scope decisions implemented, 2026-10-07
+
+Decisions A1, A2, and B1 from the same-day design spec were implemented
+on the coverage branch in two commits. A1 and A2: a closed batch capture
+failure now refuses only the slots holding the failed material, through
+named failing ordinals returned in one capturer call; a failure that
+names no material throws as a defect; the renderer-wide closure path is
+deleted with no dormant code. B1: the consent dialog runs after the
+committed-graph gate, and the pre-scan walks assigned materials plus
+material keyframes on the stored graph's clips, so a swap-reachable
+unverified shader now gets a consent subject.
+
+This closes the residual hole documented in section 15 item 5: an
+ungranted swap-only material now refuses its own slots instead of the
+renderer, and a granted one is admitted at capture and conversion.
+
+Observed on the dev editor instance on this date: the full product
+EditMode assembly passed 2501 of 2501 with 2 by-design inconclusive
+rows, and the research assembly passed 138 of 138. Both task reviews
+returned approved with no critical or important code findings; the
+deferred minors and the parked plan-wording ruling live in the plan's
+execution ledger.
