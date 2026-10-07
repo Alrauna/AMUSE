@@ -45,6 +45,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string TwoPassCanonicalNormalizedSourceHash =
             "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
 
+        // The vendor's own old-version copy of the 9.0 shader, shipped inside
+        // the current package under "Old Versions/9.0". Deliberately name
+        // recognition only: no pinned GUID or digest lives here, because the
+        // version is unverified. A build that grants the D8 transfer consent
+        // treats its materials with the verified rules above; an unconsented
+        // build refuses them at the identity conjunction, fail closed. The
+        // measured install facts, recorded 2026-10-07 from the sanctioned
+        // vendor package in the Census Lab project: all required conversion
+        // schema properties are present, and the containing package tuple
+        // equals the current package's, so a granted source passes the same
+        // package evidence check as the verified rows.
+        internal const string PoiyomiLegacy90ShaderName =
+            ".poiyomi/Old Versions/9.0/Poiyomi Toon";
+
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
 
@@ -1365,7 +1379,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             // Multiply folds the admitted mask term into the running chain
             // through the exact product machinery, the same fold the lilToon
-            // term performs over its layered chain.
+            // term performs over its layered chain. The map list threads:
+            // an admitted mapped mask factor must carry its affine map, so
+            // dropping it here would read the raw red field and prove a
+            // term the shader never evaluates.
             if (maskMultiplier != null)
             {
                 var multiplied = ScalarProductFold.Fold(
@@ -1377,7 +1394,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                         property),
-                    threadMaps: false);
+                    threadMaps: true);
                 if (multiplied == null)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -1488,16 +1505,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// the alpha. Under Multiply the term folds into the running chain
         /// through the exact product machinery: the saturated pairs are a
         /// constant one, so the chain stands unchanged, and the invert-off
-        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term is
-        /// a saturating difference, and a product with a saturating factor has
-        /// no association-invariant exact-one predicate, so it refuses naming
-        /// the mode property, exactly like the lilToon fold. The mask
+        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term
+        /// is a saturating difference, and a product with a saturating factor
+        /// has no association-invariant exact-one predicate, so it refuses
+        /// naming the mode property, exactly like the lilToon fold. The mask
         /// coordinate is <c>uv[_AlphaMaskUV]</c> under the mask's own plain
         /// affine with zero pan, and the sample rides the main sampler. Add
-        /// and Subtract and every other mode keep refusing, and so does every
-        /// other strength-value pair, because proving the saturate of
-        /// <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c> needs a
-        /// per-texel threshold envelope. Every refusal records one scoped
+        /// and Subtract and every other mode keep refusing. Strength one
+        /// admits every invert-off value below one through the mapped red
+        /// field: the term is the exact affine map
+        /// <c>saturate(r + value)</c>, which the mapped lattice resolves per
+        /// triangle, proving exactly one only where the triangle's sampled
+        /// domain holds no sub-one texel. Arbitrary strengths keep refusing:
+        /// proving <c>saturate(r * s + v)</c> for a strength outside one
+        /// needs a per-texel threshold envelope. Invert with a value in
+        /// (0, 1) keeps refusing: it mirrors the opacity predicate to an
+        /// upper bound on red, which the exact-one lattice answers unsoundly
+        /// or not at all. Every refusal records one scoped
         /// diagnostic naming the property that could not be proven.
         /// </summary>
         /// <param name="replacement">
@@ -1822,11 +1846,75 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return true;
             }
 
+            // Every other strength-one invert-off pair is the mapped red
+            // field. The vendor term is saturate(r * 1 + value): the
+            // multiply by one is exact, the single addition rounds once,
+            // and rounding and saturate are monotone in r, so the term is
+            // exactly the affine map saturate(r + value) evaluated on the
+            // stored red bytes. The mapped lattice resolves it per
+            // triangle: a triangle whose sampled domain holds no sub-one
+            // texel proves exactly one, and any other footprint fails
+            // closed to Unknown. The sample rides the main sampler, so the
+            // main sampling and parallax gates run exactly as in the
+            // (1, 0) arm above.
+            //
+            // Invert on mirrors the predicate to an upper bound on red,
+            // which the exact-one lattice answers unsoundly or not at all,
+            // so invert with a value in (0, 1) keeps refusing below.
+            if (blendStrength == 1f && !invert && value < 1f)
+            {
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
+                        MainTextureProperty);
+                    return false;
+                }
+
+                var samplingGate = FirstFailedZeroGate(
+                    evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                    return false;
+                }
+
+                var maskSample = new TextureSample(
+                    mask.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                var mapped = AffineAlphaMap.FromBinary32(
+                    blendStrength, value);
+                if (replace)
+                {
+                    replacement = ScalarSemanticValue.MappedTexture(
+                        maskSample, TextureChannel.Red, mapped);
+                }
+                else
+                {
+                    multiplier = ScalarSemanticValue.MappedTexture(
+                        maskSample, TextureChannel.Red, mapped);
+                }
+
+                return true;
+            }
+
             // Every other pair needs the deferred threshold-envelope
-            // contract: proving saturate(r * s + v) at one needs a per-texel
-            // predicate whose rounding argument is future work. The refusal
-            // names the first culprit, the strength when it leaves one and
-            // the value alone when the strength is exactly one.
+            // contract: proving saturate(r * s + v) at one for a strength
+            // outside one needs a per-texel predicate whose rounding
+            // argument is future work, and invert with a value in (0, 1)
+            // turns the opacity predicate into an upper bound on red. The
+            // refusal names the first culprit, the strength when it leaves
+            // one and the value alone when the strength is exactly one.
             AddDiagnostic(
                 diagnostics,
                 PoiyomiSemanticOutput.Alpha,

@@ -745,8 +745,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(0.5f, 0f, "_AlphaMaskBlendStrength")]
         [TestCase(2f, 0f, "_AlphaMaskBlendStrength")]
         [TestCase(0.5f, 0.5f, "_AlphaMaskBlendStrength")]
-        [TestCase(1f, 0.5f, "_AlphaMaskValue")]
-        [TestCase(1f, -0.25f, "_AlphaMaskValue")]
         public void ReplaceBoundMask_OtherStrengthValuePairs_RefuseNamingTheProperty(
             float strength, float value, string expectedDetail)
         {
@@ -755,16 +753,210 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat(BlendStrength, strength);
             material.SetFloat(MaskValue, value);
 
-            // Every other pair needs the deferred threshold-envelope
+            // A strength outside one needs the deferred threshold-envelope
             // contract: proving saturate(r * s + v) at one needs a per-texel
-            // predicate whose rounding argument is future work. The refusal
-            // names the first culprit, the strength when it leaves one and
-            // the value alone when the strength is exactly one.
+            // predicate whose rounding argument is future work. Invert on
+            // with a value in (0, 1) mirrors the opacity predicate to an
+            // upper bound on red, which the exact-one lattice answers
+            // unsoundly or not at all. The refusal names the first culprit,
+            // the strength when it leaves one and the value alone when the
+            // strength is exactly one.
             AssertUnsupportedOutput(
                 Interpret(material),
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 expectedDetail);
+        }
+
+        [Test]
+        public void ReplaceBoundMask_InvertOnValueUnderOne_RefusesNamingValue()
+        {
+            var material = BoundMaskMaterial();
+            material.SetTexture(Mask, ImportTexture("bound_mask_invert_mapped"));
+            material.SetFloat(MaskValue, 0.4f);
+            material.SetFloat(Invert, 1f);
+
+            // The invert opacity predicate is red at most value, an upper
+            // bound. The exact-one lattice proves lower bounds only, so the
+            // pair refuses instead of answering.
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                MaskValue);
+        }
+
+        // --- Falsifier 4: mapped pair rounding boundary ---
+
+        /// <summary>
+        /// One 8 by 8 red field whose every texel stores the named byte. It
+        /// separates the rounding boundary: at value 0.4 the vendor term is
+        /// exactly one only when the stored byte reaches 153.
+        /// </summary>
+        private static AlphaFieldProvider UniformRedField(byte level)
+        {
+            var bytes = new byte[8 * 8];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = level;
+            }
+
+            var field = new AlphaTextureData(8, 8, bytes);
+            return (TextureSourceId source,
+                TextureChannel channel,
+                out AlphaMipChain chain) =>
+            {
+                chain = new AlphaMipChain(new[] { field });
+                return true;
+            };
+        }
+
+        [Test]
+        public void ReplaceBoundMask_MappedPair_ProvesAndRefusesOnTheRedBoundary()
+        {
+            // The avatar-under-test pair: strength 1, value 0.4, invert off,
+            // transparent mode. The vendor term is saturate(r + 0.4). The
+            // proven value is the mapped red field under the mask's own
+            // plain affine of UV0 riding the main sampler.
+            var material = BoundMaskMaterial();
+            var mask = ImportTexture("bound_mask_mapped");
+            material.SetTexture(Mask, mask);
+            material.SetFloat(MaskValue, 0.4f);
+
+            var value = Alpha(Interpret(material));
+
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ScalarSemanticValueKind.MappedTextureSample));
+            Assert.That(
+                value.GetTextureSample(),
+                Is.EqualTo(RedFieldSample(
+                    ExpectedToken(mask),
+                    Vector2.one,
+                    new TextureSampling(
+                        TextureFilterMode.Bilinear, CoreWrapMode.Repeat))));
+            Assert.That(
+                value.GetMap(),
+                Is.EqualTo(AffineAlphaMap.FromBinary32(1f, 0.4f)));
+
+            // A field that stores full red everywhere proves the triangle:
+            // the term is exactly one at every reachable texel.
+            var solid = ResolveRed(value, SolidRedField());
+            Assert.That(solid.IsResolved, Is.True);
+            Assert.That(
+                solid.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            // Any sub-one texel is a witness: the boolean mapped lattice
+            // answers Unknown for the footprint, never a claim. The byte
+            // 200 field is the conservative ceiling: the magnitude answer
+            // would be one at those texels, but the decode-attested
+            // predicate this slice admits proves exactly one only at full
+            // red, so the triangle stays unproven.
+            var near = ResolveRed(value, UniformRedField(200));
+            Assert.That(near.IsResolved, Is.True);
+            Assert.That(
+                near.Classify(InteriorTriangle()),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            // Byte 152 sits below the rounding boundary of one for value
+            // 0.4, so the field is transparent everywhere it is sampled
+            // and the triangle stays unproven for the same witness reason.
+            var below = ResolveRed(value, UniformRedField(152));
+            Assert.That(below.IsResolved, Is.True);
+            Assert.That(
+                below.Classify(InteriorTriangle()),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ReplaceBoundMask_MappedNegativeValue_ProvesTransparentUniformly()
+        {
+            // Value -0.25 with strength 1: saturate(r - 0.25) is at most
+            // 0.75 at the red field's top, so both map endpoint bounds sit
+            // below one and the uniform transparent arm answers without
+            // consulting any texel. The refusing provider fails the test if
+            // a verdict wrongly reads a field.
+            var material = BoundMaskMaterial();
+            material.SetTexture(Mask, ImportTexture("bound_mask_negative"));
+            material.SetFloat(MaskValue, -0.25f);
+
+            var value = Alpha(Interpret(material));
+
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(ScalarSemanticValueKind.MappedTextureSample));
+            Assert.That(
+                value.GetMap(),
+                Is.EqualTo(AffineAlphaMap.FromBinary32(1f, -0.25f)));
+
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                SolidRedField(),
+                0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.TryGetUniformOutcome(out var outcome),
+                Is.True);
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void MultiplyBoundMask_MappedPair_ThreadsTheMapThroughTheFold()
+        {
+            // Multiply with the avatar-under-test pair: the mapped factor
+            // folds into the running chain with its affine map intact. A
+            // fold that drops the map reads the raw red field and would
+            // prove a term the shader never evaluates, so the chain must
+            // carry the map per factor.
+            var main = ImportTexture("multiply_mapped_main");
+            var mask = ImportTexture("multiply_mapped_mask");
+            var material = NewFixtureMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat(MaskMode, 2f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            material.SetTexture("_MainTex", main);
+            material.SetTexture(Mask, mask);
+            material.SetFloat(MaskValue, 0.4f);
+
+            var value = Alpha(Interpret(material));
+
+            var expected = ScalarSemanticValue.ProductChain(
+                new[]
+                {
+                    MainFieldSample(ExpectedToken(main)),
+                    RedFieldSample(
+                        ExpectedToken(mask),
+                        Vector2.one,
+                        new TextureSampling(
+                            TextureFilterMode.Bilinear, CoreWrapMode.Repeat)),
+                },
+                new[] { TextureChannel.Alpha, TextureChannel.Red },
+                1f,
+                new AffineAlphaMap?[]
+                {
+                    null,
+                    AffineAlphaMap.FromBinary32(1f, 0.4f),
+                });
+            Assert.That(value, Is.EqualTo(expected));
+
+            // The full-red field proves the triangle through the mapped
+            // chain, and a hole keeps it unproven, exactly like the
+            // mapless (1, 0) multiply twin.
+            var solid = ResolveRed(value, SolidRedField());
+            Assert.That(solid.IsResolved, Is.True);
+            Assert.That(
+                solid.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            var holed = ResolveRed(value, RedFieldWithHole(1, 1));
+            Assert.That(holed.IsResolved, Is.True);
+            Assert.That(
+                holed.Classify(InteriorTriangle()),
+                Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         // --- Task 4: mask multiply with the declared default ---------------

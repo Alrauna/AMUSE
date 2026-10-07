@@ -14,6 +14,29 @@ namespace Alrauna.Amuse.Editor.Host
         UnattestedMaterial,
     }
 
+    /// <summary>
+    /// One slot-scoped closure failure: the slot index it concerns and the
+    /// way it failed. A failure here is a fact about exactly one slot, so
+    /// the renderer closes with every other slot's evidence intact and this
+    /// slot alone refuses. An index at or above the renderer's slot count
+    /// names a slot the renderer does not have; the record still refuses
+    /// that binding's values from admission, and the apply pass reads it
+    /// when an appended slot could land on that index.
+    /// </summary>
+    internal sealed class SlotClosureFailure
+    {
+        internal SlotClosureFailure(
+            int slotIndex,
+            MaterialDependencyClosureFailure failure)
+        {
+            SlotIndex = slotIndex;
+            Failure = failure;
+        }
+
+        internal int SlotIndex { get; }
+        internal MaterialDependencyClosureFailure Failure { get; }
+    }
+
     internal sealed class CapturedFloatBinding
     {
         internal CapturedFloatBinding(
@@ -162,7 +185,8 @@ namespace Alrauna.Amuse.Editor.Host
             IList<int> currentMaterialIndices,
             bool hasUnnormalizedDirectBlendTree,
             bool hasAdditiveLayer,
-            IList<int> ignoredOutOfRangeSlots = null)
+            IList<int> ignoredOutOfRangeSlots = null,
+            IList<SlotClosureFailure> slotClosureFailures = null)
         {
             ClosureFailure = closureFailure;
             AlphaRelevanceRequest = alphaRelevanceRequest
@@ -177,10 +201,30 @@ namespace Alrauna.Amuse.Editor.Host
             HasAdditiveLayer = hasAdditiveLayer;
             IgnoredOutOfRangeSlots = new ReadOnlyCollection<int>(
                 new List<int>(ignoredOutOfRangeSlots ?? Array.Empty<int>()));
+
+            var orderedSlotFailures = new List<SlotClosureFailure>(
+                slotClosureFailures ?? Array.Empty<SlotClosureFailure>());
+            orderedSlotFailures.Sort(
+                (left, right) => left.SlotIndex.CompareTo(right.SlotIndex));
+            SlotClosureFailures = orderedSlotFailures.AsReadOnly();
         }
 
+        /// <summary>
+        /// True when the renderer closed with no renderer-wide closure
+        /// failure. A slot-scoped closure failure does not clear this: the
+        /// renderer is closed, the failed slot alone refuses, and sibling
+        /// slots keep their own proofs.
+        /// </summary>
         internal bool IsClosed =>
             ClosureFailure == MaterialDependencyClosureFailure.None;
+
+        /// <summary>
+        /// The renderer-wide closure failure, if any. Only capture failures
+        /// that name no slot live here: the closed-batch capturer's
+        /// all-or-nothing refusal. The three slot-scoped ways ride
+        /// <see cref="SlotClosureFailures"/> instead and never appear in
+        /// this field.
+        /// </summary>
         internal MaterialDependencyClosureFailure ClosureFailure { get; }
         internal MaterialEvidenceRequest AlphaRelevanceRequest { get; }
 
@@ -197,7 +241,11 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyList<CapturedAlphaMaterial> AdmittedMaterials { get; }
 
         // Slot order matches the current renderer material-slot order. This is
-        // the immutable replacement for the live currentSlots input.
+        // the immutable replacement for the live currentSlots input. An entry
+        // of -1 is the documented sentinel for "this slot's closure failed,
+        // so no current material was admitted": the slot refuses as a
+        // closure failure and no consumer may index the admitted list with
+        // the sentinel.
         internal IReadOnlyList<int> CurrentMaterialIndices { get; }
 
         internal bool HasUnnormalizedDirectBlendTree { get; }
@@ -208,5 +256,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// were out of range of current material slots and tolerance was enabled.
         /// </summary>
         internal IReadOnlyList<int> IgnoredOutOfRangeSlots { get; }
+
+        /// <summary>
+        /// The slot-scoped closure failures, sorted by slot index, one record
+        /// per failed slot. A slot named here refuses as
+        /// <see cref="MaterialDependencyClosureFailure"/> closure failure
+        /// while the renderer stays closed; an index at or above the slot
+        /// count names a phantom slot that only reporting and the apply pass
+        /// read.
+        /// </summary>
+        internal IReadOnlyList<SlotClosureFailure> SlotClosureFailures { get; }
     }
 }

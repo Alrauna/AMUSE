@@ -152,7 +152,11 @@ namespace Alrauna.Amuse.Editor.Host
         /// This is a live, transient host capability, NOT proof evidence: it is
         /// deliberately handed back beside the immutable evidence rather than
         /// stored in it, so the evidence graph's no-live-Unity-object guarantee is
-        /// unchanged. A closure failure yields an empty list, never a partial one.
+        /// unchanged. A renderer-wide closure failure yields an empty list,
+        /// never a partial one. A slot-scoped closure failure keeps the
+        /// pairing: the renderer is closed, and the failed slot's materials
+        /// ride the list only so the live pairing stays positional for the
+        /// slots that still resolve.
         /// </para>
         /// </param>
         internal static CapturedAnimationEvidence Capture(
@@ -432,10 +436,13 @@ namespace Alrauna.Amuse.Editor.Host
             Func<Material, Material> observedMaterialMapper = null,
             RegisteredSourceLookup resolveRegisteredSource = null)
         {
-            // Assigned once here so that EVERY closure-failure return below hands
-            // back an empty list rather than a partial one. The real pairing is
-            // assigned only at the single success return, after the captured count
-            // has been checked against the admitted count.
+            // Assigned once here so that the renderer-wide closure-failure
+            // return hands back an empty list rather than a partial one. The
+            // real pairing is assigned only at the single success return,
+            // after the captured count has been checked against the admitted
+            // count. A slot-scoped closure failure also returns through that
+            // success path, so its pairing stays positional for the slots
+            // that still resolve.
             admittedLiveMaterials = Array.Empty<Material>();
 
             if (rendererPath == null)
@@ -462,6 +469,11 @@ namespace Alrauna.Amuse.Editor.Host
                     layer.HasUnnormalizedDirectBlendTree;
             }
 
+            // The renderer-wide closure failure return. Only the closed
+            // batch capturer's refusal reaches this: the capturer's
+            // contract is all-or-nothing and names no material, so no
+            // slot can be isolated from it. The slot-scoped ways above
+            // return through the success path with their per-slot records.
             CapturedAnimationEvidence Failed(
                 MaterialDependencyClosureFailure failure)
             {
@@ -475,6 +487,25 @@ namespace Alrauna.Amuse.Editor.Host
                     hasAdditiveLayer);
             }
             var ignoredOutOfRangeSlots = new HashSet<int>();
+
+            // The slot-scoped closure failures. A failure here is a fact
+            // about exactly one slot, so the renderer closes with every
+            // other slot's evidence intact; the failed slot alone refuses.
+            // The set guards one record per slot, the list keeps first-seen
+            // order, and the evidence record sorts it.
+            var slotClosureFailures = new List<SlotClosureFailure>();
+            var closureFailedSlots = new HashSet<int>();
+
+            void RecordSlotClosureFailure(
+                int slot,
+                MaterialDependencyClosureFailure failure)
+            {
+                if (closureFailedSlots.Add(slot))
+                {
+                    slotClosureFailures.Add(new SlotClosureFailure(
+                        slot, failure));
+                }
+            }
 
             var admitted = new List<Material>();
             var materialIndices = new Dictionary<Material, int>(
@@ -512,8 +543,16 @@ namespace Alrauna.Amuse.Editor.Host
             for (var slot = 0; slot < currentSlots.Count; slot++)
             {
                 if (!TryAdmit(currentSlots[slot], out currentMaterialIndices[slot]))
-                    return Failed(
-                        MaterialDependencyClosureFailure.MissingCurrentMaterial);
+                {
+                    // An unassigned current slot is a fact about this slot
+                    // alone. Record the sentinel, refuse the slot at
+                    // resolution, and keep every sibling slot's evidence.
+                    currentMaterialIndices[slot] = -1;
+                    RecordSlotClosureFailure(
+                        slot,
+                        MaterialDependencyClosureFailure
+                            .MissingCurrentMaterial);
+                }
             }
 
             foreach (var observation in observations)
@@ -541,16 +580,53 @@ namespace Alrauna.Amuse.Editor.Host
                             continue;
                         }
 
-                        return Failed(
+                        // A binding for a slot the renderer does not have
+                        // is a fact about that binding's index alone. The
+                        // index is recorded so reporting can name it and so
+                        // the apply pass can refuse an appended slot that
+                        // would land on it. None of the binding's values is
+                        // admitted: the index addresses no real slot, so
+                        // admitting its materials would widen a set no slot
+                        // can reach.
+                        RecordSlotClosureFailure(
+                            slot,
                             MaterialDependencyClosureFailure.SlotOutOfRange);
+                        continue;
                     }
+
+                    // A null or non-material keyframe value is a fact about
+                    // this binding's slot alone. The binding is skipped
+                    // whole: admitting a prefix of its values would describe
+                    // a swap the clip does not perform. Every other slot's
+                    // reachable set is unchanged, because a material slot
+                    // reaches materials only through its own current
+                    // assignment and its own bindings.
+                    var bindingValuesAreMaterials = true;
                     foreach (var value in binding.Values)
                     {
-                        if (!(value is Material material) ||
-                            !TryAdmit(material, out _))
+                        if (!(value is Material))
                         {
-                            return Failed(
-                                MaterialDependencyClosureFailure.InvalidSwapValue);
+                            bindingValuesAreMaterials = false;
+                            break;
+                        }
+                    }
+
+                    if (!bindingValuesAreMaterials)
+                    {
+                        RecordSlotClosureFailure(
+                            slot,
+                            MaterialDependencyClosureFailure
+                                .InvalidSwapValue);
+                        continue;
+                    }
+
+                    foreach (var value in binding.Values)
+                    {
+                        if (!TryAdmit((Material)value, out _))
+                        {
+                            throw new InvalidOperationException(
+                                "A validated material-slot value failed " +
+                                "admission.");
                         }
                     }
                 }
@@ -689,10 +765,15 @@ namespace Alrauna.Amuse.Editor.Host
                         // foreign slot binding is another renderer's evidence:
                         // it is dropped outright rather than retained with an
                         // empty index list, which would read as "this renderer
-                        // has a swap that admits nothing".
+                        // has a swap that admits nothing". A binding whose
+                        // slot carries a closure failure is dropped for the
+                        // same reason: none of its values was admitted, so a
+                        // retained binding would promise values the evidence
+                        // does not hold.
                         if (!AddressesAnalyzedRenderer(
                                 binding.Path, binding.TypeName, rendererPath, rendererTypeName) ||
-                            (slot >= currentSlots.Count && ignoreOutOfRangeSlots))
+                            (slot >= currentSlots.Count && ignoreOutOfRangeSlots) ||
+                            closureFailedSlots.Contains(slot))
                         {
                             continue;
                         }
@@ -737,7 +818,8 @@ namespace Alrauna.Amuse.Editor.Host
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
                 hasAdditiveLayer,
-                orderedIgnored);
+                orderedIgnored,
+                slotClosureFailures);
         }
 
         /// <summary>

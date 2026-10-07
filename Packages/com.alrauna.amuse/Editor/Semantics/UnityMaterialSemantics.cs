@@ -701,6 +701,23 @@ namespace Alrauna.Amuse.Editor.Semantics
                     PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest);
             }
 
+            // The vendor's own old-version copy of the 9.0 shader inside the
+            // current package. It classifies to the Poiyomi family with the
+            // plain request, so the D8 pre-scan produces the transfer-consent
+            // subject for it and a granted build treats it with the verified
+            // version's rules. Its source is deliberately NOT pinned: the
+            // identity conjunction keeps refusing it, so an unconsented
+            // build stays fail-closed.
+            if (string.Equals(
+                    shaderName,
+                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                    StringComparison.Ordinal))
+            {
+                return (
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest);
+            }
+
             if (string.Equals(
                     shaderName,
                     LilToonSourceAttestation.SupportedShaderName,

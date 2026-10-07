@@ -821,11 +821,25 @@ namespace Alrauna.Amuse.Editor.Host
         /// integer scheme; BC7 decompression is specified bit-accurate; RGB24 and
         /// DXT1 have no alpha channel, so the sampler returns exactly one.
         /// <para>
+        /// DXT1Crunched and DXT5Crunched inherit their plain shapes' grounds.
+        /// Crunch is a storage-only encoding: the editor transcodes the data to
+        /// plain DXT1 or DXT5 blocks at load, so the resident texture the route
+        /// blits is the same representation playback samples, and there is no
+        /// crunched sampling path. The 2026-08-27 GPU agreement study exercised
+        /// runtime-crunch-compressed DXT5 across fourteen sRGB configurations
+        /// with full agreement against the other formats, and the committed
+        /// importer-produced capture characterization in the friend test
+        /// assembly durably exercises both crunched shapes through the
+        /// production route. The streaming readable-clone arm's CPU decode
+        /// keeps its measured rounding fact, pinned by the same characterization.
+        /// </para>
+        /// <para>
         /// Everything else is refused. Float formats cannot supply the
         /// finite-and-[0,1] attestation, because one predicate bit reports the same
         /// 0 for a legitimate below-one value as for 2.0, -1.0, NaN or +Inf.
-        /// DXT5Crunched behaves as DXT5 in one earlier measurement but is not
-        /// durably exercised. ARGB4444 is exact - its 4-bit quantization of many
+        /// The ETC and ETC2 crunched variants stay refused: they are mobile
+        /// storage encodings and the build-target gate confines imports to the
+        /// Windows Standalone target. ARGB4444 is exact - its 4-bit quantization of many
         /// authoring values to exactly one is not itself unsafe, because the
         /// imported GPU-decoded representation is what playback samples - but it has
         /// no durable production-shaped characterization. ASTC decodes under a
@@ -843,6 +857,8 @@ namespace Alrauna.Amuse.Editor.Host
                 case TextureFormat.DXT1:
                 case TextureFormat.DXT5:
                 case TextureFormat.BC7:
+                case TextureFormat.DXT1Crunched:
+                case TextureFormat.DXT5Crunched:
                     return true;
                 default:
                     return false;

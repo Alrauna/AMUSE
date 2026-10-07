@@ -2055,6 +2055,207 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void OutOfRangeClosureFailedBindingAtAppendedSlotRefusesSplitCandidate()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE closure split collision");
+            var optimizer = root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_ignoreOutOfRangeMaterialSlots")
+                .boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "closure_split"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE closure phantom swap",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        clip,
+                        EditorCurveBinding.PPtrCurve(
+                            "split", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[2]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = split,
+                            },
+                        });
+                    controller = NewController(
+                        root, "AMUSE closure phantom graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(probe.Decision.IsPrepared, Is.True,
+                        "the phantom-slot closure failure must not refuse " +
+                        "the renderer's own slots");
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .SlotBindingAbsentFromEvidence),
+                        Is.EqualTo(1),
+                        "the split slot must be refused because a closure " +
+                        "failure targets its appended slot index");
+                    Assert.That(probe.Decision.HasMutation, Is.False,
+                        "the refused candidate must produce no mesh or " +
+                        "material write");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void ClosureFailedSiblingRendererDoesNotBlockOrLeakIntoTheSplitRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE closure sibling split");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AlphaSeparationSeamProbe probe = null;
+            AnimatorController controller = null;
+            Material failedCurrent = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "closure_sibling_split"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    AddRenderer(
+                        root, "splitA", mesh, split, transparent);
+
+                    failedCurrent = Track(VerifiedOpaqueMaterial());
+                    var second = Track(VerifiedOpaqueMaterial());
+                    var failedMesh = Track(TwoTriangleMesh());
+                    AddRenderer(
+                        root, "failed", failedMesh, failedCurrent, second);
+
+                    var clip = Track(new AnimationClip
+                    {
+                        name = "AMUSE failed renderer swap",
+                    });
+                    AnimationUtility.SetObjectReferenceCurve(
+                        clip,
+                        EditorCurveBinding.PPtrCurve(
+                            "failed", typeof(SkinnedMeshRenderer),
+                            "m_Materials.Array.data[0]"),
+                        new[]
+                        {
+                            new ObjectReferenceKeyframe
+                            {
+                                time = 0f, value = null,
+                            },
+                        });
+                    controller = NewController(
+                        root, "AMUSE closure sibling graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, SeamTestPlatform.Instance);
+                    probe = context.GetState<AlphaSeparationSeamProbe>();
+
+                    Assert.That(probe.Decision.IsPrepared, Is.True);
+                    Assert.That(probe.Decision.HasMutation, Is.True,
+                        "the healthy split renderer must still apply beside " +
+                        "the closure-failed sibling");
+
+                    // The failed renderer's slot-scoped closure failure is a
+                    // fact about the failed renderer. It must not fill the
+                    // split renderer's appended-slot guard bucket.
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .SlotBindingAbsentFromEvidence),
+                        Is.Zero,
+                        "a sibling renderer's closure failure must not " +
+                        "refuse the split renderer's appended slot");
+
+                    // The finalized write set is the observable: this
+                    // platform finalizes but does not write, so the write
+                    // records carry exactly what apply would write.
+                    var writes = probe.Finalization.Writes
+                        .ToDictionary(
+                            write => write.Renderer.gameObject.name,
+                            write => write);
+
+                    var splitWrite = writes["splitA"];
+                    Assert.That(
+                        splitWrite.Materials.Length, Is.EqualTo(3),
+                        "the split renderer must gain its appended slot");
+                    Assert.That(
+                        splitWrite.Mesh, Is.Not.Null,
+                        "the split must carry its mesh clone");
+                    Assert.That(
+                        splitWrite.Materials[2],
+                        Is.SameAs(probe.RecordedClones[0]),
+                        "the appended slot must carry the mapped clone");
+
+                    // The closure-failed slot keeps its original assignment;
+                    // its healthy sibling slot still converts, because its
+                    // own proof never depended on the failed slot.
+                    var failedWrite = writes["failed"];
+                    Assert.That(
+                        failedWrite.Materials.Length, Is.EqualTo(2));
+                    Assert.That(
+                        failedWrite.Materials[0],
+                        Is.SameAs(failedCurrent),
+                        "the closure-failed slot must keep its original " +
+                        "assignment");
+                    Assert.That(
+                        failedWrite.Materials[1],
+                        Is.Not.SameAs(second),
+                        "the healthy sibling slot must still convert");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void ApplyPassDoesNotRewriteIncompatibleComponentBindings()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);

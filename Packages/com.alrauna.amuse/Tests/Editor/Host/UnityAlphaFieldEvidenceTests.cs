@@ -379,13 +379,163 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             AssertAdmittedCompressedFormat(texture, TextureFormat.BC7);
         }
 
-        // Measured: DXT5Crunched turns a source alpha of 254 into 255.
+        // Through the GPU the crunch transcode decodes exactly like its plain
+        // shape: the resident texture is ordinary DXT5 block data, which is
+        // the representation both capture and playback sample.
         [Test]
-        public void ReadableCrunchedDxt5_Refuses()
+        public void CrunchedDxt5_IsAdmittedAndSeparatesMaximumFromSubmaximum()
         {
-            var texture = ImportAsymmetric("crunch", Format(TextureImporterFormat.DXT5Crunched));
+            var texture = Import(
+                "crunch_dxt5", QuadrantPixels(), 8, 8,
+                Format(TextureImporterFormat.DXT5Crunched));
 
-            AssertRefusedForFormat(texture, TextureFormat.DXT5Crunched);
+            AssertAdmittedCompressedFormat(
+                texture, TextureFormat.DXT5Crunched);
+        }
+
+        // DXT1 carries no alpha channel in its storage encoding, and the crunch
+        // transcode targets plain DXT1 blocks, so every sampled texel is
+        // exactly one. The quadrant alpha variation must leave the verdict
+        // untouched.
+        [Test]
+        public void CrunchedDxt1_IsAdmittedAndAlphaSamplesExactlyOne()
+        {
+            var texture = Import(
+                "crunch_dxt1", QuadrantPixels(), 8, 8,
+                Format(TextureImporterFormat.DXT1Crunched));
+
+            Assert.That(
+                texture.format,
+                Is.EqualTo(TextureFormat.DXT1Crunched),
+                "The fixture must import in the format under test.");
+            Assert.That(TryField(texture, out var field), Is.True);
+            Assert.That(field.GetAlpha(1, 1), Is.EqualTo(255));
+            Assert.That(
+                field.GetAlpha(5, 1), Is.EqualTo(255),
+                "DXT1 has no alpha channel, so every sampled texel is " +
+                "exactly one.");
+        }
+
+        // The machine fact the admission grounds stand on: a crunched import's
+        // reported graphics format and its exact Sample support. This test
+        // fails loudly if an editor upgrade changes either, which is exactly
+        // when the sampling-capability gate would need a measured, named
+        // exemption instead of a silent behavior change.
+        [Test]
+        public void CrunchedImportsPinGraphicsFormatAndExactSampleSupport()
+        {
+            foreach (var (importerFormat, storageFormat) in new[]
+            {
+                (TextureImporterFormat.DXT1Crunched, TextureFormat.DXT1Crunched),
+                (TextureImporterFormat.DXT5Crunched, TextureFormat.DXT5Crunched),
+            })
+            {
+                var texture = Import(
+                    "crunch_pin_" + importerFormat, QuadrantPixels(), 8, 8,
+                    Format(importerFormat));
+
+                Assert.That(
+                    texture.format, Is.EqualTo(storageFormat),
+                    importerFormat + " must import in its storage format.");
+                Assert.That(
+                    SystemInfo.IsFormatSupported(
+                        texture.graphicsFormat, FormatUsage.Sample),
+                    Is.True,
+                    importerFormat + " reports graphicsFormat " +
+                    texture.graphicsFormat + "; if exact Sample support is " +
+                    "lost, the source-sampling gate needs a measured, named " +
+                    "exemption like the RGB24 precedent.");
+            }
+        }
+
+        // The whole crunch-encoded chain captures: crunch encodes every declared
+        // level, and the route judges each resident level, so the admitted
+        // format must produce the full chain, not just mip 0.
+        [Test]
+        public void CrunchedDxt5_MipmappedChainCapturesEveryDeclaredLevel()
+        {
+            var texture = ImportMipmapped(
+                "crunch_dxt5_mips", QuadrantPixels(), 8, 8,
+                TextureImporterFormat.DXT5Crunched);
+
+            Assert.That(texture.mipmapCount, Is.GreaterThan(1));
+            Assert.That(TryChain(texture, out var chain), Is.True);
+            Assert.That(
+                chain.Count,
+                Is.EqualTo(texture.mipmapCount),
+                "the captured chain must cover every declared level");
+            for (var level = 0; level < chain.Count; level++)
+            {
+                Assert.That(
+                    chain.IsLevelWithoutEvidence(level), Is.False,
+                    "level " + level + " must capture with evidence");
+            }
+
+            Assert.That(
+                chain[0].GetAlpha(1, 1), Is.EqualTo(255),
+                "level 0 maximum must satisfy the predicate exactly");
+            Assert.That(
+                chain[0].GetAlpha(5, 1), Is.EqualTo(0),
+                "level 0 must separate the representable submaximum");
+        }
+
+        // The pinned CPU-decode characterization for the streaming clone arm:
+        // on this editor the CPU crunch decoder decodes a representable
+        // submaximum exactly, matching the GPU route, so the clone arm
+        // fabricates no exactly-one verdict on crunched data. This test
+        // fails loudly if an editor upgrade changes that, which is exactly
+        // when the clone arm needs a named guard instead of a silent
+        // behavior change. An earlier measurement on a retired route
+        // reported 254 rounding up to 255; it does not reproduce here and
+        // the 2026-08-27 record had already moved the hazard off the
+        // formats.
+        [Test]
+        public void CrunchedCpuDecodeMatchesTheGpuRouteOnSubmaximumQuadrants()
+        {
+            var texture = Import(
+                "crunch_cpu_equivalence",
+                QuadrantPixels(),
+                8, 8,
+                Format(TextureImporterFormat.DXT5Crunched));
+
+            Assert.That(texture.format, Is.EqualTo(TextureFormat.DXT5Crunched));
+            Assert.That(
+                texture.isReadable, Is.True,
+                "the CPU decoder fact needs the readable import");
+
+            // The CPU decode of the import keeps the 254 quadrant at 254:
+            // no exactly-one fabrication on the route the streaming clone
+            // arm decodes through.
+            var cpu = texture.GetPixels32();
+            Assert.That(
+                cpu[5].a, Is.EqualTo(254),
+                "the CPU decoder must decode the submaximum quadrant " +
+                "exactly");
+            Assert.That(
+                cpu[0].a, Is.EqualTo(255),
+                "the CPU decoder must decode the maximum quadrant exactly");
+
+            // The production GPU route on the same asset answers the same
+            // predicate: 255 exactly one, 0 below one.
+            Assert.That(TryField(texture, out var field), Is.True);
+            Assert.That(field.GetAlpha(0, 0), Is.EqualTo(255));
+            Assert.That(field.GetAlpha(4, 0), Is.EqualTo(0));
+        }
+
+        // A crunched streaming texture captures through the readable-clone
+        // route now that the format is admitted. A uniform-opaque source keeps
+        // the clone arm's rounding tolerance out of the verdict.
+        [Test]
+        public void StreamingCrunchedTextureCapturesThroughTheCloneRoute()
+        {
+            var texture = ImportStreamingMipmapped(
+                "streaming_crunch", UniformPixels(8, 8, 255), 8, 8,
+                TextureImporterFormat.DXT5Crunched);
+
+            Assert.That(texture.streamingMipmaps, Is.True);
+            Assert.That(TryChain(texture, out var chain), Is.True);
+            Assert.That(
+                chain[0].GetAlpha(0, 0), Is.EqualTo(255));
         }
 
         // Measured: GetPixels32 rounds a half-precision alpha of 0.999 up to 255.
@@ -777,7 +927,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// fails here rather than passing a hand-picked sample.
         /// </summary>
         [Test]
-        public void TheFormatAllowlistIsExactlyTheSevenAdmittedFormats()
+        public void TheFormatAllowlistIsExactlyTheNineAdmittedFormats()
         {
             var admitted = new HashSet<TextureFormat>
             {
@@ -787,7 +937,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 TextureFormat.RGB24,
                 TextureFormat.DXT1,
                 TextureFormat.DXT5,
-                TextureFormat.BC7
+                TextureFormat.BC7,
+                TextureFormat.DXT1Crunched,
+                TextureFormat.DXT5Crunched
             };
 
             var unexpectedlyAdmitted = new List<TextureFormat>();
@@ -811,7 +963,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 unexpectedlyRefused, Is.Empty,
                 "Admitted formats the predicate refuses.");
-            Assert.That(admitted.Count, Is.EqualTo(7));
+            Assert.That(admitted.Count, Is.EqualTo(9));
         }
 
         [TestCase(BuildTarget.StandaloneWindows64, true)]
@@ -912,6 +1064,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TestCase(TextureFormat.BC7, false, false)]
         [TestCase(TextureFormat.RGB24, true, true)]
         [TestCase(TextureFormat.RGB24, false, true)]
+        [TestCase(TextureFormat.DXT1Crunched, true, true)]
+        [TestCase(TextureFormat.DXT1Crunched, false, false)]
+        [TestCase(TextureFormat.DXT5Crunched, true, true)]
+        [TestCase(TextureFormat.DXT5Crunched, false, false)]
         public void OnlyRgb24IsExemptFromExactSourceFormatSampleSupport(
             TextureFormat format, bool exactSampleable, bool passes)
         {
@@ -931,7 +1087,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             foreach (var refused in new[]
             {
-                TextureFormat.DXT5Crunched,
+                TextureFormat.ETC2_RGBA8Crunched,
                 TextureFormat.ARGB4444,
                 TextureFormat.RGBAHalf,
                 TextureFormat.BC6H

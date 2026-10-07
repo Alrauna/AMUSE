@@ -198,6 +198,24 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// The original shader name the lock's serialization records, or
+        /// null when the serialization names none. A build that granted the
+        /// D8 transfer consent for exactly this name has accepted the
+        /// unverified-version risk for the original, so the lock's
+        /// attestation gate may treat the grant as its answer. Reads live
+        /// serialization state only and mutates nothing.
+        /// </summary>
+        internal static string RecordedOriginalShaderName(Material material)
+        {
+            if (material == null || material.shader == null)
+            {
+                return null;
+            }
+
+            return Classify(SerializationOf(material)).OriginalShader;
+        }
+
+        /// <summary>
         /// Reads the serialization facts of one live material: the shader
         /// name, the lock flag float, and the two identity tags. The tag
         /// read follows the material first and the shader tags second,

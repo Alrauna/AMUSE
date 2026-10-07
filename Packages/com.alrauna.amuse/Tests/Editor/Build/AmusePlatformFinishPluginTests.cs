@@ -4524,6 +4524,253 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A null keyframe on one slot's swap curve is a fact about that
+        /// slot. The renderer must stay analyzed, the healthy sibling slot
+        /// must keep its proven triangles, and no renderer-wide closure
+        /// refusal may appear.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_InvalidSwapOnOneSlotKeepsTheSiblingConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE invalid swap sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Material failed = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                failed = VerifiedForceOpaqueMaterial(1f);
+                var renderer = AddTwoSlotRenderer(
+                    root, resolving, failed, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+
+                clip = new AnimationClip { name = "invalid_swap_clip" };
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        "", typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[1]"),
+                    new[] { new ObjectReferenceKeyframe { time = 0f, value = null } });
+                controller = new AnimatorController
+                {
+                    name = "invalid_swap_controller",
+                };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero,
+                    "a slot-scoped swap failure must not refuse the renderer");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the healthy sibling slot must keep its proven triangle");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (failed != null) Object.DestroyImmediate(failed);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// An unassigned current material on one slot is a fact about that
+        /// slot. The renderer must stay analyzed and the assigned sibling
+        /// slot must keep its proven triangles.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_MissingCurrentSlotKeepsTheSiblingConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE missing current sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Mesh mesh = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                var renderer = AddTwoSlotRenderer(
+                    root, resolving, null, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+                renderer.sharedMaterials = new[] { resolving, null };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero,
+                    "an unassigned slot must not refuse the renderer");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the assigned sibling slot must keep its proven triangle");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+            }
+        }
+
+        /// <summary>
+        /// When every slot fails closure there is nothing to resolve, so the
+        /// renderer refuses exactly as before, with the closure reason.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_AllSlotsClosureFailedStillRefuseTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE all slots failed");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Mesh mesh = null;
+
+            try
+            {
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new Material[] { null };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.EqualTo(1),
+                    "a renderer whose every slot failed closure refuses");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The closed-batch capturer's refusal names no slot, so it keeps
+        /// its renderer-wide scope: the renderer refuses with the closure
+        /// reason and no slot is isolated.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_ClosedCaptureRefusalStillRefusesTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE closed capture refusal");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Mesh mesh = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                AddTwoSlotRenderer(root, resolving, resolving, out mesh);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CapturerRefusesWholeBatch,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.EqualTo(1),
+                    "the capturer's all-or-nothing refusal is renderer-wide");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+            }
+        }
+
+        private static bool CapturerRefusesWholeBatch(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
+            out IReadOnlyList<CapturedAlphaMaterial> captured)
+        {
+            captured = null;
+            return false;
+        }
+
 
         /// <summary>
         /// Delegates to the shared verified seam but refuses family
@@ -4892,8 +5139,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 evidence.CurrentMaterialIndices.Count];
             for (var slot = 0; slot < current.Length; slot++)
             {
-                current[slot] = evidence.AdmittedMaterials[
-                    evidence.CurrentMaterialIndices[slot]];
+                // Same mapping as production: the -1 sentinel marks a
+                // closure-failed slot and carries no material.
+                var index = evidence.CurrentMaterialIndices[slot];
+                current[slot] = index >= 0
+                    ? evidence.AdmittedMaterials[index]
+                    : null;
             }
 
             var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(

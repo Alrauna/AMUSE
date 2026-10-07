@@ -5408,6 +5408,61 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A conversion-refused slot names the inner per-gate refusal, so
+        /// the seven conversion arms stop collapsing into one bare enum.
+        /// The locality arm's transparent slot refuses through its depth
+        /// comparison, and the entry must carry that gate's token after the
+        /// cause.
+        /// <para>
+        /// Falsifies: an emitter that discards the family boundary's inner
+        /// refusal token.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ConversionRefusedSlotNamesItsPerGateDetail()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "conversion_refusal_names_gate");
+
+                using (var arm = LocalityArmFixture.Create(
+                           fixtures, opaqueTexture,
+                           transparent => transparent.SetFloat("_ZTest", 8f)))
+                {
+                    AmusePlatformFinishState amuse = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = arm.Run());
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.EqualTo(1),
+                        "fixture precondition: the transparent slot's " +
+                        "depth comparison must refuse exactly its own " +
+                        "slot");
+
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "OpaqueConversionRefused: " +
+                            LilToonOpaqueConversionRefusal
+                                .UnsupportedDepthComparison),
+                        "the refused slot's entry must name the inner " +
+                        "per-gate refusal, not the bare cause");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
         /// through the real barrier with the family-routing conversion

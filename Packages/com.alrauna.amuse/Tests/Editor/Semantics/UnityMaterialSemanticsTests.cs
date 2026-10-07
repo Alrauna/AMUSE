@@ -876,6 +876,58 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "the subject must name the refusing gate in words");
         }
 
+        [Test]
+        public void Legacy90ShaderName_SelectsThePoiyomiFamily()
+        {
+            // The vendor's own old-version copy classifies to the Poiyomi
+            // family with the plain request, so the D8 pre-scan offers the
+            // transfer-consent subject for it. Its source stays unpinned:
+            // only a granted build may treat it with the verified rules.
+            var material = NewMaterial(
+                "legacy90-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var alphaRelevance,
+                    out var captureSchema);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                alphaRelevance,
+                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+        }
+
+        [Test]
+        public void Legacy90Material_ProducesTheTransferConsentSubject()
+        {
+            var material = NewMaterial(
+                "legacy90-consent.shader",
+                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                PoiyomiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain(
+                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain("not a verified version"));
+            Assert.That(
+                consent.GrantedShaderNames,
+                Contains.Item(
+                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
+        }
+
         /// <summary>
         /// Fresh invariance row beside
         /// <see cref="LilToonCaptureSchemaIsExactlyItsAlphaRelevance"/>:

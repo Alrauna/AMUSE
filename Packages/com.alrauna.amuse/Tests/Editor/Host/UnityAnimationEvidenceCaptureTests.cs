@@ -652,22 +652,87 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void FailedClosureExposesNoPartialEvidence()
+        public void InvalidSwapValueFailsOnlyItsOwnSlot()
         {
-            var initial = NewPoiyomiMaterial();
+            var slot0 = NewPoiyomiMaterial();
+            var slot1 = NewPoiyomiMaterial();
+            var swap = NewLilToonMaterial();
+            var texture = Own(new Texture2D(1, 1));
+
             var evidence = CaptureVerified(
                 AnalyzedRendererPath,
-                new[] { ObservationWithSlotValue(null) },
-                new[] { initial },
+                new[]
+                {
+                    ObservationWithMaterialSwap(swap),
+                    ObservationWithObjectBinding(
+                        "m_Materials.Array.data[1]", texture),
+                },
+                new[] { slot0, slot1 },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.IsClosed, Is.True);
             Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().SlotIndex,
+                Is.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().Failure,
                 Is.EqualTo(MaterialDependencyClosureFailure.InvalidSwapValue));
-            Assert.That(RequestedNames(evidence.AlphaRelevanceRequest), Is.Empty);
-            Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
-            Assert.That(evidence.CurrentMaterialIndices, Is.Empty);
+            Assert.That(evidence.CurrentMaterialIndices,
+                Is.EqualTo(new[] { 0, 1 }));
+
+            // The healthy slot keeps its swap binding and its admitted
+            // index; the failed slot's binding is dropped outright rather
+            // than retained with values the evidence does not hold.
+            var retainedBindings = evidence.Clips
+                .SelectMany(clip => clip.ObjectBindings)
+                .ToArray();
+            Assert.That(
+                retainedBindings.Select(binding => binding.PropertyName),
+                Is.EquivalentTo(new[] { "m_Materials.Array.data[0]" }));
+            CollectionAssert.AreEqual(
+                new[] { 2 },
+                retainedBindings.Single().AdmittedMaterialIndices);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public void FailedSlotBindingsNeverRetainUnadmittedValues()
+        {
+            var slot0 = NewPoiyomiMaterial();
+            var slot1 = NewPoiyomiMaterial();
+            var swap = NewLilToonMaterial();
+
+            var evidence = CaptureVerified(
+                AnalyzedRendererPath,
+                new[]
+                {
+                    ObservationWithMaterialSwap(swap),
+                    ObservationWithObjectBinding(
+                        "m_Materials.Array.data[1]", null),
+                },
+                new[] { slot0, slot1 },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            foreach (var clip in evidence.Clips)
+            {
+                foreach (var binding in clip.ObjectBindings)
+                {
+                    Assert.That(
+                        binding.AdmittedMaterialIndices,
+                        Is.All.InRange(0, evidence.AdmittedMaterials.Count - 1),
+                        "a retained binding promised a value the evidence " +
+                        "does not hold");
+                    Assert.That(
+                        binding.PropertyName,
+                        Is.Not.EqualTo("m_Materials.Array.data[1]"),
+                        "a closure-failed slot's binding must not be " +
+                        "retained");
+                }
+            }
         }
 
         [Test]
@@ -781,12 +846,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void NullOrNonMaterialSlotAssignmentsFailClosure()
+        public void NullOrNonMaterialSlotAssignmentsFailOnlyTheirSlot()
         {
             var initial = NewPoiyomiMaterial();
-            var texture = Own(new Texture2D(1, 1));
 
-            foreach (var value in new UnityEngine.Object[] { null, texture })
+            foreach (var value in new UnityEngine.Object[] { null, Own(new Texture2D(1, 1)) })
             {
                 var evidence = CaptureVerified(
                     AnalyzedRendererPath,
@@ -794,17 +858,64 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     new[] { initial },
                     EmptyGraph());
 
-                Assert.That(evidence.IsClosed, Is.False);
+                Assert.That(evidence.IsClosed, Is.True);
                 Assert.That(evidence.ClosureFailure,
+                    Is.EqualTo(MaterialDependencyClosureFailure.None));
+                Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+                Assert.That(
+                    evidence.SlotClosureFailures.Single().SlotIndex,
+                    Is.EqualTo(0));
+                Assert.That(
+                    evidence.SlotClosureFailures.Single().Failure,
                     Is.EqualTo(
                         MaterialDependencyClosureFailure.InvalidSwapValue));
-                Assert.That(evidence.Clips, Is.Empty);
-                Assert.That(evidence.AdmittedMaterials, Is.Empty);
+                Assert.That(evidence.CurrentMaterialIndices,
+                    Is.EqualTo(new[] { 0 }));
+                Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
+                Assert.That(
+                    evidence.Clips.SelectMany(clip => clip.ObjectBindings),
+                    Is.Empty);
             }
         }
 
         [Test]
-        public void OutOfRangeMaterialSlotFailsClosure()
+        public void MissingCurrentSlotFailsOnlyItsOwnSlot()
+        {
+            var slot0 = NewPoiyomiMaterial();
+            var swap = NewLilToonMaterial();
+
+            var evidence = CaptureVerified(
+                AnalyzedRendererPath,
+                new[] { ObservationWithMaterialSwap(swap) },
+                new[] { slot0, null },
+                EmptyGraph());
+
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().SlotIndex,
+                Is.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().Failure,
+                Is.EqualTo(
+                    MaterialDependencyClosureFailure.MissingCurrentMaterial));
+
+            // The sentinel marks the failed slot; the healthy slot keeps its
+            // current index and its swap binding. The swap material admits
+            // at index 1: the current material admitted first.
+            CollectionAssert.AreEqual(
+                new[] { 0, -1 }, evidence.CurrentMaterialIndices);
+            CollectionAssert.AreEqual(
+                new[] { 1 },
+                evidence.Clips.Single().ObjectBindings.Single()
+                    .AdmittedMaterialIndices);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+        }
+
+        [Test]
+        public void OutOfRangeSlotBindingRecordsPerSlotFailureWithoutTolerance()
         {
             var initial = NewPoiyomiMaterial();
             var evidence = CaptureVerified(
@@ -817,10 +928,26 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { initial },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.IsClosed, Is.True);
             Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().SlotIndex,
+                Is.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().Failure,
                 Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
-            Assert.That(evidence.Clips, Is.Empty);
+            Assert.That(evidence.IgnoredOutOfRangeSlots, Is.Empty);
+
+            // The phantom slot's binding is dropped; the renderer's own
+            // evidence is untouched.
+            Assert.That(
+                evidence.Clips.SelectMany(clip => clip.ObjectBindings),
+                Is.Empty);
+            CollectionAssert.AreEqual(
+                new[] { 0 }, evidence.CurrentMaterialIndices);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
         }
 
         [Test]
@@ -1177,7 +1304,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void ClosureFailureRetainsGraphFactsButNoPartialEvidence()
+        public void SlotClosureFailureRetainsGraphFactsAndSiblingEvidence()
         {
             var graph = new CommittedControllerGraphResult(
                 AvatarAnimationRefusal.None,
@@ -1186,20 +1313,34 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     Layer(AnimatorLayerBlendingMode.Additive, true),
                 });
 
+            var initial = NewPoiyomiMaterial();
             var evidence = CaptureVerified(
                 AnalyzedRendererPath,
                 Array.Empty<LiveClipObservation>(),
-                new Material[] { null },
+                new Material[] { null, initial },
                 graph);
 
-            Assert.That(evidence.IsClosed, Is.False);
+            Assert.That(evidence.IsClosed, Is.True);
             Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().SlotIndex,
+                Is.EqualTo(0));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().Failure,
                 Is.EqualTo(
                     MaterialDependencyClosureFailure.MissingCurrentMaterial));
+
+            // The renderer-wide graph facts ride the closed evidence, and
+            // the healthy sibling keeps its own slot evidence. The assigned
+            // slot's material admits at index 0: the failed slot admitted
+            // nothing.
             Assert.That(evidence.HasAdditiveLayer, Is.True);
             Assert.That(evidence.HasUnnormalizedDirectBlendTree, Is.True);
-            Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
+            CollectionAssert.AreEqual(
+                new[] { -1, 0 }, evidence.CurrentMaterialIndices);
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
         }
 
         [Test]
@@ -1769,7 +1910,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void OutOfRangeSlotBindingFailsClosedByDefault()
+        public void OutOfRangeSlotBindingRecordsPerSlotFailureByDefault()
         {
             var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
             var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
@@ -1784,8 +1925,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ValidGraph(),
                 ignoreOutOfRangeSlots: false);
 
-            Assert.That(evidence.IsClosed, Is.False);
-            Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
+            Assert.That(evidence.IsClosed, Is.True);
+            Assert.That(evidence.ClosureFailure,
+                Is.EqualTo(MaterialDependencyClosureFailure.None));
+            Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().SlotIndex, Is.EqualTo(1));
+            Assert.That(
+                evidence.SlotClosureFailures.Single().Failure,
+                Is.EqualTo(MaterialDependencyClosureFailure.SlotOutOfRange));
             Assert.That(evidence.IgnoredOutOfRangeSlots, Is.Empty);
         }
 

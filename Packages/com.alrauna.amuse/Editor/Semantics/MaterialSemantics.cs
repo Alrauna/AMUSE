@@ -1037,9 +1037,9 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// one closed form. <paramref name="recordRefusal"/> receives the
         /// <paramref name="refusalProperty"/> name when a saturating shape
         /// refuses. <paramref name="threadMaps"/> carries the affine map
-        /// list: the lilToon frontends thread one map per factor and keep a
-        /// single mapless factor in its own kind, while the Poiyomi frontend
-        /// has no mapped factors.
+        /// list: the lilToon and Poiyomi frontends thread one map per
+        /// factor and keep a single mapless factor in its own kind, so an
+        /// admitted mapped factor never loses its map.
         /// </summary>
         internal static ScalarSemanticValue Fold(
             ScalarSemanticValue left,

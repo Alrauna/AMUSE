@@ -53,6 +53,50 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ClosureRefusedSlotEntryCarriesTheWaySentence()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotAnalysisRefusal(
+                    _renderer,
+                    1,
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed,
+                    rendererName: "Body",
+                    closureWaySentence: AmuseReports.ClosureFailureSentence(
+                        MaterialDependencyClosureFailure.InvalidSwapValue)));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("1"),
+                "the report must name the refused slot index");
+            Assert.That(message, Does.Contain("Body"),
+                "the report must name the renderer");
+            Assert.That(message, Does.Contain("MaterialDependencyClosureFailed"));
+            Assert.That(message, Does.Contain("not"),
+                "the way sentence must name the non-material swap, not the " +
+                "bare refusal name");
+        }
+
+        [Test]
+        public void PhantomClosureSlotEntryCarriesTheOutOfRangeWay()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotAnalysisRefusal(
+                    _renderer,
+                    5,
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed,
+                    rendererName: "Body",
+                    closureWaySentence: AmuseReports.ClosureFailureSentence(
+                        MaterialDependencyClosureFailure.SlotOutOfRange)));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("5"),
+                "the report must name the phantom slot index");
+            Assert.That(message, Does.Contain("slot the renderer does not have"),
+                "the way sentence must name the out-of-range binding");
+        }
+
+        [Test]
         public void SlotAnalysisRefusalEmbedsCaptureRefusalFacts()
         {
             var refusal = new TextureCaptureRefusal(
