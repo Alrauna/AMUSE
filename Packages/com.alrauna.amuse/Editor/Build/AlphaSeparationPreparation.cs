@@ -333,6 +333,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
                 var unconvertedCount = 0;
                 var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
+                Material lastRefusedMaterial = null;
                 var slotDivergence = false;
                 var slotPremultiply = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
@@ -390,6 +391,7 @@ namespace Alrauna.Amuse.Editor.Build
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
                         lastConversionRefusal = conversionRefusal;
+                        lastRefusedMaterial = live;
                         if (isMultiMaterialSlot)
                         {
                             // In a multi-material swap, an unconverted material falls back
@@ -428,7 +430,8 @@ namespace Alrauna.Amuse.Editor.Build
                     AmuseReports.SlotSeparationRefusal(
                         target.Renderer,
                         slotIndex,
-                        slotRefusal);
+                        slotRefusal,
+                        offendingMaterial: lastRefusedMaterial);
                     // The slot is dropped with nothing registered: clones
                     // created for its earlier admitted materials would be
                     // unreachable and unknown to the apply pass's sweep. They

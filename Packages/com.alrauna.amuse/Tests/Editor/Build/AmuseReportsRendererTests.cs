@@ -76,5 +76,73 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "an unknown number of material slots"));
             Assert.That(message, Does.Not.Contain("-1"));
         }
+
+        [Test]
+        public void LockedMaterialTitleNamesVerificationNotTracing()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.RendererRefusal(
+                    _renderer,
+                    RendererAnalysisRefusal
+                        .LockedPoiyomiOriginalShaderUnattested));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+
+            // The trace succeeds for a recorded lock; the blocker is
+            // attestation of the traced original. The title names the
+            // gate that actually refused.
+            Assert.That(message, Does.Contain("has not verified"));
+            Assert.That(message, Does.Not.Contain("cannot trace"));
+        }
+
+        [Test]
+        public void ClosureRefusalNamesRendererAndFailureWay()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.RendererRefusal(
+                    _renderer,
+                    RendererAnalysisRefusal
+                        .MaterialDependencyClosureFailed,
+                    -1,
+                    -1,
+                    AmuseReports.ClosureFailureSentence(
+                        MaterialDependencyClosureFailure
+                            .InvalidSwapValue)));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+
+            // After play mode the context reference is dead, so the
+            // text is the only durable identity carrier.
+            Assert.That(message, Does.Contain("'AMUSE renderer report'"));
+            Assert.That(message, Does.Contain("not a material"));
+        }
+
+        [Test]
+        public void ClosureFailureSentenceCoversEveryWay()
+        {
+            Assert.That(
+                AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure
+                        .MissingCurrentMaterial),
+                Does.Contain("no material assigned"));
+            Assert.That(
+                AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure.SlotOutOfRange),
+                Does.Contain("slot the renderer does not have"));
+            Assert.That(
+                AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure.InvalidSwapValue),
+                Does.Contain("not a material"));
+            Assert.That(
+                AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure.UnattestedMaterial),
+                Does.Contain("could not be captured"));
+            Assert.That(
+                AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure.None),
+                Is.EqualTo(""));
+        }
     }
 }

@@ -785,7 +785,13 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer,
                         refusal,
                         extractionMeshSubMeshCount,
-                        extractionMaterialSlotCount);
+                        extractionMaterialSlotCount,
+                        refusal ==
+                            RendererAnalysisRefusal
+                                .MaterialDependencyClosureFailed
+                            ? AmuseReports.ClosureFailureSentence(
+                                evidence.ClosureFailure)
+                            : null);
                     continue;
                 }
 

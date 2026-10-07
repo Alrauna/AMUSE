@@ -15,6 +15,10 @@ namespace Alrauna.Amuse.Editor.Host
     /// no <see cref="TextureSourceId"/>, and the shader property name is then
     /// the only handle a reader has.
     /// </para>
+    /// <para>
+    /// The record may carry the texture's display name and storage format
+    /// for the report. It still holds no live Unity object.
+    /// </para>
     /// </summary>
     internal readonly struct TextureCaptureRefusal
     {
@@ -23,13 +27,17 @@ namespace Alrauna.Amuse.Editor.Host
         internal TextureSourceId SourceIdentity { get; }
         internal TextureChannel Channel { get; }
         internal TextureCaptureRefusalReason Reason { get; }
+        internal string FormatName { get; }
+        internal string TextureName { get; }
 
         internal TextureCaptureRefusal(
             string propertyName,
             bool hasSourceIdentity,
             TextureSourceId sourceIdentity,
             TextureChannel channel,
-            TextureCaptureRefusalReason reason)
+            TextureCaptureRefusalReason reason,
+            string formatName = null,
+            string textureName = null)
         {
             if (string.IsNullOrWhiteSpace(propertyName))
             {
@@ -51,6 +59,8 @@ namespace Alrauna.Amuse.Editor.Host
                 : default;
             Channel = channel;
             Reason = reason;
+            FormatName = formatName;
+            TextureName = textureName;
         }
     }
 }

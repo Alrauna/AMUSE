@@ -936,5 +936,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 MaskMode);
         }
+
+        [TestCase("_AlphaMaskValue")]
+        [TestCase("_AlphaMaskBlendStrength")]
+        [TestCase("_AlphaMaskInvert")]
+        public void AlphaMaskPropertiesCarryFeatureLabels(string propertyName)
+        {
+            // The refusal sentence must name the feature, not "a shader
+            // feature": the alpha mask is supported for other values, and
+            // lilToon already labels the same concept "Alpha mask".
+            Assert.That(
+                PoiyomiMaterialSemantics.FeatureLabelFor(propertyName),
+                Is.EqualTo("Alpha mask"));
+        }
     }
 }
