@@ -75,6 +75,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
+        internal const string OutlineEnabledProperty = "_EnableOutlines";
+        internal const string OutlineOverrideAlphaProperty = "_OutlineOverrideAlpha";
+        internal const string LineColorProperty = "_LineColor";
+        internal const string OutlineTextureProperty = "_OutlineTexture";
+        internal const string OutlineAlphaDistanceFadeProperty =
+            "_OutlineAlphaDistanceFade";
+        internal const string OutlineAudioLinkColorProperty =
+            "_OutlineALColorEnabled";
+        internal const string OutlineTextureUvProperty = "_OutlineTextureUV";
+        internal const string OutlineTexturePanProperty = "_OutlineTexturePan";
 
         // The Two Pass second family reads this tint's alpha where the plain
         // base reads _Color.a (note 4.1, vendor line 29785).
@@ -2529,6 +2539,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 DstBlend2Property,
                 BlendOp2Property,
                 BlendOpAlpha2Property,
+                OutlineEnabledProperty,
+                OutlineOverrideAlphaProperty,
+                OutlineAlphaDistanceFadeProperty,
+                OutlineAudioLinkColorProperty,
+                OutlineTextureUvProperty,
             };
             scalars.UnionWith(MainSamplingModeGates);
             scalars.UnionWith(AlphaCoverageGates);
@@ -2542,8 +2557,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 activeColorSpace: false,
                 presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
-                colorProperties: new[] { ColorProperty },
-                vectorProperties: new[] { MainTexPanProperty, AlphaMaskPanProperty },
+                colorProperties: new[] { ColorProperty, LineColorProperty },
+                vectorProperties: new[]
+                {
+                    MainTexPanProperty,
+                    AlphaMaskPanProperty,
+                    OutlineTexturePanProperty,
+                },
                 textureProperties: new[]
                 {
                     // The cutout split's capture declaration: when the
@@ -2574,6 +2594,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.RedChannel),
+
+                    // The outline texture proves per triangle through its alpha channel when
+                    // the outline is enabled: its own scale and offset for the plain affine,
+                    // the stable project identity, the whole-texture fast-path fact, and the
+                    // alpha field itself. Sampling is never asked of it: the vendor outline
+                    // block samples through the main sampler, whose state the main-texture
+                    // request above already carries.
+                    new TexturePropertyEvidenceRequest(
+                        OutlineTextureProperty,
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.SampledAlphaIsOne |
+                        TextureEvidenceKinds.AlphaChannel),
                 });
         }
 

@@ -199,6 +199,13 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiTwoPassSemanticTest"
         _OutlineBlendOpAlpha ("Alpha Blend Op", Int) = 4
         _OutlineSrcBlendAlpha ("Alpha Source Blend", Int) = 1
         _OutlineDstBlendAlpha ("Alpha Destination Blend", Int) = 0
+        _LineColor ("Outline Color", Color) = (1,1,1,1)
+        [ToggleUI] _OutlineOverrideAlpha ("Override Base Alpha", Float) = 0
+        [ToggleUI] _OutlineALColorEnabled ("Audio Link Outline Color", Float) = 0
+        _OutlineAlphaDistanceFade ("Outline Distance Alpha Fade", Float) = 0
+        _OutlineTextureUV ("Outline UV", Int) = 0
+        _OutlineTexturePan ("Outline Texture Pan", Vector) = (0, 0, 0, 0)
+        _OutlineTexture ("Outline Texture", 2D) = "white" {}
     }
 
     SubShader

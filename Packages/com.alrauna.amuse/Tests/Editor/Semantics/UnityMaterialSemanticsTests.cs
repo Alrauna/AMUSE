@@ -379,9 +379,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
                 "alpha relevance must remain the family's existing request");
 
-            // Representative conversion-only render state. Neither name appears
-            // in the alpha request, so each one separates the two questions.
-            foreach (var conversionOnly in new[] { "_ZWrite", "_EnableOutlines" })
+            // _EnableOutlines moved to the alpha request; only _ZWrite stays
+            // conversion-only.
+            foreach (var conversionOnly in new[] { "_ZWrite" })
             {
                 CollectionAssert.Contains(
                     captureSchema.ScalarProperties,

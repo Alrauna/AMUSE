@@ -119,6 +119,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.False);
             Assert.That(
                 declaring.ScalarProperties.Contains("_ModeTwoPass"), Is.False);
+
+            var request = declaring;
+            Assert.That(
+                request.ScalarProperties,
+                Does.Contain(PoiyomiMaterialSemantics.OutlineEnabledProperty));
+            Assert.That(
+                request.ScalarProperties,
+                Does.Contain(PoiyomiMaterialSemantics.OutlineOverrideAlphaProperty));
+            Assert.That(
+                request.ScalarProperties,
+                Does.Contain(PoiyomiMaterialSemantics.OutlineTextureUvProperty));
+            Assert.That(
+                request.VectorProperties,
+                Does.Contain(PoiyomiMaterialSemantics.OutlineTexturePanProperty));
+            Assert.That(
+                request.ColorProperties,
+                Does.Contain(PoiyomiMaterialSemantics.LineColorProperty));
+            var outline = request.TextureProperties.Single(t =>
+                t.PropertyName == PoiyomiMaterialSemantics.OutlineTextureProperty);
+            Assert.That(
+                outline.Evidence,
+                Is.EqualTo(TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.SampledAlphaIsOne |
+                    TextureEvidenceKinds.AlphaChannel));
         }
 
         // --- Falsifier 1: at or above the cutoff ----------------------------
