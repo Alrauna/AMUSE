@@ -129,7 +129,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " family=" + family);
 
             var semantics =
-                UnityMaterialSemantics.AnalyzeAlphaMaterial(capturedList[0]);
+                UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                    capturedList.Captured[0]);
             Assert.That(
                 semantics.Semantics.Alpha.IsComplete,
                 Is.True,
@@ -187,8 +188,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " fixture's materials, so every slot resolves without"
                 + " evidence and classifies all-unknown; graphRefusal="
                 + graph.Refusal
-                + " closureFailure=" + evidence.ClosureFailure
-                + " isClosed=" + evidence.IsClosed
                 + " admittedLive=" + admittedLiveMaterials.Count);
 
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(

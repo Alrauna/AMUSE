@@ -295,14 +295,18 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// material keeps its own identity. There is deliberately no
         /// overload without the lookup: a capture that could silently skip
         /// registered-source naming would put build-copy identity into the
-        /// reports.
+        /// reports. The outcome partitions the batch: survivors ride
+        /// <see cref="ClosedAlphaCaptureOutcome.Captured"/> in batch order,
+        /// and every member whose source failed attestation is named by
+        /// batch position in <see cref="ClosedAlphaCaptureOutcome.UnattestedOrdinals"/>.
+        /// The bool stays false only for a failure that names no material.
         /// </summary>
         internal static bool TryCaptureClosedAlphaMaterials(
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured,
+            out ClosedAlphaCaptureOutcome outcome,
             RegisteredSourceLookup resolveRegisteredSource)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
@@ -323,16 +327,18 @@ namespace Alrauna.Amuse.Editor.Semantics
             var result = CaptureBatch(
                 materials, families, requests, bounds,
                 resolveRegisteredSource);
-            foreach (var material in result)
+            var captured = new List<CapturedAlphaMaterial>();
+            var failed = new List<int>();
+            for (var index = 0; index < result.Count; index++)
             {
-                if (!IsAttestedAlphaMaterial(material))
+                if (IsAttestedAlphaMaterial(result[index]))
                 {
-                    captured = null;
-                    return false;
+                    captured.Add(result[index]);
+                    continue;
                 }
+                failed.Add(index);
             }
-
-            captured = result;
+            outcome = new ClosedAlphaCaptureOutcome(captured, failed);
             return true;
         }
 
@@ -341,9 +347,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <see cref="TryCaptureClosedAlphaMaterials"/> except that a batch
         /// member whose shader name is in <paramref name="grantedShaderNames"/>
         /// skips source-identity verification — the user accepted the
-        /// unverified-version risk for exactly that name this build. A batch
-        /// member outside the granted set still fails the whole batch, so an
-        /// unconsented discovery keeps the fail-closed renderer refusal.
+        /// unverified-version risk for exactly that name this build. An
+        /// ungranted unattested member no longer fails the batch: it is named
+        /// by batch position in the outcome's failing ordinals, and only its
+        /// own slots refuse.
         /// <paramref name="resolveRegisteredSource"/> carries registered-source
         /// naming the same way the plain overload does.
         /// </summary>
@@ -353,7 +360,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
             IReadOnlyCollection<string> grantedShaderNames,
-            out IReadOnlyList<CapturedAlphaMaterial> captured,
+            out ClosedAlphaCaptureOutcome outcome,
             RegisteredSourceLookup resolveRegisteredSource)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
@@ -374,10 +381,13 @@ namespace Alrauna.Amuse.Editor.Semantics
             var result = CaptureBatch(
                 materials, families, requests, bounds,
                 resolveRegisteredSource);
+            var captured = new List<CapturedAlphaMaterial>();
+            var failed = new List<int>();
             for (var index = 0; index < result.Count; index++)
             {
                 if (IsAttestedAlphaMaterial(result[index]))
                 {
+                    captured.Add(result[index]);
                     continue;
                 }
 
@@ -385,16 +395,16 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ? null
                     : materials[index].shader;
                 var shaderName = shader == null ? null : shader.name;
-                if (shaderName == null
-                    || !System.Linq.Enumerable.Contains(
+                if (shaderName != null
+                    && System.Linq.Enumerable.Contains(
                         grantedShaderNames, shaderName))
                 {
-                    captured = null;
-                    return false;
+                    captured.Add(result[index]);
+                    continue;
                 }
+                failed.Add(index);
             }
-
-            captured = result;
+            outcome = new ClosedAlphaCaptureOutcome(captured, failed);
             return true;
         }
 

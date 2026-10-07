@@ -328,10 +328,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 EmptyGraph(),
                 rendererTypeName: typeof(SkinnedMeshRenderer).FullName);
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(
-                evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
         }
 
@@ -628,7 +624,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { initial },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
 
             var onlyInSwapped = RequestedNames(
@@ -670,9 +666,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { slot0, slot1 },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
             Assert.That(
                 evidence.SlotClosureFailures.Single().SlotIndex,
@@ -716,7 +709,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { slot0, slot1 },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             foreach (var clip in evidence.Clips)
             {
                 foreach (var binding in clip.ObjectBindings)
@@ -815,7 +808,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 CaptureFixtureMaterials,
                 out var admittedLiveMaterials);
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(
                 admittedLiveMaterials,
                 Has.Count.EqualTo(3),
@@ -858,9 +851,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     new[] { initial },
                     EmptyGraph());
 
-                Assert.That(evidence.IsClosed, Is.True);
-                Assert.That(evidence.ClosureFailure,
-                    Is.EqualTo(MaterialDependencyClosureFailure.None));
                 Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
                 Assert.That(
                     evidence.SlotClosureFailures.Single().SlotIndex,
@@ -890,9 +880,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { slot0, null },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
             Assert.That(
                 evidence.SlotClosureFailures.Single().SlotIndex,
@@ -928,9 +915,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { initial },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
             Assert.That(
                 evidence.SlotClosureFailures.Single().SlotIndex,
@@ -1093,7 +1077,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 Assert.That(selected, Is.EqualTo(2));
                 captureCalls++;
@@ -1111,7 +1095,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Capture,
                 out _);
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(
                 captureCalls,
                 Is.EqualTo(1),
@@ -1149,7 +1133,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 capturerSaw = request;
                 return CaptureFixtureMaterials(
@@ -1165,7 +1149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Capture,
                 out _);
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             CollectionAssert.Contains(
                 RequestedNames(capturerSaw),
                 "_ZWrite",
@@ -1221,7 +1205,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 captureCalls++;
                 capturerSaw = request;
@@ -1238,7 +1222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Capture,
                 out _);
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(
                 captureCalls,
                 Is.EqualTo(1),
@@ -1285,7 +1269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { poiyomi },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             var binding = evidence.Clips.Single().FloatBindings.Single();
             Assert.That(
                 binding.PropertyName,
@@ -1320,9 +1304,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new Material[] { null, initial },
                 graph);
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
             Assert.That(
                 evidence.SlotClosureFailures.Single().SlotIndex,
@@ -1410,9 +1391,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AlphaPolicyBounds.Inert,
                 out var admittedLiveMaterials);
 
-            Assert.That(evidence.IsClosed, Is.True,
-                "an unattested material must refuse its own slots, not the " +
-                "renderer's closure");
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
             Assert.That(evidence.AdmittedMaterials[0].Family,
                 Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
@@ -1423,14 +1401,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// The closed batch capture is the sole source-attestation decision, so
-        /// its refusal is the same conservative outcome as a material no family
-        /// selects: unattested, with nothing partial escaping — including the
-        /// live/captured pairing, after selection and admission have already
-        /// found multiple materials and the capturer refused the whole batch.
+        /// --- Falsifier 1: a capturer that reports no ordinals and fails the
+        /// batch silently must throw the nameless-failure defect, never refuse
+        /// the renderer. ---
+        /// The capturer's bool is reserved for a failure that names no
+        /// material; production capturers never produce one, so the capture
+        /// treats it as an implementation defect and stops the build instead
+        /// of closing the renderer.
         /// </summary>
         [Test]
-        public void RefusedClosedCaptureIsUnattestedWithNoPartialEvidence()
+        public void NamelessBatchFailureThrowsInsteadOfRefusingTheRenderer()
         {
             var first = NewPoiyomiMaterial();
             var second = NewLilToonMaterial();
@@ -1441,40 +1421,102 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 refusedBatch = materials.ToArray();
                 captured = null;
                 return false;
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
-                AnalyzedRendererPath,
-                new[] { ObservationWithMaterialSwap(second) },
-                new[] { first },
-                EmptyGraph(),
-                SelectFixtureRequest,
-                RefuseCapture,
-                out var admittedLiveMaterials);
-
-            // Fixture precondition: the capturer refused a batch that admission
+            // Fixture precondition: the capturer fails a batch that admission
             // had already populated with multiple distinct materials.
+            Assert.Throws<InvalidOperationException>(() =>
+                UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                    AnalyzedRendererPath,
+                    new[] { ObservationWithMaterialSwap(second) },
+                    new[] { first },
+                    EmptyGraph(),
+                    SelectFixtureRequest,
+                    RefuseCapture,
+                    out _));
             Assert.That(refusedBatch, Has.Length.EqualTo(2));
             Assert.That(refusedBatch[0], Is.SameAs(first));
             Assert.That(refusedBatch[1], Is.SameAs(second));
+        }
 
-            Assert.That(evidence.IsClosed, Is.False);
+        /// <summary>
+        /// A mixed batch closes the renderer with per-material outcomes: the
+        /// healthy member's slot keeps its real captured evidence, the failed
+        /// member arrives as the unsupported sentinel that names the shader
+        /// the capture read, and no renderer-wide closure record exists.
+        /// </summary>
+        [Test]
+        public void MixedBatchClosesWithHealthySlotAnalyzableAndPoisonSlotRefused()
+        {
+            var healthy = NewPoiyomiMaterial();
+            var poison = Own(new Material(
+                UnattestedShader(
+                    "mixed-poison.shader",
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName)));
+            _fixtureFamilies.Add(poison, CapturedAlphaMaterialFamily.Poiyomi);
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                Array.Empty<LiveClipObservation>(),
+                new[] { healthy, poison },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                CapturerFailingOrdinals(new[] { 1 }),
+                out var admittedLiveMaterials);
+
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
             Assert.That(
-                evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
-            Assert.That(
-                admittedLiveMaterials,
-                Is.Empty,
-                "a refused batch must expose no live/captured pairing");
-            Assert.That(RequestedNames(evidence.AlphaRelevanceRequest), Is.Empty);
-            Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
-            Assert.That(evidence.CurrentMaterialIndices, Is.Empty);
+                evidence.AdmittedMaterials[0].Evidence.TryGetScalar(
+                    "_AlphaForceOpaque", out _),
+                Is.True,
+                "the healthy member's slot must keep real captured evidence");
+            // --- Falsifier 2: a sentinel that drops the locked-identity
+            // cause must fail the named-cause assertion. ---
+            Assert.That(evidence.AdmittedMaterials[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(evidence.AdmittedMaterials[1].ShaderName,
+                Is.EqualTo(PoiyomiMaterialSemantics.PoiyomiToonShaderName),
+                "the failed member's sentinel must name the shader cause");
+            Assert.That(evidence.SlotClosureFailures, Is.Empty,
+                "a batch failure refuses its own slots through the " +
+                "sentinel; it must not add a renderer-wide closure record");
+            Assert.That(admittedLiveMaterials, Has.Count.EqualTo(2));
+            Assert.That(admittedLiveMaterials[1], Is.SameAs(poison));
+        }
+
+        [Test]
+        public void AllPoisonBatchProducesAllSlotsRefusedAndNoRendererWideEntry()
+        {
+            var first = NewPoiyomiMaterial();
+            var second = NewLilToonMaterial();
+
+            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                AnalyzedRendererPath,
+                Array.Empty<LiveClipObservation>(),
+                new[] { first, second },
+                EmptyGraph(),
+                SelectFixtureRequest,
+                CapturerFailingOrdinals(new[] { 0, 1 }),
+                out _);
+
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(evidence.AdmittedMaterials[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(evidence.SlotClosureFailures, Is.Empty,
+                "a fully failed batch must leave no renderer-wide closure " +
+                "record; the renderer-level mirror names the first failed " +
+                "slot's way at resolution time");
+            Assert.That(evidence.CurrentMaterialIndices,
+                Is.EqualTo(new[] { 0, 1 }));
         }
 
         /// <summary>
@@ -1495,7 +1537,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
@@ -1515,7 +1557,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 capturedBatch,
                 Is.EqualTo(new[] { supported }),
                 "the unselectable swap value must not reach the batch capture");
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
             Assert.That(evidence.AdmittedMaterials[0].Family,
                 Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
@@ -1555,7 +1597,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 capturedBatch = materials.ToArray();
                 return CaptureFixtureMaterials(
@@ -1574,7 +1616,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 capturedBatch,
                 Is.EqualTo(new[] { supported }));
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
             Assert.That(evidence.AdmittedMaterials[0].Family,
                 Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
@@ -1587,13 +1629,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// The real closure path refuses conservatively from both directions: a
+        /// The real closure path stays conservative from both directions: a
         /// shader no family claims, and a shader carrying a supported name over
         /// a source no attestation can verify. Only the closed batch capture
-        /// decides the second case, and it still refuses.
+        /// decides the second case, and its failure refuses that material's
+        /// own slots through the unsupported sentinel; the renderer closes
+        /// with no renderer-wide refusal.
         /// </summary>
         [Test]
-        public void SupportedShaderNameWithUnattestedSourceFailsTheRealPath()
+        public void SupportedShaderNameWithUnattestedSourceRefusesItsOwnSlot()
         {
             var material = Own(new Material(
                 UnattestedShader(
@@ -1608,11 +1652,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AlphaPolicyBounds.Inert,
                 out _);
 
-            Assert.That(evidence.IsClosed, Is.False);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.UnattestedMaterial));
+            Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
+            Assert.That(evidence.AdmittedMaterials[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(evidence.AdmittedMaterials[0].ShaderName,
+                Is.EqualTo(PoiyomiMaterialSemantics.PoiyomiToonShaderName),
+                "the sentinel must name the shader cause the capture read");
             Assert.That(evidence.Clips, Is.Empty);
-            Assert.That(evidence.AdmittedMaterials, Is.Empty);
         }
 
         [Test]
@@ -1658,12 +1704,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 EmptyGraph());
 
             Assert.That(
-                evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None),
-                "another renderer's slot index was range-checked against this " +
-                "renderer's slot count");
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(
                 evidence.AdmittedMaterials,
                 Has.Count.EqualTo(1),
                 "only this renderer's current material may be admitted");
@@ -1701,7 +1741,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 captureCalls++;
                 capturedBatch = materials.ToArray();
@@ -1724,7 +1764,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Capture,
                 out _);
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             CollectionAssert.AreEqual(
                 new[] { current },
                 selected,
@@ -1759,7 +1799,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
             {
                 captureCalls++;
                 capturedBatch = materials.ToArray();
@@ -1782,11 +1822,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Capture,
                 out _);
 
-            Assert.That(
-                evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None),
-                "an unattested material on ANOTHER renderer refused this one");
-            Assert.That(evidence.IsClosed, Is.True);
             Assert.That(captureCalls, Is.EqualTo(1));
             CollectionAssert.AreEqual(
                 new[] { current },
@@ -1814,7 +1849,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { owningCurrent },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(
                 evidence.AdmittedMaterials,
                 Has.Count.EqualTo(2),
@@ -1855,7 +1890,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { current },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
 
             var objectBindings = evidence.Clips
@@ -1887,7 +1922,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { current },
                 EmptyGraph());
 
-            Assert.That(evidence.IsClosed, Is.True);
+
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(2));
             Assert.That(
                 evidence.Clips.SelectMany(clip => clip.ObjectBindings).ToArray(),
@@ -1925,9 +1960,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ValidGraph(),
                 ignoreOutOfRangeSlots: false);
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure,
-                Is.EqualTo(MaterialDependencyClosureFailure.None));
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
             Assert.That(
                 evidence.SlotClosureFailures.Single().SlotIndex, Is.EqualTo(1));
@@ -1953,8 +1985,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ValidGraph(),
                 ignoreOutOfRangeSlots: true);
 
-            Assert.That(evidence.IsClosed, Is.True);
-            Assert.That(evidence.ClosureFailure, Is.EqualTo(MaterialDependencyClosureFailure.None));
+
             Assert.That(evidence.IgnoredOutOfRangeSlots, Is.EquivalentTo(new[] { 1 }));
         }
 
@@ -2073,7 +2104,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> captured)
+                out ClosedAlphaCaptureOutcome captured)
         {
             var inputs = materials
                 .Select((material, index) =>
@@ -2085,14 +2116,64 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 .ToArray();
             var evidence = UnityMaterialEvidenceCapture.Capture(
                 inputs, bounds);
-            captured = evidence.Select((value, index) =>
-                    new CapturedAlphaMaterial(
-                        families[index],
-                        value,
-                        default(PoiyomiSourceEvidence),
-                        null))
-                .ToArray();
+            captured = new ClosedAlphaCaptureOutcome(
+                evidence.Select((value, index) =>
+                        new CapturedAlphaMaterial(
+                            families[index],
+                            value,
+                            default(PoiyomiSourceEvidence),
+                            null))
+                    .ToArray(),
+                Array.Empty<int>());
             return true;
+        }
+
+        /// <summary>
+        /// The mixed-batch fixture capturer: every member is really captured,
+        /// then the named batch positions are replaced by the same unsupported
+        /// sentinel production builds, so the capture mapping under test sees
+        /// survivors and failing ordinals in one outcome.
+        /// </summary>
+        private static ClosedAlphaMaterialCapturer CapturerFailingOrdinals(
+            IReadOnlyList<int> failedOrdinals)
+        {
+            return (
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                MaterialEvidenceRequest request,
+                AlphaPolicyBounds bounds,
+                out ClosedAlphaCaptureOutcome outcome) =>
+            {
+                CaptureFixtureMaterials(
+                    materials, families, request, bounds, out var batch);
+                var captured = new List<CapturedAlphaMaterial>(batch.Captured);
+                for (var index = failedOrdinals.Count - 1; index >= 0; index--)
+                {
+                    var ordinal = failedOrdinals[index];
+                    captured.RemoveAt(ordinal);
+                }
+                foreach (var ordinal in failedOrdinals)
+                {
+                    captured.Insert(
+                        ordinal,
+                        UnityMaterialSemantics.UnattestedMaterial(
+                            RendererAnalysisRefusal.None,
+                            materials[ordinal],
+                            null));
+                }
+                var survivors = new List<CapturedAlphaMaterial>();
+                var failedSet = new HashSet<int>(failedOrdinals);
+                for (var index = 0; index < captured.Count; index++)
+                {
+                    if (!failedSet.Contains(index))
+                    {
+                        survivors.Add(captured[index]);
+                    }
+                }
+                outcome = new ClosedAlphaCaptureOutcome(
+                    survivors, failedOrdinals);
+                return true;
+            };
         }
 
         private static LiveClipObservation ObservationWithMaterialSwap(

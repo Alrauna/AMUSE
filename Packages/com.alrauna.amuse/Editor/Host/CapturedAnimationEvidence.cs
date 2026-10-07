@@ -11,7 +11,6 @@ namespace Alrauna.Amuse.Editor.Host
         MissingCurrentMaterial,
         SlotOutOfRange,
         InvalidSwapValue,
-        UnattestedMaterial,
     }
 
     /// <summary>
@@ -178,7 +177,6 @@ namespace Alrauna.Amuse.Editor.Host
     internal sealed class CapturedAnimationEvidence
     {
         internal CapturedAnimationEvidence(
-            MaterialDependencyClosureFailure closureFailure,
             MaterialEvidenceRequest alphaRelevanceRequest,
             IList<CapturedClipEvidence> clips,
             IList<CapturedAlphaMaterial> admittedMaterials,
@@ -188,7 +186,6 @@ namespace Alrauna.Amuse.Editor.Host
             IList<int> ignoredOutOfRangeSlots = null,
             IList<SlotClosureFailure> slotClosureFailures = null)
         {
-            ClosureFailure = closureFailure;
             AlphaRelevanceRequest = alphaRelevanceRequest
                 ?? throw new ArgumentNullException(nameof(alphaRelevanceRequest));
             Clips = new ReadOnlyCollection<CapturedClipEvidence>(
@@ -209,23 +206,6 @@ namespace Alrauna.Amuse.Editor.Host
             SlotClosureFailures = orderedSlotFailures.AsReadOnly();
         }
 
-        /// <summary>
-        /// True when the renderer closed with no renderer-wide closure
-        /// failure. A slot-scoped closure failure does not clear this: the
-        /// renderer is closed, the failed slot alone refuses, and sibling
-        /// slots keep their own proofs.
-        /// </summary>
-        internal bool IsClosed =>
-            ClosureFailure == MaterialDependencyClosureFailure.None;
-
-        /// <summary>
-        /// The renderer-wide closure failure, if any. Only capture failures
-        /// that name no slot live here: the closed-batch capturer's
-        /// all-or-nothing refusal. The three slot-scoped ways ride
-        /// <see cref="SlotClosureFailures"/> instead and never appear in
-        /// this field.
-        /// </summary>
-        internal MaterialDependencyClosureFailure ClosureFailure { get; }
         internal MaterialEvidenceRequest AlphaRelevanceRequest { get; }
 
         internal IReadOnlyList<CapturedClipEvidence> Clips { get; }

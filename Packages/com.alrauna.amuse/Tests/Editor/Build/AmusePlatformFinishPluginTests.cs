@@ -2060,9 +2060,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // Preconditions. Without these the refusal below could hold for
                 // a reason unrelated to the rule under test.
-                Assert.That(evidence.IsClosed, Is.True,
-                    "closure failed, so the refusal would not be attributable " +
-                    "to proof-relevance recognition");
                 Assert.That(evidence.Clips, Has.Count.EqualTo(1));
                 var objects = evidence.Clips[0].ObjectBindings;
                 Assert.That(objects, Has.Count.EqualTo(1),
@@ -2301,7 +2298,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // Preconditions, read before the build commits the graph.
                 var evidence = CaptureVerifiedRuntimeStateEvidence(
                     root, fixture.Renderer);
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.Clips[0].FloatBindings,
                     Has.Count.EqualTo(1));
                 var binding = evidence.Clips[0].FloatBindings[0];
@@ -2772,7 +2769,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var result = AnalyzeVerifiedRuntimeStates(
                     root, renderer, out var evidence);
 
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.CurrentMaterialIndices,
                     Has.Count.EqualTo(slotCount));
 
@@ -3200,7 +3197,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var evidence = CaptureVerifiedRuntimeStateEvidence(
                     root, fixture.Renderer);
 
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(1));
                 var path = AnimationUtility.CalculateTransformPath(
                     fixture.Renderer.transform, root.transform);
@@ -4185,7 +4182,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     IReadOnlyList<CapturedAlphaMaterialFamily> families,
                     MaterialEvidenceRequest request,
                     AlphaPolicyBounds bounds,
-                    out IReadOnlyList<CapturedAlphaMaterial> captured)
+                    out ClosedAlphaCaptureOutcome captured)
                 {
                     batches.Add(materials.ToArray());
                     return CaptureVerifiedFixtureMaterials(
@@ -4712,12 +4709,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The closed-batch capturer's refusal names no slot, so it keeps
-        /// its renderer-wide scope: the renderer refuses with the closure
-        /// reason and no slot is isolated.
+        /// --- Falsifier 1 companion at the production entry: a batch whose
+        /// every member fails attestation refuses its slots through the
+        /// unsupported sentinel, and a renderer with nothing left resolvable
+        /// keeps its renderer-level refusal through the all-slots-failed
+        /// mirror. A capturer bool that names no material is a defect the
+        /// capture throws on; it never refuses a renderer.
         /// </summary>
         [Test]
-        public void RuntimeStateProductionEntry_ClosedCaptureRefusalStillRefusesTheRenderer()
+        public void RuntimeStateProductionEntry_AllSlotsFailedBatchStillRefusesTheRenderer()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = new GameObject("AMUSE closed capture refusal");
@@ -4739,16 +4739,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     context,
                     SupportedFacts(),
                     SelectVerifiedFixtureRequest,
-                    CapturerRefusesWholeBatch,
+                    CapturerFailsAllOrdinals,
                     ResolvingVerifiedAlphaOnly);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(amuse.RendererRefusalCount(
-                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
                     Is.EqualTo(1),
-                    "the capturer's all-or-nothing refusal is renderer-wide");
+                    "a batch whose every member failed attestation refuses " +
+                    "the renderer on its unresolvable slots");
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
             }
             finally
@@ -4760,15 +4762,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static bool CapturerRefusesWholeBatch(
+        private static bool CapturerFailsAllOrdinals(
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out ClosedAlphaCaptureOutcome captured)
         {
-            captured = null;
-            return false;
+            var ordinals = new int[materials.Count];
+            for (var index = 0; index < ordinals.Length; index++)
+            {
+                ordinals[index] = index;
+            }
+            captured = new ClosedAlphaCaptureOutcome(
+                System.Array.Empty<CapturedAlphaMaterial>(), ordinals);
+            return true;
         }
 
 
@@ -4918,10 +4926,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static void AssertRendererWideForceOpaqueFixture(
             CapturedAnimationEvidence evidence)
         {
-            Assert.That(
-                evidence.IsClosed, Is.True,
-                "fixture precondition: closure failed, so no slot would be " +
-                "resolved and the fixture would prove nothing about slot scope");
             Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(2));
             Assert.That(
                 evidence.CurrentMaterialIndices[0],
@@ -5200,7 +5204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out ClosedAlphaCaptureOutcome captured)
         {
             return VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials(
                 materials, families, request, bounds, out captured);

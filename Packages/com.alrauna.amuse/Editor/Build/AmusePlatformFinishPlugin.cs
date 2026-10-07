@@ -610,7 +610,7 @@ namespace Alrauna.Amuse.Editor.Build
                         IReadOnlyList<CapturedAlphaMaterialFamily> families,
                         MaterialEvidenceRequest request,
                         AlphaPolicyBounds bounds,
-                        out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                        out ClosedAlphaCaptureOutcome transferred) =>
                         UnityMaterialSemantics
                             .TryCaptureClosedAlphaMaterialsTransferred(
                                 materials,
@@ -863,22 +863,25 @@ namespace Alrauna.Amuse.Editor.Build
                 Renderer renderer,
                 ClosedAlphaMaterialCapturer inner)
         {
-            inner ??= (
-                IReadOnlyList<Material> batchMaterials,
-                IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
-                MaterialEvidenceRequest batchRequest,
-                AlphaPolicyBounds batchBounds,
-                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
-                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                    batchMaterials, batchFamilies, batchRequest,
-                    batchBounds, out batchCaptured,
-                    RegisteredSourceIdentity.Resolve);
+            if (inner == null)
+            {
+                inner = (
+                    IReadOnlyList<Material> batchMaterials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                    MaterialEvidenceRequest batchRequest,
+                    AlphaPolicyBounds batchBounds,
+                    out ClosedAlphaCaptureOutcome batchOutcome) =>
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        batchMaterials, batchFamilies, batchRequest,
+                        batchBounds, out batchOutcome,
+                        RegisteredSourceIdentity.Resolve);
+            }
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                out ClosedAlphaCaptureOutcome transferred) =>
             {
                 var effective = EffectiveMaterialMaterialization
                     .MaterializeAdmitted(renderer, materials, out var clones);
@@ -1167,11 +1170,6 @@ namespace Alrauna.Amuse.Editor.Build
                 throw new ArgumentNullException(nameof(rendererPath));
             if (evidence == null)
                 throw new ArgumentNullException(nameof(evidence));
-            if (!evidence.IsClosed)
-            {
-                return Refused(
-                    RendererAnalysisRefusal.MaterialDependencyClosureFailed);
-            }
 
             var floats = new List<CapturedFloatBinding>();
             var objects = new List<CapturedObjectBinding>();
@@ -1345,20 +1343,13 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// The closure way a renderer-level closure entry names. A
-        /// renderer-wide closure failure names its own way; a slot-scoped
-        /// all-failed renderer names its first failed slot's way, so the
-        /// renderer entry keeps naming the cause instead of the bare
-        /// refusal.
+        /// renderer-wide closure failure no longer exists: a fully failed
+        /// renderer names its first failed slot's way, so the renderer entry
+        /// keeps naming the cause instead of the bare refusal.
         /// </summary>
         private static MaterialDependencyClosureFailure ClosureFailureWayFor(
             CapturedAnimationEvidence evidence)
         {
-            if (evidence.ClosureFailure !=
-                MaterialDependencyClosureFailure.None)
-            {
-                return evidence.ClosureFailure;
-            }
-
             foreach (var record in evidence.SlotClosureFailures)
             {
                 return record.Failure;

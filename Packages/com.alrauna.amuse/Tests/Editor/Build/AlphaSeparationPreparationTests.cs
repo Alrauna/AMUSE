@@ -74,7 +74,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     prepared.Target.ExpectedMaterialSlotCount, Is.EqualTo(1));
                 Assert.That(prepared.RendererPath, Is.Empty);
                 Assert.That(prepared.Plan.OpaqueTriangleCount, Is.EqualTo(1));
-                Assert.That(prepared.Evidence.IsClosed, Is.True);
 
                 Assert.That(prepared.CandidateSlots, Has.Count.EqualTo(1));
                 var slot = prepared.CandidateSlots[0];
@@ -1967,10 +1966,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
-                Assert.That(batchAdmitted, Is.False,
-                    "the empty row table must refuse the batch closed " +
-                    "until the Task 2 rows land");
-                Assert.That(captured, Is.Null);
+                Assert.That(batchAdmitted, Is.True,
+                    "the empty row table must keep the Multi member " +
+                    "unattested, closing its own slots through the " +
+                    "failing ordinal");
+                Assert.That(captured.Captured, Is.Empty);
+                Assert.That(
+                    captured.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
 
                 var analyzedMaterial =
                     UnityMaterialSemantics.CaptureAlphaMaterials(
@@ -2062,8 +2064,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
-                Assert.That(batchAdmitted, Is.False);
-                Assert.That(captured, Is.Null);
+                Assert.That(batchAdmitted, Is.True);
+                Assert.That(captured.Captured, Is.Empty);
+                Assert.That(
+                    captured.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
 
                 var analyzedMaterial =
                     UnityMaterialSemantics.CaptureAlphaMaterials(
@@ -2156,16 +2160,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     captureSchema,
                     AlphaPolicyBounds.Inert,
                     out var captured);
-                Assert.That(captured.Count, Is.EqualTo(1));
+                Assert.That(captured.Captured.Count, Is.EqualTo(1));
                 Assert.That(
-                    captured[0].MultiResolution, Is.Not.Null);
+                    captured.Captured[0].MultiResolution, Is.Not.Null);
                 Assert.That(
-                    captured[0].MultiResolution.IsResolved, Is.True,
+                    captured.Captured[0].MultiResolution.IsResolved, Is.True,
                     "the derivation-consistent mode-2 state must resolve " +
                     "at the gate");
 
                 var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
-                    captured[0]);
+                    captured.Captured[0]);
                 Assert.That(
                     analysis.Semantics.Alpha.IsComplete, Is.False,
                     "the retained state answers all-Unknown alpha");
@@ -5783,11 +5787,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     captureSchema,
                     AlphaPolicyBounds.Inert,
                     out var captured);
-                Assert.That(captured.Count, Is.EqualTo(1));
+                Assert.That(captured.Captured.Count, Is.EqualTo(1));
 
                 var result = AdmittedMaterialStates.ResolveSlot(
                     new CapturedMaterialSlotEvidence(0, new[] { 0 }),
-                    captured,
+                    captured.Captured,
                     System.Array.Empty<
                         (CapturedFloatBinding, AnimatedPropertyRef)>(),
                     alphaRelevance,
@@ -5817,7 +5821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "move");
                 Assert.That(
                     result.Offender,
-                    Is.SameAs(captured[0]),
+                    Is.SameAs(captured.Captured[0]),
                     "the refusal must name the retained material");
 
                 // Preparation end to end: the retained slot donates

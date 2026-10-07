@@ -432,9 +432,6 @@ namespace Alrauna.Amuse.Editor.Build
                 case MaterialDependencyClosureFailure.InvalidSwapValue:
                     return "An animation swaps in something that is not " +
                            "a material. ";
-                case MaterialDependencyClosureFailure.UnattestedMaterial:
-                    return "A material in the animation could not be " +
-                           "captured. ";
                 default:
                     return "";
             }

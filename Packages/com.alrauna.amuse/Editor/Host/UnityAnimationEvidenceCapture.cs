@@ -89,7 +89,7 @@ namespace Alrauna.Amuse.Editor.Host
         IReadOnlyList<CapturedAlphaMaterialFamily> families,
         MaterialEvidenceRequest request,
         AlphaPolicyBounds bounds,
-        out IReadOnlyList<CapturedAlphaMaterial> captured);
+        out ClosedAlphaCaptureOutcome outcome);
 
     /// <summary>
     /// The locked-identity selection pre-check. It answers, for one live
@@ -131,10 +131,10 @@ namespace Alrauna.Amuse.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
                 MaterialEvidenceRequest batchRequest,
                 AlphaPolicyBounds batchBounds,
-                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
+                out ClosedAlphaCaptureOutcome batchOutcome) =>
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
                     batchMaterials, batchFamilies, batchRequest,
-                    batchBounds, out batchCaptured,
+                    batchBounds, out batchOutcome,
                     resolveRegisteredSource);
         }
 
@@ -469,23 +469,6 @@ namespace Alrauna.Amuse.Editor.Host
                     layer.HasUnnormalizedDirectBlendTree;
             }
 
-            // The renderer-wide closure failure return. Only the closed
-            // batch capturer's refusal reaches this: the capturer's
-            // contract is all-or-nothing and names no material, so no
-            // slot can be isolated from it. The slot-scoped ways above
-            // return through the success path with their per-slot records.
-            CapturedAnimationEvidence Failed(
-                MaterialDependencyClosureFailure failure)
-            {
-                return new CapturedAnimationEvidence(
-                    failure,
-                    EmptyRequest,
-                    Array.Empty<CapturedClipEvidence>(),
-                    Array.Empty<CapturedAlphaMaterial>(),
-                    Array.Empty<int>(),
-                    hasUnnormalizedDirectBlendTree,
-                    hasAdditiveLayer);
-            }
             var ignoredOutOfRangeSlots = new HashSet<int>();
 
             // The slot-scoped closure failures. A failure here is a fact
@@ -707,33 +690,52 @@ namespace Alrauna.Amuse.Editor.Host
             if (attestedIndices.Count > 0)
             {
                 // The closed batch capture is the sole source-attestation
-                // decision for the materials it receives. Its refusal is a
-                // capture-capability failure over an already-selected batch:
-                // the capturer's contract is all-or-nothing and names no
-                // material, so no slot can be isolated from it and the whole
-                // renderer still refuses.
+                // decision for the materials it receives. Its outcome is
+                // per-material: a failed member's slot receives the same
+                // Unsupported sentinel a selection miss receives, so only
+                // that slot refuses, and every survivor is captured exactly
+                // as a fully attested batch would capture it.
                 if (!capturer(
                         attestedMaterials,
                         attestedFamilies,
                         captureRequest,
                         bounds,
-                        out var capturedMaterials))
+                        out var batchOutcome))
                 {
-                    return Failed(
-                        MaterialDependencyClosureFailure.UnattestedMaterial);
+                    throw new InvalidOperationException(
+                        "Closed material capture failed without naming a " +
+                        "material.");
                 }
-                if (capturedMaterials == null ||
-                    capturedMaterials.Count != attestedIndices.Count)
+                if (batchOutcome.Captured.Count
+                        + batchOutcome.UnattestedOrdinals.Count
+                    != attestedIndices.Count)
                 {
                     throw new InvalidOperationException(
                         "Closed material capture returned an invalid result " +
                         "count.");
                 }
-
-                for (var ordinal = 0; ordinal < attestedIndices.Count; ordinal++)
+                var failedOrdinals = new HashSet<int>(batchOutcome.UnattestedOrdinals);
+                foreach (var ordinal in batchOutcome.UnattestedOrdinals)
                 {
-                    capturedByIndex[attestedIndices[ordinal]] =
-                        capturedMaterials[ordinal];
+                    var admittedIndex = attestedIndices[ordinal];
+                    var lockedRefusal = lockedRefusalCheck?.Invoke(
+                        admitted[admittedIndex]) ?? RendererAnalysisRefusal.None;
+                    capturedByIndex[admittedIndex] =
+                        UnityMaterialSemantics.UnattestedMaterial(
+                            lockedRefusal,
+                            admitted[admittedIndex],
+                            resolveRegisteredSource);
+                }
+                var survivorOrdinal = 0;
+                for (var index = 0; index < attestedIndices.Count; index++)
+                {
+                    if (failedOrdinals.Contains(index))
+                    {
+                        continue;
+                    }
+                    capturedByIndex[attestedIndices[index]] =
+                        batchOutcome.Captured[survivorOrdinal];
+                    survivorOrdinal++;
                 }
             }
 
@@ -811,7 +813,6 @@ namespace Alrauna.Amuse.Editor.Host
             orderedIgnored.Sort();
 
             return new CapturedAnimationEvidence(
-                MaterialDependencyClosureFailure.None,
                 alphaRelevanceRequest,
                 clips,
                 capturedByIndex,

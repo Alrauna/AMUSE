@@ -137,10 +137,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Does.Contain("not a material"));
             Assert.That(
                 AmuseReports.ClosureFailureSentence(
-                    MaterialDependencyClosureFailure.UnattestedMaterial),
-                Does.Contain("could not be captured"));
-            Assert.That(
-                AmuseReports.ClosureFailureSentence(
                     MaterialDependencyClosureFailure.None),
                 Is.EqualTo(""));
         }

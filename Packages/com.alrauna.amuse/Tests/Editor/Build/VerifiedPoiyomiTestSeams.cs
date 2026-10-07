@@ -101,7 +101,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out ClosedAlphaCaptureOutcome captured)
         {
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
             for (var index = 0; index < materials.Count; index++)
@@ -133,7 +133,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         : null);
             }
 
-            captured = result;
+            captured = new ClosedAlphaCaptureOutcome(
+                result, System.Array.Empty<int>());
             return true;
         }
 
