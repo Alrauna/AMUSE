@@ -830,8 +830,8 @@ namespace Alrauna.Amuse.Editor.Host
         /// with full agreement against the other formats, and the committed
         /// importer-produced capture characterization in the friend test
         /// assembly durably exercises both crunched shapes through the
-        /// production route. The streaming readable-clone arm's CPU decode
-        /// keeps its measured rounding fact, pinned by the same characterization.
+        /// production route. The streaming clone arm decodes crunched data
+        /// through the same CPU decoder that characterization pins.
         /// </para>
         /// <para>
         /// Everything else is refused. Float formats cannot supply the

@@ -456,19 +456,9 @@ namespace Alrauna.Amuse.Editor.Build
                 shaderTransfer.GrantedShaderNames.Count > 0
                     ? shaderTransfer.GrantedShaderNames
                     : null;
-            Func<Material, bool> grantedAwareLockAttestation =
-                grantedShaderNames == null
-                    ? lockedOriginalAttestation
-                    : material =>
-                        (lockedOriginalAttestation != null
-                            ? lockedOriginalAttestation(material)
-                            : LockedMaterialIdentity.OriginalShaderAttested(
-                                material))
-                        || LockedMaterialIdentity
-                            .RecordedOriginalShaderName(material) is
-                                string originalName
-                        && System.Linq.Enumerable.Contains(
-                            grantedShaderNames, originalName);
+            var grantedAwareLockAttestation = LockedMaterialIdentity
+                .GrantedAwareOriginalAttestation(
+                    lockedOriginalAttestation, grantedShaderNames);
             // The unlock window no longer carries its own per-build
             // consent subject. V2 and V4 passed live observation on
             // 2026-09-21, so per spec section 12 the gate moved to the
@@ -847,7 +837,7 @@ namespace Alrauna.Amuse.Editor.Build
                             RendererAnalysisRefusal
                                 .MaterialDependencyClosureFailed
                             ? AmuseReports.ClosureFailureSentence(
-                                evidence.ClosureFailure)
+                                ClosureFailureWayFor(evidence))
                             : null);
                     continue;
                 }
@@ -1351,6 +1341,30 @@ namespace Alrauna.Amuse.Editor.Build
                 RendererAnalysisRefusal.None,
                 currentMaterials,
                 slotResults);
+        }
+
+        /// <summary>
+        /// The closure way a renderer-level closure entry names. A
+        /// renderer-wide closure failure names its own way; a slot-scoped
+        /// all-failed renderer names its first failed slot's way, so the
+        /// renderer entry keeps naming the cause instead of the bare
+        /// refusal.
+        /// </summary>
+        private static MaterialDependencyClosureFailure ClosureFailureWayFor(
+            CapturedAnimationEvidence evidence)
+        {
+            if (evidence.ClosureFailure !=
+                MaterialDependencyClosureFailure.None)
+            {
+                return evidence.ClosureFailure;
+            }
+
+            foreach (var record in evidence.SlotClosureFailures)
+            {
+                return record.Failure;
+            }
+
+            return MaterialDependencyClosureFailure.None;
         }
 
         private static IReadOnlyList<BlockStateEntry> FilterBlockEntriesForSlot(

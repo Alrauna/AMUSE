@@ -458,6 +458,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "crunch_dxt5_mips", QuadrantPixels(), 8, 8,
                 TextureImporterFormat.DXT5Crunched);
 
+            Assert.That(
+                texture.format,
+                Is.EqualTo(TextureFormat.DXT5Crunched),
+                "The fixture must import in the format under test.");
             Assert.That(texture.mipmapCount, Is.GreaterThan(1));
             Assert.That(TryChain(texture, out var chain), Is.True);
             Assert.That(
@@ -522,16 +526,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(field.GetAlpha(4, 0), Is.EqualTo(0));
         }
 
-        // A crunched streaming texture captures through the readable-clone
-        // route now that the format is admitted. A uniform-opaque source keeps
-        // the clone arm's rounding tolerance out of the verdict.
+        // A crunched streaming texture captures on the streaming route now
+        // that the format is admitted. The fixture's png source decodes
+        // through the source-image arm, which is the route's first choice;
+        // the clone arm's CPU decode primitive for crunched data is
+        // characterized separately by CrunchedCpuDecodeMatchesTheGpuRoute
+        // OnSubmaximumQuadrants above.
         [Test]
-        public void StreamingCrunchedTextureCapturesThroughTheCloneRoute()
+        public void StreamingCrunchedTextureCapturesThroughTheSourceImageRoute()
         {
             var texture = ImportStreamingMipmapped(
                 "streaming_crunch", UniformPixels(8, 8, 255), 8, 8,
                 TextureImporterFormat.DXT5Crunched);
 
+            Assert.That(texture.format, Is.EqualTo(TextureFormat.DXT5Crunched));
             Assert.That(texture.streamingMipmaps, Is.True);
             Assert.That(TryChain(texture, out var chain), Is.True);
             Assert.That(

@@ -2102,9 +2102,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     controller = NewController(
                         root, "AMUSE closure phantom graph", clip);
 
-                    var context = AvatarProcessor.ProcessAvatar(
-                        root, SeamTestPlatform.Instance);
-                    probe = context.GetState<AlphaSeparationSeamProbe>();
+                    // The live curve is deleted between capture and apply:
+                    // the closure-failure record survives in the immutable
+                    // evidence, but the apply pass's live targetBindings no
+                    // longer contain index 2. The refusal must then come
+                    // from the SlotClosureFailures conjunct alone — a
+                    // validator without that conjunct lets the split apply
+                    // and fails this test.
+                    using (new ProbeScope(context =>
+                    {
+                        var committed = CommittedClipWithObjectBinding(
+                            root, "split", "m_Materials.Array.data[2]");
+                        Assert.That(committed, Is.Not.Null,
+                            "fixture precondition: the committed clip " +
+                            "must carry the phantom binding");
+                        AnimationUtility.SetObjectReferenceCurve(
+                            committed,
+                            EditorCurveBinding.PPtrCurve(
+                                "split", typeof(SkinnedMeshRenderer),
+                                "m_Materials.Array.data[2]"),
+                            null);
+                    }))
+                    {
+                        var context = AvatarProcessor.ProcessAvatar(
+                            root, SeamTestPlatform.Instance);
+                        probe = context.GetState<AlphaSeparationSeamProbe>();
+                    }
 
                     Assert.That(probe.Decision.IsPrepared, Is.True,
                         "the phantom-slot closure failure must not refuse " +

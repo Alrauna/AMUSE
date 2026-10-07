@@ -822,7 +822,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var mask = ImportTexture("bound_mask_mapped");
             material.SetTexture(Mask, mask);
             material.SetFloat(MaskValue, 0.4f);
-
             var value = Alpha(Interpret(material));
 
             Assert.That(
@@ -874,9 +873,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // Value -0.25 with strength 1: saturate(r - 0.25) is at most
             // 0.75 at the red field's top, so both map endpoint bounds sit
-            // below one and the uniform transparent arm answers without
-            // consulting any texel. The refusing provider fails the test if
-            // a verdict wrongly reads a field.
+            // below one and the uniform transparent arm answers. The
+            // TryGetUniformOutcome assertion is the texel-free pin: a
+            // classified resolution exposes no uniform outcome even when
+            // one triangle's verdict agrees with it.
             var material = BoundMaskMaterial();
             material.SetTexture(Mask, ImportTexture("bound_mask_negative"));
             material.SetFloat(MaskValue, -0.25f);
@@ -902,6 +902,84 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 outcome,
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ReplaceBoundMask_MappedPair_RidesTheMainSamplerAndTheMaskOwnSt()
+        {
+            // Two discrimination rows in one: the mask import is
+            // point-filtered, so a term that rode the mask's import
+            // sampling instead of the main sampler would carry a Point
+            // sampling and fail the equality; and a non-identity mask ST
+            // must survive into the mapped term's own affine, exactly like
+            // the (1, 0) twin proves.
+            var material = BoundMaskMaterial();
+            var mask = ImportTexture(
+                "bound_mask_mapped_st", i => i.filterMode = FilterMode.Point);
+            material.SetTexture(Mask, mask);
+            material.SetFloat(MaskValue, 0.4f);
+            material.SetTextureScale(Mask, new Vector2(2f, 1f));
+
+            var value = Alpha(Interpret(material));
+
+            Assert.That(
+                value.GetTextureSample(),
+                Is.EqualTo(RedFieldSample(
+                    ExpectedToken(mask),
+                    new Vector2(2f, 1f),
+                    new TextureSampling(
+                        TextureFilterMode.Bilinear, CoreWrapMode.Repeat))));
+            Assert.That(
+                value.GetMap(),
+                Is.EqualTo(AffineAlphaMap.FromBinary32(1f, 0.4f)));
+
+            var resolution = ResolveRed(value, SolidRedField());
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void ReplaceBoundMask_MappedPair_MipWitnessKeepsTheTriangleUnknown()
+        {
+            // Mip levels are alternative evidence: level 0 proves the
+            // triangle, and one witnessing texel anywhere in the chain
+            // keeps the outcome Unknown. MustRemainTransparent stays
+            // absorbing and Unknown never exits early.
+            var material = BoundMaskMaterial();
+            material.SetTexture(Mask, ImportTexture("bound_mask_mapped_mip"));
+            material.SetFloat(MaskValue, 0.4f);
+
+            var value = Alpha(Interpret(material));
+
+            var level0 = new AlphaTextureData(8, 8, SolidRedBytes());
+            var level1Bytes = new byte[16];
+            level1Bytes[5] = 0;
+            var level1 = new AlphaTextureData(4, 4, level1Bytes);
+            var mipped = ResolveRed(
+                value,
+                (TextureSourceId source,
+                 TextureChannel channel,
+                 out AlphaMipChain chain) =>
+                {
+                    chain = new AlphaMipChain(
+                        new[] { level0, level1 });
+                    return true;
+                });
+
+            Assert.That(mipped.IsResolved, Is.True);
+            Assert.That(
+                mipped.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            // No-op guard: the single-level solid field proves the same
+            // triangle, so the Unknown verdict comes from the witnessing
+            // level alone.
+            var solid = ResolveRed(value, SolidRedField());
+            Assert.That(
+                solid.Classify(InteriorTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         [Test]

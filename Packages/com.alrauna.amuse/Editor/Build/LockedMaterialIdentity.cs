@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -213,6 +215,41 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return Classify(SerializationOf(material)).OriginalShader;
+        }
+
+        /// <summary>
+        /// The D8 grant composition the build barrier uses for the lock's
+        /// original-attestation gate. The base predicate answers first; a
+        /// build that granted the transfer consent for exactly the
+        /// recorded original shader name additionally accepts the
+        /// unverified original as its own answered risk. A null or empty
+        /// grant set returns the base predicate unchanged, so an
+        /// unconsented build pins exactly as before.
+        /// </summary>
+        internal static Func<Material, bool> GrantedAwareOriginalAttestation(
+            Func<Material, bool> baseAttestation,
+            IReadOnlyCollection<string> grantedShaderNames)
+        {
+            if (grantedShaderNames == null || grantedShaderNames.Count == 0)
+            {
+                return baseAttestation;
+            }
+
+            return material =>
+                (baseAttestation != null
+                    ? baseAttestation(material)
+                    : OriginalShaderAttested(material))
+                || RecordedListedOriginalName(
+                    material, grantedShaderNames);
+        }
+
+        private static bool RecordedListedOriginalName(
+            Material material,
+            IReadOnlyCollection<string> grantedShaderNames)
+        {
+            var original = RecordedOriginalShaderName(material);
+            return !string.IsNullOrEmpty(original) &&
+                   grantedShaderNames.Contains(original);
         }
 
         /// <summary>
