@@ -1,5 +1,6 @@
-# Placeholder gate for branch protection / auto-merge.
-# Intentionally does nothing: real CI lands with the 0.1.0 release candidate.
+# The 0.1.0 release-candidate version series has arrived. This gate
+# remains a deliberate branch-protection placeholder: removing it needs
+# the required-check change first, or branch protection loses its gate.
 name: PR Check
 
 on:

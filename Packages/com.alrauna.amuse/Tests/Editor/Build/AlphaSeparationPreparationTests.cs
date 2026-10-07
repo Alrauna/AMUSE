@@ -5356,6 +5356,58 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A conversion-refused slot names the material that refused.
+        /// The locality arm's transparent slot refuses conversion through
+        /// its depth comparison, exactly one entry reports that refusal,
+        /// and the entry names the refused material.
+        /// <para>
+        /// Falsifies: an emitter that passes no offending material, and a
+        /// template that never consumes it.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ConversionRefusedSlotNamesItsMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "conversion_refusal_names_material");
+
+                using (var arm = LocalityArmFixture.Create(
+                           fixtures, opaqueTexture,
+                           transparent => transparent.SetFloat("_ZTest", 8f)))
+                {
+                    AmusePlatformFinishState amuse = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = arm.Run());
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.EqualTo(1),
+                        "fixture precondition: the transparent slot's " +
+                        "depth comparison must refuse exactly its own " +
+                        "slot");
+
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            arm.TransparentMaterial.name),
+                        "the refused slot's entry must name the material " +
+                        "that refused");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
         /// through the real barrier with the family-routing conversion

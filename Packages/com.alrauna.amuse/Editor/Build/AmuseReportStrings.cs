@@ -29,11 +29,12 @@ namespace Alrauna.Amuse.Editor.Build
                 "work with this renderer type yet.",
 
             ["amuse.renderer.MaterialDependencyClosureFailed"] =
-                "AMUSE could not read this renderer's animations.",
+                "AMUSE could not prove the material animations of " +
+                "renderer '{2}'.",
             ["amuse.renderer.MaterialDependencyClosureFailed:description"] =
-                "An animation on this avatar swaps a material on this " +
-                "renderer, and AMUSE cannot prove what that animation " +
-                "shows. The renderer keeps its original materials.",
+                "AMUSE cannot prove what this renderer shows when an " +
+                "animation changes its materials. {3}The renderer keeps " +
+                "its original materials.",
             ["amuse.renderer.MaterialDependencyClosureFailed:hint"] =
                 "Check the animations that touch this renderer. Every " +
                 "material they use must be one AMUSE supports.",
@@ -170,12 +171,13 @@ namespace Alrauna.Amuse.Editor.Build
                 "properties.",
 
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested"] =
-                "This renderer holds a locked material AMUSE cannot trace.",
+                "This renderer holds a locked material whose original " +
+                "shader AMUSE has not verified.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:description"] =
-                "The material is locked. Its recorded original shader is " +
-                "missing, or it is not the version AMUSE knows. AMUSE " +
-                "cannot read a locked material, so it changed nothing on " +
-                "this renderer.",
+                "The material is locked. The shader version the lock " +
+                "recorded is not a version AMUSE knows, or the lock " +
+                "records no original shader. AMUSE cannot read a locked " +
+                "material, so it changed nothing on this renderer.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
                 "Check that the original shader of the material is " +
                 "installed at the version the lock recorded.",
@@ -308,10 +310,9 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE could not read a material texture on slot {0}.",
             ["amuse.texture.UnavailableCapture:description"] =
                 "The capture of texture property {1} (channel {2}) on " +
-                "material slot {0} refused, so AMUSE has no proof for " +
-                "the triangles that sample it. Those triangles stay on " +
-                "the original material. The refusal reason is {3}, and " +
-                "the texture {4}.",
+                "material slot {0} refused. AMUSE cannot use this " +
+                "capture as proof for the triangles that sample it. " +
+                "The refusal reason is {3}, and the texture {4}.",
             ["amuse.texture.UnavailableCapture:hint"] =
                 "When the report says the texture has no source " +
                 "identity, an upstream build step replaced the " +
@@ -327,8 +328,7 @@ namespace Alrauna.Amuse.Editor.Build
                 "slot keeps its proof. " +
                 "The build saver persists these copies, and a persisted copy reads " +
                 "only under the same version rule. " +
-                "AMUSE kept the affected triangles on the original " +
-                "material. When the report says the texture has a source " +
+                "When the report says the texture has a source " +
                 "identity, make sure that the texture is a real " +
                 "imported asset and that the project supports texture " +
                 "capture.",
@@ -337,10 +337,9 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.texture.NonResidentMips:description"] =
                 "Texture property {1} (channel {2}) on material slot {0} " +
                 "has a mipmap limit that removes levels the proof must " +
-                "read, so AMUSE has no proof for the triangles that " +
-                "sample it. Those triangles stay on the original " +
-                "material. The refusal reason is {3}, and the texture " +
-                "{4}.",
+                "read. AMUSE cannot use this capture as proof for the " +
+                "triangles that sample it. The refusal reason is {3}, " +
+                "and the texture {4}.",
             ["amuse.texture.NonResidentMips:hint"] =
                 "Lower the project's texture mipmap limit, or remove the " +
                 "texture's own limit. When the report says the texture " +
@@ -353,18 +352,18 @@ namespace Alrauna.Amuse.Editor.Build
                 "cannot read.",
             ["amuse.texture.UnsupportedFormat:description"] =
                 "Texture property {1} (channel {2}) on material slot {0} " +
-                "uses a storage format outside the formats AMUSE can " +
-                "prove, so AMUSE has no proof for the triangles that " +
-                "sample it. Those triangles stay on the original " +
-                "material. The refusal reason is {3}, and the texture " +
-                "{4}.",
+                "uses the storage format {5}, which is outside the " +
+                "formats AMUSE can prove. The texture is '{6}'. AMUSE " +
+                "cannot use this capture as proof for the triangles " +
+                "that sample it. The refusal reason is {3}, and the " +
+                "texture {4}.",
             ["amuse.texture.UnsupportedFormat:hint"] =
                 "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
-                "DXT5, or BC7. When the report says the texture has no " +
-                "source identity, the build saw a texture that no project " +
-                "asset backs. When it says the texture has a source " +
-                "identity, the capture route refused a real imported " +
-                "asset.",
+                "DXT1, DXT5, or BC7. When the report says the texture " +
+                "has no source identity, the build saw a texture that " +
+                "no project asset backs. When it says the texture has a " +
+                "source identity, the capture route refused a real " +
+                "imported asset.",
             ["amuse.texture.NoAlphaChannel"] =
                 "A material texture on slot {0} has no alpha channel.",
             ["amuse.texture.NoAlphaChannel:description"] =
@@ -429,8 +428,9 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.OpaqueConversionRefused"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.OpaqueConversionRefused:description"] =
-                "The opaque conversion refused one material on slot {0} of renderer '{2}'. " +
-                "Reason: {1}. The slot keeps its original material.",
+                "The opaque conversion refused one material ({3}) on slot " +
+                "{0} of renderer '{2}'. Reason: {1}. The slot keeps its " +
+                "original material.",
             ["amuse.slotSeparation.OpaqueConversionRefused:hint"] =
                 "Check the conversion eligibility gates on the swapped " +
                 "materials of this slot.",

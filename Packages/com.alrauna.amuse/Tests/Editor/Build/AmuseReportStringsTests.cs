@@ -179,6 +179,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void RefusalNamingFixKeysExist()
+        {
+            // The per-cause loops cover the keys the key builders
+            // produce. These literal checks pin the exact keys the
+            // report naming fixes changed, so a table edit or a key
+            // builder change cannot drop one silently.
+            var keys = new[]
+            {
+                "amuse.slotSeparation.OpaqueConversionRefused:description",
+                "amuse.renderer.LockedPoiyomiOriginalShaderUnattested",
+                "amuse.renderer.LockedPoiyomiOriginalShaderUnattested:description",
+                "amuse.renderer.MaterialDependencyClosureFailed",
+                "amuse.renderer.MaterialDependencyClosureFailed:description",
+                "amuse.texture.UnsupportedFormat:description",
+                "amuse.texture.UnsupportedFormat:hint",
+            };
+            foreach (var key in keys)
+            {
+                Assert.That(AmuseReportStrings.Has(key), Is.True, key);
+            }
+        }
+
+        [Test]
         public void UnavailableCaptureHint_NamesTheUpstreamReplacement()
         {
             var hint = AmuseReportStrings.Get(

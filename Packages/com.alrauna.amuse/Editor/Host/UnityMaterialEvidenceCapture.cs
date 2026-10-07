@@ -1437,6 +1437,11 @@ namespace Alrauna.Amuse.Editor.Host
                 return Array.Empty<TextureCaptureRefusal>();
             }
 
+            var textureName = texture.name;
+            var formatName = texture is Texture2D texture2D
+                ? texture2D.format.ToString()
+                : null;
+
             var refusals = new List<TextureCaptureRefusal>(2);
             if (captured.AlphaCaptureRefusal !=
                 TextureCaptureRefusalReason.None)
@@ -1446,7 +1451,9 @@ namespace Alrauna.Amuse.Editor.Host
                     captured.HasSourceIdentity,
                     captured.SourceIdentity,
                     TextureChannel.Alpha,
-                    captured.AlphaCaptureRefusal));
+                    captured.AlphaCaptureRefusal,
+                    formatName: formatName,
+                    textureName: textureName));
             }
 
             if (captured.RedCaptureRefusal !=
@@ -1457,7 +1464,9 @@ namespace Alrauna.Amuse.Editor.Host
                     captured.HasSourceIdentity,
                     captured.SourceIdentity,
                     TextureChannel.Red,
-                    captured.RedCaptureRefusal));
+                    captured.RedCaptureRefusal,
+                    formatName: formatName,
+                    textureName: textureName));
             }
 
             return refusals.Count == 0

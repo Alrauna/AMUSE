@@ -111,6 +111,67 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void UnsupportedFormatEntryNamesFormatAndTexture()
+        {
+            var refusal = new TextureCaptureRefusal(
+                "_MainTex",
+                true,
+                default,
+                TextureChannel.Alpha,
+                TextureCaptureRefusalReason.UnsupportedFormat,
+                formatName: "DXT1Crunched",
+                textureName: "synthetic atlas copy");
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.TextureCaptureRefusal(
+                    _renderer, 5, refusal));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("DXT1Crunched"));
+            Assert.That(message, Does.Contain("synthetic atlas copy"));
+        }
+
+        [Test]
+        public void TextureEntriesNeverClaimWhereTrianglesLanded()
+        {
+            var reasons = new[]
+            {
+                TextureCaptureRefusalReason.UnavailableCapture,
+                TextureCaptureRefusalReason.NonResidentMips,
+                TextureCaptureRefusalReason.UnsupportedFormat,
+            };
+
+            foreach (var reason in reasons)
+            {
+                var refusal = new TextureCaptureRefusal(
+                    "_MainTex",
+                    true,
+                    default,
+                    TextureChannel.Alpha,
+                    reason,
+                    formatName: "DXT1Crunched",
+                    textureName: "synthetic atlas copy");
+
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.TextureCaptureRefusal(
+                        _renderer, 5, refusal));
+
+                var message = errors[0].TheError.ToMessage();
+
+                // A resolved slot's proof may not need the refused chain,
+                // so the entry states the lost evidence, never the slot's
+                // outcome. All three changed texture entries carry the
+                // invariant.
+                Assert.That(
+                    message, Does.Not.Contain("stay on the original material"));
+                Assert.That(
+                    message, Does.Not.Contain("kept the affected triangles"));
+                Assert.That(message, Does.Contain("cannot use this capture"));
+            }
+        }
+
+        [Test]
         public void SlotSeparationRefusalReportsSlotIndexAndCause()
         {
             var errors = ErrorReport.CaptureErrors(() =>

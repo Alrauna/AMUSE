@@ -323,9 +323,9 @@ namespace Alrauna.Amuse.Editor.Build
         }
         /// <summary>
         /// One Information entry per texture whose capture refused, with
-        /// the slot index, the texture property, and the sampled channel:
-        /// the triangles that sample it have no proof and stay on the
-        /// original material.
+        /// the slot index, the texture property, the sampled channel, the
+        /// storage format, and the texture name: the entry states the lost
+        /// evidence and never claims the slot's outcome.
         /// </summary>
         internal static void TextureCaptureRefusal(
             Renderer renderer,
@@ -344,7 +344,9 @@ namespace Alrauna.Amuse.Editor.Build
                     refusal.Reason.ToString(),
                     refusal.HasSourceIdentity
                         ? "has a source identity"
-                        : "has no source identity");
+                        : "has no source identity",
+                    refusal.FormatName,
+                    refusal.TextureName);
             }
         }
         /// <summary>
@@ -382,7 +384,8 @@ namespace Alrauna.Amuse.Editor.Build
             Renderer renderer,
             RendererAnalysisRefusal cause,
             int meshSubMeshCount = -1,
-            int materialSlotCount = -1)
+            int materialSlotCount = -1,
+            string detail = null)
         {
             using (ErrorReport.WithContextObject(renderer))
             {
@@ -391,7 +394,38 @@ namespace Alrauna.Amuse.Editor.Build
                     ErrorSeverity.Information,
                     AmuseReportStrings.RendererKey(cause),
                     SlotCountPhrase(meshSubMeshCount),
-                    SlotCountPhrase(materialSlotCount));
+                    SlotCountPhrase(materialSlotCount),
+                    renderer != null ? renderer.gameObject.name : null,
+                    string.IsNullOrEmpty(detail) ? "" : detail);
+            }
+        }
+
+        /// <summary>
+        /// One plain sentence naming the way the material dependency
+        /// closure failed. The renderer entry prints it so the reader
+        /// can tell a read failure from an unassigned slot. The empty
+        /// string keeps the entry readable when no way is known.
+        /// </summary>
+        internal static string ClosureFailureSentence(
+            MaterialDependencyClosureFailure failure)
+        {
+            switch (failure)
+            {
+                case MaterialDependencyClosureFailure
+                        .MissingCurrentMaterial:
+                    return "The renderer has a material slot with no " +
+                           "material assigned. ";
+                case MaterialDependencyClosureFailure.SlotOutOfRange:
+                    return "An animation binds a material slot the " +
+                           "renderer does not have. ";
+                case MaterialDependencyClosureFailure.InvalidSwapValue:
+                    return "An animation swaps in something that is not " +
+                           "a material. ";
+                case MaterialDependencyClosureFailure.UnattestedMaterial:
+                    return "A material in the animation could not be " +
+                           "captured. ";
+                default:
+                    return "";
             }
         }
 

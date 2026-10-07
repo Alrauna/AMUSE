@@ -986,6 +986,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ["_PoiParallax"] = "Parallax",
                 ["_AlphaForceOpaque"] = "Force opaque",
                 ["_AlphaForceOpaque2"] = "Second pass force opaque",
+                ["_AlphaMaskValue"] = "Alpha mask",
+                ["_AlphaMaskBlendStrength"] = "Alpha mask",
+                ["_AlphaMaskInvert"] = "Alpha mask",
                 ["_Mode"] = "Rendering mode preset",
                 ["_ModeTwoPass"] = "Second pass rendering mode preset",
             };
