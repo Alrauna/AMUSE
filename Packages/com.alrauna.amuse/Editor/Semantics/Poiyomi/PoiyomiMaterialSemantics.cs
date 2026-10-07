@@ -1015,6 +1015,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ["_AlphaMaskInvert"] = "Alpha mask",
                 ["_Mode"] = "Rendering mode preset",
                 ["_ModeTwoPass"] = "Second pass rendering mode preset",
+                ["_EnableOutlines"] = "Outline",
+                ["_OutlineOverrideAlpha"] = "Outline",
+                ["_LineColor"] = "Outline",
+                ["_OutlineTexture"] = "Outline",
+                ["_OutlineTexturePan"] = "Outline",
+                ["_OutlineTextureUV"] = "Outline",
+                ["_OutlineAlphaDistanceFade"] = "Outline",
+                ["_OutlineALColorEnabled"] = "Outline",
             };
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
@@ -1290,131 +1298,314 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
 
-            // Replace discards the base term outright, so _MainIgnoreTexAlpha,
-            // the tint alpha and _MainTex cannot reach the result and are not
-            // read.
+            ScalarSemanticValue baseAlpha;
             if (maskReplacement != null)
             {
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    maskReplacement);
-            }
-
-            if (!TryReadBinary(
-                    evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    IgnoreMainTexAlphaProperty);
-            }
-
-            if (!evidence.TryGetColor(baseColorProperty, out var color) ||
-                !IsFinite(color.a))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    baseColorProperty);
-            }
-
-            var colorAlpha = color.a;
-            if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var mainTexture))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
-            }
-
-            ScalarSemanticValue baseChain;
-            if (ignoreAlpha || !mainTexture.IsAssigned)
-            {
-                baseChain = ScalarSemanticValue.Constant(colorAlpha);
+                // Replace discards the base term outright, so _MainIgnoreTexAlpha,
+                // the tint alpha and _MainTex cannot reach the result and are not
+                // read.
+                baseAlpha = maskReplacement;
             }
             else
             {
-                // Field-predicate agreement (Task 6). A non-cutout preset
-                // claims the exact-one rule, and only an exact-255 field can
-                // answer it: a cutoff-binarized field's byte 255 means the
-                // texel satisfies the capture's cutoff test, so consuming it
-                // under the exact-one rule would call a chain between the
-                // cutoff and one opaque. The capture predicate selects the
-                // exact field for every non-cutout preset, so a binarized
-                // field under a non-cutout claim means the two sides
-                // disagree, and the claim refuses naming _Cutoff.
-                if (!isCutout &&
-                    mainTexture.Texture.CaptureThreshold < 1f)
+                if (!TryReadBinary(
+                        evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
                 {
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        CutoffProperty);
+                        IgnoreMainTexAlphaProperty);
                 }
 
-                // Only a texture-backed claim depends on the sampling
-                // coordinate, so the parallax proof is required here and
-                // nowhere earlier.
-                var samplingGate =
-                    FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
-                if (samplingGate != null)
+                if (!evidence.TryGetColor(baseColorProperty, out var color) ||
+                    !IsFinite(color.a))
                 {
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        samplingGate);
+                        baseColorProperty);
                 }
 
-                if (!TryInterpretMainSample(
-                        evidence,
-                        PoiyomiSemanticOutput.Alpha,
-                        requireColorInterpretation: false,
-                        diagnostics,
-                        out var sample,
-                        out _))
+                var colorAlpha = color.a;
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var mainTexture))
                 {
-                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainTextureProperty);
                 }
 
-                baseChain = colorAlpha == 1f
-                    ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
-                    : ScalarSemanticValue.TextureTimesConstant(
-                        sample, TextureChannel.Alpha, colorAlpha);
+                ScalarSemanticValue baseChain;
+                if (ignoreAlpha || !mainTexture.IsAssigned)
+                {
+                    baseChain = ScalarSemanticValue.Constant(colorAlpha);
+                }
+                else
+                {
+                    // Field-predicate agreement (Task 6). A non-cutout preset
+                    // claims the exact-one rule, and only an exact-255 field can
+                    // answer it: a cutoff-binarized field's byte 255 means the
+                    // texel satisfies the capture's cutoff test, so consuming it
+                    // under the exact-one rule would call a chain between the
+                    // cutoff and one opaque. The capture predicate selects the
+                    // exact field for every non-cutout preset, so a binarized
+                    // field under a non-cutout claim means the two sides
+                    // disagree, and the claim refuses naming _Cutoff.
+                    if (!isCutout &&
+                        mainTexture.Texture.CaptureThreshold < 1f)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            CutoffProperty);
+                    }
+
+                    // Only a texture-backed claim depends on the sampling
+                    // coordinate, so the parallax proof is required here and
+                    // nowhere earlier.
+                    var samplingGate =
+                        FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
+                    if (samplingGate != null)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            samplingGate);
+                    }
+
+                    if (!TryInterpretMainSample(
+                            evidence,
+                            PoiyomiSemanticOutput.Alpha,
+                            requireColorInterpretation: false,
+                            diagnostics,
+                            out var sample,
+                            out _))
+                    {
+                        return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    }
+
+                    baseChain = colorAlpha == 1f
+                        ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
+                        : ScalarSemanticValue.TextureTimesConstant(
+                            sample, TextureChannel.Alpha, colorAlpha);
+                }
+
+                // Multiply folds the admitted mask term into the running chain
+                // through the exact product machinery, the same fold the lilToon
+                // term performs over its layered chain. The map list threads:
+                // an admitted mapped mask factor must carry its affine map, so
+                // dropping it here would read the raw red field and prove a
+                // term the shader never evaluates.
+                if (maskMultiplier != null)
+                {
+                    var multiplied = ScalarProductFold.Fold(
+                        baseChain,
+                        maskMultiplier,
+                        MainAlphaMaskModeProperty,
+                        property => AddDiagnostic(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            property),
+                        threadMaps: true);
+                    if (multiplied == null)
+                    {
+                        return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    }
+
+                    baseAlpha = multiplied;
+                }
+                else
+                {
+                    baseAlpha = baseChain;
+                }
             }
 
-            // Multiply folds the admitted mask term into the running chain
-            // through the exact product machinery, the same fold the lilToon
-            // term performs over its layered chain. The map list threads:
-            // an admitted mapped mask factor must carry its affine map, so
-            // dropping it here would read the raw red field and prove a
-            // term the shader never evaluates.
-            if (maskMultiplier != null)
+            if (!evidence.TryGetScalar(
+                    OutlineEnabledProperty, out var enableOutlines) ||
+                !IsFinite(enableOutlines))
             {
-                var multiplied = ScalarProductFold.Fold(
-                    baseChain,
-                    maskMultiplier,
-                    MainAlphaMaskModeProperty,
-                    property => AddDiagnostic(
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineEnabledProperty);
+            }
+
+            if (enableOutlines <= 0f)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Complete(baseAlpha);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineOverrideAlphaProperty, out var overrideAlpha) ||
+                !IsFinite(overrideAlpha))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineOverrideAlphaProperty);
+            }
+
+            if (!evidence.TryGetColor(
+                    LineColorProperty, out var lineColor) ||
+                !IsFinite(lineColor.a) ||
+                lineColor.a != 1f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    LineColorProperty);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineAlphaDistanceFadeProperty, out var fade) ||
+                !IsFinite(fade) ||
+                fade != 0f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineAlphaDistanceFadeProperty);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineAudioLinkColorProperty, out var alColor) ||
+                !IsFinite(alColor) ||
+                alColor != 0f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineAudioLinkColorProperty);
+            }
+
+            if (!evidence.TryGetTexture(
+                    OutlineTextureProperty, out var outlineTexture))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineTextureProperty);
+            }
+
+            ScalarSemanticValue outlineFactor;
+            if (!outlineTexture.IsAssigned)
+            {
+                outlineFactor = ScalarSemanticValue.Constant(1f);
+            }
+            else if (outlineTexture.Texture != null &&
+                     outlineTexture.Texture.SampledAlphaIsProvenOne)
+            {
+                outlineFactor = ScalarSemanticValue.Constant(1f);
+            }
+            else
+            {
+                if (!evidence.TryGetScalar(
+                        OutlineTextureUvProperty, out var rawChannel) ||
+                    !IsFinite(rawChannel))
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        property),
-                    threadMaps: true);
-                if (multiplied == null)
-                {
-                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                        OutlineTextureUvProperty);
                 }
 
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    multiplied);
+                var channel = Mathf.RoundToInt(rawChannel);
+                if (channel < 0 || channel > 3 || channel != rawChannel)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureUvProperty);
+                }
+
+                if (!evidence.TryGetVector(
+                        OutlineTexturePanProperty, out var pan) ||
+                    !IsFinite(pan) ||
+                    pan.x != 0f || pan.y != 0f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTexturePanProperty);
+                }
+
+                if (!outlineTexture.HasScaleOffset ||
+                    !IsFinite(outlineTexture.Scale) ||
+                    !IsFinite(outlineTexture.Offset))
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureProperty);
+                }
+
+                if (outlineTexture.Texture == null ||
+                    !outlineTexture.Texture.HasSourceIdentity ||
+                    !outlineTexture.Texture.HasAlphaChannel ||
+                    outlineTexture.Texture.AlphaCaptureRefusal != TextureCaptureRefusalReason.None)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureProperty);
+                }
+
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainTextureProperty);
+                }
+
+                var mapping = new UvMapping(
+                    channel, outlineTexture.Scale, outlineTexture.Offset);
+                var sample = new TextureSample(
+                    outlineTexture.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                outlineFactor = ScalarSemanticValue.Texture(
+                    sample, TextureChannel.Alpha);
             }
 
-            return SemanticOutput<ScalarSemanticValue>.Complete(baseChain);
+            var folded = ScalarProductFold.Fold(
+                baseAlpha,
+                outlineFactor,
+                OutlineEnabledProperty,
+                property => AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    property),
+                threadMaps: true);
+            if (folded == null)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(folded);
         }
 
         /// <summary>

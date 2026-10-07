@@ -1794,6 +1794,62 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
+        public void LayerChannelMapping_WithAffineTransform_TransformsChannelCoordinates()
+        {
+            var field = new AlphaTextureData(
+                4,
+                4,
+                new byte[]
+                {
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 255,
+                });
+            var uv0Set = new Vector2[][]
+            {
+                new[]
+                {
+                    new Vector2(0f, 0f),
+                    new Vector2(0.1f, 0f),
+                    new Vector2(0f, 0.1f),
+                },
+            };
+            var uv1Set = new Vector2[]
+            {
+                new Vector2(0.3f, 0.3f),
+                new Vector2(0.4f, 0.3f),
+                new Vector2(0.3f, 0.4f),
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                uv0Set[0][0], uv0Set[0][1], uv0Set[0][2])
+                .WithChannels(new IReadOnlyList<Vector2>[] { uv1Set }, 0, 1, 2);
+
+            var value = ScalarSemanticValue.Texture(
+                Sample(
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    uvChannel: 1,
+                    scaleX: 2f,
+                    scaleY: 2f,
+                    offsetX: 0.5f,
+                    offsetY: 0.25f),
+                TextureChannel.Alpha);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                Providing(field), 0);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(triangle),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "channel 1 coordinates (0.3, 0.3) scaled by (2, 2) and offset by (0.5, 0.25) " +
+                "must land in the opaque corner (1.1, 0.85); untransformed channel 1 or " +
+                "transformed channel 0 would remain transparent");
+        }
+
+        [Test]
         public void SaturatingSumWithMissingEvidenceFailsClosed()
         {
             var value = ScalarSemanticValue.SaturatingSum(
