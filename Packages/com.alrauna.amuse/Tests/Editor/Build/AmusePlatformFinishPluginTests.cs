@@ -313,6 +313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
 
                 AmusePlatformFinishPass.Execute(
                     context,
@@ -344,6 +345,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
 
                 var reports = ErrorReport.CaptureErrors(
                     () => AmusePlatformFinishPass.Execute(
@@ -402,6 +404,386 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        // --- Falsifier 3: an implementation that grants by material reference
+        // instead of shader name must fail the distinct-materials-same-shader
+        // case: two materials, one shader, one grant covers both. ---
+
+        /// <summary>
+        /// The granted swap-only name admits the swap-only material through
+        /// the transferred capture. Two assigned materials share one
+        /// unverified shader, so one shader-name grant covers both
+        /// instances; a second shader exists only inside the swap curve,
+        /// so only the widened pre-scan can offer and grant it. The unmoved
+        /// gates stay: every refusal remains per slot.
+        /// </summary>
+        [Test]
+        public void AGrantedSwapOnlyShaderNameAdmitsTheSwapMaterialThroughTheTransferredCapture()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var legacyShader = WriteSwapConsentStandIn(
+                "granted-swap-legacy90.shader",
+                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                PoiyomiStandInProperties());
+            var twoPassShader = WriteSwapConsentStandIn(
+                "granted-swap-two-pass.shader",
+                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
+                PoiyomiTwoPassStandInProperties());
+            var assignedFirst = new Material(legacyShader);
+            var assignedSecond = new Material(legacyShader);
+            var swapOnly = new Material(twoPassShader);
+            var mesh = TwoSubmeshTriangleMesh();
+            var root = new GameObject("AMUSE granted swap consent fixture");
+            var clip = new AnimationClip { name = "granted swap clip" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = swapOnly,
+                    },
+                });
+            var consentSubjects = new List<string>();
+
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials =
+                    new[] { assignedFirst, assignedSecond };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ConsentTestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                state.StructuralGraph = StoredGraphWithSwapClip(clip);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    subjects =>
+                    {
+                        consentSubjects.AddRange(subjects);
+                        return true;
+                    });
+
+                var after = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    consentSubjects,
+                    Has.Count.EqualTo(2),
+                    "one subject per distinct unverified shader: the " +
+                    "assigned shader and the swap-only shader");
+                Assert.That(
+                    consentSubjects.Any(subject => subject.Contains(
+                        PoiyomiMaterialSemantics
+                            .PoiyomiLegacy90ShaderName)),
+                    Is.True,
+                    "the assigned shader's subject must be offered");
+                Assert.That(
+                    consentSubjects.Any(subject => subject.Contains(
+                        PoiyomiMaterialSemantics
+                            .PoiyomiTwoPassShaderName)),
+                    Is.True,
+                    "the swap-only shader's subject must be offered");
+                Assert.That(after.ConsentDeclined, Is.False);
+                Assert.That(
+                    after.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    after.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "the granted build must not refuse the renderer");
+                Assert.That(
+                    after.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.Zero,
+                    "both assigned instances share one granted shader " +
+                    "name, and the swap-only material rides the same " +
+                    "grant, so no slot may refuse");
+                Assert.That(after.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    after.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(2),
+                    "exactly the two assigned triangles may be opaque " +
+                    "candidates: fewer means a slot still refused, and " +
+                    "more means the swap-only material was treated as a " +
+                    "proven slot");
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(assignedFirst);
+                Object.DestroyImmediate(assignedSecond);
+                Object.DestroyImmediate(swapOnly);
+                Object.DestroyImmediate(clip);
+            }
+        }
+
+        /// <summary>
+        /// The declined path: with the presenter declining, nothing is
+        /// granted. The build itself stops as a declined no-op, and the
+        /// Part A contract shows what the ungranted swap-only material
+        /// would do in any build that reaches capture: it fails
+        /// attestation and reports its own ordinal, never a batch-wide
+        /// silence.
+        /// </summary>
+        [Test]
+        public void ADeclinedBuildGrantsNothingAndTheSwapOnlyMaterialRefusesWithTheNamedCause()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var legacyShader = WriteSwapConsentStandIn(
+                "declined-swap-legacy90.shader",
+                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                PoiyomiStandInProperties());
+            var twoPassShader = WriteSwapConsentStandIn(
+                "declined-swap-two-pass.shader",
+                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
+                PoiyomiTwoPassStandInProperties());
+            var assignedMaterial = new Material(legacyShader);
+            var swapOnly = new Material(twoPassShader);
+            var mesh = TwoSubmeshTriangleMesh();
+            var root = new GameObject("AMUSE declined swap consent fixture");
+            var clip = new AnimationClip { name = "declined swap clip" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = swapOnly,
+                    },
+                });
+
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { assignedMaterial };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ConsentTestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                state.StructuralGraph = StoredGraphWithSwapClip(clip);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    subjects => false);
+
+                var after = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    after.ConsentDeclined,
+                    Is.True,
+                    "the decline must stop the build");
+                Assert.That(after.AnalyzedRendererCount, Is.Zero);
+                Assert.That(
+                    context.GetState<TransientUnlockWindowState>()
+                        .ConsentGranted,
+                    Is.False,
+                    "a declined build grants nothing, including the " +
+                    "unlock window");
+
+                // The ungranted swap-only material's own contract level
+                // refusal, per Part A: the transferred capturer reports
+                // the failing ordinal instead of failing the batch or
+                // staying silent.
+                var success = UnityMaterialSemantics
+                    .TryCaptureClosedAlphaMaterialsTransferred(
+                        new[] { swapOnly },
+                        new[]
+                        {
+                            CapturedAlphaMaterialFamily.PoiyomiTwoPass,
+                        },
+                        PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest,
+                        AlphaPolicyBounds.Inert,
+                        System.Array.Empty<string>(),
+                        out var outcome,
+                        null);
+
+                Assert.That(success, Is.True,
+                    "the capturer survives an ungranted member");
+                Assert.That(
+                    outcome.UnattestedOrdinals,
+                    Is.EqualTo(new[] { 0 }),
+                    "the ungranted swap-only material refuses with its " +
+                    "own named ordinal");
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(assignedMaterial);
+                Object.DestroyImmediate(swapOnly);
+                Object.DestroyImmediate(clip);
+            }
+        }
+
+        private const string SwapConsentShaderFolder =
+            "Assets/AmuseTests_SwapConsent";
+
+        private static Shader WriteSwapConsentStandIn(
+            string fileName,
+            string shaderName,
+            string properties)
+        {
+            return TestShaderWriter.WriteTestShader(
+                SwapConsentShaderFolder + "/" + fileName,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    Properties\n    {" + properties +
+                "\n    }\n    SubShader { Pass {} }\n}\n");
+        }
+
+        private static Mesh TwoSubmeshTriangleMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f),
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+            return mesh;
+        }
+
+        private static CommittedControllerGraphResult StoredGraphWithSwapClip(
+            AnimationClip clip)
+        {
+            return new CommittedControllerGraphResult(
+                AvatarAnimationRefusal.None,
+                new[]
+                {
+                    new CommittedLayer(
+                        "swap-consent",
+                        0,
+                        AnimatorLayerBlendingMode.Override,
+                        new[] { clip },
+                        System.Array.Empty<StateMachineBehaviour>(),
+                        false),
+                });
+        }
+
+        private sealed class ConsentTestGenericPlatform : INDMFPlatformProvider
+        {
+            internal static readonly ConsentTestGenericPlatform Instance =
+                new ConsentTestGenericPlatform();
+
+            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string DisplayName => "AMUSE swap consent test generic";
+        }
+
+        /// <summary>
+        /// The Poiyomi stand-in property block: the scalars the plain alpha
+        /// request and the verified interpretation read, at the wholly
+        /// opaque corpus state.
+        /// </summary>
+        private static string PoiyomiStandInProperties()
+        {
+            return @"
+        shader_master_label (""Master"", Float) = 0
+        _ShaderOptimizerEnabled (""Locked"", Float) = 0
+        _MainTex (""Main"", 2D) = ""white"" {}
+        _Color (""Color"", Color) = (1,1,1,1)
+        _BumpMap (""Bump"", 2D) = ""bump"" {}
+        _EmissionMap (""Emission"", 2D) = ""white"" {}
+        _EnableEmission (""Emission 0"", Float) = 0
+        _EnableEmission1 (""Emission 1"", Float) = 0
+        _EnableEmission2 (""Emission 2"", Float) = 0
+        _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
+        _AlphaForceOpaque (""Force Opaque"", Float) = 1
+        _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
+        _AlphaToCoverage (""Coverage"", Float) = 0
+        _AlphaSharpenedA2C (""Sharpened"", Float) = 0
+        _AlphaDithering (""Dither"", Float) = 0
+        _EnableDissolve (""Dissolve"", Float) = 0
+        _EnableUDIMDiscardOptions (""UDIM"", Float) = 0
+        _AlphaMod (""Alpha Mod"", Float) = 0
+        _MainAlphaMaskMode (""Mask Mode"", Float) = 0
+        _AlphaDistanceFade (""Distance"", Float) = 0
+        _AlphaFresnel (""Fresnel"", Float) = 0
+        _AlphaAngular (""Angular"", Float) = 0
+        _AlphaAudioLinkEnabled (""Audio Alpha"", Float) = 0
+        _EnableAudioLink (""Audio"", Float) = 0
+        _AlphaGlobalMask (""Global Mask"", Float) = 0
+        _AlphaPremultiply (""Premultiply"", Float) = 0
+        _BSSEnabled (""Beat Saber"", Float) = 0
+        _BackFaceEnabled (""Backface"", Float) = 0
+        _RGBMaskEnabled (""RGB Mask"", Float) = 0
+        _DecalEnabled (""Decal 0"", Float) = 0
+        _DecalEnabled1 (""Decal 1"", Float) = 0
+        _DecalEnabled2 (""Decal 2"", Float) = 0
+        _DecalEnabled3 (""Decal 3"", Float) = 0
+        _EnableFlipbook (""Flipbook"", Float) = 0
+        _EnableRimLighting (""Rim"", Float) = 0
+        _EnableRim2Lighting (""Rim 2"", Float) = 0
+        _EnableDepthRimLighting (""Depth Rim"", Float) = 0
+        _EnableEnvironmentalRim (""Env Rim"", Float) = 0
+        _VideoEffectsEnable (""Video"", Float) = 0
+        _EnableTouchGlow (""Touch"", Float) = 0
+        _MainVertexColoringEnabled (""Vertex"", Float) = 0
+        _MainTexUV (""UV"", Float) = 0
+        _MainTexPan (""Pan"", Vector) = (0,0,0,0)
+        _MainPixelMode (""Pixel"", Float) = 0
+        _MainTexStochastic (""Stochastic"", Float) = 0";
+        }
+
+        /// <summary>
+        /// The Two Pass stand-in property block: the plain block plus the
+        /// second family's tint and force-opaque flag.
+        /// </summary>
+        private static string PoiyomiTwoPassStandInProperties()
+        {
+            return PoiyomiStandInProperties() + @"
+        _AlphaForceOpaque2 (""Force Opaque Two Pass"", Float) = 1
+        _TwoPassColor (""Two Pass Color"", Color) = (1,1,1,1)";
         }
 
         [Test]

@@ -436,14 +436,51 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
+            // Reaching positive lifecycle permission without the bindings the
+            // capture pass retains is an integration defect in the caller, not a
+            // domain refusal: nothing about the avatar has been observed yet.
+            if (state.AnimatorBindings == null)
+            {
+                throw new InvalidOperationException(
+                    "AMUSE PlatformFinish barrier reached positive lifecycle " +
+                    "permission with no retained animator bindings.");
+            }
+
+            // The structural pass enumerated the real graph before
+            // virtualization and stored it; this pass reads that stored
+            // result so the checks that need real clips keep their
+            // pre-virtualization view. Direct callers that bypass the pass
+            // list get the enumeration inline: at that point the graph is
+            // still real, so the view is equally pre-virtualization.
+            if (state.StructuralGraph == null)
+            {
+                AmuseStructuralGraphCheck.Execute(context);
+            }
+
+            var graph = state.StructuralGraph;
+
+            if (graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                // Avatar scope: the exact named cause is preserved and the whole
+                // avatar stops. No renderer is analyzed, so no partial result and
+                // no per-renderer accounting can survive. The structural graph
+                // check pass named the cause, on the pass path and on the inline
+                // fallback path. This gate records the state and stops.
+                state.AvatarRefusal = graph.Refusal;
+                return;
+            }
+
             // D8 consent layer: one consolidated click-through per build
             // covers host versions beyond the attested maxima and shader
-            // names collected from the avatar's assigned materials whose
-            // source is not a verified version. Batch mode has no user to
-            // ask and refuses. Declining is a total no-op after the
-            // trigger: an opted-out avatar never asks.
+            // names collected from the avatar's assigned materials and
+            // swap-reachable materials whose source is not a verified
+            // version. The block sits after the committed-graph gate, so
+            // an avatar that refuses avatar-wide is never asked. Batch
+            // mode has no user to ask and refuses. Declining is a total
+            // no-op after the trigger: an opted-out avatar never asks.
             var shaderTransfer = UnityMaterialSemantics
-                .CollectTransferConsent(AllAssignedMaterials(context));
+                .CollectTransferConsent(
+                    AssignedAndSwapCurvedMaterials(context, graph));
             var subjects = new List<string>(lifecycle.ConsentSubjects);
             subjects.AddRange(shaderTransfer.Subjects);
             // The granted transfer names compose into every gate that
@@ -489,41 +526,6 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var transferShaders = grantedShaderNames != null;
-
-
-            // Reaching positive lifecycle permission without the bindings the
-            // capture pass retains is an integration defect in the caller, not a
-            // domain refusal: nothing about the avatar has been observed yet.
-            if (state.AnimatorBindings == null)
-            {
-                throw new InvalidOperationException(
-                    "AMUSE PlatformFinish barrier reached positive lifecycle " +
-                    "permission with no retained animator bindings.");
-            }
-
-            // The structural pass enumerated the real graph before
-            // virtualization and stored it; this pass reads that stored
-            // result so the checks that need real clips keep their
-            // pre-virtualization view. Direct callers that bypass the pass
-            // list get the enumeration inline: at that point the graph is
-            // still real, so the view is equally pre-virtualization.
-            if (state.StructuralGraph == null)
-            {
-                AmuseStructuralGraphCheck.Execute(context);
-            }
-
-            var graph = state.StructuralGraph;
-
-            if (graph.Refusal != AvatarAnimationRefusal.None)
-            {
-                // Avatar scope: the exact named cause is preserved and the whole
-                // avatar stops. No renderer is analyzed, so no partial result and
-                // no per-renderer accounting can survive. The structural graph
-                // check pass named the cause, on the pass path and on the inline
-                // fallback path. This gate records the state and stops.
-                state.AvatarRefusal = graph.Refusal;
-                return;
-            }
 
             // Every avatar-scope gate has passed: the unlock window opens
             // here, before capture, so the whole pipeline below reads the
@@ -1091,6 +1093,52 @@ namespace Alrauna.Amuse.Editor.Build
                     if (material != null)
                     {
                         yield return material;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The D8 pre-scan's material universe: the assigned materials,
+        /// then every material a stored-graph clip can swap onto a slot
+        /// through an object-reference curve. A material reachable only
+        /// through a swap must get its consent subject like an assigned
+        /// one. Null and non-material key values skip, and distinctness
+        /// stays the collector's job, with the seen set keeping the walk
+        /// itself duplicate-free.
+        /// </summary>
+        private static IEnumerable<Material> AssignedAndSwapCurvedMaterials(
+            BuildContext context,
+            CommittedControllerGraphResult graph)
+        {
+            var seen = new HashSet<Material>();
+            foreach (var material in AllAssignedMaterials(context))
+            {
+                if (seen.Add(material))
+                {
+                    yield return material;
+                }
+            }
+            foreach (var layer in graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    foreach (var binding in AnimationUtility
+                                 .GetObjectReferenceCurveBindings(clip))
+                    {
+                        if (!binding.propertyName.StartsWith("m_Materials"))
+                        {
+                            continue;
+                        }
+                        foreach (var key in AnimationUtility
+                                     .GetObjectReferenceCurve(clip, binding))
+                        {
+                            if (key.value is Material material
+                                && seen.Add(material))
+                            {
+                                yield return material;
+                            }
+                        }
                     }
                 }
             }
