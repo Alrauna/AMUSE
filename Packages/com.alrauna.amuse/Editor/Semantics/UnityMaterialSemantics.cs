@@ -309,37 +309,14 @@ namespace Alrauna.Amuse.Editor.Semantics
             out ClosedAlphaCaptureOutcome outcome,
             RegisteredSourceLookup resolveRegisteredSource)
         {
-            if (materials == null) throw new ArgumentNullException(nameof(materials));
-            if (families == null) throw new ArgumentNullException(nameof(families));
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            if (materials.Count != families.Count)
-            {
-                throw new ArgumentException(
-                    "Material and family counts must match.", nameof(families));
-            }
-
-            var requests = new MaterialEvidenceRequest[materials.Count];
-            for (var index = 0; index < materials.Count; index++)
-            {
-                requests[index] = request;
-            }
-
-            var result = CaptureBatch(
-                materials, families, requests, bounds,
+            return TryCaptureClosedAlphaMaterialsTransferred(
+                materials,
+                families,
+                request,
+                bounds,
+                System.Array.Empty<string>(),
+                out outcome,
                 resolveRegisteredSource);
-            var captured = new List<CapturedAlphaMaterial>();
-            var failed = new List<int>();
-            for (var index = 0; index < result.Count; index++)
-            {
-                if (IsAttestedAlphaMaterial(result[index]))
-                {
-                    captured.Add(result[index]);
-                    continue;
-                }
-                failed.Add(index);
-            }
-            outcome = new ClosedAlphaCaptureOutcome(captured, failed);
-            return true;
         }
 
         /// <summary>

@@ -1501,12 +1501,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             ScalarSemanticValue outlineFactor;
-            if (!outlineTexture.IsAssigned)
-            {
-                outlineFactor = ScalarSemanticValue.Constant(1f);
-            }
-            else if (outlineTexture.Texture != null &&
-                     outlineTexture.Texture.SampledAlphaIsProvenOne)
+            if (!outlineTexture.IsAssigned ||
+                (outlineTexture.Texture != null &&
+                 outlineTexture.Texture.SampledAlphaIsProvenOne))
             {
                 outlineFactor = ScalarSemanticValue.Constant(1f);
             }
@@ -2095,15 +2092,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     main.Texture.Sampling);
                 var mapped = AffineAlphaMap.FromBinary32(
                     blendStrength, value);
+                var factor = ScalarSemanticValue.MappedTexture(
+                    maskSample, TextureChannel.Red, mapped);
                 if (replace)
                 {
-                    replacement = ScalarSemanticValue.MappedTexture(
-                        maskSample, TextureChannel.Red, mapped);
+                    replacement = factor;
                 }
                 else
                 {
-                    multiplier = ScalarSemanticValue.MappedTexture(
-                        maskSample, TextureChannel.Red, mapped);
+                    multiplier = factor;
                 }
 
                 return true;

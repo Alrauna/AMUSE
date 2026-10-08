@@ -18,14 +18,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
-        private static void AssertUnsupportedOutputIsAbsent(PoiyomiSemanticResult result)
-        {
-            Assert.That(
-                result.Diagnostics.Any(d => d.Output == PoiyomiSemanticOutput.Alpha),
-                Is.False,
-                "Alpha output must not emit a diagnostic.");
-        }
-
         [Test]
         public void OutlinesDisabled_HostileState_ChangesNothing()
         {
@@ -36,7 +28,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var result = Interpret(material);
 
-            AssertUnsupportedOutputIsAbsent(result);
+            Assert.That(
+                result.Diagnostics.Any(d => d.Output == PoiyomiSemanticOutput.Alpha),
+                Is.False,
+                "Alpha output must not emit a diagnostic.");
         }
 
         [Test]
