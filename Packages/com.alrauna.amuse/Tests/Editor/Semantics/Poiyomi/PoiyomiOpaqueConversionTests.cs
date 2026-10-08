@@ -975,36 +975,163 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Direct falsification of the <c>AlreadyOpaque</c> classification.
-        /// <see cref="TryFindNonCanonicalFact"/> and the evaluator's canonical
-        /// comparison are separate code paths over separate inputs - a live
-        /// material versus captured evidence - so the per-field tests above do
-        /// not protect this one. Perturbing any single canonical fact must stop
-        /// the material being classified as a no-op.
-        /// <para>
-        /// The replacement outcome is deliberately unconstrained. Depending on
-        /// the property the correct answer is <c>Convertible</c> (for facts no
-        /// gate reads, such as the outline blend fields) or a specific refusal
-        /// (for facts a gate reads, such as <c>_ZTest</c>). The load-bearing
-        /// assertion is only that a disagreement cannot silently pass the
-        /// canonical-comparison path.
-        /// </para>
+        /// An authored opaque Poiyomi material has shader default values for inactive properties.
+        /// Inactive properties include cutoff and alpha blend factors.
+        /// The material is functionally opaque.
+        /// It must evaluate to AlreadyOpaque.
         /// </summary>
         [Test]
-        public void PerturbingAnyCanonicalProperty_PreventsAlreadyOpaque()
+        public void AuthoredOpaqueMaterialWithShaderDefaults_EvaluatesToAlreadyOpaque()
         {
-            foreach (var (property, value) in ExpectedCanonicalTuple)
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 0f);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetFloat("_BlendOpAlpha", 0f);
+            material.SetFloat("_DstBlendAlpha", 10f);
+            material.SetFloat("_OutlineDstBlendAlpha", 10f);
+            material.SetFloat("_OutlineBlendOpAlpha", 0f);
+            material.renderQueue = 2000;
+            material.SetOverrideTag("RenderType", "Opaque");
+
+            var result = EvaluateFor(material);
+
+            Assert.That(
+                result.Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        /// <summary>
+        /// A material with forced opaque alpha and standard base RGB replacement is functionally opaque.
+        /// It must evaluate to AlreadyOpaque even when the rendering mode is Cutout.
+        /// </summary>
+        [Test]
+        public void AuthoredOpaqueMaterialWithForcedAlpha_EvaluatesToAlreadyOpaque()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 1f);
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetFloat("_BlendOp", 0f);
+            material.SetFloat("_SrcBlend", 1f);
+            material.SetFloat("_DstBlend", 0f);
+            material.SetFloat("_ZWrite", 1f);
+            material.SetFloat("_ZTest", 4f);
+            material.SetFloat("_AddSrcBlend", 1f);
+            material.SetFloat("_AddDstBlend", 1f);
+            material.SetFloat("_AlphaToCoverage", 0f);
+            material.SetFloat("_AlphaPremultiply", 0f);
+            material.renderQueue = 2000;
+            material.SetOverrideTag("RenderType", "Opaque");
+
+            var result = EvaluateFor(material);
+
+            Assert.That(
+                result.Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        private static readonly (string Property, float PerturbedValue)[] EssentialOpaquePropertyPerturbations =
+        {
+            ("_SrcBlend", 5f),
+            ("_DstBlend", 10f),
+            ("_BlendOp", 1f),
+            ("_ZWrite", 0f),
+            ("_ZTest", 8f),
+            ("_AddSrcBlend", 0f),
+            ("_AddDstBlend", 0f),
+            ("_AlphaToCoverage", 1f),
+            ("_AlphaPremultiply", 1f),
+        };
+
+        /// <summary>
+        /// Perturbing any essential opaque property must prevent AlreadyOpaque.
+        /// Essential properties control RGB blend replacement, depth write, depth test, and alpha features.
+        /// Perturbing the render queue or the RenderType tag must also prevent AlreadyOpaque.
+        /// </summary>
+        [Test]
+        public void PerturbingEssentialOpaqueProperty_PreventsAlreadyOpaque()
+        {
+            foreach (var (property, perturbedValue) in EssentialOpaquePropertyPerturbations)
             {
                 var material = MakeCanonical(NewFixtureMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
-                material.SetFloat(property, value + 1f);
+                material.SetFloat(property, perturbedValue);
 
                 var result = EvaluateFor(material);
 
                 Assert.That(
                     result.Outcome,
                     Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
-                    $"Perturbed '{property}' was still classified AlreadyOpaque.");
+                    $"Perturbed essential property '{property}' unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetFloat("_Mode", 1f);
+                material.SetFloat("_AlphaForceOpaque", 0f);
+
+                var result = EvaluateFor(material);
+
+                Assert.That(
+                    result.Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Cutout mode without forced opaque unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.renderQueue = 3000;
+
+                Assert.That(
+                    EvaluateFor(material).Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Perturbed render queue unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetOverrideTag("RenderType", "Transparent");
+
+                Assert.That(
+                    EvaluateFor(material).Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Perturbed RenderType tag unexpectedly retained AlreadyOpaque.");
+            }
+        }
+
+        private static readonly (string Property, float PerturbedValue)[] InactiveOpaquePropertyPerturbations =
+        {
+            ("_Cutoff", 0.5f),
+            ("_BlendOpAlpha", 0f),
+            ("_DstBlendAlpha", 10f),
+            ("_OutlineDstBlendAlpha", 10f),
+            ("_OutlineBlendOpAlpha", 0f),
+        };
+
+        /// <summary>
+        /// Inactive properties do not affect opaque RGB rendering.
+        /// Perturbing any inactive property must retain the AlreadyOpaque outcome.
+        /// </summary>
+        [Test]
+        public void PerturbingInactiveProperty_RetainsAlreadyOpaque()
+        {
+            foreach (var (property, perturbedValue) in InactiveOpaquePropertyPerturbations)
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetFloat(property, perturbedValue);
+
+                var result = EvaluateFor(material);
+
+                Assert.That(
+                    result.Outcome,
+                    Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    $"Perturbed inactive property '{property}' unexpectedly prevented AlreadyOpaque.");
             }
         }
 

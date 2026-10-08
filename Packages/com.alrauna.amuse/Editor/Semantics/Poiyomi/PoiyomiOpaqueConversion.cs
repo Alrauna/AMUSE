@@ -282,7 +282,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             // 2. AlreadyOpaque, before any transformation gate.
-            if (IsCanonicalOpaque(values, effectiveRenderQueue, effectiveRenderType))
+            if (IsFunctionallyOpaque(values, effectiveRenderQueue, effectiveRenderType))
             {
                 return PoiyomiOpaqueConversionEligibility.AlreadyOpaque();
             }
@@ -413,21 +413,38 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Whether all 25 canonical facts already match. The recipe values
-        /// occupy the entries of <see cref="ConversionSchema"/> in
-        /// order, so the comparison indexes them directly.
+        /// Checks whether the material is already functionally opaque.
+        /// It checks essential properties for opaque rendering.
+        /// It ignores inactive properties such as alpha blending factors.
         /// </summary>
-        private static bool IsCanonicalOpaque(
+        private static bool IsFunctionallyOpaque(
             IReadOnlyList<float> values,
             int effectiveRenderQueue,
             string effectiveRenderType)
         {
-            for (var index = 0; index < CanonicalOpaqueTuple.Length; index++)
+            var mode = Read(values, "_Mode");
+            var alphaForceOpaque = Read(values, "_AlphaForceOpaque");
+            if (mode != 0f && alphaForceOpaque != 1f)
             {
-                if (values[index] != CanonicalOpaqueTuple[index].Value)
-                {
-                    return false;
-                }
+                return false;
+            }
+
+            if (Read(values, "_BlendOp") != 0f ||
+                Read(values, "_SrcBlend") != 1f ||
+                Read(values, "_DstBlend") != 0f ||
+                Read(values, "_ZWrite") != 1f ||
+                Read(values, "_ZTest") != 4f ||
+                Read(values, "_AddSrcBlend") != 1f ||
+                Read(values, "_AddDstBlend") != 1f ||
+                Read(values, "_AlphaToCoverage") != 0f ||
+                Read(values, "_AlphaPremultiply") != 0f)
+            {
+                return false;
+            }
+
+            if (Read(values, "_Cutoff") > 1f)
+            {
+                return false;
             }
 
             return effectiveRenderQueue == CanonicalOpaqueRenderQueue &&
