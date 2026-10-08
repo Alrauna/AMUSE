@@ -233,3 +233,25 @@ Use the narrowest validation layer that can disprove the behavior. Then expand v
 Empirical evidence is not automatically universal proof. Do not demand mathematical proof when the declared product contract needs a well-characterized compatibility guarantee.
 
 When you find an independent prerequisite, do not mix it into the current work. Park the current work. Complete the prerequisite separately from fresh `main`. Resume the consumer from updated `main`.
+
+## Development Skill Governance
+
+Superpowers is the process and workflow authority. Ponytail is the implementation-minimalism authority.
+
+When both apply, Superpowers determines how the work proceeds. Ponytail constrains what is built and how simply it is implemented. Ponytail MUST NOT be used to bypass Superpowers planning, debugging, TDD, review, or verification requirements. Ponytail MUST NOT be used to weaken correctness, security, data safety, accessibility, or repository-specific requirements.
+
+Superpowers governs development workflow. Invoke applicable Superpowers skills before development actions:
+
+- Use `brainstorming` for new features or design changes.
+- Use `systematic-debugging` for bugs, test failures, and unexpected behavior.
+- Use `writing-plans` for non-trivial approved work.
+- Use `tdd` or `test-driven-development` during implementation.
+- Use `subagent-driven-development` or `executing-plans` for planned work.
+- Use `code-review` skills (`code-review`, `requesting-code-review`, `receiving-code-review`) for code review.
+- Use `verification-before-completion` before claiming success or completion.
+
+Ponytail governs implementation minimalism throughout design, implementation, bug fixes, refactors, and dependency decisions.
+
+After understanding the affected code path, apply the Ponytail ladder: YAGNI → reuse existing code → stdlib → native platform feature → existing dependency → simplest expression → minimum new implementation. Avoid speculative abstractions, unnecessary dependencies, boilerplate, and premature flexibility.
+
+When reviewing substantive diffs or suspected over-engineering, use `ponytail-review`. This review complements correctness-focused code review by finding unnecessary complexity.

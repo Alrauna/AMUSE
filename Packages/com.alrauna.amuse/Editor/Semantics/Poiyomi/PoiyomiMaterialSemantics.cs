@@ -61,6 +61,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
+        internal const string OutlineEnabledProperty = "_EnableOutlines";
+        internal const string OutlineOverrideAlphaProperty = "_OutlineOverrideAlpha";
+        internal const string LineColorProperty = "_LineColor";
+        internal const string OutlineTextureProperty = "_OutlineTexture";
+        internal const string OutlineAlphaDistanceFadeProperty =
+            "_OutlineAlphaDistanceFade";
+        internal const string OutlineAudioLinkColorProperty =
+            "_OutlineALColorEnabled";
+        internal const string OutlineTextureUvProperty = "_OutlineTextureUV";
+        internal const string OutlineTexturePanProperty = "_OutlineTexturePan";
 
         // The Two Pass second family reads this tint's alpha where the plain
         // base reads _Color.a (note 4.1, vendor line 29785).
@@ -991,6 +1001,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ["_AlphaMaskInvert"] = "Alpha mask",
                 ["_Mode"] = "Rendering mode preset",
                 ["_ModeTwoPass"] = "Second pass rendering mode preset",
+                ["_EnableOutlines"] = "Outline",
+                ["_OutlineOverrideAlpha"] = "Outline",
+                ["_LineColor"] = "Outline",
+                ["_OutlineTexture"] = "Outline",
+                ["_OutlineTexturePan"] = "Outline",
+                ["_OutlineTextureUV"] = "Outline",
+                ["_OutlineAlphaDistanceFade"] = "Outline",
+                ["_OutlineALColorEnabled"] = "Outline",
             };
 
         private static SemanticOutput<ScalarSemanticValue> InterpretAlpha(
@@ -1266,128 +1284,311 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
 
-            // Replace discards the base term outright, so _MainIgnoreTexAlpha,
-            // the tint alpha and _MainTex cannot reach the result and are not
-            // read.
+            ScalarSemanticValue baseAlpha;
             if (maskReplacement != null)
             {
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    maskReplacement);
-            }
-
-            if (!TryReadBinary(
-                    evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    IgnoreMainTexAlphaProperty);
-            }
-
-            if (!evidence.TryGetColor(baseColorProperty, out var color) ||
-                !IsFinite(color.a))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    baseColorProperty);
-            }
-
-            var colorAlpha = color.a;
-            if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var mainTexture))
-            {
-                return RecordUnknown<ScalarSemanticValue>(
-                    diagnostics,
-                    PoiyomiSemanticOutput.Alpha,
-                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
-            }
-
-            ScalarSemanticValue baseChain;
-            if (ignoreAlpha || !mainTexture.IsAssigned)
-            {
-                baseChain = ScalarSemanticValue.Constant(colorAlpha);
+                // Replace discards the base term outright, so _MainIgnoreTexAlpha,
+                // the tint alpha and _MainTex cannot reach the result and are not
+                // read.
+                baseAlpha = maskReplacement;
             }
             else
             {
-                // Field-predicate agreement (Task 6). A non-cutout preset
-                // claims the exact-one rule, and only an exact-255 field can
-                // answer it: a cutoff-binarized field's byte 255 means the
-                // texel satisfies the capture's cutoff test, so consuming it
-                // under the exact-one rule would call a chain between the
-                // cutoff and one opaque. The capture predicate selects the
-                // exact field for every non-cutout preset, so a binarized
-                // field under a non-cutout claim means the two sides
-                // disagree, and the claim refuses naming _Cutoff.
-                if (!isCutout &&
-                    mainTexture.Texture.CaptureThreshold < 1f)
+                if (!TryReadBinary(
+                        evidence, IgnoreMainTexAlphaProperty, out var ignoreAlpha))
                 {
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        CutoffProperty);
+                        IgnoreMainTexAlphaProperty);
                 }
 
-                // Only a texture-backed claim depends on the sampling
-                // coordinate, so the parallax proof is required here and
-                // nowhere earlier.
-                var samplingGate =
-                    FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
-                if (samplingGate != null)
+                if (!evidence.TryGetColor(baseColorProperty, out var color) ||
+                    !IsFinite(color.a))
                 {
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        samplingGate);
+                        baseColorProperty);
                 }
 
-                if (!TryInterpretMainSample(
-                        evidence,
-                        PoiyomiSemanticOutput.Alpha,
-                        requireColorInterpretation: false,
-                        diagnostics,
-                        out var sample,
-                        out _))
+                var colorAlpha = color.a;
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var mainTexture))
                 {
-                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainTextureProperty);
                 }
 
-                baseChain = colorAlpha == 1f
-                    ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
-                    : ScalarSemanticValue.TextureTimesConstant(
-                        sample, TextureChannel.Alpha, colorAlpha);
+                ScalarSemanticValue baseChain;
+                if (ignoreAlpha || !mainTexture.IsAssigned)
+                {
+                    baseChain = ScalarSemanticValue.Constant(colorAlpha);
+                }
+                else
+                {
+                    // Field-predicate agreement (Task 6). A non-cutout preset
+                    // claims the exact-one rule, and only an exact-255 field can
+                    // answer it: a cutoff-binarized field's byte 255 means the
+                    // texel satisfies the capture's cutoff test, so consuming it
+                    // under the exact-one rule would call a chain between the
+                    // cutoff and one opaque. The capture predicate selects the
+                    // exact field for every non-cutout preset, so a binarized
+                    // field under a non-cutout claim means the two sides
+                    // disagree, and the claim refuses naming _Cutoff.
+                    if (!isCutout &&
+                        mainTexture.Texture.CaptureThreshold < 1f)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            CutoffProperty);
+                    }
+
+                    // Only a texture-backed claim depends on the sampling
+                    // coordinate, so the parallax proof is required here and
+                    // nowhere earlier.
+                    var samplingGate =
+                        FirstFailedZeroGate(evidence, TextureBackedAlphaGates);
+                    if (samplingGate != null)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            samplingGate);
+                    }
+
+                    if (!TryInterpretMainSample(
+                            evidence,
+                            PoiyomiSemanticOutput.Alpha,
+                            requireColorInterpretation: false,
+                            diagnostics,
+                            out var sample,
+                            out _))
+                    {
+                        return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    }
+
+                    baseChain = colorAlpha == 1f
+                        ? ScalarSemanticValue.Texture(sample, TextureChannel.Alpha)
+                        : ScalarSemanticValue.TextureTimesConstant(
+                            sample, TextureChannel.Alpha, colorAlpha);
+                }
+
+                // Multiply folds the admitted mask term into the running chain
+                // through the exact product machinery, the same fold the lilToon
+                // term performs over its layered chain. The map list threads:
+                // an admitted mapped mask factor must carry its affine map, so
+                // dropping it here would read the raw red field and prove a
+                // term the shader never evaluates.
+                if (maskMultiplier != null)
+                {
+                    var multiplied = ScalarProductFold.Fold(
+                        baseChain,
+                        maskMultiplier,
+                        MainAlphaMaskModeProperty,
+                        property => AddDiagnostic(
+                            diagnostics,
+                            PoiyomiSemanticOutput.Alpha,
+                            PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                            property),
+                        threadMaps: true);
+                    if (multiplied == null)
+                    {
+                        return SemanticOutput<ScalarSemanticValue>.Unknown();
+                    }
+
+                    baseAlpha = multiplied;
+                }
+                else
+                {
+                    baseAlpha = baseChain;
+                }
             }
 
-            // Multiply folds the admitted mask term into the running chain
-            // through the exact product machinery, the same fold the lilToon
-            // term performs over its layered chain.
-            if (maskMultiplier != null)
+            if (!evidence.TryGetScalar(
+                    OutlineEnabledProperty, out var enableOutlines) ||
+                !IsFinite(enableOutlines))
             {
-                var multiplied = ScalarProductFold.Fold(
-                    baseChain,
-                    maskMultiplier,
-                    MainAlphaMaskModeProperty,
-                    property => AddDiagnostic(
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineEnabledProperty);
+            }
+
+            if (enableOutlines <= 0f)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Complete(baseAlpha);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineOverrideAlphaProperty, out var overrideAlpha) ||
+                !IsFinite(overrideAlpha))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineOverrideAlphaProperty);
+            }
+
+            if (!evidence.TryGetColor(
+                    LineColorProperty, out var lineColor) ||
+                !IsFinite(lineColor.a) ||
+                lineColor.a != 1f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    LineColorProperty);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineAlphaDistanceFadeProperty, out var fade) ||
+                !IsFinite(fade) ||
+                fade != 0f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineAlphaDistanceFadeProperty);
+            }
+
+            if (!evidence.TryGetScalar(
+                    OutlineAudioLinkColorProperty, out var alColor) ||
+                !IsFinite(alColor) ||
+                alColor != 0f)
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineAudioLinkColorProperty);
+            }
+
+            if (!evidence.TryGetTexture(
+                    OutlineTextureProperty, out var outlineTexture))
+            {
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    OutlineTextureProperty);
+            }
+
+            ScalarSemanticValue outlineFactor;
+            if (!outlineTexture.IsAssigned ||
+                (outlineTexture.Texture != null &&
+                 outlineTexture.Texture.SampledAlphaIsProvenOne))
+            {
+                outlineFactor = ScalarSemanticValue.Constant(1f);
+            }
+            else
+            {
+                if (!evidence.TryGetScalar(
+                        OutlineTextureUvProperty, out var rawChannel) ||
+                    !IsFinite(rawChannel))
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        property),
-                    threadMaps: false);
-                if (multiplied == null)
-                {
-                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                        OutlineTextureUvProperty);
                 }
 
-                return SemanticOutput<ScalarSemanticValue>.Complete(
-                    multiplied);
+                var channel = Mathf.RoundToInt(rawChannel);
+                if (channel < 0 || channel > 3 || channel != rawChannel)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureUvProperty);
+                }
+
+                if (!evidence.TryGetVector(
+                        OutlineTexturePanProperty, out var pan) ||
+                    !IsFinite(pan) ||
+                    pan.x != 0f || pan.y != 0f)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTexturePanProperty);
+                }
+
+                if (!outlineTexture.HasScaleOffset ||
+                    !IsFinite(outlineTexture.Scale) ||
+                    !IsFinite(outlineTexture.Offset))
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureProperty);
+                }
+
+                if (outlineTexture.Texture == null ||
+                    !outlineTexture.Texture.HasSourceIdentity ||
+                    !outlineTexture.Texture.HasAlphaChannel ||
+                    outlineTexture.Texture.AlphaCaptureRefusal != TextureCaptureRefusalReason.None)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        OutlineTextureProperty);
+                }
+
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    return RecordUnknown<ScalarSemanticValue>(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        MainTextureProperty);
+                }
+
+                var mapping = new UvMapping(
+                    channel, outlineTexture.Scale, outlineTexture.Offset);
+                var sample = new TextureSample(
+                    outlineTexture.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                outlineFactor = ScalarSemanticValue.Texture(
+                    sample, TextureChannel.Alpha);
             }
 
-            return SemanticOutput<ScalarSemanticValue>.Complete(baseChain);
+            var folded = ScalarProductFold.Fold(
+                baseAlpha,
+                outlineFactor,
+                OutlineEnabledProperty,
+                property => AddDiagnostic(
+                    diagnostics,
+                    PoiyomiSemanticOutput.Alpha,
+                    PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                    property),
+                threadMaps: true);
+            if (folded == null)
+            {
+                return SemanticOutput<ScalarSemanticValue>.Unknown();
+            }
+
+            return SemanticOutput<ScalarSemanticValue>.Complete(folded);
         }
 
         /// <summary>
@@ -1488,16 +1689,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// the alpha. Under Multiply the term folds into the running chain
         /// through the exact product machinery: the saturated pairs are a
         /// constant one, so the chain stands unchanged, and the invert-off
-        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term is
-        /// a saturating difference, and a product with a saturating factor has
-        /// no association-invariant exact-one predicate, so it refuses naming
-        /// the mode property, exactly like the lilToon fold. The mask
+        /// (1, 0) term is the sampled red itself. The invert-on (1, 0) term
+        /// is a saturating difference, and a product with a saturating factor
+        /// has no association-invariant exact-one predicate, so it refuses
+        /// naming the mode property, exactly like the lilToon fold. The mask
         /// coordinate is <c>uv[_AlphaMaskUV]</c> under the mask's own plain
         /// affine with zero pan, and the sample rides the main sampler. Add
-        /// and Subtract and every other mode keep refusing, and so does every
-        /// other strength-value pair, because proving the saturate of
-        /// <c>r * s + v</c> for arbitrary <c>s</c> and <c>v</c> needs a
-        /// per-texel threshold envelope. Every refusal records one scoped
+        /// and Subtract and every other mode keep refusing. Strength one
+        /// admits every invert-off value below one through the mapped red
+        /// field: the term is the exact affine map
+        /// <c>saturate(r + value)</c>, which the mapped lattice resolves per
+        /// triangle, proving exactly one only where the triangle's sampled
+        /// domain holds no sub-one texel. Arbitrary strengths keep refusing:
+        /// proving <c>saturate(r * s + v)</c> for a strength outside one
+        /// needs a per-texel threshold envelope. Invert with a value in
+        /// (0, 1) keeps refusing: it mirrors the opacity predicate to an
+        /// upper bound on red, which the exact-one lattice answers unsoundly
+        /// or not at all. Every refusal records one scoped
         /// diagnostic naming the property that could not be proven.
         /// </summary>
         /// <param name="replacement">
@@ -1822,11 +2030,75 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return true;
             }
 
+            // Every other strength-one invert-off pair is the mapped red
+            // field. The vendor term is saturate(r * 1 + value): the
+            // multiply by one is exact, the single addition rounds once,
+            // and rounding and saturate are monotone in r, so the term is
+            // exactly the affine map saturate(r + value) evaluated on the
+            // stored red bytes. The mapped lattice resolves it per
+            // triangle: a triangle whose sampled domain holds no sub-one
+            // texel proves exactly one, and any other footprint fails
+            // closed to Unknown. The sample rides the main sampler, so the
+            // main sampling and parallax gates run exactly as in the
+            // (1, 0) arm above.
+            //
+            // Invert on mirrors the predicate to an upper bound on red,
+            // which the exact-one lattice answers unsoundly or not at all,
+            // so invert with a value in (0, 1) keeps refusing below.
+            if (blendStrength == 1f && !invert && value < 1f)
+            {
+                if (!evidence.TryGetTexture(
+                        MainTextureProperty, out var main) ||
+                    main.Texture == null ||
+                    !main.Texture.HasSampling)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
+                        MainTextureProperty);
+                    return false;
+                }
+
+                var samplingGate = FirstFailedZeroGate(
+                    evidence, TextureBackedAlphaGates);
+                if (samplingGate != null)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        samplingGate);
+                    return false;
+                }
+
+                var maskSample = new TextureSample(
+                    mask.Texture.SourceIdentity,
+                    mapping,
+                    main.Texture.Sampling);
+                var mapped = AffineAlphaMap.FromBinary32(
+                    blendStrength, value);
+                var factor = ScalarSemanticValue.MappedTexture(
+                    maskSample, TextureChannel.Red, mapped);
+                if (replace)
+                {
+                    replacement = factor;
+                }
+                else
+                {
+                    multiplier = factor;
+                }
+
+                return true;
+            }
+
             // Every other pair needs the deferred threshold-envelope
-            // contract: proving saturate(r * s + v) at one needs a per-texel
-            // predicate whose rounding argument is future work. The refusal
-            // names the first culprit, the strength when it leaves one and
-            // the value alone when the strength is exactly one.
+            // contract: proving saturate(r * s + v) at one for a strength
+            // outside one needs a per-texel predicate whose rounding
+            // argument is future work, and invert with a value in (0, 1)
+            // turns the opacity predicate into an upper bound on red. The
+            // refusal names the first culprit, the strength when it leaves
+            // one and the value alone when the strength is exactly one.
             AddDiagnostic(
                 diagnostics,
                 PoiyomiSemanticOutput.Alpha,
@@ -2441,6 +2713,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 DstBlend2Property,
                 BlendOp2Property,
                 BlendOpAlpha2Property,
+                OutlineEnabledProperty,
+                OutlineOverrideAlphaProperty,
+                OutlineAlphaDistanceFadeProperty,
+                OutlineAudioLinkColorProperty,
+                OutlineTextureUvProperty,
             };
             scalars.UnionWith(MainSamplingModeGates);
             scalars.UnionWith(AlphaCoverageGates);
@@ -2454,8 +2731,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 activeColorSpace: false,
                 presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
-                colorProperties: new[] { ColorProperty },
-                vectorProperties: new[] { MainTexPanProperty, AlphaMaskPanProperty },
+                colorProperties: new[] { ColorProperty, LineColorProperty },
+                vectorProperties: new[]
+                {
+                    MainTexPanProperty,
+                    AlphaMaskPanProperty,
+                    OutlineTexturePanProperty,
+                },
                 textureProperties: new[]
                 {
                     // The cutout split's capture declaration: when the
@@ -2486,6 +2768,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.RedChannel),
+
+                    // The outline texture proves per triangle through its alpha channel when
+                    // the outline is enabled: its own scale and offset for the plain affine,
+                    // the stable project identity, the whole-texture fast-path fact, and the
+                    // alpha field itself. Sampling is never asked of it: the vendor outline
+                    // block samples through the main sampler, whose state the main-texture
+                    // request above already carries.
+                    new TexturePropertyEvidenceRequest(
+                        OutlineTextureProperty,
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.SampledAlphaIsOne |
+                        TextureEvidenceKinds.AlphaChannel),
                 });
         }
 

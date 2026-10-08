@@ -31,13 +31,15 @@ namespace Alrauna.Amuse.Editor.Analysis
             RendererAnalysisRefusal refusal,
             IReadOnlyList<AlphaResolution> resolutions,
             CapturedAlphaMaterial offender,
-            AlphaUnknownReason unknownReason)
+            AlphaUnknownReason unknownReason,
+            MaterialDependencyClosureFailure closureWay)
         {
             IsResolved = refusal == RendererAnalysisRefusal.None;
             Refusal = refusal;
             Resolutions = resolutions;
             Offender = offender;
             UnknownReason = unknownReason;
+            ClosureWay = closureWay;
         }
 
         internal bool IsResolved { get; }
@@ -58,10 +60,20 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </summary>
         internal AlphaUnknownReason UnknownReason { get; }
 
+        /// <summary>
+        /// The way a closure-failure refusal failed, or
+        /// <see cref="MaterialDependencyClosureFailure.None"/> when the
+        /// refusal is not a closure failure. Report evidence only: the
+        /// slot's outcome is the refusal, never the way.
+        /// </summary>
+        internal MaterialDependencyClosureFailure ClosureWay { get; }
+
         internal static SlotResolutionResult Refused(
             RendererAnalysisRefusal refusal,
             CapturedAlphaMaterial offender = null,
-            AlphaUnknownReason unknownReason = null)
+            AlphaUnknownReason unknownReason = null,
+            MaterialDependencyClosureFailure closureWay =
+                MaterialDependencyClosureFailure.None)
         {
             if (refusal == RendererAnalysisRefusal.None)
             {
@@ -71,7 +83,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return new SlotResolutionResult(
                 refusal, Array.Empty<AlphaResolution>(), offender,
-                unknownReason);
+                unknownReason, closureWay);
         }
 
         internal static SlotResolutionResult Resolved(
@@ -88,7 +100,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return new SlotResolutionResult(
                 RendererAnalysisRefusal.None, Array.AsReadOnly(copy),
-                null, null);
+                null, null, MaterialDependencyClosureFailure.None);
         }
     }
 

@@ -389,25 +389,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             // boundary.
             var transformed = triangle;
             var envelope = AlphaUvEnvelope.Zero;
-            if (_mapping.Scale.x != 1f ||
-                _mapping.Scale.y != 1f ||
-                _mapping.Offset.x != 0f ||
-                _mapping.Offset.y != 0f)
-            {
-                if (!AffineUvTransform.TryTransform(
-                        _mapping, triangle, out transformed, out envelope))
-                {
-                    return TriangleAlphaOutcome.Unknown;
-                }
-            }
-
             if (_mapping.Channel != 0)
             {
-                // A layer channel mapping is exact identity in scale and
-                // offset by the frontend boundary, so the channel selection
-                // substitutes the named channel's vertex coordinates and the
-                // classifier reads them as plain uv0. A channel the mesh
-                // does not carry invalidates only this triangle's proof.
+                // A layer channel mapping selects the named channel's vertex
+                // coordinates and the classifier reads them as plain uv0. A
+                // channel the mesh does not carry invalidates only this
+                // triangle's proof.
                 if (!triangle.TryGetUvSet(_mapping.Channel,
                         out var channelA, out var channelB,
                         out var channelC))
@@ -418,6 +405,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                 transformed = TriangleAlphaInput.WithUv0(
                     triangle.Position0, triangle.Position1,
                     triangle.Position2, channelA, channelB, channelC);
+            }
+
+            if (_mapping.Scale.x != 1f ||
+                _mapping.Scale.y != 1f ||
+                _mapping.Offset.x != 0f ||
+                _mapping.Offset.y != 0f)
+            {
+                if (!AffineUvTransform.TryTransform(
+                        _mapping, transformed, out transformed, out envelope))
+                {
+                    return TriangleAlphaOutcome.Unknown;
+                }
             }
 
             var sawUnknown = false;

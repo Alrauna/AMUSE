@@ -22,8 +22,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     public sealed class PoiyomiOpaqueConversionTests : PoiyomiFixtureTestBase
     {
         /// <summary>
-        /// The 24 properties conversion reads: the 23 canonical recipe
-        /// properties plus the eligibility-only <c>_EnableOutlines</c>.
+        /// The 23 properties conversion reads: the canonical recipe
+        /// properties.
         /// <c>_AddBlendOp</c> and <c>_AddBlendOpAlpha</c> are deliberately
         /// absent - the recipe never writes them, so the unchanged blend
         /// operation cancels once the factors are proven equivalent at alpha 1.
@@ -36,7 +36,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_AlphaToCoverage", "_ZWrite", "_ZTest", "_AlphaPremultiply",
             "_OutlineSrcBlend", "_OutlineDstBlend", "_OutlineSrcBlendAlpha",
             "_OutlineDstBlendAlpha", "_OutlineBlendOp", "_OutlineBlendOpAlpha",
-            "_EnableOutlines",
         };
 
         /// <summary>
@@ -109,7 +108,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var actual = PoiyomiOpaqueConversion.ConversionRequiredSchemaProperties;
 
-            Assert.That(actual.Count, Is.EqualTo(24));
+            Assert.That(actual.Count, Is.EqualTo(23));
             CollectionAssert.AreEquivalent(ExpectedConversionSchema, actual);
         }
 
@@ -120,8 +119,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             Assert.That(request.ShaderName, Is.True);
             Assert.That(request.ActiveColorSpace, Is.False);
-            Assert.That(request.PresenceProperties.Count, Is.EqualTo(24));
-            Assert.That(request.ScalarProperties.Count, Is.EqualTo(25));
+            Assert.That(request.PresenceProperties.Count, Is.EqualTo(23));
+            Assert.That(request.ScalarProperties.Count, Is.EqualTo(24));
             Assert.That(
                 request.ScalarProperties,
                 Has.Member("_ShaderOptimizerEnabled"));
@@ -151,6 +150,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 PoiyomiOpaqueConversion.CanonicalOpaqueProperties.Select(p => p.Property),
                 Has.No.Member("_AddBlendOpAlpha"));
+        }
+
+        [Test]
+        public void ConversionEvidenceRequest_CarriesNoOutlineSymbol()
+        {
+            var request = PoiyomiOpaqueConversion.ConversionEvidenceRequest;
+
+            Assert.That(
+                request.ScalarProperties,
+                Has.No.Member("_EnableOutlines"));
+            Assert.That(
+                request.ScalarProperties,
+                Has.No.Member("_OutlineTextureUV"));
+            Assert.That(
+                request.ScalarProperties,
+                Has.No.Member("_OutlineAlphaDistanceFade"));
+            Assert.That(
+                request.ScalarProperties,
+                Has.No.Member("_OutlineALColorEnabled"));
+            Assert.That(request.ColorProperties, Is.Empty);
+            Assert.That(request.TextureProperties, Is.Empty);
         }
 
         // --- Relevance isolation ---------------------------------------------
@@ -185,7 +205,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </para>
         /// </summary>
         [TestCase("material._ZWrite")]
-        [TestCase("material._EnableOutlines")]
         public void ConversionOnlyState_IsIrrelevantToAlphaButRelevantToConversion(
             string binding)
         {
@@ -195,6 +214,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 ResolveUnder(binding, PoiyomiOpaqueConversion.ConversionEvidenceRequest),
                 Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+        }
+
+        /// <summary>
+        /// Outline enable state is an alpha-request concern after the outline
+        /// cutover. An animated outline enable is relevant to alpha proof.
+        /// It is irrelevant to conversion evidence.
+        /// </summary>
+        [Test]
+        public void EnableOutlines_IsRelevantToAlphaEvidenceRequest()
+        {
+            Assert.That(
+                ResolveUnder("material._EnableOutlines", PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                ResolveUnder("material._EnableOutlines", PoiyomiOpaqueConversion.ConversionEvidenceRequest),
+                Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
         }
 
         /// <summary>
@@ -347,14 +382,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void RefusedEvaluation_LeavesTheSourceMaterialUntouched()
         {
             var source = ConvertibleFade();
-            source.SetFloat("_EnableOutlines", 1f);
+            source.SetFloat("_AlphaToCoverage", 1f);
             var before = SnapshotFloats(source);
             var queueBefore = source.renderQueue;
             var tagBefore = source.GetTag("RenderType", false);
 
             AssertRefusal(
                 EvaluateFor(source),
-                PoiyomiOpaqueConversionRefusal.OutlinesEnabled);
+                PoiyomiOpaqueConversionRefusal.AlphaToCoverageEnabled);
 
             AssertUnchanged(source, before, queueBefore, tagBefore);
         }
@@ -437,7 +472,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Every one of the 24 conversion-read properties must refuse when it is
+        /// Every one of the 23 conversion-read properties must refuse when it is
         /// not finite, not just the few a hand-picked list happens to name. The
         /// cases are driven from the independently stated
         /// <see cref="ExpectedConversionSchema"/> rather than from the
@@ -457,7 +492,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 float.NaN, float.PositiveInfinity, float.NegativeInfinity,
             };
 
-            Assert.That(ExpectedConversionSchema.Length, Is.EqualTo(24));
+            Assert.That(ExpectedConversionSchema.Length, Is.EqualTo(23));
 
             foreach (var property in ExpectedConversionSchema)
             {
@@ -477,40 +512,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                         $"Non-finite '{property}' ({value}) named the wrong refusal.");
                 }
             }
-        }
-
-        [TestCase(1f)]
-        [TestCase(0.5f)]
-        [TestCase(0.005f)]
-        [TestCase(-1f)]
-        public void EnabledOutlines_RefuseConversion(float enableOutlines)
-        {
-            var material = ConvertibleFade();
-            material.SetFloat("_EnableOutlines", enableOutlines);
-
-            AssertRefusal(
-                EvaluateFor(material),
-                PoiyomiOpaqueConversionRefusal.OutlinesEnabled);
-        }
-
-        /// <summary>
-        /// A perfect base-alpha proof does not rescue enabled outlines. The
-        /// vendor's outline pass writes alpha from outline texture/colour and an
-        /// optional distance fade, none of which AMUSE models, and then
-        /// <c>_Mode == Opaque</c> forces that alpha to 1 before the outline
-        /// clip - resurrecting outline fragments the author faded away.
-        /// </summary>
-        [Test]
-        public void EnabledOutlines_RefuseEvenWhenBaseAlphaIsExactlyOne()
-        {
-            var material = ConvertibleFade();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetFloat("_EnableOutlines", 1f);
-
-            AssertRefusal(
-                EvaluateFor(material),
-                PoiyomiOpaqueConversionRefusal.OutlinesEnabled);
         }
 
         [Test]
@@ -946,12 +947,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The outline hazard is a MUTATION hazard: writing <c>_Mode = 0</c>
-        /// would force unmodelled outline alpha to 1 before the outline clip. A
-        /// canonical material already has <c>_Mode == 0</c>, so that forcing is
-        /// the author's existing state and nothing would be written. Refusing
-        /// here would claim AMUSE declined to do something it was never going
-        /// to do.
+        /// A canonical material already has <c>_Mode == 0</c>.
+        /// Conversion returns <c>AlreadyOpaque</c> without writing changes.
+        /// Conversion no longer reads <c>_EnableOutlines</c> after the outline cutover.
+        /// Enabling outlines does not change the <c>AlreadyOpaque</c> outcome.
         /// </summary>
         [Test]
         public void AlreadyOpaque_EvenWithOutlinesEnabled()
@@ -968,43 +967,171 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void AlreadyOpaque_EvenWithNonFiniteEnableOutlines()
         {
             var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", float.NaN);
 
             Assert.That(
-                EvaluateWith(material, "_EnableOutlines", float.NaN).Outcome,
+                EvaluateFor(material).Outcome,
                 Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
         }
 
         /// <summary>
-        /// Direct falsification of the <c>AlreadyOpaque</c> classification.
-        /// <see cref="TryFindNonCanonicalFact"/> and the evaluator's canonical
-        /// comparison are separate code paths over separate inputs - a live
-        /// material versus captured evidence - so the per-field tests above do
-        /// not protect this one. Perturbing any single canonical fact must stop
-        /// the material being classified as a no-op.
-        /// <para>
-        /// The replacement outcome is deliberately unconstrained. Depending on
-        /// the property the correct answer is <c>Convertible</c> (for facts no
-        /// gate reads, such as the outline blend fields) or a specific refusal
-        /// (for facts a gate reads, such as <c>_ZTest</c>). The load-bearing
-        /// assertion is only that a disagreement cannot silently pass the
-        /// canonical-comparison path.
-        /// </para>
+        /// An authored opaque Poiyomi material has shader default values for inactive properties.
+        /// Inactive properties include cutoff and alpha blend factors.
+        /// The material is functionally opaque.
+        /// It must evaluate to AlreadyOpaque.
         /// </summary>
         [Test]
-        public void PerturbingAnyCanonicalProperty_PreventsAlreadyOpaque()
+        public void AuthoredOpaqueMaterialWithShaderDefaults_EvaluatesToAlreadyOpaque()
         {
-            foreach (var (property, value) in ExpectedCanonicalTuple)
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 0f);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetFloat("_BlendOpAlpha", 0f);
+            material.SetFloat("_DstBlendAlpha", 10f);
+            material.SetFloat("_OutlineDstBlendAlpha", 10f);
+            material.SetFloat("_OutlineBlendOpAlpha", 0f);
+            material.renderQueue = 2000;
+            material.SetOverrideTag("RenderType", "Opaque");
+
+            var result = EvaluateFor(material);
+
+            Assert.That(
+                result.Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        /// <summary>
+        /// A material with forced opaque alpha and standard base RGB replacement is functionally opaque.
+        /// It must evaluate to AlreadyOpaque even when the rendering mode is Cutout.
+        /// </summary>
+        [Test]
+        public void AuthoredOpaqueMaterialWithForcedAlpha_EvaluatesToAlreadyOpaque()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 1f);
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetFloat("_BlendOp", 0f);
+            material.SetFloat("_SrcBlend", 1f);
+            material.SetFloat("_DstBlend", 0f);
+            material.SetFloat("_ZWrite", 1f);
+            material.SetFloat("_ZTest", 4f);
+            material.SetFloat("_AddSrcBlend", 1f);
+            material.SetFloat("_AddDstBlend", 1f);
+            material.SetFloat("_AlphaToCoverage", 0f);
+            material.SetFloat("_AlphaPremultiply", 0f);
+            material.renderQueue = 2000;
+            material.SetOverrideTag("RenderType", "Opaque");
+
+            var result = EvaluateFor(material);
+
+            Assert.That(
+                result.Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        private static readonly (string Property, float PerturbedValue)[] EssentialOpaquePropertyPerturbations =
+        {
+            ("_SrcBlend", 5f),
+            ("_DstBlend", 10f),
+            ("_BlendOp", 1f),
+            ("_ZWrite", 0f),
+            ("_ZTest", 8f),
+            ("_AddSrcBlend", 0f),
+            ("_AddDstBlend", 0f),
+            ("_AlphaToCoverage", 1f),
+            ("_AlphaPremultiply", 1f),
+        };
+
+        /// <summary>
+        /// Perturbing any essential opaque property must prevent AlreadyOpaque.
+        /// Essential properties control RGB blend replacement, depth write, depth test, and alpha features.
+        /// Perturbing the render queue or the RenderType tag must also prevent AlreadyOpaque.
+        /// </summary>
+        [Test]
+        public void PerturbingEssentialOpaqueProperty_PreventsAlreadyOpaque()
+        {
+            foreach (var (property, perturbedValue) in EssentialOpaquePropertyPerturbations)
             {
                 var material = MakeCanonical(NewFixtureMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
-                material.SetFloat(property, value + 1f);
+                material.SetFloat(property, perturbedValue);
 
                 var result = EvaluateFor(material);
 
                 Assert.That(
                     result.Outcome,
                     Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
-                    $"Perturbed '{property}' was still classified AlreadyOpaque.");
+                    $"Perturbed essential property '{property}' unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetFloat("_Mode", 1f);
+                material.SetFloat("_AlphaForceOpaque", 0f);
+
+                var result = EvaluateFor(material);
+
+                Assert.That(
+                    result.Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Cutout mode without forced opaque unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.renderQueue = 3000;
+
+                Assert.That(
+                    EvaluateFor(material).Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Perturbed render queue unexpectedly retained AlreadyOpaque.");
+            }
+
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetOverrideTag("RenderType", "Transparent");
+
+                Assert.That(
+                    EvaluateFor(material).Outcome,
+                    Is.Not.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    "Perturbed RenderType tag unexpectedly retained AlreadyOpaque.");
+            }
+        }
+
+        private static readonly (string Property, float PerturbedValue)[] InactiveOpaquePropertyPerturbations =
+        {
+            ("_Cutoff", 0.5f),
+            ("_BlendOpAlpha", 0f),
+            ("_DstBlendAlpha", 10f),
+            ("_OutlineDstBlendAlpha", 10f),
+            ("_OutlineBlendOpAlpha", 0f),
+        };
+
+        /// <summary>
+        /// Inactive properties do not affect opaque RGB rendering.
+        /// Perturbing any inactive property must retain the AlreadyOpaque outcome.
+        /// </summary>
+        [Test]
+        public void PerturbingInactiveProperty_RetainsAlreadyOpaque()
+        {
+            foreach (var (property, perturbedValue) in InactiveOpaquePropertyPerturbations)
+            {
+                var material = MakeCanonical(NewFixtureMaterial());
+                material.SetFloat("_EnableOutlines", 0f);
+                material.SetFloat(property, perturbedValue);
+
+                var result = EvaluateFor(material);
+
+                Assert.That(
+                    result.Outcome,
+                    Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                    $"Perturbed inactive property '{property}' unexpectedly prevented AlreadyOpaque.");
             }
         }
 
@@ -1235,9 +1362,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void ExpectedConversionSchema_HasTwentyFourProperties()
+        public void ExpectedConversionSchema_HasTwentyThreeProperties()
         {
-            Assert.That(ExpectedConversionSchema.Length, Is.EqualTo(24));
+            Assert.That(ExpectedConversionSchema.Length, Is.EqualTo(23));
         }
 
         [Test]

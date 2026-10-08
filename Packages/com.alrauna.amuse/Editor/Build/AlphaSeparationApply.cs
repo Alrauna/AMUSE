@@ -602,7 +602,16 @@ namespace Alrauna.Amuse.Editor.Build
                 SubmeshSeparationDisposition.Split)
             {
                 var appendedIndex = live.Length + currentSplitCount;
+                // An appended slot lands on a fresh index. Any binding that
+                // points at that index but is absent from the evidence — a
+                // tolerance-ignored out-of-range slot, a slot-scoped closure
+                // failure, or a live target binding the capture did not
+                // record — could write the appended slot at runtime after
+                // the plan treated it as opaque, so the appended candidate
+                // refuses.
                 if (prepared.Evidence.IgnoredOutOfRangeSlots.Contains(appendedIndex) ||
+                    prepared.Evidence.SlotClosureFailures.Any(
+                        record => record.SlotIndex == appendedIndex) ||
                     targetBindings.Any(target => target.SlotIndex == appendedIndex))
                 {
                     return AlphaSeparationSlotRefusal

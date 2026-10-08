@@ -7,6 +7,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
@@ -313,6 +314,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
 
                 AmusePlatformFinishPass.Execute(
                     context,
@@ -344,6 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var context = AvatarProcessor.ProcessAvatar(
                     root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
 
                 var reports = ErrorReport.CaptureErrors(
                     () => AmusePlatformFinishPass.Execute(
@@ -402,6 +405,477 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        // --- Falsifier 3: an implementation that grants by material reference
+        // instead of shader name must fail the distinct-materials-same-shader
+        // case: two materials, one shader, one grant covers both. ---
+
+        /// <summary>
+        /// The granted swap-only name admits the swap-only material through
+        /// the transferred capture. Two assigned materials share one
+        /// unverified shader, so one shader-name grant covers both
+        /// instances; a second shader exists only inside the swap curve,
+        /// so only the widened pre-scan can offer and grant it. The unmoved
+        /// gates stay: every refusal remains per slot.
+        /// </summary>
+        [Test]
+        public void AGrantedSwapOnlyShaderNameAdmitsTheSwapMaterialThroughTheTransferredCapture()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var cutoutShader = WriteSwapConsentStandIn(
+                "granted-swap-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                LilToonStandInProperties());
+            var transparentShader = WriteSwapConsentStandIn(
+                "granted-swap-transparent.shader",
+                LilToonSourceAttestation.TransparentShaderName,
+                LilToonStandInProperties());
+            var assignedFirst = new Material(cutoutShader);
+            var assignedSecond = new Material(cutoutShader);
+            var swapOnly = new Material(transparentShader);
+            var mesh = TwoSubmeshTriangleMesh();
+            var root = new GameObject("AMUSE granted swap consent fixture");
+            var clip = new AnimationClip { name = "granted swap clip" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = swapOnly,
+                    },
+                });
+            var consentSubjects = new List<string>();
+
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials =
+                    new[] { assignedFirst, assignedSecond };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ConsentTestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                state.StructuralGraph = StoredGraphWithSwapClip(clip);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    subjects =>
+                    {
+                        consentSubjects.AddRange(subjects);
+                        return true;
+                    });
+
+                var after = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    consentSubjects,
+                    Has.Count.EqualTo(2),
+                    "one subject per distinct unverified shader: the " +
+                    "assigned shader and the swap-only shader");
+                Assert.That(
+                    consentSubjects.Any(subject => subject.Contains(
+                        LilToonSourceAttestation
+                            .CutoutShaderName)),
+                    Is.True,
+                    "the assigned shader's subject must be offered");
+                Assert.That(
+                    consentSubjects.Any(subject => subject.Contains(
+                        LilToonSourceAttestation
+                            .TransparentShaderName)),
+                    Is.True,
+                    "the swap-only shader's subject must be offered");
+                Assert.That(after.ConsentDeclined, Is.False);
+                Assert.That(
+                    after.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(
+                    after.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "the granted build must not refuse the renderer");
+                Assert.That(
+                    after.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.Zero,
+                    "both assigned instances share one granted shader " +
+                    "name, and the swap-only material rides the same " +
+                    "grant, so no slot may refuse");
+                Assert.That(after.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    after.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(2),
+                    "exactly the two assigned triangles may be opaque " +
+                    "candidates: fewer means a slot still refused, and " +
+                    "more means the swap-only material was treated as a " +
+                    "proven slot");
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(assignedFirst);
+                Object.DestroyImmediate(assignedSecond);
+                Object.DestroyImmediate(swapOnly);
+                Object.DestroyImmediate(clip);
+            }
+        }
+
+        /// <summary>
+        /// The declined path: with the presenter declining, nothing is
+        /// granted. The build itself stops as a declined no-op, and the
+        /// Part A contract shows what the ungranted swap-only material
+        /// would do in any build that reaches capture: it fails
+        /// attestation and reports its own ordinal, never a batch-wide
+        /// silence.
+        /// </summary>
+        [Test]
+        public void ADeclinedBuildGrantsNothingAndTheSwapOnlyMaterialRefusesWithTheNamedCause()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var cutoutShader = WriteSwapConsentStandIn(
+                "declined-swap-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                LilToonStandInProperties());
+            var transparentShader = WriteSwapConsentStandIn(
+                "declined-swap-transparent.shader",
+                LilToonSourceAttestation.TransparentShaderName,
+                LilToonStandInProperties());
+            var assignedMaterial = new Material(cutoutShader);
+            var swapOnly = new Material(transparentShader);
+            var mesh = TwoSubmeshTriangleMesh();
+            var root = new GameObject("AMUSE declined swap consent fixture");
+            var clip = new AnimationClip { name = "declined swap clip" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = swapOnly,
+                    },
+                });
+
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { assignedMaterial };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ConsentTestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                state.StructuralGraph = StoredGraphWithSwapClip(clip);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    subjects => false);
+
+                var after = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    after.ConsentDeclined,
+                    Is.True,
+                    "the decline must stop the build");
+                Assert.That(after.AnalyzedRendererCount, Is.Zero);
+                Assert.That(
+                    context.GetState<TransientUnlockWindowState>()
+                        .ConsentGranted,
+                    Is.False,
+                    "a declined build grants nothing, including the " +
+                    "unlock window");
+
+                // The ungranted swap-only material's own contract level
+                // refusal, per Part A: the transferred capturer reports
+                // the failing ordinal instead of failing the batch or
+                // staying silent.
+                var success = UnityMaterialSemantics
+                    .TryCaptureClosedAlphaMaterialsTransferred(
+                        new[] { swapOnly },
+                        new[]
+                        {
+                            CapturedAlphaMaterialFamily.LilToonTransparent,
+                        },
+                        LilToonTransparentMaterialSemantics.AlphaEvidenceRequest,
+                        AlphaPolicyBounds.Inert,
+                        System.Array.Empty<string>(),
+                        out var outcome,
+                        null);
+
+                Assert.That(success, Is.True,
+                    "the capturer survives an ungranted member");
+                Assert.That(
+                    outcome.UnattestedOrdinals,
+                    Is.EqualTo(new[] { 0 }),
+                    "the ungranted swap-only material refuses with its " +
+                    "own named ordinal");
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(mesh);
+                Object.DestroyImmediate(assignedMaterial);
+                Object.DestroyImmediate(swapOnly);
+                Object.DestroyImmediate(clip);
+            }
+        }
+
+        [Test]
+        public void PoiyomiMaterials_NeverProduceTransferConsentSubjects()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var legacyShader = WriteSwapConsentStandIn(
+                "swap-unsupported-poi.shader",
+                ".poiyomi/Old Versions/9.0/Poiyomi Toon",
+                PoiyomiStandInProperties());
+            var assigned = new Material(legacyShader);
+            var mesh = TriangleMesh();
+            var root = new GameObject("AMUSE unverified poi consent fixture");
+            var renderer = root.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { assigned };
+
+            try
+            {
+                var consent = UnityMaterialSemantics.CollectTransferConsent(
+                    new[] { assigned });
+
+                Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+                Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(assigned);
+            }
+        }
+
+        private const string SwapConsentShaderFolder =
+            "Assets/AmuseTests_SwapConsent";
+
+        private static Shader WriteSwapConsentStandIn(
+            string fileName,
+            string shaderName,
+            string properties)
+        {
+            return TestShaderWriter.WriteTestShader(
+                SwapConsentShaderFolder + "/" + fileName,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    Properties\n    {" + properties +
+                "\n    }\n    SubShader { Pass {} }\n}\n");
+        }
+
+        private static Mesh TriangleMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            return mesh;
+        }
+
+        private static Mesh TwoSubmeshTriangleMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f),
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            mesh.SetTriangles(new[] { 3, 4, 5 }, 1);
+            return mesh;
+        }
+
+        private static CommittedControllerGraphResult StoredGraphWithSwapClip(
+            AnimationClip clip)
+        {
+            return new CommittedControllerGraphResult(
+                AvatarAnimationRefusal.None,
+                new[]
+                {
+                    new CommittedLayer(
+                        "swap-consent",
+                        0,
+                        AnimatorLayerBlendingMode.Override,
+                        new[] { clip },
+                        System.Array.Empty<StateMachineBehaviour>(),
+                        false),
+                });
+        }
+
+        private sealed class ConsentTestGenericPlatform : INDMFPlatformProvider
+        {
+            internal static readonly ConsentTestGenericPlatform Instance =
+                new ConsentTestGenericPlatform();
+
+            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string DisplayName => "AMUSE swap consent test generic";
+        }
+
+        /// <summary>
+        /// The Poiyomi stand-in property block: the scalars the plain alpha
+        /// request and the verified interpretation read, at the wholly
+        /// opaque corpus state.
+        /// </summary>
+        private static string PoiyomiStandInProperties()
+        {
+            return @"
+        shader_master_label (""Master"", Float) = 0
+        _ShaderOptimizerEnabled (""Locked"", Float) = 0
+        _MainTex (""Main"", 2D) = ""white"" {}
+        _Color (""Color"", Color) = (1,1,1,1)
+        _BumpMap (""Bump"", 2D) = ""bump"" {}
+        _EmissionMap (""Emission"", 2D) = ""white"" {}
+        _EnableEmission (""Emission 0"", Float) = 0
+        _EnableEmission1 (""Emission 1"", Float) = 0
+        _EnableEmission2 (""Emission 2"", Float) = 0
+        _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
+        _AlphaForceOpaque (""Force Opaque"", Float) = 1
+        _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
+        _AlphaToCoverage (""Coverage"", Float) = 0
+        _AlphaSharpenedA2C (""Sharpened"", Float) = 0
+        _AlphaDithering (""Dither"", Float) = 0
+        _EnableDissolve (""Dissolve"", Float) = 0
+        _EnableUDIMDiscardOptions (""UDIM"", Float) = 0
+        _AlphaMod (""Alpha Mod"", Float) = 0
+        _MainAlphaMaskMode (""Mask Mode"", Float) = 0
+        _AlphaDistanceFade (""Distance"", Float) = 0
+        _AlphaFresnel (""Fresnel"", Float) = 0
+        _AlphaAngular (""Angular"", Float) = 0
+        _AlphaAudioLinkEnabled (""Audio Alpha"", Float) = 0
+        _EnableAudioLink (""Audio"", Float) = 0
+        _AlphaGlobalMask (""Global Mask"", Float) = 0
+        _AlphaPremultiply (""Premultiply"", Float) = 0
+        _BSSEnabled (""Beat Saber"", Float) = 0
+        _BackFaceEnabled (""Backface"", Float) = 0
+        _RGBMaskEnabled (""RGB Mask"", Float) = 0
+        _DecalEnabled (""Decal 0"", Float) = 0
+        _DecalEnabled1 (""Decal 1"", Float) = 0
+        _DecalEnabled2 (""Decal 2"", Float) = 0
+        _DecalEnabled3 (""Decal 3"", Float) = 0
+        _EnableFlipbook (""Flipbook"", Float) = 0
+        _EnableRimLighting (""Rim"", Float) = 0
+        _EnableRim2Lighting (""Rim 2"", Float) = 0
+        _EnableDepthRimLighting (""Depth Rim"", Float) = 0
+        _EnableEnvironmentalRim (""Env Rim"", Float) = 0
+        _VideoEffectsEnable (""Video"", Float) = 0
+        _EnableTouchGlow (""Touch"", Float) = 0
+        _MainVertexColoringEnabled (""Vertex"", Float) = 0
+        _MainTexUV (""UV"", Float) = 0
+        _MainTexPan (""Pan"", Vector) = (0,0,0,0)
+        _MainPixelMode (""Pixel"", Float) = 0
+        _MainTexStochastic (""Stochastic"", Float) = 0";
+        }
+
+        /// <summary>
+        /// A stand-in property block declaring every property needed by
+        /// lilToon cutout and transparent alpha interpretation.
+        /// </summary>
+        private static string LilToonStandInProperties()
+        {
+            return @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _UDIMDiscardMode (""UDIMDiscardMode"", Int) = 0
+        _ShiftBackfaceUV (""ShiftBackfaceUV"", Int) = 0
+        _UseParallax (""UseParallax"", Int) = 0
+        _UseMain2ndTex (""UseMain2ndTex"", Int) = 0
+        _UseMain3rdTex (""UseMain3rdTex"", Int) = 0
+        _AlphaMaskMode (""AlphaMaskMode"", Int) = 0
+        _UseDither (""UseDither"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _SubpassCutoff (""SubpassCutoff"", Range(0,1)) = 0.5
+        _AlphaBoostFA (""AlphaBoostFA"", Float) = 10
+        _Color (""Color"", Color) = (1,1,1,1)
+        _MainTex (""Texture"", 2D) = ""white"" {}
+        _DissolveParams (""DissolveParams"", Vector) = (0,0,0.5,0.1)
+        _MainTex_ScrollRotate (""ScrollRotate"", Vector) = (0,0,0,0)
+        _DistanceFade (""DistanceFade"", Vector) = (0.1,0.01,0,0)
+        _SrcBlend (""SrcBlend"", Float) = 1
+        _DstBlend (""DstBlend"", Float) = 0
+        _AlphaToMask (""AlphaToMask"", Float) = 0
+        _ZWrite (""ZWrite"", Float) = 1
+        _ZTest (""ZTest"", Float) = 4
+        _OffsetFactor (""OffsetFactor"", Float) = 0
+        _OffsetUnits (""OffsetUnits"", Float) = 0
+        _ColorMask (""ColorMask"", Float) = 15
+        _SrcBlendAlpha (""SrcBlendAlpha"", Float) = 1
+        _DstBlendAlpha (""DstBlendAlpha"", Float) = 10
+        _BlendOp (""BlendOp"", Float) = 0
+        _BlendOpAlpha (""BlendOpAlpha"", Float) = 0
+        _SrcBlendFA (""SrcBlendFA"", Float) = 1
+        _DstBlendFA (""DstBlendFA"", Float) = 1
+        _SrcBlendAlphaFA (""SrcBlendAlphaFA"", Float) = 0
+        _DstBlendAlphaFA (""DstBlendAlphaFA"", Float) = 1
+        _BlendOpFA (""BlendOpFA"", Float) = 4
+        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4";
         }
 
         [Test]
@@ -2060,9 +2534,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // Preconditions. Without these the refusal below could hold for
                 // a reason unrelated to the rule under test.
-                Assert.That(evidence.IsClosed, Is.True,
-                    "closure failed, so the refusal would not be attributable " +
-                    "to proof-relevance recognition");
                 Assert.That(evidence.Clips, Has.Count.EqualTo(1));
                 var objects = evidence.Clips[0].ObjectBindings;
                 Assert.That(objects, Has.Count.EqualTo(1),
@@ -2301,7 +2772,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // Preconditions, read before the build commits the graph.
                 var evidence = CaptureVerifiedRuntimeStateEvidence(
                     root, fixture.Renderer);
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.Clips[0].FloatBindings,
                     Has.Count.EqualTo(1));
                 var binding = evidence.Clips[0].FloatBindings[0];
@@ -2772,7 +3243,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var result = AnalyzeVerifiedRuntimeStates(
                     root, renderer, out var evidence);
 
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.CurrentMaterialIndices,
                     Has.Count.EqualTo(slotCount));
 
@@ -3200,7 +3671,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var evidence = CaptureVerifiedRuntimeStateEvidence(
                     root, fixture.Renderer);
 
-                Assert.That(evidence.IsClosed, Is.True);
+
                 Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(1));
                 var path = AnimationUtility.CalculateTransformPath(
                     fixture.Renderer.transform, root.transform);
@@ -4185,7 +4656,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     IReadOnlyList<CapturedAlphaMaterialFamily> families,
                     MaterialEvidenceRequest request,
                     AlphaPolicyBounds bounds,
-                    out IReadOnlyList<CapturedAlphaMaterial> captured)
+                    out ClosedAlphaCaptureOutcome captured)
                 {
                     batches.Add(materials.ToArray());
                     return CaptureVerifiedFixtureMaterials(
@@ -4524,6 +4995,260 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A null keyframe on one slot's swap curve is a fact about that
+        /// slot. The renderer must stay analyzed, the healthy sibling slot
+        /// must keep its proven triangles, and no renderer-wide closure
+        /// refusal may appear.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_InvalidSwapOnOneSlotKeepsTheSiblingConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE invalid swap sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Material failed = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                failed = VerifiedForceOpaqueMaterial(1f);
+                var renderer = AddTwoSlotRenderer(
+                    root, resolving, failed, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+
+                clip = new AnimationClip { name = "invalid_swap_clip" };
+                AnimationUtility.SetObjectReferenceCurve(
+                    clip,
+                    EditorCurveBinding.PPtrCurve(
+                        "", typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[1]"),
+                    new[] { new ObjectReferenceKeyframe { time = 0f, value = null } });
+                controller = new AnimatorController
+                {
+                    name = "invalid_swap_controller",
+                };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                root.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero,
+                    "a slot-scoped swap failure must not refuse the renderer");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the healthy sibling slot must keep its proven triangle");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (failed != null) Object.DestroyImmediate(failed);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// An unassigned current material on one slot is a fact about that
+        /// slot. The renderer must stay analyzed and the assigned sibling
+        /// slot must keep its proven triangles.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_MissingCurrentSlotKeepsTheSiblingConvertible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE missing current sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Mesh mesh = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                var renderer = AddTwoSlotRenderer(
+                    root, resolving, null, out mesh);
+                AssertTwoSlotTriangleFixture(mesh);
+                renderer.sharedMaterials = new[] { resolving, null };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.Zero,
+                    "an unassigned slot must not refuse the renderer");
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "the assigned sibling slot must keep its proven triangle");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+            }
+        }
+
+        /// <summary>
+        /// When every slot fails closure there is nothing to resolve, so the
+        /// renderer refuses exactly as before, with the closure reason.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_AllSlotsClosureFailedStillRefuseTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE all slots failed");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Mesh mesh = null;
+
+            try
+            {
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new Material[] { null };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal.MaterialDependencyClosureFailed),
+                    Is.EqualTo(1),
+                    "a renderer whose every slot failed closure refuses");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 1 companion at the production entry: a batch whose
+        /// every member fails attestation refuses its slots through the
+        /// unsupported sentinel, and a renderer with nothing left resolvable
+        /// keeps its renderer-level refusal through the all-slots-failed
+        /// mirror. A capturer bool that names no material is a defect the
+        /// capture throws on; it never refuses a renderer.
+        /// </summary>
+        [Test]
+        public void RuntimeStateProductionEntry_AllSlotsFailedBatchStillRefusesTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE closed capture refusal");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material resolving = null;
+            Mesh mesh = null;
+
+            try
+            {
+                resolving = VerifiedForceOpaqueMaterial(1f);
+                AddTwoSlotRenderer(root, resolving, resolving, out mesh);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CapturerFailsAllOrdinals,
+                    ResolvingVerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdmittedMaterialSemanticsUnknown),
+                    Is.EqualTo(1),
+                    "a batch whose every member failed attestation refuses " +
+                    "the renderer on its unresolvable slots");
+                Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (resolving != null) Object.DestroyImmediate(resolving);
+            }
+        }
+
+        private static bool CapturerFailsAllOrdinals(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
+            out ClosedAlphaCaptureOutcome captured)
+        {
+            var ordinals = System.Linq.Enumerable.Range(0, materials.Count).ToArray();
+            captured = new ClosedAlphaCaptureOutcome(
+                System.Array.Empty<CapturedAlphaMaterial>(), ordinals);
+            return true;
+        }
+
 
         /// <summary>
         /// Delegates to the shared verified seam but refuses family
@@ -4671,10 +5396,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static void AssertRendererWideForceOpaqueFixture(
             CapturedAnimationEvidence evidence)
         {
-            Assert.That(
-                evidence.IsClosed, Is.True,
-                "fixture precondition: closure failed, so no slot would be " +
-                "resolved and the fixture would prove nothing about slot scope");
             Assert.That(evidence.CurrentMaterialIndices, Has.Count.EqualTo(2));
             Assert.That(
                 evidence.CurrentMaterialIndices[0],
@@ -4892,8 +5613,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 evidence.CurrentMaterialIndices.Count];
             for (var slot = 0; slot < current.Length; slot++)
             {
-                current[slot] = evidence.AdmittedMaterials[
-                    evidence.CurrentMaterialIndices[slot]];
+                // Same mapping as production: the -1 sentinel marks a
+                // closure-failed slot and carries no material.
+                var index = evidence.CurrentMaterialIndices[slot];
+                current[slot] = index >= 0
+                    ? evidence.AdmittedMaterials[index]
+                    : null;
             }
 
             var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
@@ -4949,7 +5674,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
-            out IReadOnlyList<CapturedAlphaMaterial> captured)
+            out ClosedAlphaCaptureOutcome captured)
         {
             return VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials(
                 materials, families, request, bounds, out captured);

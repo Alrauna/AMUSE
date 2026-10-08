@@ -1,5 +1,7 @@
 using NUnit.Framework;
+using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Host;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -98,6 +100,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(identity.IsLocked, Is.False);
             Assert.That(identity.OriginalShader, Is.Null);
             Assert.That(identity.OriginalShaderGuid, Is.Null);
+        }
+
+        // --- Attestation and pre-check on unverified original shaders -----
+
+        private const string LockedStandInShaderName =
+            "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
+
+        private readonly System.Collections.Generic.List<UnityEngine.Object>
+            _owned = new System.Collections.Generic.List<UnityEngine.Object>();
+
+        [TearDown]
+        public void DestroyOwnedObjects()
+        {
+            foreach (var value in _owned)
+            {
+                if (value != null) UnityEngine.Object.DestroyImmediate(value);
+            }
+
+            _owned.Clear();
+        }
+
+        private T Track<T>(T obj) where T : UnityEngine.Object
+        {
+            _owned.Add(obj);
+            return obj;
+        }
+
+        [Test]
+        public void LockedPoiyomi_UnverifiedOriginalShaderAlwaysRefuses()
+        {
+            var shader = Shader.Find(LockedStandInShaderName) ??
+                Shader.Find("Unlit/Color");
+            var material = Track(new Material(shader));
+            material.shader = shader;
+            material.SetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                ".poiyomi/Old Versions/9.0/Poiyomi Toon");
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
+
+            var attests = LockedMaterialIdentity.OriginalShaderAttested(material);
+            var refusal = LockedMaterialIdentity.PreCheckRefusal(material);
+
+            Assert.That(attests, Is.False);
+            Assert.That(
+                refusal,
+                Is.EqualTo(RendererAnalysisRefusal.LockedPoiyomiOriginalShaderUnattested));
         }
     }
 }

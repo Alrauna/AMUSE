@@ -46,6 +46,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         /// _Mode left it in the final review fix wave: the cutout split
         /// branches on the preset selector, so the interpretation reads it
         /// and a changed mode can change the claim.
+        ///
+        /// _EnableOutlines left this list when outline alpha was modelled.
+        /// The alpha semantics reads the outline toggle to evaluate outline
+        /// alpha factors. Enabling outlines changes the claim.
         /// </summary>
         private static readonly string[] IrrelevantFloats =
         {
@@ -70,7 +74,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_AddDstBlendAlpha",
             "_ZWrite",
             "_ZTest",
-            "_EnableOutlines",
             "_OutlineBlendOp",
             "_OutlineSrcBlend",
             "_OutlineDstBlend",

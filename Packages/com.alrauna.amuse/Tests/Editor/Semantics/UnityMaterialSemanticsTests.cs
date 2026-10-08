@@ -379,9 +379,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
                 "alpha relevance must remain the family's existing request");
 
-            // Representative conversion-only render state. Neither name appears
-            // in the alpha request, so each one separates the two questions.
-            foreach (var conversionOnly in new[] { "_ZWrite", "_EnableOutlines" })
+            // _EnableOutlines moved to the alpha request; only _ZWrite stays
+            // conversion-only.
+            foreach (var conversionOnly in new[] { "_ZWrite" })
             {
                 CollectionAssert.Contains(
                     captureSchema.ScalarProperties,
@@ -876,6 +876,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "the subject must name the refusing gate in words");
         }
 
+        [Test]
+        public void Legacy90ShaderName_SelectsUnsupportedFamily()
+        {
+            const string legacy90Name = ".poiyomi/Old Versions/9.0/Poiyomi Toon";
+            var material = NewMaterial(
+                "legacy90-poiyomi.shader",
+                legacy90Name,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var alphaRelevance,
+                    out var captureSchema);
+
+            Assert.That(selected, Is.False);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(alphaRelevance, Is.Null);
+            Assert.That(captureSchema, Is.Null);
+        }
+
+        [Test]
+        public void Legacy90Material_ProducesZeroTransferConsentSubjects()
+        {
+            const string legacy90Name = ".poiyomi/Old Versions/9.0/Poiyomi Toon";
+            var material = NewMaterial(
+                "legacy90-consent.shader",
+                legacy90Name,
+                PoiyomiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void UnverifiedPoiyomi_ProducesZeroTransferConsentSubjects()
+        {
+            var material = NewMaterial(
+                "unverified-poiyomi-consent.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
+        }
+
         /// <summary>
         /// Fresh invariance row beside
         /// <see cref="LilToonCaptureSchemaIsExactlyItsAlphaRelevance"/>:
@@ -1045,6 +1099,122 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "an unsupported family must yield no capture schema either");
         }
 
+        /// <summary>
+        /// A mixed closed batch reports survivors and failing ordinals in one
+        /// call. The public project installs no vendor shader, so no member
+        /// can pass source attestation; the survivor here is the granted
+        /// transferred member, whose capture is the real recorded evidence and
+        /// never the unsupported sentinel.
+        /// </summary>
+        [Test]
+        public void MixedBatchReportsSurvivorsAndFailingOrdinals()
+        {
+            var healthy = NewMaterial(
+                "mixed-healthy.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+            var poison = NewMaterial(
+                "mixed-poison.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var ok = UnityMaterialSemantics
+                .TryCaptureClosedAlphaMaterialsTransferred(
+                    new[] { healthy, poison },
+                    new[]
+                    {
+                        CapturedAlphaMaterialFamily.LilToon,
+                        CapturedAlphaMaterialFamily.Poiyomi,
+                    },
+                    MaterialEvidenceRequest.Combine(
+                        LilToonMaterialSemantics.AlphaEvidenceRequest,
+                        PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                    AlphaPolicyBounds.Inert,
+                    new[] { LilToonSourceAttestation.SupportedShaderName },
+                    out var outcome,
+                    RegisteredSourceIdentity.Resolve);
+
+            Assert.That(ok, Is.True);
+            Assert.That(outcome.UnattestedOrdinals, Is.EqualTo(new[] { 1 }));
+            Assert.That(outcome.Captured.Count, Is.EqualTo(1));
+            Assert.That(
+                outcome.Captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+            Assert.That(
+                outcome.Captured[0].ShaderName,
+                Is.EqualTo(LilToonSourceAttestation.SupportedShaderName),
+                "the survivor must be the first member's own capture, not " +
+                "the unsupported sentinel");
+        }
+
+        [Test]
+        public void AllFailedBatchReportsEveryOrdinalAndNoSurvivors()
+        {
+            var first = NewMaterial(
+                "all-failed-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+            var second = NewMaterial(
+                "all-failed-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var ok = UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                new[] { first, second },
+                new[]
+                {
+                    CapturedAlphaMaterialFamily.LilToon,
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                },
+                MaterialEvidenceRequest.Combine(
+                    LilToonMaterialSemantics.AlphaEvidenceRequest,
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                AlphaPolicyBounds.Inert,
+                out var outcome,
+                RegisteredSourceIdentity.Resolve);
+
+            Assert.That(ok, Is.True);
+            Assert.That(
+                outcome.UnattestedOrdinals, Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(outcome.Captured, Is.Empty);
+        }
+
+        [Test]
+        public void TransferredBatchGrantsTheNamedMemberAndReportsTheRest()
+        {
+            var granted = NewMaterial(
+                "transfer-granted.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+            var ungranted = NewMaterial(
+                "transfer-ungranted.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                CutoutProperties());
+
+            var ok = UnityMaterialSemantics
+                .TryCaptureClosedAlphaMaterialsTransferred(
+                    new[] { granted, ungranted },
+                    new[]
+                    {
+                        CapturedAlphaMaterialFamily.LilToon,
+                        CapturedAlphaMaterialFamily.LilToonCutout,
+                    },
+                    MaterialEvidenceRequest.Combine(
+                        LilToonMaterialSemantics.AlphaEvidenceRequest,
+                        LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                    AlphaPolicyBounds.Inert,
+                    new[] { LilToonSourceAttestation.SupportedShaderName },
+                    out var outcome,
+                    RegisteredSourceIdentity.Resolve);
+
+            Assert.That(ok, Is.True);
+            Assert.That(outcome.UnattestedOrdinals, Is.EqualTo(new[] { 1 }));
+            Assert.That(outcome.Captured.Count, Is.EqualTo(1));
+            Assert.That(
+                outcome.Captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+        }
+
         [Test]
         public void ClosedCaptureRevalidatesLilToonSourceAttestation()
         {
@@ -1058,11 +1228,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { CapturedAlphaMaterialFamily.LilToon },
                 LilToonMaterialSemantics.AlphaEvidenceRequest,
                 AlphaPolicyBounds.Inert,
-                out var captured,
+                out var outcome,
                 RegisteredSourceIdentity.Resolve);
 
-            Assert.That(success, Is.False);
-            Assert.That(captured, Is.Null);
+            Assert.That(success, Is.True);
+            Assert.That(outcome.Captured, Is.Empty);
+            Assert.That(
+                outcome.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
         }
 
         [Test]
@@ -1078,11 +1250,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 new[] { CapturedAlphaMaterialFamily.Poiyomi },
                 PoiyomiMaterialSemantics.AlphaEvidenceRequest,
                 AlphaPolicyBounds.Inert,
-                out var captured,
+                out var outcome,
                 RegisteredSourceIdentity.Resolve);
 
-            Assert.That(success, Is.False);
-            Assert.That(captured, Is.Null);
+            Assert.That(success, Is.True);
+            Assert.That(outcome.Captured, Is.Empty);
+            Assert.That(
+                outcome.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
         }
 
         [Test]
@@ -1233,11 +1407,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     LilToonMaterialSemantics.AlphaEvidenceRequest,
                     AlphaPolicyBounds.Inert,
                     new[] { LilToonSourceAttestation.SupportedShaderName },
-                    out var captured,
+                    out var outcome,
                     resolveRegisteredSource);
 
             Assert.That(success, Is.True, "the granted fixture must capture");
-            return captured[0];
+            return outcome.Captured[0];
         }
 
         private Material NewMaterial(

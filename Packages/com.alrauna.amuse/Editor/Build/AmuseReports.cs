@@ -43,7 +43,8 @@ namespace Alrauna.Amuse.Editor.Build
             string rendererName = null,
             CapturedAlphaMaterial offender = null,
             AlphaUnknownReason unknownReason = null,
-            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null)
+            IReadOnlyList<TextureCaptureRefusal> captureRefusals = null,
+            string closureWaySentence = null)
         {
             if (cause == RendererAnalysisRefusal.None)
             {
@@ -60,6 +61,16 @@ namespace Alrauna.Amuse.Editor.Build
             else if (captureSentence.Length > 0)
             {
                 evidenceSentence = evidenceSentence + " " + captureSentence;
+            }
+
+            // A closure-failure slot carries its own way sentence, so the
+            // entry names the unassigned slot, the out-of-range binding, or
+            // the non-material swap instead of the bare refusal name.
+            if (!string.IsNullOrEmpty(closureWaySentence))
+            {
+                evidenceSentence = evidenceSentence.Length == 0
+                    ? closureWaySentence
+                    : evidenceSentence + " " + closureWaySentence;
             }
 
             using (ErrorReport.WithContextObject(renderer))
@@ -421,9 +432,6 @@ namespace Alrauna.Amuse.Editor.Build
                 case MaterialDependencyClosureFailure.InvalidSwapValue:
                     return "An animation swaps in something that is not " +
                            "a material. ";
-                case MaterialDependencyClosureFailure.UnattestedMaterial:
-                    return "A material in the animation could not be " +
-                           "captured. ";
                 default:
                     return "";
             }

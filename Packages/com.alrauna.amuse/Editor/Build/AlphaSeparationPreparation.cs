@@ -103,7 +103,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
             string rendererTypeName = null,
-            bool allowDepthTestChange = false)
+            bool allowDepthTestChange = false,
+            IReadOnlyCollection<string> grantedShaderNames = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -334,6 +335,12 @@ namespace Alrauna.Amuse.Editor.Build
                 var unconvertedCount = 0;
                 var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
                 Material lastRefusedMaterial = null;
+
+                // The inner per-gate refusal token of the last conversion
+                // refusal, when the family boundary carries one. The report
+                // prints it after the cause, so the seven conversion arms
+                // stop collapsing into one bare enum.
+                var lastConversionRefusedDetail = default(string);
                 var slotDivergence = false;
                 var slotPremultiply = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
@@ -383,15 +390,18 @@ namespace Alrauna.Amuse.Editor.Build
                         poiyomiConversion,
                         lilToonConversion,
                         allowDepthTestChange,
+                        grantedShaderNames,
                         out var opaque,
                         out var materialDivergence,
-                        out var materialPremultiply);
+                        out var materialPremultiply,
+                        out var conversionRefusedDetail);
                     slotDivergence |= materialDivergence;
                     slotPremultiply |= materialPremultiply;
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
                         lastConversionRefusal = conversionRefusal;
                         lastRefusedMaterial = live;
+                        lastConversionRefusedDetail = conversionRefusedDetail;
                         if (isMultiMaterialSlot)
                         {
                             // In a multi-material swap, an unconverted material falls back
@@ -431,7 +441,14 @@ namespace Alrauna.Amuse.Editor.Build
                         target.Renderer,
                         slotIndex,
                         slotRefusal,
-                        offendingMaterial: lastRefusedMaterial);
+                        offendingMaterial: lastRefusedMaterial,
+                        detail: slotRefusal ==
+                                AlphaSeparationSlotRefusal
+                                    .OpaqueConversionRefused &&
+                            !string.IsNullOrEmpty(lastConversionRefusedDetail)
+                            ? "OpaqueConversionRefused: " +
+                              lastConversionRefusedDetail
+                            : null);
                     // The slot is dropped with nothing registered: clones
                     // created for its earlier admitted materials would be
                     // unreachable and unknown to the apply pass's sweep. They
@@ -570,6 +587,23 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// True when this build's D8 transfer consent granted exactly this
+        /// shader name, so the identity conjunction's failure is an accepted,
+        /// user-authorized risk for this build: the unverified source is
+        /// treated with the verified version's rules, exactly as the
+        /// transferred capture entry already does. A null or ungranted name
+        /// keeps the fail-closed refusal.
+        /// </summary>
+        private static bool IsGrantedShader(
+            string shaderName,
+            IReadOnlyCollection<string> grantedShaderNames)
+        {
+            return !string.IsNullOrEmpty(shaderName) &&
+                   grantedShaderNames != null &&
+                   grantedShaderNames.Contains(shaderName);
+        }
+
+        /// <summary>
         /// Runs the shader-family conversion boundary for one admitted
         /// material: the per-family branch, derived conversion evidence
         /// admitted against this material's own captured defaults under its
@@ -584,7 +618,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// the depth-test policy admitted onto a mixed-split plan refuses
         /// here, before any material is prepared for that slot.
         /// </summary>
-        private static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
+        internal static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
             CapturedAlphaMaterial captured,
             Material live,
             IReadOnlyList<(CapturedFloatBinding Binding,
@@ -594,13 +628,16 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             bool allowDepthTestChange,
+            IReadOnlyCollection<string> grantedShaderNames,
             out Material opaque,
             out bool depthTestDivergence,
-            out bool premultiplyNormalization)
+            out bool premultiplyNormalization,
+            out string refusedDetail)
         {
             opaque = null;
             depthTestDivergence = false;
             premultiplyNormalization = false;
+            refusedDetail = null;
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.LilToon:
@@ -660,6 +697,7 @@ namespace Alrauna.Amuse.Editor.Build
                         if (multiEligibility.Outcome !=
                             LilToonOpaqueConversionOutcome.Convertible)
                         {
+                            refusedDetail = multiEligibility.Refusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -694,9 +732,10 @@ namespace Alrauna.Amuse.Editor.Build
                                 allowDepthTestChange,
                                 preparedOpaque,
                                 out opaque,
-                                out _,
+                                out var seamRefusal,
                                 out var seamDivergence))
                         {
+                            refusedDetail = seamRefusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -727,12 +766,20 @@ namespace Alrauna.Amuse.Editor.Build
                         var attested = isTransparent
                             ? LilToonSourceAttestation
                                 .TryVerifyLilToonTransparentIdentity(
-                                    sourceEvidence, out _)
+                                    sourceEvidence,
+                                    out var lilIdentityDiagnostic)
                             : LilToonSourceAttestation
                                 .TryVerifyLilToonCutoutIdentity(
-                                    sourceEvidence, out _);
-                        if (!attested)
+                                    sourceEvidence,
+                                    out lilIdentityDiagnostic);
+                        if (!attested &&
+                            !IsGrantedShader(
+                                sourceEvidence.ShaderName,
+                                grantedShaderNames))
                         {
+                            refusedDetail =
+                                "SourceIdentity." +
+                                lilIdentityDiagnostic.Code;
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -749,6 +796,8 @@ namespace Alrauna.Amuse.Editor.Build
                         if (eligibility.Outcome !=
                             LilToonOpaqueConversionOutcome.Convertible)
                         {
+                            refusedDetail =
+                                eligibility.Refusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -794,10 +843,11 @@ namespace Alrauna.Amuse.Editor.Build
                                 allowDepthTestChange,
                                 preparedOpaque,
                                 out opaque,
-                                out _,
+                                out var seamRefusal,
                                 out var seamDivergence,
                                 out var seamPremultiply))
                         {
+                            refusedDetail = seamRefusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -826,8 +876,12 @@ namespace Alrauna.Amuse.Editor.Build
                                     live.shader, derived);
                         if (!PoiyomiMaterialSemantics
                                 .TryVerifyPoiyomiIdentity(
-                                    sourceEvidence, out _))
+                                    sourceEvidence,
+                                    out var poiIdentityDiagnostic))
                         {
+                            refusedDetail =
+                                "SourceIdentity." +
+                                poiIdentityDiagnostic.Code;
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
@@ -856,6 +910,8 @@ namespace Alrauna.Amuse.Editor.Build
                                         .PrepareCanonicalOpaqueClone(live);
                                 break;
                             default:
+                                refusedDetail =
+                                    eligibility.Refusal.ToString();
                                 return AlphaSeparationSlotRefusal
                                     .OpaqueConversionRefused;
                         }

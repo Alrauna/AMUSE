@@ -436,48 +436,6 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
-            // D8 consent layer: one consolidated click-through per build
-            // covers host versions beyond the attested maxima and shader
-            // names collected from the avatar's assigned materials whose
-            // source is not a verified version. Batch mode has no user to
-            // ask and refuses. Declining is a total no-op after the
-            // trigger: an opted-out avatar never asks.
-            var shaderTransfer = UnityMaterialSemantics
-                .CollectTransferConsent(AllAssignedMaterials(context));
-            var subjects = new List<string>(lifecycle.ConsentSubjects);
-            subjects.AddRange(shaderTransfer.Subjects);
-            // The unlock window no longer carries its own per-build
-            // consent subject. V2 and V4 passed live observation on
-            // 2026-09-21, so per spec section 12 the gate moved to the
-            // D8 pattern: an eligible build opens the window without
-            // asking. Eligibility is the attestation gate alone: a
-            // recognized locked material whose original shader attests.
-            // No build path consults a vendor answer.
-            var windowEligible = TransientUnlockAvailability
-                .WindowEligibleForConsent(
-                    AllAssignedMaterials(context),
-                    lockedOriginalAttestation);
-
-            if (subjects.Count > 0
-                && !VersionConsentDialog.ShouldProceed(
-                    subjects,
-                    UnityEngine.Application.isBatchMode,
-                    consentPresenter ?? VersionConsentDialog.Present))
-            {
-                state.ConsentDeclined = true;
-                AmuseReports.ConsentDeclined(subjects);
-                return;
-            }
-
-            if (windowEligible)
-            {
-                context.GetState<TransientUnlockWindowState>()
-                    .ConsentGranted = true;
-            }
-
-            var transferShaders = shaderTransfer.GrantedShaderNames.Count > 0;
-
-
             // Reaching positive lifecycle permission without the bindings the
             // capture pass retains is an integration defect in the caller, not a
             // domain refusal: nothing about the avatar has been observed yet.
@@ -511,6 +469,59 @@ namespace Alrauna.Amuse.Editor.Build
                 state.AvatarRefusal = graph.Refusal;
                 return;
             }
+
+            // D8 consent layer: one consolidated click-through per build
+            // covers host versions beyond the attested maxima and shader
+            // names collected from the avatar's assigned materials and
+            // swap-reachable materials whose source is not a verified
+            // version. The block sits after the committed-graph gate, so
+            // an avatar that refuses avatar-wide is never asked. Batch
+            // mode has no user to ask and refuses. Declining is a total
+            // no-op after the trigger: an opted-out avatar never asks.
+            var shaderTransfer = UnityMaterialSemantics
+                .CollectTransferConsent(
+                    AssignedAndSwapCurvedMaterials(context, graph));
+            var subjects = new List<string>(lifecycle.ConsentSubjects);
+            subjects.AddRange(shaderTransfer.Subjects);
+            // The granted transfer names compose into every gate that
+            // verifies a source identity: the transferred capture skips the
+            // check for a granted name, and the conversion boundary skips it
+            // for a granted name.
+            // An unconsented build grants nothing and stays fail-closed.
+            var grantedShaderNames =
+                shaderTransfer.GrantedShaderNames.Count > 0
+                    ? shaderTransfer.GrantedShaderNames
+                    : null;
+            // The unlock window no longer carries its own per-build
+            // consent subject. V2 and V4 passed live observation on
+            // 2026-09-21, so per spec section 12 the gate moved to the
+            // D8 pattern: an eligible build opens the window without
+            // asking. Eligibility is the attestation gate alone: a
+            // locked material whose original shader passes attestation
+            // opens the window.
+            var windowEligible =
+                TransientUnlockAvailability.WindowEligibleForConsent(
+                    AllAssignedMaterials(context),
+                    lockedOriginalAttestation);
+
+            if (subjects.Count > 0
+                && !VersionConsentDialog.ShouldProceed(
+                    subjects,
+                    UnityEngine.Application.isBatchMode,
+                    consentPresenter ?? VersionConsentDialog.Present))
+            {
+                state.ConsentDeclined = true;
+                AmuseReports.ConsentDeclined(subjects);
+                return;
+            }
+
+            if (windowEligible)
+            {
+                context.GetState<TransientUnlockWindowState>()
+                    .ConsentGranted = true;
+            }
+
+            var transferShaders = grantedShaderNames != null;
 
             // Every avatar-scope gate has passed: the unlock window opens
             // here, before capture, so the whole pipeline below reads the
@@ -597,7 +608,7 @@ namespace Alrauna.Amuse.Editor.Build
                         IReadOnlyList<CapturedAlphaMaterialFamily> families,
                         MaterialEvidenceRequest request,
                         AlphaPolicyBounds bounds,
-                        out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                        out ClosedAlphaCaptureOutcome transferred) =>
                         UnityMaterialSemantics
                             .TryCaptureClosedAlphaMaterialsTransferred(
                                 materials,
@@ -700,6 +711,8 @@ namespace Alrauna.Amuse.Editor.Build
                         continue;
                     }
 
+                    var closureWay =
+                        resolved.SlotResults[slotIndex].ClosureWay;
                     AmuseReports.SlotAnalysisRefusal(
                         renderer,
                         slotIndex,
@@ -707,8 +720,37 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer.gameObject.name,
                         resolved.SlotResults[slotIndex].Offender,
                         resolved.SlotResults[slotIndex].UnknownReason,
-                        slots[slotIndex].CaptureRefusals);
+                        slots[slotIndex].CaptureRefusals,
+                        closureWay ==
+                            MaterialDependencyClosureFailure.None
+                            ? null
+                            : AmuseReports.ClosureFailureSentence(
+                                closureWay));
                 }
+
+                // An out-of-range closure failure names a slot the renderer
+                // does not have, so it has no slot result. It still reports
+                // its own entry: the template takes an arbitrary slot index,
+                // and the apply pass reads the same record when a split
+                // could append a slot onto that index.
+                foreach (var record in evidence.SlotClosureFailures)
+                {
+                    if (record.SlotIndex < resolved.SlotResults.Length)
+                    {
+                        continue;
+                    }
+
+                    AmuseReports.SlotAnalysisRefusal(
+                        renderer,
+                        record.SlotIndex,
+                        RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed,
+                        renderer.gameObject.name,
+                        closureWaySentence:
+                        AmuseReports.ClosureFailureSentence(
+                            record.Failure));
+                }
+
                 var opaqueCandidateTriangleCount = 0;
                 var extractionMeshSubMeshCount = -1;
                 var extractionMaterialSlotCount = -1;
@@ -769,7 +811,8 @@ namespace Alrauna.Amuse.Editor.Build
                             lilToonConversion,
                             minimumOpaqueCoveragePercent,
                             rendererTypeName,
-                            allowDepthTestChange);
+                            allowDepthTestChange,
+                            grantedShaderNames);
                     }
                 }
 
@@ -787,10 +830,11 @@ namespace Alrauna.Amuse.Editor.Build
                         extractionMeshSubMeshCount,
                         extractionMaterialSlotCount,
                         refusal ==
-                            RendererAnalysisRefusal
-                                .MaterialDependencyClosureFailed
+                        RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed &&
+                        evidence.SlotClosureFailures.Count > 0
                             ? AmuseReports.ClosureFailureSentence(
-                                evidence.ClosureFailure)
+                                evidence.SlotClosureFailures[0].Failure)
                             : null);
                     continue;
                 }
@@ -816,22 +860,25 @@ namespace Alrauna.Amuse.Editor.Build
                 Renderer renderer,
                 ClosedAlphaMaterialCapturer inner)
         {
-            inner ??= (
-                IReadOnlyList<Material> batchMaterials,
-                IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
-                MaterialEvidenceRequest batchRequest,
-                AlphaPolicyBounds batchBounds,
-                out IReadOnlyList<CapturedAlphaMaterial> batchCaptured) =>
-                UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                    batchMaterials, batchFamilies, batchRequest,
-                    batchBounds, out batchCaptured,
-                    RegisteredSourceIdentity.Resolve);
+            if (inner == null)
+            {
+                inner = (
+                    IReadOnlyList<Material> batchMaterials,
+                    IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
+                    MaterialEvidenceRequest batchRequest,
+                    AlphaPolicyBounds batchBounds,
+                    out ClosedAlphaCaptureOutcome batchOutcome) =>
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        batchMaterials, batchFamilies, batchRequest,
+                        batchBounds, out batchOutcome,
+                        RegisteredSourceIdentity.Resolve);
+            }
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
-                out IReadOnlyList<CapturedAlphaMaterial> transferred) =>
+                out ClosedAlphaCaptureOutcome transferred) =>
             {
                 var effective = EffectiveMaterialMaterialization
                     .MaterializeAdmitted(renderer, materials, out var clones);
@@ -1046,6 +1093,52 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The D8 pre-scan's material universe: the assigned materials,
+        /// then every material a stored-graph clip can swap onto a slot
+        /// through an object-reference curve. A material reachable only
+        /// through a swap must get its consent subject like an assigned
+        /// one. Null and non-material key values skip, and distinctness
+        /// stays the collector's job, with the seen set keeping the walk
+        /// itself duplicate-free.
+        /// </summary>
+        private static IEnumerable<Material> AssignedAndSwapCurvedMaterials(
+            BuildContext context,
+            CommittedControllerGraphResult graph)
+        {
+            var seen = new HashSet<Material>();
+            foreach (var material in AllAssignedMaterials(context))
+            {
+                if (seen.Add(material))
+                {
+                    yield return material;
+                }
+            }
+            foreach (var layer in graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    foreach (var binding in AnimationUtility
+                                 .GetObjectReferenceCurveBindings(clip))
+                    {
+                        if (!binding.propertyName.StartsWith("m_Materials"))
+                        {
+                            continue;
+                        }
+                        foreach (var key in AnimationUtility
+                                     .GetObjectReferenceCurve(clip, binding))
+                        {
+                            if (key.value is Material material
+                                && seen.Add(material))
+                            {
+                                yield return material;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
 
         /// <summary>
         /// Exercises the PlatformFinish-owned runtime-state orchestration with
@@ -1120,11 +1213,6 @@ namespace Alrauna.Amuse.Editor.Build
                 throw new ArgumentNullException(nameof(rendererPath));
             if (evidence == null)
                 throw new ArgumentNullException(nameof(evidence));
-            if (!evidence.IsClosed)
-            {
-                return Refused(
-                    RendererAnalysisRefusal.MaterialDependencyClosureFailed);
-            }
 
             var floats = new List<CapturedFloatBinding>();
             var objects = new List<CapturedObjectBinding>();
@@ -1213,6 +1301,26 @@ namespace Alrauna.Amuse.Editor.Build
             var anySlotResolved = false;
             for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
             {
+                // A slot-scoped closure failure is a fact about this slot
+                // alone. The renderer is closed, so the slot refuses here
+                // and every sibling slot's own resolution continues.
+                var closureWay = ClosureWayForSlot(evidence, slotIndex);
+                if (closureWay !=
+                    MaterialDependencyClosureFailure.None)
+                {
+                    slotResults[slotIndex] = SlotResolutionResult.Refused(
+                        RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed,
+                        closureWay: closureWay);
+                    if (firstSlotRefusal == RendererAnalysisRefusal.None)
+                    {
+                        firstSlotRefusal = RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed;
+                    }
+
+                    continue;
+                }
+
                 var slotEntries = FilterBlockEntriesForSlot(blockState, slotIndex);
                 var resolved = AdmittedMaterialStates.ResolveSlot(
                     slots[slotIndex],
@@ -1260,8 +1368,14 @@ namespace Alrauna.Amuse.Editor.Build
                 new CapturedAlphaMaterial[evidence.CurrentMaterialIndices.Count];
             for (var slot = 0; slot < currentMaterials.Length; slot++)
             {
-                currentMaterials[slot] = evidence.AdmittedMaterials[
-                    evidence.CurrentMaterialIndices[slot]];
+                // The -1 sentinel marks a closure-failed slot. Geometry
+                // extraction carries the slots positionally and never reads
+                // them for classification: a refused slot's triangles are
+                // unproven outcomes, so the null entry is inert.
+                var index = evidence.CurrentMaterialIndices[slot];
+                currentMaterials[slot] = index >= 0
+                    ? evidence.AdmittedMaterials[index]
+                    : null;
             }
 
             return new ResolvedRuntimeStates(
@@ -1269,6 +1383,7 @@ namespace Alrauna.Amuse.Editor.Build
                 currentMaterials,
                 slotResults);
         }
+
 
         private static IReadOnlyList<BlockStateEntry> FilterBlockEntriesForSlot(
             IReadOnlyList<BlockStateEntry> blockState,
@@ -1289,6 +1404,28 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// The way the slot's material dependency closure failed, or
+        /// <see cref="MaterialDependencyClosureFailure.None"/> when the slot
+        /// closed cleanly. One lookup per slot over the sorted failure
+        /// records; the records are unique per slot, so the first match is
+        /// the only one.
+        /// </summary>
+        private static MaterialDependencyClosureFailure ClosureWayForSlot(
+            CapturedAnimationEvidence evidence,
+            int slotIndex)
+        {
+            foreach (var record in evidence.SlotClosureFailures)
+            {
+                if (record.SlotIndex == slotIndex)
+                {
+                    return record.Failure;
+                }
+            }
+
+            return MaterialDependencyClosureFailure.None;
         }
 
         private static ResolvedRuntimeStates Refused(
@@ -1348,7 +1485,8 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
             string rendererTypeName = null,
-            bool allowDepthTestChange = false)
+            bool allowDepthTestChange = false,
+            IReadOnlyCollection<string> grantedShaderNames = null)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -1361,7 +1499,8 @@ namespace Alrauna.Amuse.Editor.Build
                 lilToonConversion,
                 minimumOpaqueCoveragePercent,
                 rendererTypeName,
-                allowDepthTestChange);
+                allowDepthTestChange,
+                grantedShaderNames);
             if (prepared == null)
             {
                 return;
@@ -1437,10 +1576,17 @@ namespace Alrauna.Amuse.Editor.Build
             var admittedBySlot = new List<int>[evidence.CurrentMaterialIndices.Count];
             for (var slot = 0; slot < admittedBySlot.Length; slot++)
             {
-                admittedBySlot[slot] = new List<int>
+                admittedBySlot[slot] = new List<int>();
+
+                // The -1 sentinel marks a slot whose closure failed: no
+                // current material was admitted. The slot refuses as a
+                // closure failure before resolution, so its admitted list
+                // only needs the swap indices it still validly holds.
+                if (evidence.CurrentMaterialIndices[slot] >= 0)
                 {
-                    evidence.CurrentMaterialIndices[slot],
-                };
+                    admittedBySlot[slot].Add(
+                        evidence.CurrentMaterialIndices[slot]);
+                }
             }
 
             foreach (var clip in evidence.Clips)

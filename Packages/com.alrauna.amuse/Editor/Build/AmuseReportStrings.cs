@@ -359,11 +359,11 @@ namespace Alrauna.Amuse.Editor.Build
                 "texture {4}.",
             ["amuse.texture.UnsupportedFormat:hint"] =
                 "Re-import the texture as RGBA32, ARGB32, Alpha8, RGB24, " +
-                "DXT1, DXT5, or BC7. When the report says the texture " +
-                "has no source identity, the build saw a texture that " +
-                "no project asset backs. When it says the texture has a " +
-                "source identity, the capture route refused a real " +
-                "imported asset.",
+                "DXT1, DXT5, BC7, DXT1 Crunched, or DXT5 Crunched. When " +
+                "the report says the texture has no source identity, the " +
+                "build saw a texture that no project asset backs. When it " +
+                "says the texture has a source identity, the capture route " +
+                "refused a real imported asset.",
             ["amuse.texture.NoAlphaChannel"] =
                 "A material texture on slot {0} has no alpha channel.",
             ["amuse.texture.NoAlphaChannel:description"] =

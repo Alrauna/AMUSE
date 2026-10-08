@@ -41,7 +41,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         ConversionPropertyNotFinite,
 
         // Effective render-state eligibility
-        OutlinesEnabled,
         AlphaToCoverageEnabled,
         UnsupportedDepthComparison,
         UnsupportedBlendEquation,
@@ -207,24 +206,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // --- Conversion evidence -------------------------------------------
 
-        /// <summary>
-        /// The one property outside the canonical recipe that conversion reads.
-        /// The vendor's outline pass opens with
-        /// <c>clip(_EnableOutlines - 0.01)</c>, then replaces or multiplies
-        /// alpha from outline texture/colour and an optional distance fade -
-        /// none of which AMUSE models - before <c>_Mode == Opaque</c> forces
-        /// that alpha to 1 ahead of the outline clip. Conversion therefore
-        /// requires outlines disabled whenever it would mutate the material.
-        /// </summary>
-        private const string EnableOutlinesProperty = "_EnableOutlines";
-
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
 
         /// <summary>
-        /// The 24 properties conversion reads: the 23 recipe properties plus
-        /// <see cref="EnableOutlinesProperty"/>. Used both as the request's
-        /// presence schema and as the conversion source-attestation schema.
+        /// The 23 properties conversion reads: the canonical recipe
+        /// properties. Used both as the request's presence schema and
+        /// as the conversion source-attestation schema.
         /// </summary>
         private static readonly string[] ConversionSchema = BuildConversionSchema();
 
@@ -294,17 +282,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             // 2. AlreadyOpaque, before any transformation gate.
-            if (IsCanonicalOpaque(values, effectiveRenderQueue, effectiveRenderType))
+            if (IsFunctionallyOpaque(values, effectiveRenderQueue, effectiveRenderType))
             {
                 return PoiyomiOpaqueConversionEligibility.AlreadyOpaque();
             }
 
             // --- Transformation gates. Each exists to authorize a change, so
             // none is reachable once step 2 has established that nothing will
-            // be changed. Exactly one of them - the outline gate - can fail on
-            // a material that is otherwise canonical, because _EnableOutlines
-            // is the only conversion-read property the recipe does not write.
-
+            // be changed.
             // 3. Finiteness.
             foreach (var value in values)
             {
@@ -315,14 +300,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            // 4. Outlines. See EnableOutlinesProperty for why this refuses.
-            if (Read(values, EnableOutlinesProperty) != 0f)
-            {
-                return PoiyomiOpaqueConversionEligibility.Refused(
-                    PoiyomiOpaqueConversionRefusal.OutlinesEnabled);
-            }
-
-            // 5. Premultiplication. The vendor premultiply feature scales
+            // 4. Premultiplication. The vendor premultiply feature scales
             //    the color by saturate(alpha) in three passes and never
             //    writes the alpha value (note 4.3). The proof moves only
             //    triangles whose alpha is exactly 1, so the factor is
@@ -336,14 +314,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    an unproven triangle.
             var premultiplied = Read(values, "_AlphaPremultiply") != 0f;
 
-            // 6. Coverage.
+            // 5. Coverage.
             if (Read(values, "_AlphaToCoverage") != 0f)
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.AlphaToCoverageEnabled);
             }
 
-            // 7. Depth comparison. Required to be LEqual already rather than
+            // 6. Depth comparison. Required to be LEqual already rather than
             //    normalized to it: a different comparison changes visibility
             //    independently of alpha, so a material authored to draw with
             //    Always, Greater or Disabled expresses a visibility intent the
@@ -366,7 +344,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
             }
 
-            // 8. Base RGB blend. At alpha 1 both accepted source factors
+            // 7. Base RGB blend. At alpha 1 both accepted source factors
             //    evaluate to 1 and both accepted destination factors to 0, so
             //    the blend degenerates to `dst := src` and normalizing to
             //    One/Zero is an identity there.
@@ -381,7 +359,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     PoiyomiOpaqueConversionRefusal.UnsupportedBlendEquation);
             }
 
-            // 9. ForwardAdd RGB blend FACTORS, which the recipe rewrites to
+            // 8. ForwardAdd RGB blend FACTORS, which the recipe rewrites to
             //    One/One. At alpha 1 the accepted source factors evaluate to 1
             //    and the accepted destination factor to 1, so the accepted
             //    states are equivalent to the canonical tuple. The blend
@@ -397,7 +375,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         .UnsupportedForwardAddBlendEquation);
             }
 
-            // 10. Clip threshold. The pinned shader clips unconditionally in
+            // 9. Clip threshold. The pinned shader clips unconditionally in
             //     all four shading passes with `clip(alpha - _Cutoff)`, which
             //     discards when the difference is negative. Alpha exactly 1
             //     therefore survives precisely when _Cutoff <= 1. Only once
@@ -435,25 +413,38 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Whether all 25 canonical facts already match. The recipe values
-        /// occupy the leading entries of <see cref="ConversionSchema"/> in
-        /// order, so the comparison indexes them directly.
-        /// <para>
-        /// <c>_EnableOutlines</c> is deliberately excluded: it is not written,
-        /// so it cannot make a material non-canonical.
-        /// </para>
+        /// Checks whether the material is already functionally opaque.
+        /// It checks essential properties for opaque rendering.
+        /// It ignores inactive properties such as alpha blending factors.
         /// </summary>
-        private static bool IsCanonicalOpaque(
+        private static bool IsFunctionallyOpaque(
             IReadOnlyList<float> values,
             int effectiveRenderQueue,
             string effectiveRenderType)
         {
-            for (var index = 0; index < CanonicalOpaqueTuple.Length; index++)
+            var mode = Read(values, "_Mode");
+            var alphaForceOpaque = Read(values, "_AlphaForceOpaque");
+            if (mode != 0f && alphaForceOpaque != 1f)
             {
-                if (values[index] != CanonicalOpaqueTuple[index].Value)
-                {
-                    return false;
-                }
+                return false;
+            }
+
+            if (Read(values, "_BlendOp") != 0f ||
+                Read(values, "_SrcBlend") != 1f ||
+                Read(values, "_DstBlend") != 0f ||
+                Read(values, "_ZWrite") != 1f ||
+                Read(values, "_ZTest") != 4f ||
+                Read(values, "_AddSrcBlend") != 1f ||
+                Read(values, "_AddDstBlend") != 1f ||
+                Read(values, "_AlphaToCoverage") != 0f ||
+                Read(values, "_AlphaPremultiply") != 0f)
+            {
+                return false;
+            }
+
+            if (Read(values, "_Cutoff") > 1f)
+            {
+                return false;
             }
 
             return effectiveRenderQueue == CanonicalOpaqueRenderQueue &&
@@ -597,13 +588,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static string[] BuildConversionSchema()
         {
-            var schema = new string[CanonicalOpaqueTuple.Length + 1];
+            var schema = new string[CanonicalOpaqueTuple.Length];
             for (var index = 0; index < CanonicalOpaqueTuple.Length; index++)
             {
                 schema[index] = CanonicalOpaqueTuple[index].Property;
             }
 
-            schema[CanonicalOpaqueTuple.Length] = EnableOutlinesProperty;
             return schema;
         }
 

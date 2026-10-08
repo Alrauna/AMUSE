@@ -648,7 +648,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var texture = Track(ImportSplitAlphaTexture("sibling"));
                     var opaque = Track(VerifiedOpaqueMaterial());
                     var splitRefused = Track(SplitAlphaMaterial(texture));
-                    splitRefused.SetFloat("_EnableOutlines", 1f);
+                    splitRefused.SetFloat("_ZTest", 8f);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
                     var renderer = AddRenderer(
                         root, "body", sourceMesh, opaque, splitRefused);
@@ -671,7 +671,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused),
                         Is.EqualTo(1),
-                        "exactly the outlines-enabled split slot may refuse");
+                        "exactly the ztest-refused split slot may refuse");
                     Assert.That(
                         state.SlotRefusalCount(
                             AlphaSeparationSlotRefusal
@@ -704,6 +704,125 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
                     Assert.That(state.AppliedOpaqueTriangleCount,
                         Is.EqualTo(1));
+                }
+                finally
+                {
+                    DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        private static Texture2D ImportSplitHollowTexture(string name)
+        {
+            var pixels = new Color32[16];
+
+            return TestTextureImport.WritePng(
+                SplitTempFolder + "/" + name + ".png",
+                4,
+                4,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = TextureWrapMode.Clamp;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                },
+                alpha: true);
+        }
+
+        [Test]
+        public void OutlinesOnSplitConvertsWhenTheOutlineIsProven()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE split outlines converts");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(ImportSplitAlphaTexture("splitOutlineProven"));
+                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var splitOutlines = Track(SplitAlphaMaterial(texture));
+                    splitOutlines.SetFloat("_EnableOutlines", 1f);
+                    var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "body", sourceMesh, opaque, splitOutlines);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1));
+                    Assert.That(
+                        state.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                        Is.Zero, "a proven outline no longer refuses the split slot");
+                    Assert.That(renderer.sharedMesh.subMeshCount, Is.EqualTo(3));
+                    Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(2));
+                }
+                finally
+                {
+                    DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void OutlinesHoleyTextureMovesNothingButRefusesNothing()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE split outlines holey");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(ImportSplitAlphaTexture("splitBase"));
+                    var outlineTexture = Track(ImportSplitHollowTexture("splitOutlineHoley"));
+                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var splitOutlines = Track(SplitAlphaMaterial(texture));
+                    splitOutlines.SetFloat("_EnableOutlines", 1f);
+                    splitOutlines.SetTexture("_OutlineTexture", outlineTexture);
+                    var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "body", sourceMesh, opaque, splitOutlines);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, AlphaSeparationApplyTests.ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(
+                        state.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                        Is.Zero, "an empty outline intersection is the contract, not a refusal");
+                    Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(1),
+                        "only the wholly opaque sibling moves");
+                    Assert.That(renderer.sharedMesh.subMeshCount, Is.EqualTo(2),
+                        "the outlines slot keeps its original submesh");
+                    Assert.That(
+                        renderer.sharedMaterials[1],
+                        Is.SameAs(splitOutlines),
+                        "the outlines slot's material must be untouched");
                 }
                 finally
                 {

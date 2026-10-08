@@ -74,7 +74,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     prepared.Target.ExpectedMaterialSlotCount, Is.EqualTo(1));
                 Assert.That(prepared.RendererPath, Is.Empty);
                 Assert.That(prepared.Plan.OpaqueTriangleCount, Is.EqualTo(1));
-                Assert.That(prepared.Evidence.IsClosed, Is.True);
 
                 Assert.That(prepared.CandidateSlots, Has.Count.EqualTo(1));
                 var slot = prepared.CandidateSlots[0];
@@ -1967,10 +1966,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
-                Assert.That(batchAdmitted, Is.False,
-                    "the empty row table must refuse the batch closed " +
-                    "until the Task 2 rows land");
-                Assert.That(captured, Is.Null);
+                Assert.That(batchAdmitted, Is.True,
+                    "the empty row table must keep the Multi member " +
+                    "unattested, closing its own slots through the " +
+                    "failing ordinal");
+                Assert.That(captured.Captured, Is.Empty);
+                Assert.That(
+                    captured.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
 
                 var analyzedMaterial =
                     UnityMaterialSemantics.CaptureAlphaMaterials(
@@ -2062,8 +2064,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaPolicyBounds.Inert,
                         out var captured,
                         RegisteredSourceIdentity.Resolve);
-                Assert.That(batchAdmitted, Is.False);
-                Assert.That(captured, Is.Null);
+                Assert.That(batchAdmitted, Is.True);
+                Assert.That(captured.Captured, Is.Empty);
+                Assert.That(
+                    captured.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
 
                 var analyzedMaterial =
                     UnityMaterialSemantics.CaptureAlphaMaterials(
@@ -2156,16 +2160,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     captureSchema,
                     AlphaPolicyBounds.Inert,
                     out var captured);
-                Assert.That(captured.Count, Is.EqualTo(1));
+                Assert.That(captured.Captured.Count, Is.EqualTo(1));
                 Assert.That(
-                    captured[0].MultiResolution, Is.Not.Null);
+                    captured.Captured[0].MultiResolution, Is.Not.Null);
                 Assert.That(
-                    captured[0].MultiResolution.IsResolved, Is.True,
+                    captured.Captured[0].MultiResolution.IsResolved, Is.True,
                     "the derivation-consistent mode-2 state must resolve " +
                     "at the gate");
 
                 var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(
-                    captured[0]);
+                    captured.Captured[0]);
                 Assert.That(
                     analysis.Semantics.Alpha.IsComplete, Is.False,
                     "the retained state answers all-Unknown alpha");
@@ -5408,6 +5412,61 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A conversion-refused slot names the inner per-gate refusal, so
+        /// the seven conversion arms stop collapsing into one bare enum.
+        /// The locality arm's transparent slot refuses through its depth
+        /// comparison, and the entry must carry that gate's token after the
+        /// cause.
+        /// <para>
+        /// Falsifies: an emitter that discards the family boundary's inner
+        /// refusal token.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void ConversionRefusedSlotNamesItsPerGateDetail()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "conversion_refusal_names_gate");
+
+                using (var arm = LocalityArmFixture.Create(
+                           fixtures, opaqueTexture,
+                           transparent => transparent.SetFloat("_ZTest", 8f)))
+                {
+                    AmusePlatformFinishState amuse = null;
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = arm.Run());
+
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.EqualTo(1),
+                        "fixture precondition: the transparent slot's " +
+                        "depth comparison must refuse exactly its own " +
+                        "slot");
+
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "OpaqueConversionRefused: " +
+                            LilToonOpaqueConversionRefusal
+                                .UnsupportedDepthComparison),
+                        "the refused slot's entry must name the inner " +
+                        "per-gate refusal, not the bare cause");
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
         /// through the real barrier with the family-routing conversion
@@ -5728,11 +5787,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     captureSchema,
                     AlphaPolicyBounds.Inert,
                     out var captured);
-                Assert.That(captured.Count, Is.EqualTo(1));
+                Assert.That(captured.Captured.Count, Is.EqualTo(1));
 
                 var result = AdmittedMaterialStates.ResolveSlot(
                     new CapturedMaterialSlotEvidence(0, new[] { 0 }),
-                    captured,
+                    captured.Captured,
                     System.Array.Empty<
                         (CapturedFloatBinding, AnimatedPropertyRef)>(),
                     alphaRelevance,
@@ -5762,7 +5821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "move");
                 Assert.That(
                     result.Offender,
-                    Is.SameAs(captured[0]),
+                    Is.SameAs(captured.Captured[0]),
                     "the refusal must name the retained material");
 
                 // Preparation end to end: the retained slot donates
@@ -8696,6 +8755,168 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_PoiParallax", 0f);
             material.SetFloat("_PoiInternalParallax", 0f);
             return material;
+        }
+
+        private const string UnverifiedPoiyomiTempFolder =
+            "Assets/AmuseTests_UnverifiedPoiyomi";
+
+        [Test]
+        public void UnverifiedPoiyomi_RefusesConversionEvenWhenShaderNameGranted()
+        {
+            Material material = null;
+            try
+            {
+                material = NewMaterial(
+                    "unverified-poi-granted.shader",
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                    PoiyomiProperties());
+                var captured = CaptureAdmittedPoiyomiMaterial(material);
+                var granted = new[] { PoiyomiMaterialSemantics.PoiyomiToonShaderName };
+
+                var refusal = ConvertAdmittedMaterialDirect(
+                    material,
+                    captured,
+                    grantedShaderNames: granted,
+                    out var opaque,
+                    out var detail);
+
+                Assert.That(refusal, Is.EqualTo(AlphaSeparationSlotRefusal.OpaqueConversionRefused));
+                Assert.That(detail, Does.StartWith("SourceIdentity."));
+                Assert.That(opaque, Is.Null);
+            }
+            finally
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                if (AssetDatabase.IsValidFolder(UnverifiedPoiyomiTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(UnverifiedPoiyomiTempFolder);
+                }
+            }
+        }
+
+        private static Material NewMaterial(
+            string fileName,
+            string shaderName,
+            string properties)
+        {
+            if (!AssetDatabase.IsValidFolder(UnverifiedPoiyomiTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_UnverifiedPoiyomi");
+            }
+
+            var path = UnverifiedPoiyomiTempFolder + "/" + fileName;
+            var shader = TestShaderWriter.WriteTestShader(
+                path,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    Properties\n    {" + properties +
+                "\n    }\n    SubShader { Pass {} }\n}\n");
+            return new Material(shader);
+        }
+
+        private static CapturedAlphaMaterial CaptureAdmittedPoiyomiMaterial(
+            Material material)
+        {
+            var request = MaterialEvidenceRequest.Combine(
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+            var inputs = new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    request)
+            };
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, AlphaPolicyBounds.Inert);
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Poiyomi,
+                evidence[0],
+                default,
+                null,
+                materialPath: material != null
+                    ? AssetDatabase.GetAssetPath(material)
+                    : null,
+                materialName: material != null ? material.name : null,
+                shaderName: material != null && material.shader != null
+                    ? material.shader.name
+                    : null);
+        }
+
+        private static AlphaSeparationSlotRefusal ConvertAdmittedMaterialDirect(
+            Material live,
+            CapturedAlphaMaterial captured,
+            IReadOnlyCollection<string> grantedShaderNames,
+            out Material opaque,
+            out string detail)
+        {
+            return AlphaSeparationPreparation.ConvertAdmittedMaterial(
+                captured,
+                live,
+                Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                Array.Empty<string>(),
+                preparedOpaque: null,
+                poiyomiConversion: null,
+                lilToonConversion: null,
+                allowDepthTestChange: false,
+                grantedShaderNames: grantedShaderNames,
+                out opaque,
+                out _,
+                out _,
+                out detail);
+        }
+
+        private static string PoiyomiProperties()
+        {
+            return @"
+        shader_master_label (""Master"", Float) = 0
+        _ShaderOptimizerEnabled (""Locked"", Float) = 0
+        _MainTex (""Main"", 2D) = ""white"" {}
+        _Color (""Color"", Color) = (1,1,1,1)
+        _BumpMap (""Bump"", 2D) = ""bump"" {}
+        _EmissionMap (""Emission"", 2D) = ""white"" {}
+        _EnableEmission (""Emission 0"", Float) = 0
+        _EnableEmission1 (""Emission 1"", Float) = 0
+        _EnableEmission2 (""Emission 2"", Float) = 0
+        _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
+        _AlphaForceOpaque (""Force Opaque"", Float) = 1
+        _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
+        _AlphaToCoverage (""Coverage"", Float) = 0
+        _AlphaSharpenedA2C (""Sharpened"", Float) = 0
+        _AlphaDithering (""Dither"", Float) = 0
+        _EnableDissolve (""Dissolve"", Float) = 0
+        _EnableUDIMDiscardOptions (""UDIM"", Float) = 0
+        _AlphaMod (""Alpha Mod"", Float) = 0
+        _MainAlphaMaskMode (""Mask Mode"", Float) = 0
+        _AlphaDistanceFade (""Distance"", Float) = 0
+        _AlphaFresnel (""Fresnel"", Float) = 0
+        _AlphaAngular (""Angular"", Float) = 0
+        _AlphaAudioLinkEnabled (""Audio Alpha"", Float) = 0
+        _EnableAudioLink (""Audio"", Float) = 0
+        _AlphaGlobalMask (""Global Mask"", Float) = 0
+        _AlphaMask (""Mask"", 2D) = ""white"" {}
+        _AlphaMaskPan (""Pan"", Vector) = (0,0,0,0)
+        _AlphaMaskUV (""UV"", Float) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _MipLevelRule (""Rule"", Float) = 0
+        _MainVertexColoringEnabled (""Vertex"", Float) = 0
+        _MainTexUV (""UV"", Float) = 0
+        _MainTexPan (""Pan"", Vector) = (0,0,0,0)
+        _MainPixelMode (""Pixel"", Float) = 0
+        _MainTexStochastic (""Stochastic"", Float) = 0";
         }
 
         /// <summary>
