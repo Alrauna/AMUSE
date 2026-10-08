@@ -618,7 +618,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// the depth-test policy admitted onto a mixed-split plan refuses
         /// here, before any material is prepared for that slot.
         /// </summary>
-        private static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
+        internal static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
             CapturedAlphaMaterial captured,
             Material live,
             IReadOnlyList<(CapturedFloatBinding Binding,
@@ -877,10 +877,7 @@ namespace Alrauna.Amuse.Editor.Build
                         if (!PoiyomiMaterialSemantics
                                 .TryVerifyPoiyomiIdentity(
                                     sourceEvidence,
-                                    out var poiIdentityDiagnostic) &&
-                            !IsGrantedShader(
-                                sourceEvidence.ShaderName,
-                                grantedShaderNames))
+                                    out var poiIdentityDiagnostic))
                         {
                             refusedDetail =
                                 "SourceIdentity." +

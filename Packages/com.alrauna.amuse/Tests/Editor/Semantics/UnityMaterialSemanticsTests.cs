@@ -877,15 +877,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void Legacy90ShaderName_SelectsThePoiyomiFamily()
+        public void Legacy90ShaderName_SelectsUnsupportedFamily()
         {
-            // The vendor's own old-version copy classifies to the Poiyomi
-            // family with the plain request, so the D8 pre-scan offers the
-            // transfer-consent subject for it. Its source stays unpinned:
-            // only a granted build may treat it with the verified rules.
+            const string legacy90Name = ".poiyomi/Old Versions/9.0/Poiyomi Toon";
             var material = NewMaterial(
                 "legacy90-poiyomi.shader",
-                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                legacy90Name,
                 PoiyomiProperties());
 
             var selected = UnityMaterialSemantics
@@ -895,37 +892,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     out var alphaRelevance,
                     out var captureSchema);
 
-            Assert.That(selected, Is.True);
+            Assert.That(selected, Is.False);
             Assert.That(
-                family, Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
-            Assert.That(
-                alphaRelevance,
-                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest));
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(alphaRelevance, Is.Null);
+            Assert.That(captureSchema, Is.Null);
         }
 
         [Test]
-        public void Legacy90Material_ProducesTheTransferConsentSubject()
+        public void Legacy90Material_ProducesZeroTransferConsentSubjects()
         {
+            const string legacy90Name = ".poiyomi/Old Versions/9.0/Poiyomi Toon";
             var material = NewMaterial(
                 "legacy90-consent.shader",
-                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
+                legacy90Name,
                 PoiyomiProperties());
 
             var consent = UnityMaterialSemantics.CollectTransferConsent(
                 new[] { material });
 
-            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
-            Assert.That(
-                consent.Subjects[0],
-                Does.Contain(
-                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
-            Assert.That(
-                consent.Subjects[0],
-                Does.Contain("not a verified version"));
-            Assert.That(
-                consent.GrantedShaderNames,
-                Contains.Item(
-                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
+            Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void UnverifiedPoiyomi_ProducesZeroTransferConsentSubjects()
+        {
+            var material = NewMaterial(
+                "unverified-poiyomi-consent.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsent(
+                new[] { material });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
         }
 
         /// <summary>

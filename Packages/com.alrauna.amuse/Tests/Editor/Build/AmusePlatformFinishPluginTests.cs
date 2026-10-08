@@ -7,6 +7,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
@@ -425,17 +426,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var shaderScope = new TestTransientScope(
                 SwapConsentShaderFolder);
             shaderScope.EnsureTempFolder();
-            var legacyShader = WriteSwapConsentStandIn(
-                "granted-swap-legacy90.shader",
-                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
-                PoiyomiStandInProperties());
-            var twoPassShader = WriteSwapConsentStandIn(
-                "granted-swap-two-pass.shader",
-                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
-                PoiyomiTwoPassStandInProperties());
-            var assignedFirst = new Material(legacyShader);
-            var assignedSecond = new Material(legacyShader);
-            var swapOnly = new Material(twoPassShader);
+            var cutoutShader = WriteSwapConsentStandIn(
+                "granted-swap-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                LilToonStandInProperties());
+            var transparentShader = WriteSwapConsentStandIn(
+                "granted-swap-transparent.shader",
+                LilToonSourceAttestation.TransparentShaderName,
+                LilToonStandInProperties());
+            var assignedFirst = new Material(cutoutShader);
+            var assignedSecond = new Material(cutoutShader);
+            var swapOnly = new Material(transparentShader);
             var mesh = TwoSubmeshTriangleMesh();
             var root = new GameObject("AMUSE granted swap consent fixture");
             var clip = new AnimationClip { name = "granted swap clip" };
@@ -490,14 +491,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "assigned shader and the swap-only shader");
                 Assert.That(
                     consentSubjects.Any(subject => subject.Contains(
-                        PoiyomiMaterialSemantics
-                            .PoiyomiLegacy90ShaderName)),
+                        LilToonSourceAttestation
+                            .CutoutShaderName)),
                     Is.True,
                     "the assigned shader's subject must be offered");
                 Assert.That(
                     consentSubjects.Any(subject => subject.Contains(
-                        PoiyomiMaterialSemantics
-                            .PoiyomiTwoPassShaderName)),
+                        LilToonSourceAttestation
+                            .TransparentShaderName)),
                     Is.True,
                     "the swap-only shader's subject must be offered");
                 Assert.That(after.ConsentDeclined, Is.False);
@@ -552,16 +553,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var shaderScope = new TestTransientScope(
                 SwapConsentShaderFolder);
             shaderScope.EnsureTempFolder();
-            var legacyShader = WriteSwapConsentStandIn(
-                "declined-swap-legacy90.shader",
-                PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
-                PoiyomiStandInProperties());
-            var twoPassShader = WriteSwapConsentStandIn(
-                "declined-swap-two-pass.shader",
-                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
-                PoiyomiTwoPassStandInProperties());
-            var assignedMaterial = new Material(legacyShader);
-            var swapOnly = new Material(twoPassShader);
+            var cutoutShader = WriteSwapConsentStandIn(
+                "declined-swap-cutout.shader",
+                LilToonSourceAttestation.CutoutShaderName,
+                LilToonStandInProperties());
+            var transparentShader = WriteSwapConsentStandIn(
+                "declined-swap-transparent.shader",
+                LilToonSourceAttestation.TransparentShaderName,
+                LilToonStandInProperties());
+            var assignedMaterial = new Material(cutoutShader);
+            var swapOnly = new Material(transparentShader);
             var mesh = TwoSubmeshTriangleMesh();
             var root = new GameObject("AMUSE declined swap consent fixture");
             var clip = new AnimationClip { name = "declined swap clip" };
@@ -624,9 +625,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new[] { swapOnly },
                         new[]
                         {
-                            CapturedAlphaMaterialFamily.PoiyomiTwoPass,
+                            CapturedAlphaMaterialFamily.LilToonTransparent,
                         },
-                        PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest,
+                        LilToonTransparentMaterialSemantics.AlphaEvidenceRequest,
                         AlphaPolicyBounds.Inert,
                         System.Array.Empty<string>(),
                         out var outcome,
@@ -651,6 +652,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void PoiyomiMaterials_NeverProduceTransferConsentSubjects()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var shaderScope = new TestTransientScope(
+                SwapConsentShaderFolder);
+            shaderScope.EnsureTempFolder();
+            var legacyShader = WriteSwapConsentStandIn(
+                "swap-unsupported-poi.shader",
+                ".poiyomi/Old Versions/9.0/Poiyomi Toon",
+                PoiyomiStandInProperties());
+            var assigned = new Material(legacyShader);
+            var mesh = TriangleMesh();
+            var root = new GameObject("AMUSE unverified poi consent fixture");
+            var renderer = root.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { assigned };
+
+            try
+            {
+                var consent = UnityMaterialSemantics.CollectTransferConsent(
+                    new[] { assigned });
+
+                Assert.That(consent.Subjects.Count, Is.EqualTo(0));
+                Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                shaderScope.TearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+                UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(assigned);
+            }
+        }
+
         private const string SwapConsentShaderFolder =
             "Assets/AmuseTests_SwapConsent";
 
@@ -664,6 +700,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    Properties\n    {" + properties +
                 "\n    }\n    SubShader { Pass {} }\n}\n");
+        }
+
+        private static Mesh TriangleMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            return mesh;
         }
 
         private static Mesh TwoSubmeshTriangleMesh()
@@ -776,14 +825,57 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The Two Pass stand-in property block: the plain block plus the
-        /// second family's tint and force-opaque flag.
+        /// A stand-in property block declaring every property needed by
+        /// lilToon cutout and transparent alpha interpretation.
         /// </summary>
-        private static string PoiyomiTwoPassStandInProperties()
+        private static string LilToonStandInProperties()
         {
-            return PoiyomiStandInProperties() + @"
-        _AlphaForceOpaque2 (""Force Opaque Two Pass"", Float) = 1
-        _TwoPassColor (""Two Pass Color"", Color) = (1,1,1,1)";
+            return @"
+        [HideInInspector] _lilToonVersion (""Version"", Int) = 45
+        _Invisible (""Invisible"", Int) = 0
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _UDIMDiscardMode (""UDIMDiscardMode"", Int) = 0
+        _ShiftBackfaceUV (""ShiftBackfaceUV"", Int) = 0
+        _UseParallax (""UseParallax"", Int) = 0
+        _UseMain2ndTex (""UseMain2ndTex"", Int) = 0
+        _UseMain3rdTex (""UseMain3rdTex"", Int) = 0
+        _AlphaMaskMode (""AlphaMaskMode"", Int) = 0
+        _UseDither (""UseDither"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _SubpassCutoff (""SubpassCutoff"", Range(0,1)) = 0.5
+        _AlphaBoostFA (""AlphaBoostFA"", Float) = 10
+        _Color (""Color"", Color) = (1,1,1,1)
+        _MainTex (""Texture"", 2D) = ""white"" {}
+        _DissolveParams (""DissolveParams"", Vector) = (0,0,0.5,0.1)
+        _MainTex_ScrollRotate (""ScrollRotate"", Vector) = (0,0,0,0)
+        _DistanceFade (""DistanceFade"", Vector) = (0.1,0.01,0,0)
+        _SrcBlend (""SrcBlend"", Float) = 1
+        _DstBlend (""DstBlend"", Float) = 0
+        _AlphaToMask (""AlphaToMask"", Float) = 0
+        _ZWrite (""ZWrite"", Float) = 1
+        _ZTest (""ZTest"", Float) = 4
+        _OffsetFactor (""OffsetFactor"", Float) = 0
+        _OffsetUnits (""OffsetUnits"", Float) = 0
+        _ColorMask (""ColorMask"", Float) = 15
+        _SrcBlendAlpha (""SrcBlendAlpha"", Float) = 1
+        _DstBlendAlpha (""DstBlendAlpha"", Float) = 10
+        _BlendOp (""BlendOp"", Float) = 0
+        _BlendOpAlpha (""BlendOpAlpha"", Float) = 0
+        _SrcBlendFA (""SrcBlendFA"", Float) = 1
+        _DstBlendFA (""DstBlendFA"", Float) = 1
+        _SrcBlendAlphaFA (""SrcBlendAlphaFA"", Float) = 0
+        _DstBlendAlphaFA (""DstBlendAlphaFA"", Float) = 1
+        _BlendOpFA (""BlendOpFA"", Float) = 4
+        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4";
         }
 
         [Test]

@@ -8757,6 +8757,168 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
+        private const string UnverifiedPoiyomiTempFolder =
+            "Assets/AmuseTests_UnverifiedPoiyomi";
+
+        [Test]
+        public void UnverifiedPoiyomi_RefusesConversionEvenWhenShaderNameGranted()
+        {
+            Material material = null;
+            try
+            {
+                material = NewMaterial(
+                    "unverified-poi-granted.shader",
+                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                    PoiyomiProperties());
+                var captured = CaptureAdmittedPoiyomiMaterial(material);
+                var granted = new[] { PoiyomiMaterialSemantics.PoiyomiToonShaderName };
+
+                var refusal = ConvertAdmittedMaterialDirect(
+                    material,
+                    captured,
+                    grantedShaderNames: granted,
+                    out var opaque,
+                    out var detail);
+
+                Assert.That(refusal, Is.EqualTo(AlphaSeparationSlotRefusal.OpaqueConversionRefused));
+                Assert.That(detail, Does.StartWith("SourceIdentity."));
+                Assert.That(opaque, Is.Null);
+            }
+            finally
+            {
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                if (AssetDatabase.IsValidFolder(UnverifiedPoiyomiTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(UnverifiedPoiyomiTempFolder);
+                }
+            }
+        }
+
+        private static Material NewMaterial(
+            string fileName,
+            string shaderName,
+            string properties)
+        {
+            if (!AssetDatabase.IsValidFolder(UnverifiedPoiyomiTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_UnverifiedPoiyomi");
+            }
+
+            var path = UnverifiedPoiyomiTempFolder + "/" + fileName;
+            var shader = TestShaderWriter.WriteTestShader(
+                path,
+                "Shader \"" + shaderName + "\"\n" +
+                "{\n    Properties\n    {" + properties +
+                "\n    }\n    SubShader { Pass {} }\n}\n");
+            return new Material(shader);
+        }
+
+        private static CapturedAlphaMaterial CaptureAdmittedPoiyomiMaterial(
+            Material material)
+        {
+            var request = MaterialEvidenceRequest.Combine(
+                PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                PoiyomiOpaqueConversion.ConversionEvidenceRequest);
+            var inputs = new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    request)
+            };
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, AlphaPolicyBounds.Inert);
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Poiyomi,
+                evidence[0],
+                default,
+                null,
+                materialPath: material != null
+                    ? AssetDatabase.GetAssetPath(material)
+                    : null,
+                materialName: material != null ? material.name : null,
+                shaderName: material != null && material.shader != null
+                    ? material.shader.name
+                    : null);
+        }
+
+        private static AlphaSeparationSlotRefusal ConvertAdmittedMaterialDirect(
+            Material live,
+            CapturedAlphaMaterial captured,
+            IReadOnlyCollection<string> grantedShaderNames,
+            out Material opaque,
+            out string detail)
+        {
+            return AlphaSeparationPreparation.ConvertAdmittedMaterial(
+                captured,
+                live,
+                Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
+                Array.Empty<string>(),
+                preparedOpaque: null,
+                poiyomiConversion: null,
+                lilToonConversion: null,
+                allowDepthTestChange: false,
+                grantedShaderNames: grantedShaderNames,
+                out opaque,
+                out _,
+                out _,
+                out detail);
+        }
+
+        private static string PoiyomiProperties()
+        {
+            return @"
+        shader_master_label (""Master"", Float) = 0
+        _ShaderOptimizerEnabled (""Locked"", Float) = 0
+        _MainTex (""Main"", 2D) = ""white"" {}
+        _Color (""Color"", Color) = (1,1,1,1)
+        _BumpMap (""Bump"", 2D) = ""bump"" {}
+        _EmissionMap (""Emission"", 2D) = ""white"" {}
+        _EnableEmission (""Emission 0"", Float) = 0
+        _EnableEmission1 (""Emission 1"", Float) = 0
+        _EnableEmission2 (""Emission 2"", Float) = 0
+        _EnableEmission3 (""Emission 3"", Float) = 0
+        _BlendOp (""Blend Op"", Int) = 0
+        _SrcBlend (""Src Blend"", Float) = 1
+        _DstBlend (""Dst Blend"", Float) = 0
+        _BlendOpAlpha (""Alpha Blend Op"", Int) = 4
+        _SrcBlendAlpha (""Alpha Src"", Float) = 1
+        _DstBlendAlpha (""Alpha Dst"", Float) = 10
+        _SrcBlend2 (""Src Blend 2"", Float) = 1
+        _DstBlend2 (""Dst Blend 2"", Float) = 0
+        _BlendOp2 (""Blend Op 2"", Int) = 0
+        _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
+        _AlphaForceOpaque (""Force Opaque"", Float) = 1
+        _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
+        _AlphaToCoverage (""Coverage"", Float) = 0
+        _AlphaSharpenedA2C (""Sharpened"", Float) = 0
+        _AlphaDithering (""Dither"", Float) = 0
+        _EnableDissolve (""Dissolve"", Float) = 0
+        _EnableUDIMDiscardOptions (""UDIM"", Float) = 0
+        _AlphaMod (""Alpha Mod"", Float) = 0
+        _MainAlphaMaskMode (""Mask Mode"", Float) = 0
+        _AlphaDistanceFade (""Distance"", Float) = 0
+        _AlphaFresnel (""Fresnel"", Float) = 0
+        _AlphaAngular (""Angular"", Float) = 0
+        _AlphaAudioLinkEnabled (""Audio Alpha"", Float) = 0
+        _EnableAudioLink (""Audio"", Float) = 0
+        _AlphaGlobalMask (""Global Mask"", Float) = 0
+        _AlphaMask (""Mask"", 2D) = ""white"" {}
+        _AlphaMaskPan (""Pan"", Vector) = (0,0,0,0)
+        _AlphaMaskUV (""UV"", Float) = 0
+        _Cutoff (""Cutoff"", Range(0,1)) = 0.5
+        _MipLevelRule (""Rule"", Float) = 0
+        _MainVertexColoringEnabled (""Vertex"", Float) = 0
+        _MainTexUV (""UV"", Float) = 0
+        _MainTexPan (""Pan"", Vector) = (0,0,0,0)
+        _MainPixelMode (""Pixel"", Float) = 0
+        _MainTexStochastic (""Stochastic"", Float) = 0";
+        }
+
         /// <summary>
         /// A material carrying every one of the canonical Opaque recipe's
         /// facts, so conversion classifies it AlreadyOpaque: a successful

@@ -479,7 +479,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 }
 
                 var family = IdentifyFamily(material);
-                if (family == CapturedAlphaMaterialFamily.Unsupported)
+                if (family == CapturedAlphaMaterialFamily.Unsupported ||
+                    family == CapturedAlphaMaterialFamily.Poiyomi ||
+                    family == CapturedAlphaMaterialFamily.PoiyomiTwoPass)
                 {
                     continue;
                 }
@@ -686,23 +688,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return (
                     CapturedAlphaMaterialFamily.PoiyomiTwoPass,
                     PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest);
-            }
-
-            // The vendor's own old-version copy of the 9.0 shader inside the
-            // current package. It classifies to the Poiyomi family with the
-            // plain request, so the D8 pre-scan produces the transfer-consent
-            // subject for it and a granted build treats it with the verified
-            // version's rules. Its source is deliberately NOT pinned: the
-            // identity conjunction keeps refusing it, so an unconsented
-            // build stays fail-closed.
-            if (string.Equals(
-                    shaderName,
-                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName,
-                    StringComparison.Ordinal))
-            {
-                return (
-                    CapturedAlphaMaterialFamily.Poiyomi,
-                    PoiyomiMaterialSemantics.AlphaEvidenceRequest);
             }
 
             if (string.Equals(
@@ -1012,10 +997,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    // PoiyomiSourceEvidence is a struct: the gather always
-                    // produced one. The consent covers the identity risk.
-                    if (verifyIdentity &&
-                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(
@@ -1027,10 +1009,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                         captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    // The same struct guarantee holds, and the consent
-                    // covers the identity risk for both Poiyomi identities.
-                    if (verifyIdentity &&
-                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(
@@ -1038,9 +1017,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                             captured.ShaderName);
                     }
 
-                    alpha = PoiyomiMaterialSemantics
-                        .InterpretVerifiedTwoPassAlpha(
-                            captured.Evidence, out unknownReason);
+                    alpha = PoiyomiMaterialSemantics.InterpretVerifiedTwoPassAlpha(
+                        captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.LilToon:
                     if (captured.LilToonEvidence == null ||

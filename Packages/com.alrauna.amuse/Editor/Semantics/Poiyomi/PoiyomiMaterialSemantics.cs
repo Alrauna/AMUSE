@@ -45,20 +45,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string TwoPassCanonicalNormalizedSourceHash =
             "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
 
-        // The vendor's own old-version copy of the 9.0 shader, shipped inside
-        // the current package under "Old Versions/9.0". Deliberately name
-        // recognition only: no pinned GUID or digest lives here, because the
-        // version is unverified. A build that grants the D8 transfer consent
-        // treats its materials with the verified rules above; an unconsented
-        // build refuses them at the identity conjunction, fail closed. The
-        // measured install facts, recorded 2026-10-07 from the sanctioned
-        // vendor package in the Census Lab project: all required conversion
-        // schema properties are present, and the containing package tuple
-        // equals the current package's, so a granted source passes the same
-        // package evidence check as the verified rows.
-        internal const string PoiyomiLegacy90ShaderName =
-            ".poiyomi/Old Versions/9.0/Poiyomi Toon";
-
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
 

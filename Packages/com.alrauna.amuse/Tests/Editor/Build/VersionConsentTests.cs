@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
-using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -234,9 +234,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ConsentSwapShaderFolder);
             shaderScope.EnsureTempFolder();
             var shader = TestShaderWriter.WriteTestShader(
-                ConsentSwapShaderFolder + "/swap-consent-legacy90.shader",
+                ConsentSwapShaderFolder + "/swap-consent-cutout.shader",
                 StandInShaderText(
-                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
+                    LilToonSourceAttestation.CutoutShaderName));
             var swapMaterial = shaderScope.Track(new Material(shader));
             var assignedMaterial = new Material(Shader.Find("Unlit/Color"));
             var mesh = TriangleMesh();
@@ -298,7 +298,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     presentations[0][0],
                     Does.Contain(
-                        PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName),
+                        LilToonSourceAttestation.CutoutShaderName),
                     "the subject must name the swap-only shader");
                 Assert.That(
                     after.ConsentDeclined,
@@ -331,9 +331,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ConsentSwapShaderFolder);
             shaderScope.EnsureTempFolder();
             var shader = TestShaderWriter.WriteTestShader(
-                ConsentSwapShaderFolder + "/graph-refused-legacy90.shader",
+                ConsentSwapShaderFolder + "/graph-refused-cutout.shader",
                 StandInShaderText(
-                    PoiyomiMaterialSemantics.PoiyomiLegacy90ShaderName));
+                    LilToonSourceAttestation.CutoutShaderName));
             var assignedMaterial = shaderScope.Track(new Material(shader));
             var mesh = TriangleMesh();
             var root = new GameObject("AMUSE graph refused consent fixture");
@@ -404,9 +404,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "{\n    Properties\n    {\n" +
                 "        _MainTex (\"Main\", 2D) = \"white\" {}\n" +
                 "        _Color (\"Color\", Color) = (1,1,1,1)\n" +
-                "        _AlphaForceOpaque (\"Force Opaque\", Float) = 1\n" +
-                "        _MainAlphaMaskMode (\"Mask Mode\", Float) = 0\n" +
-                "        _ShaderOptimizerEnabled (\"Locked\", Float) = 0\n" +
+                "        _Cutoff (\"Cutoff\", Range(0, 1)) = 0.5\n" +
                 "    }\n    SubShader { Pass {} }\n}\n";
         }
 

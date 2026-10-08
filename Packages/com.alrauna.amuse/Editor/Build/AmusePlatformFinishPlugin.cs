@@ -485,28 +485,24 @@ namespace Alrauna.Amuse.Editor.Build
             subjects.AddRange(shaderTransfer.Subjects);
             // The granted transfer names compose into every gate that
             // verifies a source identity: the transferred capture skips the
-            // check for a granted name, the conversion boundary skips it
-            // for a granted name, and the lock's original-attestation gate
-            // accepts a grant whose name is exactly the recorded original.
+            // check for a granted name, and the conversion boundary skips it
+            // for a granted name.
             // An unconsented build grants nothing and stays fail-closed.
             var grantedShaderNames =
                 shaderTransfer.GrantedShaderNames.Count > 0
                     ? shaderTransfer.GrantedShaderNames
                     : null;
-            var grantedAwareLockAttestation = LockedMaterialIdentity
-                .GrantedAwareOriginalAttestation(
-                    lockedOriginalAttestation, grantedShaderNames);
             // The unlock window no longer carries its own per-build
             // consent subject. V2 and V4 passed live observation on
             // 2026-09-21, so per spec section 12 the gate moved to the
             // D8 pattern: an eligible build opens the window without
             // asking. Eligibility is the attestation gate alone: a
-            // recognized locked material whose original shader attests.
-            // No build path consults a vendor answer.
-            var windowEligible = TransientUnlockAvailability
-                .WindowEligibleForConsent(
+            // locked material whose original shader passes attestation
+            // opens the window.
+            var windowEligible =
+                TransientUnlockAvailability.WindowEligibleForConsent(
                     AllAssignedMaterials(context),
-                    grantedAwareLockAttestation);
+                    lockedOriginalAttestation);
 
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
@@ -536,7 +532,7 @@ namespace Alrauna.Amuse.Editor.Build
                 context,
                 context.GetState<TransientUnlockWindowState>(),
                 TransientUnlockSwapIn.Availability.FromProduction(),
-                grantedAwareLockAttestation);
+                lockedOriginalAttestation);
 
             // From here the run is reported, so the apply pass may
             // summarize it with applied counts.

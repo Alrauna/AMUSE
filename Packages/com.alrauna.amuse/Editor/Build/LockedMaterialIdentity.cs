@@ -200,57 +200,6 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// The original shader name the lock's serialization records, or
-        /// null when the serialization names none. A build that granted the
-        /// D8 transfer consent for exactly this name has accepted the
-        /// unverified-version risk for the original, so the lock's
-        /// attestation gate may treat the grant as its answer. Reads live
-        /// serialization state only and mutates nothing.
-        /// </summary>
-        internal static string RecordedOriginalShaderName(Material material)
-        {
-            if (material == null || material.shader == null)
-            {
-                return null;
-            }
-
-            return Classify(SerializationOf(material)).OriginalShader;
-        }
-
-        /// <summary>
-        /// The D8 grant composition the build barrier uses for the lock's
-        /// original-attestation gate. The base predicate answers first; a
-        /// build that granted the transfer consent for exactly the
-        /// recorded original shader name additionally accepts the
-        /// unverified original as its own answered risk. A null or empty
-        /// grant set returns the base predicate unchanged, so an
-        /// unconsented build pins exactly as before.
-        /// </summary>
-        internal static Func<Material, bool> GrantedAwareOriginalAttestation(
-            Func<Material, bool> baseAttestation,
-            IReadOnlyCollection<string> grantedShaderNames)
-        {
-            if (grantedShaderNames == null || grantedShaderNames.Count == 0)
-            {
-                return baseAttestation;
-            }
-
-            return material =>
-            {
-                if (baseAttestation != null
-                    ? baseAttestation(material)
-                    : OriginalShaderAttested(material))
-                {
-                    return true;
-                }
-
-                var original = RecordedOriginalShaderName(material);
-                return !string.IsNullOrEmpty(original) &&
-                       grantedShaderNames.Contains(original);
-            };
-        }
-
-        /// <summary>
         /// Reads the serialization facts of one live material: the shader
         /// name, the lock flag float, and the two identity tags. The tag
         /// read follows the material first and the shader tags second,
