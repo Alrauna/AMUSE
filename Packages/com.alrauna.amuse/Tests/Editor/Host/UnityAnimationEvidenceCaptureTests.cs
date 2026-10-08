@@ -2146,30 +2146,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 CaptureFixtureMaterials(
                     materials, families, request, bounds, out var batch);
-                var captured = new List<CapturedAlphaMaterial>(batch.Captured);
-                for (var index = failedOrdinals.Count - 1; index >= 0; index--)
-                {
-                    var ordinal = failedOrdinals[index];
-                    captured.RemoveAt(ordinal);
-                }
-                foreach (var ordinal in failedOrdinals)
-                {
-                    captured.Insert(
-                        ordinal,
-                        UnityMaterialSemantics.UnattestedMaterial(
-                            RendererAnalysisRefusal.None,
-                            materials[ordinal],
-                            null));
-                }
-                var survivors = new List<CapturedAlphaMaterial>();
                 var failedSet = new HashSet<int>(failedOrdinals);
-                for (var index = 0; index < captured.Count; index++)
-                {
-                    if (!failedSet.Contains(index))
-                    {
-                        survivors.Add(captured[index]);
-                    }
-                }
+                var survivors = batch.Captured
+                    .Where((_, index) => !failedSet.Contains(index))
+                    .ToList();
                 outcome = new ClosedAlphaCaptureOutcome(
                     survivors, failedOrdinals);
                 return true;

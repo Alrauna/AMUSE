@@ -715,27 +715,25 @@ namespace Alrauna.Amuse.Editor.Host
                         "count.");
                 }
                 var failedOrdinals = new HashSet<int>(batchOutcome.UnattestedOrdinals);
-                foreach (var ordinal in batchOutcome.UnattestedOrdinals)
-                {
-                    var admittedIndex = attestedIndices[ordinal];
-                    var lockedRefusal = lockedRefusalCheck?.Invoke(
-                        admitted[admittedIndex]) ?? RendererAnalysisRefusal.None;
-                    capturedByIndex[admittedIndex] =
-                        UnityMaterialSemantics.UnattestedMaterial(
-                            lockedRefusal,
-                            admitted[admittedIndex],
-                            resolveRegisteredSource);
-                }
                 var survivorOrdinal = 0;
                 for (var index = 0; index < attestedIndices.Count; index++)
                 {
+                    var admittedIndex = attestedIndices[index];
                     if (failedOrdinals.Contains(index))
                     {
-                        continue;
+                        var lockedRefusal = lockedRefusalCheck?.Invoke(
+                            admitted[admittedIndex]) ?? RendererAnalysisRefusal.None;
+                        capturedByIndex[admittedIndex] =
+                            UnityMaterialSemantics.UnattestedMaterial(
+                                lockedRefusal,
+                                admitted[admittedIndex],
+                                resolveRegisteredSource);
                     }
-                    capturedByIndex[attestedIndices[index]] =
-                        batchOutcome.Captured[survivorOrdinal];
-                    survivorOrdinal++;
+                    else
+                    {
+                        capturedByIndex[admittedIndex] =
+                            batchOutcome.Captured[survivorOrdinal++];
+                    }
                 }
             }
 
