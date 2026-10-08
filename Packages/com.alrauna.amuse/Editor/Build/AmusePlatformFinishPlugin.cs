@@ -816,9 +816,7 @@ namespace Alrauna.Amuse.Editor.Build
                             minimumOpaqueCoveragePercent,
                             rendererTypeName,
                             allowDepthTestChange,
-                            transferShaders
-                                ? shaderTransfer.GrantedShaderNames
-                                : null);
+                            grantedShaderNames);
                     }
                 }
 
@@ -836,10 +834,11 @@ namespace Alrauna.Amuse.Editor.Build
                         extractionMeshSubMeshCount,
                         extractionMaterialSlotCount,
                         refusal ==
-                            RendererAnalysisRefusal
-                                .MaterialDependencyClosureFailed
+                        RendererAnalysisRefusal
+                            .MaterialDependencyClosureFailed &&
+                        evidence.SlotClosureFailures.Count > 0
                             ? AmuseReports.ClosureFailureSentence(
-                                ClosureFailureWayFor(evidence))
+                                evidence.SlotClosureFailures[0].Failure)
                             : null);
                     continue;
                 }
@@ -1389,22 +1388,6 @@ namespace Alrauna.Amuse.Editor.Build
                 slotResults);
         }
 
-        /// <summary>
-        /// The closure way a renderer-level closure entry names. A
-        /// renderer-wide closure failure no longer exists: a fully failed
-        /// renderer names its first failed slot's way, so the renderer entry
-        /// keeps naming the cause instead of the bare refusal.
-        /// </summary>
-        private static MaterialDependencyClosureFailure ClosureFailureWayFor(
-            CapturedAnimationEvidence evidence)
-        {
-            foreach (var record in evidence.SlotClosureFailures)
-            {
-                return record.Failure;
-            }
-
-            return MaterialDependencyClosureFailure.None;
-        }
 
         private static IReadOnlyList<BlockStateEntry> FilterBlockEntriesForSlot(
             IReadOnlyList<BlockStateEntry> blockState,

@@ -236,20 +236,18 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return material =>
-                (baseAttestation != null
+            {
+                if (baseAttestation != null
                     ? baseAttestation(material)
                     : OriginalShaderAttested(material))
-                || RecordedListedOriginalName(
-                    material, grantedShaderNames);
-        }
+                {
+                    return true;
+                }
 
-        private static bool RecordedListedOriginalName(
-            Material material,
-            IReadOnlyCollection<string> grantedShaderNames)
-        {
-            var original = RecordedOriginalShaderName(material);
-            return !string.IsNullOrEmpty(original) &&
-                   grantedShaderNames.Contains(original);
+                var original = RecordedOriginalShaderName(material);
+                return !string.IsNullOrEmpty(original) &&
+                       grantedShaderNames.Contains(original);
+            };
         }
 
         /// <summary>

@@ -5151,11 +5151,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AlphaPolicyBounds bounds,
             out ClosedAlphaCaptureOutcome captured)
         {
-            var ordinals = new int[materials.Count];
-            for (var index = 0; index < ordinals.Length; index++)
-            {
-                ordinals[index] = index;
-            }
+            var ordinals = System.Linq.Enumerable.Range(0, materials.Count).ToArray();
             captured = new ClosedAlphaCaptureOutcome(
                 System.Array.Empty<CapturedAlphaMaterial>(), ordinals);
             return true;

@@ -721,10 +721,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static Texture2D ImportSplitHollowTexture(string name)
         {
             var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(0, 0, 0, 0);
-            }
 
             return TestTextureImport.WritePng(
                 SplitTempFolder + "/" + name + ".png",
