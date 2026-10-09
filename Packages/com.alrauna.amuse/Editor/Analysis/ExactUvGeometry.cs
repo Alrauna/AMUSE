@@ -667,7 +667,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             return cross.Numerator.Sign;
         }
 
-        private static IReadOnlyList<ExactUvPoint> CreateHull(ExactUvPoint[] points)
+        internal static IReadOnlyList<ExactUvPoint> CreateHull(ExactUvPoint[] points)
         {
             var unique = new List<ExactUvPoint>(3);
             for (var index = 0; index < points.Length; index++)
@@ -682,13 +682,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return unique;
             }
 
-            var cross = Cross(unique[0], unique[1], unique[2]);
-            if (cross == BigInteger.Zero)
+            var orientation = Orientation(unique[0], unique[1], unique[2]);
+            if (orientation == 0)
             {
                 unique.Sort(ComparePoints);
-                return new[] { unique[0], unique[2] };
+                return new[] { unique[0], unique[unique.Count - 1] };
             }
-            if (cross < BigInteger.Zero)
+            if (orientation < 0)
             {
                 var swap = unique[1];
                 unique[1] = unique[2];
@@ -713,15 +713,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         {
             var x = left.X.CompareTo(right.X);
             return x != 0 ? x : left.Y.CompareTo(right.Y);
-        }
-
-        private static BigInteger Cross(ExactUvPoint first, ExactUvPoint second, ExactUvPoint third)
-        {
-            var ax = second.X.Numerator - first.X.Numerator;
-            var ay = second.Y.Numerator - first.Y.Numerator;
-            var bx = third.X.Numerator - first.X.Numerator;
-            var by = third.Y.Numerator - first.Y.Numerator;
-            return ax * by - ay * bx;
         }
 
         private static List<ExactUvPoint> Clip(
@@ -865,6 +856,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                 remainder += modulus;
             }
             return (int)remainder;
+        }
+
+        internal static int FloorMod(int value, int modulus)
+        {
+            if (modulus <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(modulus));
+            }
+            var remainder = value % modulus;
+            if (remainder < 0)
+            {
+                remainder += modulus;
+            }
+            return remainder;
         }
     }
 }

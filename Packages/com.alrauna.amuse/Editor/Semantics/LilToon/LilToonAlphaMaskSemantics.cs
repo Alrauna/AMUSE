@@ -288,7 +288,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MaskProperty);
             }
 
-            if (!assignment.HasScaleOffset)
+            if (!assignment.HasScaleOffset ||
+                !float.IsFinite(assignment.Scale.x) ||
+                !float.IsFinite(assignment.Scale.y) ||
+                !float.IsFinite(assignment.Offset.x) ||
+                !float.IsFinite(assignment.Offset.y))
             {
                 return Refuse(
                     diagnostics,

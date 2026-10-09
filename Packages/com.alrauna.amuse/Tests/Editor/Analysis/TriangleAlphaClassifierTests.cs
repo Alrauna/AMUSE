@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -1471,6 +1472,246 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 TextureFilterMode.Point,
                 TextureWrapMode.Clamp,
                 TextureAnisoMode.Anisotropic);
+        }
+
+        [Test]
+        public void RepeatCoordinateDifferenceOverflow_ReturnsUnknown()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+            var bilinearSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Repeat);
+            var pointSampling = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Repeat);
+
+            var bilinearEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var pointEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            var bilinearOutcome = TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                bilinearSampling,
+                bilinearEnvelope);
+            Assert.That(
+                bilinearOutcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            var pointOutcome = TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                pointSampling,
+                pointEnvelope);
+            Assert.That(
+                pointOutcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void WitnessRepeatCoordinateOverflow_ReturnsTrue()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+
+            var bilinearEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var pointEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointEnvelope),
+                Is.True);
+        }
+
+        [Test]
+        public void RepeatBoundaryCoordinates_PreventLoopRollover()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+
+            var pointXEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            var pointYEnvelope = new AlphaUvEnvelope(
+                new ExactRational(BigInteger.Zero),
+                new ExactRational(2147483647, 2));
+            var pointSampling = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Repeat);
+            var bilinearSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    pointSampling,
+                    pointXEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointXEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    pointSampling,
+                    pointYEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointYEnvelope),
+                Is.True);
+
+            var bilinearXEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var bilinearYEnvelope = new AlphaUvEnvelope(
+                new ExactRational(BigInteger.Zero),
+                new ExactRational(1073741823));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    bilinearSampling,
+                    bilinearXEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearXEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    bilinearSampling,
+                    bilinearYEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearYEnvelope),
+                Is.True);
+        }
+
+        [Test]
+        public void TryGetUvSet_WithTruncatedChannelBuffer_ReturnsFalseWithoutThrowing()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_WithNegativeVertexIndices_ReturnsFalseWithoutThrowing()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangleA = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, -1, 1, 2);
+            var triangleB = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, -1, 2);
+            var triangleC = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, 1, -1);
+
+            Assert.That(triangleA.TryGetUvSet(1, out var a1, out var b1, out var c1), Is.False);
+            Assert.That(a1, Is.EqualTo(Vector2.zero));
+            Assert.That(b1, Is.EqualTo(Vector2.zero));
+            Assert.That(c1, Is.EqualTo(Vector2.zero));
+
+            Assert.That(triangleB.TryGetUvSet(1, out var a2, out var b2, out var c2), Is.False);
+            Assert.That(a2, Is.EqualTo(Vector2.zero));
+            Assert.That(b2, Is.EqualTo(Vector2.zero));
+            Assert.That(c2, Is.EqualTo(Vector2.zero));
+
+            Assert.That(triangleC.TryGetUvSet(1, out var a3, out var b3, out var c3), Is.False);
+            Assert.That(a3, Is.EqualTo(Vector2.zero));
+            Assert.That(b3, Is.EqualTo(Vector2.zero));
+            Assert.That(c3, Is.EqualTo(Vector2.zero));
         }
     }
 }

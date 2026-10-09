@@ -160,6 +160,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return true;
             }
 
+            if (candidate.HasProperty("_TransparentMode") &&
+                candidate.GetFloat("_TransparentMode") != 0f)
+            {
+                factName = "_TransparentMode";
+                return true;
+            }
+
             factName = null;
             return false;
         }
@@ -271,6 +278,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // shape with container stand-ins.
             if (attestedTarget == source.shader)
             {
+                clone.SetFloat("_TransparentMode", 0f);
                 WriteMultiModeZeroKeywordSet(clone);
             }
 

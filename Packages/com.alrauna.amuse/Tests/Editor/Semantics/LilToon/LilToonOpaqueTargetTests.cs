@@ -559,6 +559,57 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// The Multi opaque clone must write _TransparentMode to zero.
+        /// The source material starts with a non-zero mode value.
+        /// The prepared clone must clear the mode to zero.
+        /// It must pass canonical fact validation.
+        /// </summary>
+        [TestCase(1f)]
+        [TestCase(2f)]
+        public void
+            PrepareCanonicalOpaqueClone_MultiContainer_SetsTransparentModeZero(
+                float initialTransparentMode)
+        {
+            var source = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            source.SetFloat("_TransparentMode", initialTransparentMode);
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(
+                clone.GetFloat("_TransparentMode"),
+                Is.EqualTo(0f),
+                "The opaque clone must write _TransparentMode to zero.");
+            Assert.That(
+                LilToonOpaqueTarget.TryFindNonCanonicalFact(clone, out var fact),
+                Is.False,
+                $"The opaque clone must have no non-canonical facts, but found: {fact}");
+        }
+
+        /// <summary>
+        /// A non-zero _TransparentMode value is not canonical.
+        /// The method must identify _TransparentMode as the non-canonical fact.
+        /// </summary>
+        [TestCase(1f)]
+        [TestCase(2f)]
+        public void
+            TryFindNonCanonicalFact_MultiContainerWithNonZeroMode_IdentifiesTransparentMode(
+                float nonZeroMode)
+        {
+            var material = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            material.SetFloat("_TransparentMode", nonZeroMode);
+
+            var found = LilToonOpaqueTarget.TryFindNonCanonicalFact(
+                material, out var factName);
+
+            Assert.That(found, Is.True);
+            Assert.That(factName, Is.EqualTo("_TransparentMode"));
+        }
+
+        /// <summary>
         /// The closed request the clone capture runs under: the three Multi
         /// scalars the mode read and the gate rules consume, plus the
         /// keyword set. The request names exactly the facts the fixture

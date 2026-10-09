@@ -96,9 +96,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return false;
             }
 
-            a = _extraUvSets[index][_indexA];
-            b = _extraUvSets[index][_indexB];
-            c = _extraUvSets[index][_indexC];
+            var uvList = _extraUvSets[index];
+            if ((uint)_indexA >= (uint)uvList.Count ||
+                (uint)_indexB >= (uint)uvList.Count ||
+                (uint)_indexC >= (uint)uvList.Count)
+            {
+                a = default;
+                b = default;
+                c = default;
+                return false;
+            }
+
+            a = uvList[_indexA];
+            b = uvList[_indexB];
+            c = uvList[_indexC];
             return true;
         }
 
@@ -729,9 +740,18 @@ namespace Alrauna.Amuse.Editor.Analysis
             var maximumX = maxCellX + 1;
             var minimumY = minCellY - 1;
             var maximumY = maxCellY + 1;
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
+
+            if (minimumX <= int.MinValue || maximumX >= int.MaxValue ||
+                minimumY <= int.MinValue || maximumY >= int.MaxValue)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            var spanX = (long)maximumX - minimumX + 1L;
+            var spanY = (long)maximumY - minimumY + 1L;
+            if (spanX <= 0L || spanY <= 0L ||
+                spanX > MaxSupportRegions || spanY > MaxSupportRegions ||
+                spanX * spanY > MaxSupportRegions)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
@@ -798,7 +818,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// unbounded give-up returns true: the witness bound that keeps red
         /// in [0, 1) and the decision honest through the map.
         /// </summary>
-        private static bool HasMappedWitnessBilinearRepeat(
+        internal static bool HasMappedWitnessBilinearRepeat(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
             AlphaUvEnvelope envelope)
@@ -837,9 +857,18 @@ namespace Alrauna.Amuse.Editor.Analysis
             var maximumX = maxCellX + 1;
             var minimumY = minCellY - 1;
             var maximumY = maxCellY + 1;
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
+
+            if (minimumX <= int.MinValue || maximumX >= int.MaxValue ||
+                minimumY <= int.MinValue || maximumY >= int.MaxValue)
+            {
+                return true;
+            }
+
+            var spanX = (long)maximumX - minimumX + 1L;
+            var spanY = (long)maximumY - minimumY + 1L;
+            if (spanX <= 0L || spanY <= 0L ||
+                spanX > MaxSupportRegions || spanY > MaxSupportRegions ||
+                spanX * spanY > MaxSupportRegions)
             {
                 return true;
             }
@@ -1344,9 +1373,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return TriangleAlphaOutcome.Unknown;
             }
 
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
+            if (minimumX <= int.MinValue || maximumX >= int.MaxValue ||
+                minimumY <= int.MinValue || maximumY >= int.MaxValue)
+            {
+                return TriangleAlphaOutcome.Unknown;
+            }
+
+            var spanX = (long)maximumX - minimumX + 1L;
+            var spanY = (long)maximumY - minimumY + 1L;
+            if (spanX <= 0L || spanY <= 0L ||
+                spanX > MaxSupportRegions || spanY > MaxSupportRegions ||
+                spanX * spanY > MaxSupportRegions)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
@@ -1399,7 +1436,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// witness bound that keeps red in [0, 1) and the decision honest
         /// through the map.
         /// </summary>
-        private static bool HasMappedWitnessPointRepeat(
+        internal static bool HasMappedWitnessPointRepeat(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
             AlphaUvEnvelope envelope)
@@ -1428,9 +1465,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return true;
             }
 
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
+            if (minimumX <= int.MinValue || maximumX >= int.MaxValue ||
+                minimumY <= int.MinValue || maximumY >= int.MaxValue)
+            {
+                return true;
+            }
+
+            var spanX = (long)maximumX - minimumX + 1L;
+            var spanY = (long)maximumY - minimumY + 1L;
+            if (spanX <= 0L || spanY <= 0L ||
+                spanX > MaxSupportRegions || spanY > MaxSupportRegions ||
+                spanX * spanY > MaxSupportRegions)
             {
                 return true;
             }

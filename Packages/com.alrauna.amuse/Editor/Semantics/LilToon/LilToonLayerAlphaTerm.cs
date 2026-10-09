@@ -361,11 +361,32 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // uvMain is UV0 under the families' identity gates. The mask
                 // borrows _MainTex's sampler, which is the main assignment's
                 // sampling evidence.
+                CapturedTextureAssignment mainAssignment;
+                bool hasMain;
+                try
+                {
+                    hasMain = evidence.TryGetTexture("_MainTex", out mainAssignment);
+                }
+                catch (ArgumentException)
+                {
+                    hasMain = false;
+                    mainAssignment = default;
+                }
+
+                if (!hasMain ||
+                    !mainAssignment.IsAssigned ||
+                    mainAssignment.Texture == null ||
+                    !mainAssignment.Texture.HasSampling)
+                {
+                    return Refuse(diagnostics, "_MainTex");
+                }
+
+                var maskSampling = mainAssignment.Texture.Sampling;
                 factors.Add((
                     new TextureSample(
                         blendMask.Texture.SourceIdentity,
                         new UvMapping(0, Vector2.one, Vector2.zero),
-                        layerSampling),
+                        maskSampling),
                     TextureChannel.Red));
             }
 
