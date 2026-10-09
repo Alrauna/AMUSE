@@ -281,6 +281,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 clone.SetFloat("_TransparentMode", 0f);
                 WriteMultiModeZeroKeywordSet(clone);
             }
+            else
+            {
+                clone.DisableKeyword("UNITY_UI_ALPHACLIP");
+                clone.DisableKeyword("UNITY_UI_CLIP_RECT");
+                clone.DisableKeyword("ETC1_EXTERNAL_ALPHA");
+                clone.DisableKeyword("_COLOROVERLAY_ON");
+            }
 
             if (TryFindNonCanonicalFact(clone, out var fact))
             {

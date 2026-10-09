@@ -365,6 +365,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     textureProperties:
                         Array.Empty<TexturePropertyEvidenceRequest>()));
 
+        internal static MaterialEvidenceRequest
+            FullTwoPassMaterialEvidenceRequest { get; } =
+            CreateTwoPassAlphaEvidenceRequest(FullMaterialEvidenceRequest);
+
         // Enabled source blocks the pinned source uses to perturb or replace
         // the tangent-space normal: detail normals, RGBA-mask normal
         // replacement, the four decals, and internal/offset parallax. Each is
@@ -421,12 +425,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             RequireAnalyzableMaterial(material);
 
+            var isTwoPass = material.shader != null &&
+                string.Equals(
+                    material.shader.name,
+                    PoiyomiTwoPassShaderName,
+                    StringComparison.Ordinal);
+
+            var request = isTwoPass
+                ? FullTwoPassMaterialEvidenceRequest
+                : FullMaterialEvidenceRequest;
+
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
                 new MaterialEvidenceCaptureInput(
                     material,
-                    FullMaterialEvidenceRequest,
-                    AlphaPredicateRequestFor(material, false)),
+                    request,
+                    AlphaPredicateRequestFor(material, isTwoPass)),
             })[0];
             var evidence = GatherSourceEvidence(
                 material.shader, captured, RequiredSchemaProperties);
@@ -439,7 +453,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 material,
                 QualitySettings.activeColorSpace,
                 captured,
-                false);
+                isTwoPass);
         }
 
         /// <summary>

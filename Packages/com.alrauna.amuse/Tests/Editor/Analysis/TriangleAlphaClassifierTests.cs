@@ -1713,5 +1713,207 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(b3, Is.EqualTo(Vector2.zero));
             Assert.That(c3, Is.EqualTo(Vector2.zero));
         }
+
+        [Test]
+        public void TryGetUvSet_ReturnsTrue_ForValidPrimaryChannelZero()
+        {
+            var uv0 = new Vector2(0.1f, 0.2f);
+            var uv1 = new Vector2(0.3f, 0.4f);
+            var uv2 = new Vector2(0.5f, 0.6f);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                uv0,
+                uv1,
+                uv2);
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.True);
+            Assert.That(a, Is.EqualTo(uv0));
+            Assert.That(b, Is.EqualTo(uv1));
+            Assert.That(c, Is.EqualTo(uv2));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenPrimaryChannelContainsNaN()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(float.NaN, 0f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenPrimaryChannelContainsInfinity()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(float.PositiveInfinity, 0.5f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenChannelIndexIsNegative()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(-1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenChannelIndexExceedsAvailableSets()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(2, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsNaN()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(float.NaN, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsPositiveInfinity()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(float.PositiveInfinity, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsNegativeInfinity()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, float.NegativeInfinity) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsTrue_WhenSecondaryChannelContainsValidCoordinates()
+        {
+            var uvA = new Vector2(0.1f, 0.1f);
+            var uvB = new Vector2(0.2f, 0.2f);
+            var uvC = new Vector2(0.3f, 0.3f);
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { uvA, uvB, uvC }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.True);
+            Assert.That(a, Is.EqualTo(uvA));
+            Assert.That(b, Is.EqualTo(uvB));
+            Assert.That(c, Is.EqualTo(uvC));
+        }
     }
 }

@@ -81,6 +81,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                 a = Uv0;
                 b = Uv1;
                 c = Uv2;
+                if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c))
+                {
+                    a = default;
+                    b = default;
+                    c = default;
+                    return false;
+                }
+
                 return true;
             }
 
@@ -110,7 +118,23 @@ namespace Alrauna.Amuse.Editor.Analysis
             a = uvList[_indexA];
             b = uvList[_indexB];
             c = uvList[_indexC];
+            if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c))
+            {
+                a = default;
+                b = default;
+                c = default;
+                return false;
+            }
+
             return true;
+        }
+
+        private static bool IsFinite(Vector2 value)
+        {
+            return !float.IsNaN(value.x) &&
+                   !float.IsInfinity(value.x) &&
+                   !float.IsNaN(value.y) &&
+                   !float.IsInfinity(value.y);
         }
 
         /// <summary>

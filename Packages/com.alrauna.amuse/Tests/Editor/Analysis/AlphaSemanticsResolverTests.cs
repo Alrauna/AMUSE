@@ -2160,5 +2160,46 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
+        [Test]
+        public void LayerSamplingSecondaryChannelWithNaN_YieldsUnknownOutcomeWithoutThrowing()
+        {
+            var value = ScalarSemanticValue.Texture(
+                new TextureSample(
+                    new TextureSourceId("test:layer"),
+                    new UvMapping(
+                        1,
+                        new Vector2(1f, 1f),
+                        new Vector2(0f, 0f)),
+                    new TextureSampling(
+                        TextureFilterMode.Point, TextureWrapMode.Clamp)),
+                TextureChannel.Alpha);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingLayerField(AllOpaqueChain()), 0);
+
+            var uv1Set = new Vector2[]
+            {
+                new Vector2(float.NaN, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f))
+                .WithChannels(new IReadOnlyList<Vector2>[] { uv1Set }, 0, 1, 2);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            var outcome = TriangleAlphaOutcome.MustRemainTransparent;
+            Assert.DoesNotThrow(() =>
+            {
+                outcome = resolution.Classify(triangle);
+            });
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
     }
 }

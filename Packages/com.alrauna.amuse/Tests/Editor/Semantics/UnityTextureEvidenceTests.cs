@@ -528,6 +528,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(UnityTextureEvidence.TryGetSampling(null, out _), Is.False);
         }
 
+        [Test]
+        public void TryGetSampling_Non2DTexture_ReturnsFalse()
+        {
+            var cubemap = new Cubemap(16, TextureFormat.RGBA32, false);
+            try
+            {
+                Assert.That(UnityTextureEvidence.TryGetSampling(cubemap, out _), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cubemap);
+            }
+
+            var texture3D = new Texture3D(16, 16, 16, TextureFormat.RGBA32, false);
+            try
+            {
+                Assert.That(UnityTextureEvidence.TryGetSampling(texture3D, out _), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture3D);
+            }
+        }
+
         // --- TryGetColorInterpretation ---
 
         [Test]

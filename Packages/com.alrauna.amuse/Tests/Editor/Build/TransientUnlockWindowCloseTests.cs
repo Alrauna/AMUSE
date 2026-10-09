@@ -1000,5 +1000,111 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(result, Is.False,
                 "CurveInversionWasComplete must return false when the committed graph returns a refusal.");
         }
+
+        /// <summary>
+        /// ClipsInMotion terminates cleanly without throwing an exception when a blend tree contains a cycle.
+        /// </summary>
+        [Test]
+        public void ClipsInMotion_TerminatesCleanly_WhenBlendTreeContainsCycle()
+        {
+            var treeA = Track(new BlendTree { name = "TreeA" });
+            var treeB = Track(new BlendTree { name = "TreeB" });
+            var clip = Track(new AnimationClip { name = "CyclicClip" });
+
+            treeA.AddChild(clip);
+            treeA.AddChild(treeB);
+            treeB.AddChild(treeA);
+
+            var seenClips = new HashSet<AnimationClip>();
+            var visitedMotions = new HashSet<Motion>();
+
+            var clips = TransientUnlockWindowClose.ClipsInMotion(
+                treeA, seenClips, visitedMotions).ToList();
+
+            Assert.That(clips, Does.Contain(clip),
+                "ClipsInMotion must yield the clip within the cyclic blend tree.");
+            Assert.That(clips.Count, Is.EqualTo(1),
+                "ClipsInMotion must terminate cleanly and yield each clip once.");
+        }
+
+        /// <summary>
+        /// ClipsInStateMachine terminates cleanly without throwing an exception when a state machine contains a cycle.
+        /// </summary>
+        [Test]
+        public void ClipsInStateMachine_TerminatesCleanly_WhenStateMachineContainsCycle()
+        {
+            var rootMachine = Track(new AnimatorStateMachine { name = "RootMachine" });
+            var subMachine = rootMachine.AddStateMachine("SubMachine");
+            var clip = Track(new AnimationClip { name = "StateMachineClip" });
+            var state = subMachine.AddState("SubState");
+            state.motion = clip;
+
+            var seenClips = new HashSet<AnimationClip>();
+            var visitedStateMachines = new HashSet<AnimatorStateMachine> { subMachine };
+            var visitedMotions = new HashSet<Motion>();
+
+            var clips = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+
+            Assert.That(clips, Is.Empty,
+                "ClipsInStateMachine must terminate cleanly without entering already visited cyclic state machines.");
+
+            visitedStateMachines.Clear();
+            var firstPass = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+            Assert.That(firstPass, Does.Contain(clip));
+
+            var secondPass = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+            Assert.That(secondPass, Is.Empty,
+                "Re-entering an already visited state machine must terminate cleanly.");
+        }
+
+        /// <summary>
+        /// CommittedClips terminates cleanly and yields each clip once when a blend tree is shared across layers.
+        /// </summary>
+        [Test]
+        public void CommittedClips_TerminatesCleanly_WhenSharedBlendTreeExistsAcrossLayers()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE shared blend tree across layers fixture");
+            var sharedClip = Track(new AnimationClip { name = "SharedAcrossLayersClip" });
+
+            var sharedTree = Track(new BlendTree
+            {
+                name = "SharedTreeAcrossLayers",
+                blendType = BlendTreeType.Direct,
+            });
+            sharedTree.AddChild(sharedClip);
+
+            var controller = Track(new AnimatorController { name = "MultiLayerController" });
+            controller.AddLayer("Layer0");
+            controller.AddLayer("Layer1");
+
+            var state0 = controller.layers[0].stateMachine.AddState("State0");
+            state0.motion = sharedTree;
+
+            var state1 = controller.layers[1].stateMachine.AddState("State1");
+            state1.motion = sharedTree;
+
+            var child = Track(new GameObject("ChildWithController"));
+            child.transform.SetParent(root.transform, false);
+            var probe = child.AddComponent<VirtualizedControllerProbe>();
+            probe.AnimatorController = controller;
+
+            var context = new BuildContext(
+                root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var clips = TransientUnlockWindowClose.CommittedClips(context).ToList();
+
+            Assert.That(clips, Does.Contain(sharedClip),
+                "CommittedClips must contain the clip from the shared blend tree.");
+            Assert.That(clips.Count, Is.EqualTo(1),
+                "CommittedClips must not duplicate clips from a blend tree shared across layers.");
+        }
     }
 }

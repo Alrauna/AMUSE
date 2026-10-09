@@ -290,6 +290,70 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             AssertUnchanged(source, before, queueBefore, tagBefore);
         }
 
+        // --- Mode keyword normalization on regular conversions ---------------
+
+        /// <summary>
+        /// Regular cutout-to-opaque conversions swap to a different target shader.
+        /// The clone inherits keywords from the source material.
+        /// Preparation must disable mode-specific cutout and overlay keywords.
+        /// </summary>
+        [Test]
+        public void
+            PrepareCanonicalOpaqueClone_RegularCutoutConversion_DisablesAllModeKeywords()
+        {
+            var source = NewCutoutFixtureMaterial();
+            source.EnableKeyword("UNITY_UI_ALPHACLIP");
+            source.EnableKeyword("UNITY_UI_CLIP_RECT");
+            source.EnableKeyword("ETC1_EXTERNAL_ALPHA");
+            source.EnableKeyword("_COLOROVERLAY_ON");
+            var target = Shader.Find(OpaqueConversionShaderName);
+            Assert.That(
+                target, Is.Not.Null,
+                $"Fixture shader '{OpaqueConversionShaderName}' must import.");
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(clone.IsKeywordEnabled("UNITY_UI_ALPHACLIP"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("UNITY_UI_CLIP_RECT"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("ETC1_EXTERNAL_ALPHA"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("_COLOROVERLAY_ON"), Is.False);
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("UNITY_UI_ALPHACLIP"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("UNITY_UI_CLIP_RECT"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("ETC1_EXTERNAL_ALPHA"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("_COLOROVERLAY_ON"));
+        }
+
+        /// <summary>
+        /// Regular cutout-to-opaque conversions must not strip feature keywords.
+        /// Keywords like normal map and emission must remain enabled on the clone.
+        /// </summary>
+        [Test]
+        public void PrepareCanonicalOpaqueClone_PreservesFeatureKeywords()
+        {
+            var source = NewCutoutFixtureMaterial();
+            source.EnableKeyword("_NORMALMAP");
+            source.EnableKeyword("_EMISSION");
+            var target = Shader.Find(OpaqueConversionShaderName);
+            Assert.That(
+                target, Is.Not.Null,
+                $"Fixture shader '{OpaqueConversionShaderName}' must import.");
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(clone.shaderKeywords, Does.Contain("_NORMALMAP"));
+            Assert.That(clone.shaderKeywords, Does.Contain("_EMISSION"));
+        }
+
         // --- Source preservation ---------------------------------------------
 
         [Test]

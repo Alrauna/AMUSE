@@ -465,10 +465,13 @@ namespace Alrauna.Amuse.Editor.Build
                 if (entry.Item2 is AnimatorController controller &&
                     seenControllers.Add(controller))
                 {
+                    var visitedStateMachines = new HashSet<AnimatorStateMachine>();
+                    var visitedMotions = new HashSet<Motion>();
+
                     foreach (var layer in controller.layers)
                     {
                         foreach (var clip in ClipsInStateMachine(
-                                     layer.stateMachine, seenClips))
+                                     layer.stateMachine, seenClips, visitedStateMachines, visitedMotions))
                         {
                             yield return clip;
                         }
@@ -482,10 +485,13 @@ namespace Alrauna.Amuse.Editor.Build
                 if (source.AnimatorController is AnimatorController controller &&
                     seenControllers.Add(controller))
                 {
+                    var visitedStateMachines = new HashSet<AnimatorStateMachine>();
+                    var visitedMotions = new HashSet<Motion>();
+
                     foreach (var layer in controller.layers)
                     {
                         foreach (var clip in ClipsInStateMachine(
-                                     layer.stateMachine, seenClips))
+                                     layer.stateMachine, seenClips, visitedStateMachines, visitedMotions))
                         {
                             yield return clip;
                         }
@@ -494,10 +500,21 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
-        private static IEnumerable<AnimationClip> ClipsInStateMachine(
-            AnimatorStateMachine stateMachine, HashSet<AnimationClip> seen)
+        internal static IEnumerable<AnimationClip> ClipsInStateMachine(
+            AnimatorStateMachine stateMachine,
+            HashSet<AnimationClip> seenClips,
+            HashSet<AnimatorStateMachine> visitedStateMachines = null,
+            HashSet<Motion> visitedMotions = null)
         {
             if (stateMachine == null)
+            {
+                yield break;
+            }
+
+            visitedStateMachines ??= new HashSet<AnimatorStateMachine>();
+            visitedMotions ??= new HashSet<Motion>();
+
+            if (!visitedStateMachines.Add(stateMachine))
             {
                 yield break;
             }
@@ -509,7 +526,7 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                foreach (var clip in ClipsInMotion(state.state.motion, seen))
+                foreach (var clip in ClipsInMotion(state.state.motion, seenClips, visitedMotions))
                 {
                     yield return clip;
                 }
@@ -523,19 +540,32 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 foreach (var clip in ClipsInStateMachine(
-                             child.stateMachine, seen))
+                             child.stateMachine, seenClips, visitedStateMachines, visitedMotions))
                 {
                     yield return clip;
                 }
             }
         }
 
-        private static IEnumerable<AnimationClip> ClipsInMotion(
-            Motion motion, HashSet<AnimationClip> seen)
+        internal static IEnumerable<AnimationClip> ClipsInMotion(
+            Motion motion,
+            HashSet<AnimationClip> seenClips,
+            HashSet<Motion> visitedMotions = null)
         {
+            if (motion == null)
+            {
+                yield break;
+            }
+
+            visitedMotions ??= new HashSet<Motion>();
+            if (!visitedMotions.Add(motion))
+            {
+                yield break;
+            }
+
             if (motion is AnimationClip clip)
             {
-                if (seen.Add(clip))
+                if (seenClips.Add(clip))
                 {
                     yield return clip;
                 }
@@ -553,7 +583,7 @@ namespace Alrauna.Amuse.Editor.Build
                 foreach (var child in blendTree.children)
                 {
                     foreach (var found in ClipsInMotion(
-                                 child.motion, seen))
+                                 child.motion, seenClips, visitedMotions))
                     {
                         yield return found;
                     }

@@ -126,6 +126,11 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
+            if (texture.dimension != UnityEngine.Rendering.TextureDimension.Tex2D)
+            {
+                return false;
+            }
+
             if (!TryMapFilterMode(texture.filterMode, out var filter))
             {
                 return false;

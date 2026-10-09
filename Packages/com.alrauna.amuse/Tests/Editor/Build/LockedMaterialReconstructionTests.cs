@@ -248,6 +248,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Appends one saved integer entry through the serialization.
+        /// Renamed integer properties persist this way when locked.
+        /// </summary>
+        private static void WriteSavedInt(
+            Material material, string propertyName, int value)
+        {
+            using var serialized = new SerializedObject(material);
+            var ints = serialized.FindProperty(
+                "m_SavedProperties.m_Ints");
+            Assert.That(ints, Is.Not.Null,
+                "m_Ints must exist on a material.");
+            ints.InsertArrayElementAtIndex(ints.arraySize);
+            var element = ints.GetArrayElementAtIndex(
+                ints.arraySize - 1);
+            SetElementKey(element, propertyName);
+            var second = element.FindPropertyRelative("second");
+            Assert.That(second, Is.Not.Null,
+                "the int element must expose its value.");
+            second.intValue = value;
+            serialized.ApplyModifiedProperties();
+        }
+
+        /// <summary>
         /// Writes the key of one saved-property element. The current
         /// material serialization keeps the key string directly in
         /// "first"; the older one kept it inside a "first" struct under
@@ -598,6 +621,64 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LockedMaterialIdentity.OptimizerEnabledPropertyName),
                 Is.EqualTo(0f),
                 "every other step must still have held");
+        }
+
+        [Test]
+        public void MoveSuffixedSavedValues_RestoresIntegerProperties_ToClonedMaterial()
+        {
+            var integerShader = Track(ShaderUtil.CreateShaderAsset(
+                "Shader \"Hidden/AmuseTests/ReconIntegerTest\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        _Cull (\"Cull\", Integer) = 0\n" +
+                "    }\n" +
+                "    SubShader { Pass {} }\n" +
+                "}\n"));
+
+            var clone = Track(new Material(integerShader)
+            {
+                name = LockedMaterialName,
+            });
+            clone.SetOverrideTag("thry_rename_suffix", RenameSuffix);
+            clone.SetOverrideTag("_CullAnimated", "2");
+
+            const int expectedValue = 2;
+            WriteSavedInt(clone, "_Cull_" + RenameSuffix, expectedValue);
+
+            Assert.That(clone.GetInteger("_Cull"), Is.EqualTo(0),
+                "the integer property must start at its default value");
+
+            LockedMaterialReconstruction.MoveSuffixedSavedValues(
+                clone, integerShader);
+
+            Assert.That(clone.GetInteger("_Cull"), Is.EqualTo(expectedValue),
+                "the suffixed saved int must restore onto the declared plain property");
+        }
+
+        [Test]
+        public void ReadSavedProperties_ReadsIntegerPropertyStorage()
+        {
+            var originalShader = StandInShader(OriginalStandInShaderName);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                originalShader, out var guid, out long _);
+            var locked = LockedFixture(originalShader, guid);
+            const string propertyName = "_Cull_ReconCape2D7";
+            const int expectedValue = 2;
+            WriteSavedInt(locked, propertyName, expectedValue);
+
+            var textures = new List<(string name, Texture texture,
+                Vector2 scale, Vector2 offset)>();
+            var floats = new List<(string name, float value)>();
+            var colors = new List<(string name, Color value)>();
+            var vectors = new List<(string name, Vector4 value)>();
+
+            LockedMaterialReconstruction.ReadSavedProperties(
+                locked, textures, floats, colors, vectors);
+
+            Assert.That(floats, Has.Some.Matches<(string name, float value)>(
+                entry => entry.name == propertyName &&
+                         Mathf.RoundToInt(entry.value) == expectedValue));
         }
     }
 }
