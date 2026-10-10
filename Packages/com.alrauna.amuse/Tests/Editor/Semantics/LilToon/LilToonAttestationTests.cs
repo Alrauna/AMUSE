@@ -633,6 +633,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void Canonicalize_AppendedLtcgiTagTokenInsideAllmanSubShader_IsRemoved()
+        {
+            // The shipped 2.3.4 containers place the SubShader brace on its
+            // own line. The R6 proof covers the token on that Tags line too.
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n" +
+                "    }\n" +
+                "}\n";
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Is.EqualTo(Canon(clean)));
+        }
+
+        [Test]
         public void Canonicalize_AppendedLtcgiTagTokenOutsideSubShaderScope_IsRetained()
         {
             const string tagged =

@@ -1263,15 +1263,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Marks the lines where the R6 LTCGI tag strip may run: a Tags line
         /// whose innermost open brace scope is a SubShader block. One forward
-        /// walk tracks brace depth. A comment-only line carries no braces. The
-        /// anchor may under-strip: a Tags line that keeps its token contributes
-        /// its original text to the digest and the material refuses. It must
-        /// never widen the strip beyond SubShader scope.
+        /// walk tracks brace depth. A SubShader keyword whose brace opens on a
+        /// later line, the shipped Allman shape, holds its kind pending until
+        /// the brace line. Blank lines and comments between keyword and brace
+        /// keep the pair. Any other content line between them breaks the pair,
+        /// so the strip under-fires. A comment-only line carries no braces.
+        /// The anchor may under-strip: a Tags line that keeps its token
+        /// contributes its original text to the digest and the material
+        /// refuses. It must never widen the strip beyond SubShader scope.
         /// </summary>
         private static bool[] ComputeLtcgiTagStripScope(string[] lines)
         {
             var eligible = new bool[lines.Length];
             var scopeKinds = new List<string>();
+            var pendingSubShader = false;
             for (var i = 0; i < lines.Length; i++)
             {
                 var trimmed = lines[i].Trim();
@@ -1294,11 +1299,30 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 var closes = CountCharacter(trimmed, '}');
                 for (var open = 0; open < opens; open++)
                 {
-                    scopeKinds.Add(
-                        firstToken == "SubShader" && open == 0
-                            ? "SubShader"
-                            : "other");
+                    var opensSubShader = open == 0 &&
+                        (firstToken == "SubShader" ||
+                            (pendingSubShader &&
+                                trimmed.StartsWith(
+                                    "{", StringComparison.Ordinal)));
+                    scopeKinds.Add(opensSubShader ? "SubShader" : "other");
                 }
+
+                if (opens > 0)
+                {
+                    pendingSubShader = false;
+                }
+                else if (firstToken == "SubShader")
+                {
+                    pendingSubShader = true;
+                }
+                else if (pendingSubShader && trimmed.Length > 0)
+                {
+                    // A content line between the keyword and its brace breaks
+                    // the Allman pair. The strip under-fires and the material
+                    // refuses, which is the safe direction.
+                    pendingSubShader = false;
+                }
+
                 for (var close = 0; close < closes; close++)
                 {
                     if (scopeKinds.Count > 0)
