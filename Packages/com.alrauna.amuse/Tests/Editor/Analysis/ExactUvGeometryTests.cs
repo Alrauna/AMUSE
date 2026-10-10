@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
+using UnityEngine;
 using BigInteger = System.Numerics.BigInteger;
 using Alrauna.Amuse.Editor.Analysis;
 
@@ -142,6 +143,58 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(counterClockwiseHull[1].Y.CompareTo(new ExactRational(1, 4)), Is.EqualTo(0));
             Assert.That(counterClockwiseHull[2].X.CompareTo(new ExactRational(1, 3)), Is.EqualTo(0));
             Assert.That(counterClockwiseHull[2].Y.CompareTo(new ExactRational(1, 2)), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void IntegerUvVerticesKeepTexelScaleAtTwo()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f), new Vector2(2f, 0f), new Vector2(0f, 2f));
+
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(
+                triangle, 4, 4, AlphaUvEnvelope.Zero);
+
+            Assert.That(domain.TexelScale, Is.EqualTo(BigInteger.One << 1));
+        }
+
+        [Test]
+        public void SharedBitLengthMatchesReferenceAcrossMagnitudes()
+        {
+            for (var exponent = 1; exponent <= 256; exponent++)
+            {
+                var power = BigInteger.One << exponent;
+                Assert.That(
+                    ExactUvGeometry.BitLength(power - BigInteger.One),
+                    Is.EqualTo(exponent));
+                Assert.That(
+                    ExactUvGeometry.BitLength(power),
+                    Is.EqualTo(exponent + 1));
+                Assert.That(
+                    ExactUvGeometry.BitLength(power + BigInteger.One),
+                    Is.EqualTo(exponent + 1));
+            }
+        }
+
+        [TestCase(0, -140)]
+        [TestCase(1, -20)]
+        [TestCase(-3, -20)]
+        [TestCase(7, 0)]
+        [TestCase(12345, 20)]
+        public void SharedDyadicToRationalMatchesDirectConstruction(
+            int significand, int exponent)
+        {
+            var dyadic = new ExactDyadic(significand, exponent);
+            var shared = ExactUvGeometry.ToRational(dyadic);
+            var direct = exponent >= 0
+                ? new ExactRational((BigInteger)significand << exponent)
+                : new ExactRational(
+                    (BigInteger)significand, BigInteger.One << -exponent);
+
+            Assert.That(
+                shared.Numerator, Is.EqualTo(direct.Numerator));
+            Assert.That(
+                shared.Denominator, Is.EqualTo(direct.Denominator));
         }
     }
 }

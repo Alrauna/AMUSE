@@ -53,7 +53,7 @@ namespace Alrauna.Amuse.Research.Collection
             Renderer renderer,
             string hierarchyPath,
             CensusShaderFamily families,
-            BaseMaterialSemanticsProvider semanticsProvider)
+            ResearchMaterialSemanticsProvider semanticsProvider)
         {
             var analysis = semanticsProvider == null
                 ? UnityRendererAlphaAnalysis.Analyze(renderer)

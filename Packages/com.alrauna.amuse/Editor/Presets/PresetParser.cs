@@ -107,6 +107,16 @@ namespace Alrauna.Amuse.Editor.Presets
                 return false;
             }
 
+            if (polygonClamp != 100)
+            {
+                var effectiveOpaque = alphaClamp <= 0 ? 100 : alphaClamp;
+                if (polygonClamp >= effectiveOpaque)
+                {
+                    refusal = PresetLoadRefusal.ClampAboveOpaquePercent;
+                    return false;
+                }
+            }
+
             if (version != CurrentSchemaVersion)
             {
                 refusal = PresetLoadRefusal.UnknownSchemaVersion;
@@ -156,6 +166,26 @@ namespace Alrauna.Amuse.Editor.Presets
                 refusal = PresetLoadRefusal.WrongValueType;
                 value = default;
                 return false;
+            }
+            if (typeof(T) == typeof(int))
+            {
+                // A token beyond long range carries a BigInteger, so
+                // the boxed value is not a long. Refuse it by name
+                // instead of letting the conversion throw.
+                if (!(token is JValue jValue) || !(jValue.Value is long raw))
+                {
+                    refusal = PresetLoadRefusal.ValueOutOfRange;
+                    value = default;
+                    return false;
+                }
+                if (raw < int.MinValue || raw > int.MaxValue)
+                {
+                    refusal = PresetLoadRefusal.ValueOutOfRange;
+                    value = default;
+                    return false;
+                }
+                value = (T)(object)(int)raw;
+                return true;
             }
             value = token.Value<T>();
             return true;

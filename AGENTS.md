@@ -12,16 +12,18 @@ The correctness policy, the optimization policy, and the session rules live in t
 
 ## Architecture & Data Flow
 
-One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers three PlatformFinish passes:
+One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five PlatformFinish passes:
 
-1. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into `BuildContext` state before the extension deactivates.
-2. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
-3. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
+1. `AmuseStructuralGraphCheck` runs extension-free on real authored clips before animator virtualization, stores the enumerated graph and its structural refusal in state, and reports nothing itself.
+2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into `BuildContext` state before the extension deactivates.
+3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
+4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
+5. `TransientUnlockWindowClose` runs extension-free after the animator scope closes, reverts every open pair to its locked original, re-asserts apply's recorded writes, and destroys the unlocked clone last.
 
 Module layering, dependency direction:
 
 - `Build/` owns the NDMF lifecycle and mutation. It calls every other module.
-- `Host/` is the only module that touches live Unity objects. It captures immutable evidence: renderer snapshots, animation closure, and GPU alpha readback through an R8_UNorm blit (`UnityAlphaFieldEvidence.cs`).
+- `Host/` is the only module that touches live Unity objects. It captures immutable evidence: renderer snapshots, animation closure, and GPU alpha readback through an R8_UNorm blit (`UnityAlphaFieldEvidence.cs`). The Semantics conversion recipes are sanctioned exceptions that mutate only AMUSE-owned transients.
 - `Analysis/` is the pure proof core: exact rational-interval triangle classification (`TriangleAlphaClassifier.cs`), UV envelopes (`ExactUvGeometry.cs`, `AffineUvTransform.cs`), runtime-state resolution, and mesh planning. It never mutates Unity state.
 - `Semantics/` holds the shader frontends. `Poiyomi/` and `LilToon/` attest shader identity first (pinned GUIDs, package versions, SHA-256 canonical digests), then answer alpha semantics. `MaterialSemantics.cs` defines the shader-independent value algebra.
 
@@ -76,7 +78,7 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 
 ## Important Files
 
-- `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` — NDMF entry point and the three passes
+- `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` — NDMF entry point and the five passes
 - `Packages/com.alrauna.amuse/Editor/Build/HostLifecycleCapability.cs` — version, platform, build-path, and services gate
 - `Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationPreparation.cs` and `AlphaSeparationApply.cs` — prepare, then the single mutation
 - `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs` — exact per-triangle alpha proof

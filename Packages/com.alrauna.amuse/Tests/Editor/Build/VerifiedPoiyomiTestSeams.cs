@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -48,33 +49,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var eligibility = PoiyomiOpaqueConversion
                 .EvaluateVerifiedEligibility(
                     derived, queue, renderType, allowDepthTestChange);
-            switch (eligibility.Outcome)
-            {
-                case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
-                    opaque = live;
-                    refusal = PoiyomiOpaqueConversionRefusal.None;
-                    depthTestDivergence = false;
-                    premultiplyNormalization = false;
-                    return true;
-                case PoiyomiOpaqueConversionOutcome.Convertible:
-                    // An already-prepared artifact for this source is reused
-                    // here; only a first conversion creates the canonical
-                    // clone.
-                    opaque = preparedOpaque ??
-                        PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(
-                            live);
-                    refusal = PoiyomiOpaqueConversionRefusal.None;
-                    depthTestDivergence = eligibility.DepthTestDivergence;
-                    premultiplyNormalization =
-                        eligibility.PremultiplyNormalization;
-                    return true;
-                default:
-                    opaque = null;
-                    refusal = eligibility.Refusal;
-                    depthTestDivergence = false;
-                    premultiplyNormalization = false;
-                    return false;
-            }
+            return AlphaSeparationPreparation.TryMapPoiyomiOutcome(
+                eligibility, live, preparedOpaque,
+                out opaque, out refusal, out depthTestDivergence,
+                out premultiplyNormalization);
         }
 
         /// <summary>

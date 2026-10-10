@@ -201,6 +201,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // An unhandled closure failure value throws. This matches
+        // the FeatureSentence discipline: no silent empty sentence.
+        [Test]
+        public void UnhandledClosureFailureThrows()
+        {
+            Assert.Throws<InvalidOperationException>(
+                () => AmuseReports.ClosureFailureSentence(
+                    (MaterialDependencyClosureFailure)999));
+        }
+
         [Test]
         public void UnavailableCaptureHint_NamesTheUpstreamReplacement()
         {

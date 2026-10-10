@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using System.Globalization;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace Alrauna.Amuse.Editor.Semantics
 {
@@ -11,8 +13,8 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// optimization policy, and no NDMF types, and it takes no
     /// <see cref="Material"/>; "which texture supplies this fact" is
     /// shader-specific knowledge that belongs in the frontend asking. It is not
-    /// an extraction framework, and it exposes exactly the five facts that have
-    /// two proven consumers.
+    /// an extraction framework, and it exposes exactly six facts, each with a
+    /// proven consumer.
     /// </summary>
     internal static class UnityTextureEvidence
     {
@@ -143,12 +145,27 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            var aniso = texture.anisoLevel > 1
+            var aniso = texture.anisoLevel > 1 ||
+                        (texture.anisoLevel == 1 && LevelOneSamplesAnisotropically())
                 ? TextureAnisoMode.Anisotropic
                 : TextureAnisoMode.None;
 
             sampling = new TextureSampling(filter, wrapU, aniso);
             return true;
+        }
+
+        /// <summary>
+        /// Answers whether Unity samples an anisoLevel 1 texture
+        /// anisotropically under the current quality mode. Forced On maps
+        /// to ForceEnable and forces every level. Per Texture maps to
+        /// Enable and respects level 1 as off. Disable also respects
+        /// level 1 as off. This Unity version defines no Enable On Build
+        /// mode, so no other mode admits level 1.
+        /// </summary>
+        private static bool LevelOneSamplesAnisotropically()
+        {
+            var mode = QualitySettings.anisotropicFiltering;
+            return mode == AnisotropicFiltering.ForceEnable;
         }
 
         /// <summary>
@@ -197,11 +214,21 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// copy, or an in-memory admitted Avatar Optimizer atlas) has a
         /// format that names no alpha component. Input or
         /// grayscale-derived alpha is not one and is therefore not proven.
+        /// A normal-map import is never proven, because the conversion
+        /// writes the normal x component into alpha.
         /// </summary>
         internal static bool TryProveSampledAlphaIsOne(Texture texture)
         {
             if (TryGetTextureImporter(texture, out var importer))
             {
+                if (importer.textureType == TextureImporterType.NormalMap)
+                {
+                    // The desktop normal-map conversion swizzles the normal x
+                    // component into the alpha channel. The sampled alpha is that
+                    // component, not one, whatever the source alpha facts say.
+                    return false;
+                }
+
                 return !importer.DoesSourceTextureHaveAlpha() &&
                        importer.alphaSource == TextureImporterAlphaSource.None;
             }
@@ -237,6 +264,96 @@ namespace Alrauna.Amuse.Editor.Semantics
             return importer.textureType == TextureImporterType.NormalMap &&
                    !importer.flipGreenChannel;
         }
+
+        /// <summary>
+        /// Positively proves that every effective sampled colour value for this
+        /// texture is finite and confined to [0,1]. The capture records this as
+        /// a request-scoped fact beside the colour interpretation. The capture
+        /// stores values, never texture references, so a consumer cannot run
+        /// this predicate after the capture.
+        /// <para>
+        /// Only imported formats on the allow-list below succeed. Every other
+        /// format — signed-normalized, half, float, shared-exponent, BC6H — and
+        /// every texture whose importer cannot be read, refuses. A format Unity
+        /// adds in a future version is not on the list and therefore refuses.
+        /// Nothing is clamped, approximated, or assumed bounded. The fact has
+        /// one lilToon consumer today: it names the range in which
+        /// <c>lilToneCorrection</c> at <c>_MainTexHSVG = (0,1,1,1)</c> is the
+        /// identity.
+        /// </para>
+        /// </summary>
+        internal static bool TryProveColorValuesInUnitRange(Texture texture)
+        {
+            if (texture == null)
+            {
+                return false;
+            }
+
+            var path = AssetDatabase.GetAssetPath(texture);
+            if (string.IsNullOrEmpty(path) ||
+                !(AssetImporter.GetAtPath(path) is TextureImporter))
+            {
+                return false;
+            }
+
+            return BoundedColorFormats.Contains(texture.graphicsFormat);
+        }
+
+        /// <summary>
+        /// Unsigned-normalized and sRGB formats, whose decoded values are
+        /// exactly the closed interval [0,1]. Enumerated rather than
+        /// pattern-matched so an unrecognized format cannot pass by accident.
+        /// </summary>
+        private static readonly HashSet<GraphicsFormat> BoundedColorFormats =
+            new HashSet<GraphicsFormat>
+            {
+                GraphicsFormat.R8_UNorm,
+                GraphicsFormat.R8G8_UNorm,
+                GraphicsFormat.R8G8B8_UNorm,
+                GraphicsFormat.R8G8B8A8_UNorm,
+                GraphicsFormat.R8G8B8_SRGB,
+                GraphicsFormat.R8G8B8A8_SRGB,
+                GraphicsFormat.B8G8R8_UNorm,
+                GraphicsFormat.B8G8R8A8_UNorm,
+                GraphicsFormat.B8G8R8_SRGB,
+                GraphicsFormat.B8G8R8A8_SRGB,
+                GraphicsFormat.R16_UNorm,
+                GraphicsFormat.R16G16_UNorm,
+                GraphicsFormat.R16G16B16_UNorm,
+                GraphicsFormat.R16G16B16A16_UNorm,
+                GraphicsFormat.R5G6B5_UNormPack16,
+                GraphicsFormat.R4G4B4A4_UNormPack16,
+                GraphicsFormat.R5G5B5A1_UNormPack16,
+                GraphicsFormat.RGBA_DXT1_UNorm,
+                GraphicsFormat.RGBA_DXT1_SRGB,
+                GraphicsFormat.RGBA_DXT3_UNorm,
+                GraphicsFormat.RGBA_DXT3_SRGB,
+                GraphicsFormat.RGBA_DXT5_UNorm,
+                GraphicsFormat.RGBA_DXT5_SRGB,
+                GraphicsFormat.R_BC4_UNorm,
+                GraphicsFormat.RG_BC5_UNorm,
+                GraphicsFormat.RGBA_BC7_UNorm,
+                GraphicsFormat.RGBA_BC7_SRGB,
+                GraphicsFormat.RGB_ETC_UNorm,
+                GraphicsFormat.RGB_ETC2_UNorm,
+                GraphicsFormat.RGB_ETC2_SRGB,
+                GraphicsFormat.RGB_A1_ETC2_UNorm,
+                GraphicsFormat.RGB_A1_ETC2_SRGB,
+                GraphicsFormat.RGBA_ETC2_UNorm,
+                GraphicsFormat.RGBA_ETC2_SRGB,
+                GraphicsFormat.RGBA_ASTC4X4_UNorm,
+                GraphicsFormat.RGBA_ASTC4X4_SRGB,
+                GraphicsFormat.RGBA_ASTC5X5_UNorm,
+                GraphicsFormat.RGBA_ASTC5X5_SRGB,
+                GraphicsFormat.RGBA_ASTC6X6_UNorm,
+                GraphicsFormat.RGBA_ASTC6X6_SRGB,
+                GraphicsFormat.RGBA_ASTC8X8_UNorm,
+                GraphicsFormat.RGBA_ASTC8X8_SRGB,
+                GraphicsFormat.RGBA_ASTC10X10_UNorm,
+                GraphicsFormat.RGBA_ASTC10X10_SRGB,
+                GraphicsFormat.RGBA_ASTC12X12_UNorm,
+                GraphicsFormat.RGBA_ASTC12X12_SRGB,
+            };
 
         private static bool TryGetTextureImporter(
             Texture texture,

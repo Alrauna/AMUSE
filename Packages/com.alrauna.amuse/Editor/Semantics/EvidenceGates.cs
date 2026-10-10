@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
-using Alrauna.Amuse.Editor.Semantics.LilToon;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Semantics
@@ -11,9 +10,9 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// exact-off and binary-flag property gates over a live material or a
     /// captured evidence snapshot, the finiteness predicates those gates
     /// and every scalar comparison build on, the analyzability precondition,
-    /// the lilToon unknown-recorder, and the all-Unknown sentinel no family
-    /// selects. One definition, so two frontends can never disagree about
-    /// what a proven-off property or a readable flag is.
+    /// and the all-Unknown sentinel no family selects. One definition, so
+    /// two frontends can never disagree about what a proven-off property
+    /// or a readable flag is.
     /// </summary>
     internal static class EvidenceGates
     {
@@ -148,22 +147,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "The material has no shader and cannot be analyzed.",
                     nameof(material));
             }
-        }
-
-        /// <summary>
-        /// Records one lilToon diagnostic and answers the Unknown output of
-        /// the requested kind. The Poiyomi frontend keeps its own analog,
-        /// because it routes through the Poiyomi diagnostic vocabulary.
-        /// </summary>
-        internal static SemanticOutput<T> RecordUnknown<T>(
-            List<LilToonSemanticDiagnostic> diagnostics,
-            LilToonSemanticOutput output,
-            LilToonSemanticDiagnosticCode code,
-            string detail)
-            where T : class
-        {
-            diagnostics.Add(new LilToonSemanticDiagnostic(output, code, detail));
-            return SemanticOutput<T>.Unknown();
         }
 
         /// <summary>

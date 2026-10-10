@@ -284,6 +284,21 @@ namespace Alrauna.Amuse.Editor.Analysis
     {
         internal const int MaxSupportRegions = 65536;
 
+        // The per-candidate pre-filter translates the triangle so the
+        // candidate support box sits on the square from -1 to 1. The
+        // translation is exact in rationals. The conversion to doubles
+        // then costs a few rounding steps of half an ulp. At magnitude
+        // 256 that is about 1e-13 per coordinate. Inside the separating
+        // axis test the edge vectors, the normals, and the dot products
+        // stay at or below magnitude 2 to the power 19. Each rounding
+        // step there costs about 1e-10. A short stack of such steps
+        // stays below the 1e-9 separation margin in EdgeSeparates. So a
+        // support box that touches the triangle is never reported as
+        // separated. Above this bound the rounding noise can exceed the
+        // margin, so the caller skips the pre-filter and lets the exact
+        // intersection test decide.
+        private const double PreFilterSafeCoordinateBound = 256;
+
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
@@ -676,9 +691,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the point clamp candidate
         /// window substitute for witnesses. The gate counts every candidate
         /// whose support interval intersects the domain. Opaque candidates
-        /// count too. Erasure substitutes only when the erased share of the
-        /// consulted candidates stays strictly under the policy. Equality
-        /// refuses. The existence walk runs first, so a window without
+        /// count too. Erasure substitutes when the erased share of the
+        /// consulted candidates stays at or under the policy. Equality
+        /// moves. The existence walk runs first, so a window without
         /// erasure never pays for the exact intersection count.
         /// </summary>
         private static bool PointClampSubstitutesErasedTexels(
@@ -937,9 +952,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the bilinear repeat
         /// candidate window substitute for witnesses. The gate counts every
         /// candidate whose support interval intersects the domain. Opaque
-        /// candidates count too. Erasure substitutes only when the erased
-        /// share of the consulted candidates stays strictly under the
-        /// policy. Equality refuses. The existence walk runs first, so a
+        /// candidates count too. Erasure substitutes when the erased
+        /// share of the consulted candidates stays at or under the
+        /// policy. Equality moves. The existence walk runs first, so a
         /// window without erasure never pays for the exact intersection
         /// count.
         /// </summary>
@@ -1072,10 +1087,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                                          (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
                                          (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
                                          (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
-                        if (!isBoundary && !ConservativeBilinearSupportOverlapsTriangle(
-                                x - 0.5, x + 1.5,
-                                y - 0.5, y + 1.5,
-                                v0x, v0y, v1x, v1y, v2x, v2y))
+                        // The translated extraction returns false past the
+                        // proven bound. Then no cheap rejection happens, and
+                        // the exact intersection test below decides alone.
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -1, 1, -1, 1,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
                         {
                             continue;
                         }
@@ -1152,10 +1175,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                                          (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
                                          (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
                                          (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
-                        if (!isBoundary && !ConservativeBilinearSupportOverlapsTriangle(
-                                x - 0.5, x + 1.5,
-                                y - 0.5, y + 1.5,
-                                v0x, v0y, v1x, v1y, v2x, v2y))
+                        // The translated extraction returns false past the
+                        // proven bound. Then no cheap rejection happens, and
+                        // the exact intersection test below decides alone.
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -1, 1, -1, 1,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
                         {
                             continue;
                         }
@@ -1176,9 +1207,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the bilinear clamp
         /// candidate window substitute for witnesses. The gate counts every
         /// candidate whose support interval intersects the domain. Opaque
-        /// candidates count too. Erasure substitutes only when the erased
-        /// share of the consulted candidates stays strictly under the
-        /// policy. Equality refuses. The existence walk runs first, so a
+        /// candidates count too. Erasure substitutes when the erased
+        /// share of the consulted candidates stays at or under the
+        /// policy. Equality moves. The existence walk runs first, so a
         /// window without erasure never pays for the exact intersection
         /// count.
         /// </summary>
@@ -1367,6 +1398,56 @@ namespace Alrauna.Amuse.Editor.Analysis
             v2y = (double)pt2.Y.Numerator / (double)pt2.Y.Denominator / scale;
         }
 
+        /// <summary>
+        /// Extracts the triangle vertices in texel units relative to one
+        /// candidate support box center at (x + 0.5, y + 0.5). The
+        /// subtraction runs on exact rationals, so the translation adds no
+        /// error. The conversion to doubles stays inside the proven error
+        /// stack only while every translated magnitude is at or below
+        /// PreFilterSafeCoordinateBound. Returns false past that bound, and
+        /// the caller then skips the pre-filter and falls through to the
+        /// exact intersection test.
+        /// </summary>
+        private static bool TryExtractTexelVerticesRelativeToCandidate(
+            ExactUvDomain domain,
+            int x,
+            int y,
+            out double v0x, out double v0y,
+            out double v1x, out double v1y,
+            out double v2x, out double v2y)
+        {
+            var scale = domain.TexelScale;
+            var centerX = new ExactRational(2 * (BigInteger)x + 1, 2);
+            var centerY = new ExactRational(2 * (BigInteger)y + 1, 2);
+            var first = TryTranslatedTexelVertex(
+                domain.Vertices[0], scale, centerX, centerY, out v0x, out v0y);
+            var second = TryTranslatedTexelVertex(
+                domain.Vertices[1], scale, centerX, centerY, out v1x, out v1y);
+            var third = TryTranslatedTexelVertex(
+                domain.Vertices[2], scale, centerX, centerY, out v2x, out v2y);
+            return first && second && third;
+        }
+
+        private static bool TryTranslatedTexelVertex(
+            ExactUvPoint point,
+            BigInteger scale,
+            ExactRational centerX,
+            ExactRational centerY,
+            out double vx,
+            out double vy)
+        {
+            var rx = ExactRational.Subtract(
+                ExactRational.Divide(point.X, new ExactRational(scale)),
+                centerX);
+            var ry = ExactRational.Subtract(
+                ExactRational.Divide(point.Y, new ExactRational(scale)),
+                centerY);
+            vx = (double)rx.Numerator / (double)rx.Denominator;
+            vy = (double)ry.Numerator / (double)ry.Denominator;
+            return Math.Abs(vx) <= PreFilterSafeCoordinateBound &&
+                   Math.Abs(vy) <= PreFilterSafeCoordinateBound;
+        }
+
         private static TriangleAlphaOutcome ClassifyPointRepeat(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
@@ -1530,9 +1611,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the point repeat candidate
         /// window substitute for witnesses. The gate counts every candidate
         /// whose support interval intersects the domain. Opaque candidates
-        /// count too. Erasure substitutes only when the erased share of the
-        /// consulted candidates stays strictly under the policy. Equality
-        /// refuses. The existence walk runs first, so a window without
+        /// count too. Erasure substitutes when the erased share of the
+        /// consulted candidates stays at or under the policy. Equality
+        /// moves. The existence walk runs first, so a window without
         /// erasure never pays for the exact intersection count.
         /// </summary>
         private static bool PointRepeatSubstitutesErasedTexels(

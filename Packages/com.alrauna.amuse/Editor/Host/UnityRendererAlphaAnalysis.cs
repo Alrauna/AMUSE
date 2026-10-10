@@ -203,11 +203,12 @@ namespace Alrauna.Amuse.Editor.Host
         CapturedAlphaMaterialSemanticsResolver(
             CapturedAlphaMaterial material);
 
-    // The research census collector's test seam. The research
-    // RendererObservationBuilder overload and the census tests consume it.
+    // Research-only seam. The name says it: no product proof path may
+    // consume this delegate. The research census collector's
+    // RendererObservationBuilder overload and the census tests use it.
     // New product proof paths use CapturedAlphaMaterialSemanticsResolver
     // exclusively.
-    internal delegate MaterialSemantics BaseMaterialSemanticsProvider(
+    internal delegate MaterialSemantics ResearchMaterialSemanticsProvider(
         Material material);
 
     /// <summary>
@@ -253,7 +254,7 @@ namespace Alrauna.Amuse.Editor.Host
         // cross into proof and planning.
         internal static RendererAlphaAnalysis Analyze(
             Renderer renderer,
-            BaseMaterialSemanticsProvider semanticsProvider,
+            ResearchMaterialSemanticsProvider semanticsProvider,
             RegisteredSourceLookup resolveRegisteredSource = null)
         {
             if (semanticsProvider == null)
@@ -347,7 +348,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         private static UnityRendererAlphaExtraction Capture(
             Renderer renderer,
-            BaseMaterialSemanticsProvider legacySemanticsProvider,
+            ResearchMaterialSemanticsProvider legacySemanticsProvider,
             IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots,
             out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
                 legacySemantics,
@@ -648,7 +649,8 @@ namespace Alrauna.Amuse.Editor.Host
                     submesh.Indices,
                     snapshot.Positions,
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
-                    resolution);
+                    resolution,
+                    snapshot.ExtraUvSets);
 
                 submeshInputs.Add(new SubmeshSeparationInput(
                     submesh.MaterialSlotIndex, submesh.Indices, outcomes));
@@ -686,27 +688,30 @@ namespace Alrauna.Amuse.Editor.Host
             // which assignments the material actually samples; the
             // incomplete all-unknown semantic of a null material never
             // reaches the provider.
-            var predicateRequest = material == null
-                ? null
-                : UnityMaterialSemantics.AlphaRequestForFamily(
-                    material.Family);
-            AlphaFieldProvider materialFields =
-                (TextureSourceId source,
-                    TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return material != null &&
-                        alphaFields.TryGetFor(
-                            material.Evidence,
-                            predicateRequest,
-                            source,
-                            channel,
-                            out chain);
-                };
-            var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Semantics.Alpha, materialFields,
-                maxNoiseTexelPercent);
+            AlphaResolution resolution;
+            if (material == null)
+            {
+                // A null slot has no family and no evidence, so the shared
+                // per-material rule cannot run. Its all-unknown semantic
+                // refuses before any field lookup, so a never-true provider
+                // stands in for one.
+                resolution = AlphaSemanticsResolver.Resolve(
+                    semantics.Semantics.Alpha,
+                    (TextureSourceId source, TextureChannel channel,
+                        out AlphaMipChain chain) =>
+                    {
+                        chain = null;
+                        return false;
+                    },
+                    maxNoiseTexelPercent);
+            }
+            else
+            {
+                resolution = AdmittedMaterialStates
+                    .ResolveAdmittedMaterialSemantics(
+                        material, semantics, alphaFields,
+                        maxNoiseTexelPercent);
+            }
 
             if (material != null)
             {
@@ -855,7 +860,7 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Vector3> positions,
             IReadOnlyList<Vector2> uv,
             AlphaResolution resolution,
-            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets = null)
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets)
         {
             var outcomes = new TriangleAlphaOutcome[indices.Count / 3];
             if (!resolution.IsResolved)

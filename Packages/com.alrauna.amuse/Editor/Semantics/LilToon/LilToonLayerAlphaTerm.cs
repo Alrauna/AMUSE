@@ -344,9 +344,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     TextureChannel.Alpha));
             }
 
-            if (evidence.TryGetTexture(
-                    blendMaskProperty, out var blendMask) &&
-                blendMask.IsAssigned)
+            if (!evidence.TryGetTexture(blendMaskProperty, out var blendMask))
+            {
+                return Refuse(diagnostics, blendMaskProperty);
+            }
+
+            if (blendMask.IsAssigned)
             {
                 if (!blendMask.Texture.HasSourceIdentity)
                 {

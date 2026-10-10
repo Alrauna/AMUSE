@@ -61,7 +61,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// transparent interpreter, whose gates read schema facts the
         /// opaque request alone never carried; an interpreter read of an
         /// unrequested name throws, so the resolved family's own schema
-        /// must ride the one Multi capture. Every supported container
+        /// must ride the one Multi capture. The conversion eligibility
+        /// evaluator is the second conversion reader: its schema opens
+        /// with the canonical recipe names, so the recipe evidence rides
+        /// the one Multi capture beside the alpha and Multi state facts.
+        /// Every supported container
         /// classifies under this one request, so one capture serves the
         /// resolution and the interpretation on both containers.
         /// </summary>
@@ -71,6 +75,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonMaterialSemantics.AlphaEvidenceRequest,
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
                     LilToonTransparentMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonMultiSourceEligibility.ConversionEvidenceRequest,
                     new MaterialEvidenceRequest(
                         shaderName: true,
                         activeColorSpace: false,

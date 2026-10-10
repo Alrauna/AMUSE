@@ -481,10 +481,8 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Rewrites one object curve from L to U with every time preserved
-        /// exactly, and records the rewrite on the pair. A curve whose
-        /// every value already maps to itself is never written and never
-        /// recorded, so the fallback inverts only real rewrites. Returns
-        /// false when nothing changed.
+        /// exactly, and a curve whose every value already maps to itself
+        /// is never written, so the fallback inverts only real rewrites.
         /// </summary>
         private static void RewriteCurve(
             LockedSlots entry,
@@ -524,7 +522,6 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             clip.SetObjectCurve(binding, mapped);
-            pair.AddBinding(binding, slotIndex);
         }
 
         /// <summary>

@@ -15,5 +15,6 @@ namespace Alrauna.Amuse.Editor.Presets
         UnknownField,
         WrongValueType,
         ValueOutOfRange,
+        ClampAboveOpaquePercent,
     }
 }

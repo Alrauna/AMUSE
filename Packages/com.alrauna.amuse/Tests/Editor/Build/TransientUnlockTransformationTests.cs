@@ -105,12 +105,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The verified opaque Poiyomi stand-in the apply fixtures use: an
         /// unlocked, schema-complete material whose conversion produces
-        /// the real canonical opaque clone.
+        /// the real canonical opaque clone. The stand-in's Fade-preset
+        /// render state keeps it convertible instead of AlreadyOpaque.
         /// </summary>
         private static Material VerifiedOpaqueFixtureMaterial()
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 
@@ -189,7 +191,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var root = BuildAvatarRoot("AMUSE pipeline window fixture");
             var locked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "PipelineCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -343,7 +345,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var root = BuildAvatarRoot("AMUSE vendorless non-play fixture");
             var locked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "VendorlessCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -685,11 +687,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var root = BuildAvatarRoot("AMUSE clip only lock fixture");
             var slotLocked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "SlotCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var clipLocked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "ClipCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var sibling = Track(VerifiedOpaqueFixtureMaterial());
@@ -781,7 +783,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = BuildAvatarRoot(
                 "AMUSE swept output fixture");
             var locked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "SweptOutputCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var sourceMesh = Track(
@@ -886,7 +888,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = BuildAvatarRoot(
                 "AMUSE retained copies fixture");
             var locked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "RetainedCopiesCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -998,8 +1000,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(1),
                 "the retention of the clone is named once for the " +
                 "affected slot, never silent");
-            Assert.That(TransientUnlockTestKnobs.Window.OpenPairs,
-                Is.Empty, "a completed build holds zero open pairs");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
             Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
                 "the locked original keeps its locked stand-in shader");
         }
@@ -1022,7 +1027,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var root = BuildAvatarRoot("AMUSE play close purity fixture");
             var locked = Track(
-                TransientUnlockTestLifecycle.LockedMaterialWithOriginal(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "PurityCape",
                     "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());

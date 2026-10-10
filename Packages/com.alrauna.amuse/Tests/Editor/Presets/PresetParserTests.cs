@@ -196,5 +196,58 @@ namespace Alrauna.Amuse.Tests.Editor
                 "\"minimumOpaqueCoveragePercent\": 101");
             Refuses(json, PresetLoadRefusal.ValueOutOfRange);
         }
+
+        [Test]
+        public void IntegerBeyondIntRangeRefusesValueOutOfRange()
+        {
+            Refuses(WithSettings(
+                    "\"schemaVersion\": 1",
+                    "\"schemaVersion\": 3000000000"),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void IntegerBeyondLongRangeRefusesValueOutOfRange()
+        {
+            Refuses(WithSettings(
+                    "\"schemaVersion\": 1",
+                    "\"schemaVersion\": 99999999999999999999"),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void ClampAtOrAboveOpaquePercentRefuses()
+        {
+            Refuses(WithSettings(
+                    "\"minimumOpaqueAlphaPercent\": 100",
+                    "\"minimumOpaqueAlphaPercent\": 60")
+                .Replace("\"polygonAlphaUpperClampPercent\": 100",
+                    "\"polygonAlphaUpperClampPercent\": 60"),
+                PresetLoadRefusal.ClampAboveOpaquePercent);
+        }
+
+        [Test]
+        public void ClampBelowOpaquePercentParses()
+        {
+            var body = WithSettings(
+                    "\"minimumOpaqueAlphaPercent\": 100",
+                    "\"minimumOpaqueAlphaPercent\": 60")
+                .Replace("\"polygonAlphaUpperClampPercent\": 100",
+                    "\"polygonAlphaUpperClampPercent\": 59");
+            Assert.That(PresetParser.TryParse(
+                body, out _, out var refusal), Is.True, refusal.ToString());
+        }
+
+        [Test]
+        public void InertClampWithAnyOpaqueParses()
+        {
+            // The shipped clamp 100 stays the inert sentinel over an
+            // opaque percent of 0, which reads as effective 100.
+            var body = WithSettings(
+                "\"minimumOpaqueAlphaPercent\": 100",
+                "\"minimumOpaqueAlphaPercent\": 0");
+            Assert.That(PresetParser.TryParse(
+                body, out _, out var refusal), Is.True, refusal.ToString());
+        }
     }
 }

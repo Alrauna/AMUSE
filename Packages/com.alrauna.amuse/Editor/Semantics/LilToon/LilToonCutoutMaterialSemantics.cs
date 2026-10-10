@@ -182,7 +182,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 diagnostics,
                 AlphaCoverageGates,
                 MaxProvableCutoff,
-                Array.Empty<LilToonAlphaGate>());
+                Array.Empty<LilToonAlphaGate>(),
+                requiresExactMainField: false);
         }
     }
 }

@@ -58,6 +58,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string DstBlend2Property = "_DstBlend2";
         private const string BlendOp2Property = "_BlendOp2";
         private const string BlendOpAlpha2Property = "_BlendOpAlpha2";
+        private const string SrcBlendAlpha2Property = "_SrcBlendAlpha2";
+        private const string DstBlendAlpha2Property = "_DstBlendAlpha2";
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
@@ -1051,7 +1053,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     SrcBlendProperty,
                     DstBlendProperty,
                     BlendOpProperty,
-                    BlendOpAlphaProperty))
+                    BlendOpAlphaProperty,
+                    SrcBlendAlphaProperty,
+                    DstBlendAlphaProperty))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -1067,13 +1071,21 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // always names the 2-family scalars, and a plain Toon material
             // yields no value for them, while a Two Pass source that lost
             // them fails identity before this read.
+            //
+            // Destination-alpha caveat: this pair proves the second pass's own
+            // alpha output is exactly one. The destination factor still decides
+            // how that output composes with the framebuffer's alpha channel. The
+            // recorded claim covers the rendered pixel, not the framebuffer
+            // alpha channel.
             if (evidence.TryGetScalar(SrcBlend2Property, out _) &&
                 !IsProvenOpaqueBlend(
                     evidence,
                     SrcBlend2Property,
                     DstBlend2Property,
                     BlendOp2Property,
-                    BlendOpAlpha2Property))
+                    BlendOpAlpha2Property,
+                    SrcBlendAlpha2Property,
+                    DstBlendAlpha2Property))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
@@ -1412,8 +1424,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                             diagnostics,
                             PoiyomiSemanticOutput.Alpha,
                             PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                            property),
-                        threadMaps: true);
+                            property));
                     if (multiplied == null)
                     {
                         return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -1595,8 +1606,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    property),
-                threadMaps: true);
+                    property));
             if (folded == null)
             {
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -1639,7 +1649,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             string srcProperty,
             string dstProperty,
             string blendOpProperty,
-            string blendOpAlphaProperty)
+            string blendOpAlphaProperty,
+            string srcBlendAlphaProperty,
+            string dstBlendAlphaProperty)
         {
             if (!evidence.TryGetScalar(srcProperty, out var src) ||
                 !IsFinite(src) ||
@@ -1652,10 +1664,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     blendOpAlphaProperty, out var blendOpAlpha) ||
                 !IsFinite(blendOpAlpha) ||
                 !evidence.TryGetScalar(
-                    SrcBlendAlphaProperty, out var srcBlendAlpha) ||
+                    srcBlendAlphaProperty, out var srcBlendAlpha) ||
                 !IsFinite(srcBlendAlpha) ||
                 !evidence.TryGetScalar(
-                    DstBlendAlphaProperty, out var dstBlendAlpha) ||
+                    dstBlendAlphaProperty, out var dstBlendAlpha) ||
                 !IsFinite(dstBlendAlpha))
             {
                 return false;
@@ -1987,6 +1999,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     return false;
                 }
 
+                if (mask.Texture.RedCaptureRefusal !=
+                    TextureCaptureRefusalReason.None)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskProperty);
+                    return false;
+                }
+
                 var maskSample = new TextureSample(
                     mask.Texture.SourceIdentity,
                     mapping,
@@ -2083,6 +2106,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                         samplingGate);
+                    return false;
+                }
+
+                if (mask.Texture.RedCaptureRefusal !=
+                    TextureCaptureRefusalReason.None)
+                {
+                    AddDiagnostic(
+                        diagnostics,
+                        PoiyomiSemanticOutput.Alpha,
+                        PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                        AlphaMaskProperty);
                     return false;
                 }
 
@@ -2463,6 +2497,34 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return NormalizedSourceHash.Compute(rawSource);
         }
 
+        private static readonly Dictionary<string, (DateTime LastWriteUtc, string Hash)>
+            SourceHashMemo = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Reads the shader asset source and returns its normalized hash, at
+        /// most once per unchanged file. The digest is a pure function of the
+        /// immutable asset, so the memo key is the asset path and the guard is
+        /// the file's UTC write time. A failed read stays uncached, so a
+        /// transient failure costs one retry on the next call.
+        /// </summary>
+        internal static bool TryReadNormalizedSourceHashCached(
+            string assetPath,
+            out string normalizedHash)
+        {
+            var lastWrite = File.GetLastWriteTimeUtc(assetPath);
+            if (SourceHashMemo.TryGetValue(assetPath, out var cached) &&
+                cached.LastWriteUtc == lastWrite)
+            {
+                normalizedHash = cached.Hash;
+                return true;
+            }
+
+            normalizedHash = ComputeNormalizedSourceHash(
+                File.ReadAllText(assetPath, Encoding.UTF8));
+            SourceHashMemo[assetPath] = (lastWrite, normalizedHash);
+            return true;
+        }
+
         /// <summary>
         /// Evaluates the exact identity conjunction against already-read
         /// evidence. Returns true only for the canonical, unlocked source at
@@ -2618,10 +2680,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 assetGuid = guid?.ToLowerInvariant();
                 try
                 {
-                    if (File.Exists(assetPath))
+                    if (File.Exists(assetPath) &&
+                        TryReadNormalizedSourceHashCached(assetPath, out var cachedHash))
                     {
-                        var rawSource = File.ReadAllText(assetPath, Encoding.UTF8);
-                        normalizedHash = ComputeNormalizedSourceHash(rawSource);
+                        normalizedHash = cachedHash;
                         hasReadableSource = true;
                     }
                 }
@@ -2727,6 +2789,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 DstBlend2Property,
                 BlendOp2Property,
                 BlendOpAlpha2Property,
+
+                // Destination-alpha caveat: this pair proves the second pass's own
+                // alpha output is exactly one. The destination factor still decides
+                // how that output composes with the framebuffer's alpha channel. The
+                // recorded claim covers the rendered pixel, not the framebuffer
+                // alpha channel.
+                SrcBlendAlpha2Property,
+                DstBlendAlpha2Property,
                 OutlineEnabledProperty,
                 OutlineOverrideAlphaProperty,
                 OutlineAlphaDistanceFadeProperty,

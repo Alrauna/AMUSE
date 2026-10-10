@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -72,11 +73,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return root;
         }
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
+        [SetUp]
+        public void PinPerTextureAnisotropicFiltering()
+        {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the
+            // pipeline's triangle proofs refuse every triangle. The Per
+            // Texture mode is the mode these fixtures were written under.
+            // The pin is per test and restores the editor mode on teardown,
+            // which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+        }
+
         [TearDown]
         public void TearDown()
         {
             AlphaSeparationSplitTests.DeleteSplitFolder();
             DestroyTracked();
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
         }
 
         [Test]
@@ -783,6 +804,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
+            ApplyVendorFadeRenderState(material);
             return material;
         }
 
@@ -792,7 +814,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            ApplyVendorFadeRenderState(material);
             return material;
+        }
+
+        /// <summary>
+        /// Writes the pinned Poiyomi 9.3.64 Fade preset's render state onto
+        /// the stand-in, so the fixture converts instead of classifying
+        /// AlreadyOpaque. See
+        /// <see cref="PoiyomiFixtureTestBase.ApplyConvertibleRenderState"/>.
+        /// </summary>
+        private static void ApplyVendorFadeRenderState(Material material)
+        {
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
         }
 
         /// <summary>
@@ -817,6 +851,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_MainTexStochastic", 0f);
             material.SetFloat("_PoiParallax", 0f);
             material.SetFloat("_PoiInternalParallax", 0f);
+            ApplyVendorFadeRenderState(material);
             return material;
         }
 
@@ -960,6 +995,70 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
                     "No stale write may touch the mesh.");
                 Assert.That(state.AppliedRendererCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Falsifier: renderer reparented between barrier and apply ------
+
+        /// <summary>
+        /// A reparent between the barrier and the apply pass moves the
+        /// renderer off its prepared transform path. The prepared clips
+        /// still name the old path, so apply must refuse every slot of
+        /// the renderer instead of writing curves onto the old path.
+        /// </summary>
+        [Test]
+        public void
+            ARendererReparentedBetweenBarrierAndApplyRefusesEverySlotOfTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE reparented apply");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = Track(VerifiedOpaqueMaterial());
+                var mesh = Track(SingleTriangleMesh());
+                var renderer = AddRenderer(root, "body", mesh, material);
+
+                BuildContext context;
+                using (new ProbeScope(_ =>
+                {
+                    var mover = new GameObject("AMUSE moved between passes");
+                    mover.transform.SetParent(root.transform, false);
+                    renderer.transform.SetParent(mover.transform, true);
+                }))
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
+
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RendererChangedSincePreparation),
+                    Is.EqualTo(1),
+                    "The reparent moved the renderer off its prepared " +
+                    "path, so the fixture's single candidate slot must " +
+                    "refuse.");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0));
+                Assert.That(
+                    renderer.sharedMaterials[0], Is.SameAs(material),
+                    "Nothing may be written to the moved renderer.");
             }
             finally
             {
@@ -1169,6 +1268,62 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void NullAndEmptyObjectCurvesAreSkippedBySlotValidation()
+        {
+            var source = Track(VerifiedOpaqueMaterial());
+            var plan = new SubmeshSeparationPlan(
+                0,
+                0,
+                new[] { 0 },
+                new[] { 1 },
+                SubmeshSeparationDisposition.WhollyOpaqueCandidate);
+            var candidate = new PreparedSlotSeparation(
+                plan,
+                new Dictionary<Material, Material> { [source] = source },
+                false,
+                false);
+            var binding = EditorCurveBinding.PPtrCurve(
+                "Body",
+                typeof(SkinnedMeshRenderer),
+                "m_Materials.Array.data[0]");
+            var virtualClip = VirtualClip.Clone(
+                new CloneContext(GenericPlatformAnimatorBindings.Instance),
+                new AnimationClip());
+            var method = typeof(AlphaSeparationApply).GetMethod(
+                "ValidateCandidateSlot",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            foreach (var curve in new ObjectReferenceKeyframe[][]
+                     {
+                         null,
+                         Array.Empty<ObjectReferenceKeyframe>(),
+                     })
+            {
+                var targets = new List<(VirtualClip, EditorCurveBinding,
+                                        ObjectReferenceKeyframe[], int)>
+                {
+                    (virtualClip, binding, curve, 0),
+                };
+                var arguments = new object[]
+                {
+                    null,
+                    candidate,
+                    new Material[] { source },
+                    new HashSet<(string, string, string)>(),
+                    targets,
+                    0,
+                    null,
+                };
+                var refusal = default(object);
+                Assert.DoesNotThrow(
+                    () => refusal = method.Invoke(null, arguments),
+                    "a null or empty curve must skip validation, not throw");
+                Assert.That(
+                    (AlphaSeparationSlotRefusal)refusal,
+                    Is.EqualTo(AlphaSeparationSlotRefusal.None));
             }
         }
 
@@ -1485,6 +1640,84 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             AlphaSeparationSlotRefusal
                                 .RuntimeMaterialValueNotMapped),
                         Is.EqualTo(1));
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(probe?.State);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Finding 9: in-place mesh edit between barrier and apply -------
+
+        [Test]
+        public void AnInPlaceMeshEditBetweenBarrierAndApplyRefusesEverySlotOfTheRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE in-place edited split");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AlphaSeparationSeamProbe probe = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "in_place_edit"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
+                    var transparent = Track(VerifiedTransparentMaterial());
+                    var mesh = Track(
+                        AlphaSeparationSplitTests.CreateSplitSourceMesh());
+                    var renderer = AddRenderer(
+                        root, "split", mesh, split, transparent);
+
+                    using (new ProbeScope(_ =>
+                    {
+                        var indices = mesh.GetIndices(0);
+                        var grown = new int[indices.Length + 3];
+                        indices.CopyTo(grown, 0);
+                        grown[indices.Length] = indices[0];
+                        grown[indices.Length + 1] = indices[1];
+                        grown[indices.Length + 2] = indices[2];
+                        mesh.SetIndices(
+                            grown,
+                            MeshTopology.Triangles,
+                            0,
+                            calculateBounds: false);
+                    }))
+                    {
+                        var context = AvatarProcessor.ProcessAvatar(
+                            root, SeamTestPlatform.Instance);
+                        probe = context.GetState<AlphaSeparationSeamProbe>();
+                    }
+
+                    Assert.That(probe.Decision.IsPrepared, Is.True);
+                    Assert.That(probe.Decision.HasMutation, Is.False,
+                        "an in-place rewrite of the shared mesh must refuse " +
+                        "the renderer, not apply the stale preparation");
+
+                    Assert.That(probe.RecordedMeshClones, Has.Count.EqualTo(1));
+                    Assert.That(
+                        probe.RecordedMeshClones[0] == null, Is.True,
+                        "the orphaned clone of a refused renderer must be " +
+                        "destroyed");
+
+                    Assert.That(
+                        probe.SlotRefusals(
+                            AlphaSeparationSlotRefusal
+                                .RendererChangedSincePreparation),
+                        Is.EqualTo(1),
+                        "the fixture has one candidate slot, so the refusal " +
+                        "must be recorded exactly once");
                 }
                 finally
                 {

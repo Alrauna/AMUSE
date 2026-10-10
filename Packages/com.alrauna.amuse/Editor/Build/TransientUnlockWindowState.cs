@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Build
@@ -116,7 +115,7 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// One swapped pair: the untouched locked original L and its
-        /// unlocked clone U, plus every reference the swap-in rewrote, so
+        /// unlocked clone U, plus every slot the swap-in substituted, so
         /// the fallback can invert exactly the substitution and nothing a
         /// later pass added. L is never destroyed. U is the only
         /// destroyable side of the whole window, and only the fallback
@@ -128,16 +127,9 @@ namespace Alrauna.Amuse.Editor.Build
             internal Material UnlockedClone { get; set; }
 
             private readonly List<SlotSwap> slots = new List<SlotSwap>();
-            private readonly List<RewrittenBinding> bindings =
-                new List<RewrittenBinding>();
 
             /// <summary>Every slot that held L and now holds U.</summary>
             internal IReadOnlyList<SlotSwap> Slots => slots;
-
-            /// <summary>
-            /// Every object curve the swap-in rewrote from L to U.
-            /// </summary>
-            internal IReadOnlyList<RewrittenBinding> Bindings => bindings;
 
             internal SwappedPair(Material lockedOriginal)
             {
@@ -165,23 +157,6 @@ namespace Alrauna.Amuse.Editor.Build
 
                 slots.Add(new SlotSwap(renderer, slotIndex));
             }
-
-            /// <summary>
-            /// Records one rewritten object curve, keyed by binding
-            /// identity: transform path, material-slot property name,
-            /// renderer type full name, and parsed slot index. The record
-            /// holds no live clip reference, so the fallback can match the
-            /// same binding on the committed clips after the animator
-            /// extension has closed.
-            /// </summary>
-            internal void AddBinding(EditorCurveBinding binding, int slotIndex)
-            {
-                bindings.Add(new RewrittenBinding(
-                    binding.path,
-                    binding.propertyName,
-                    binding.type.FullName,
-                    slotIndex));
-            }
         }
 
         /// <summary>One slot that held L and holds U while the window is open.</summary>
@@ -193,35 +168,6 @@ namespace Alrauna.Amuse.Editor.Build
             internal SlotSwap(Renderer renderer, int slotIndex)
             {
                 Renderer = renderer;
-                SlotIndex = slotIndex;
-            }
-        }
-
-        /// <summary>
-        /// One object curve the swap-in rewrote, recorded as binding
-        /// identity: the transform path, the material-slot property name,
-        /// the renderer type full name the binding carries, and the parsed
-        /// slot index. The fallback inverts the committed clips after the
-        /// animator extension has closed, so the record holds no live clip
-        /// reference; matching proceeds by binding identity, never by clip
-        /// name.
-        /// </summary>
-        internal readonly struct RewrittenBinding
-        {
-            internal string Path { get; }
-            internal string PropertyName { get; }
-            internal string TypeName { get; }
-            internal int SlotIndex { get; }
-
-            internal RewrittenBinding(
-                string path,
-                string propertyName,
-                string typeName,
-                int slotIndex)
-            {
-                Path = path;
-                PropertyName = propertyName;
-                TypeName = typeName;
                 SlotIndex = slotIndex;
             }
         }

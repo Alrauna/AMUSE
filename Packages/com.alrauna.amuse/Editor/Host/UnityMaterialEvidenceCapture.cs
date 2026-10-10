@@ -20,6 +20,7 @@ namespace Alrauna.Amuse.Editor.Host
         CanonicalNormalMap = 1 << 5,
         AlphaChannel = 1 << 6,
         RedChannel = 1 << 7,
+        BoundedColorRange = 1 << 8,
     }
 
     internal readonly struct TexturePropertyEvidenceRequest
@@ -32,7 +33,8 @@ namespace Alrauna.Amuse.Editor.Host
             TextureEvidenceKinds.SampledAlphaIsOne |
             TextureEvidenceKinds.CanonicalNormalMap |
             TextureEvidenceKinds.AlphaChannel |
-            TextureEvidenceKinds.RedChannel;
+            TextureEvidenceKinds.RedChannel |
+            TextureEvidenceKinds.BoundedColorRange;
 
         internal string PropertyName { get; }
         internal TextureEvidenceKinds Evidence { get; }
@@ -349,9 +351,9 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// The alpha policy bounds this capture ran under. With a declared
         /// cutoff below one the capture kept the policy inert for the
-        /// source, which the field key derives from the threshold; the raw
-        /// bounds are stored so both arms key exactly as they were
-        /// captured.
+        /// source, which the field key derives from the threshold. The
+        /// alpha arm keys these bounds, and the red arm keys the inert
+        /// bounds because the capture pins red to them.
         /// </summary>
         internal AlphaPolicyBounds CaptureBounds { get; }
 
@@ -361,6 +363,15 @@ namespace Alrauna.Amuse.Editor.Host
         internal TextureColorInterpretation ColorInterpretation { get; }
         internal bool SampledAlphaIsProvenOne { get; }
         internal bool IsCanonicalNormalMap { get; }
+
+        /// <summary>
+        /// True only when every effective sampled colour value of the source
+        /// is finite and confined to [0,1]. The fact is a captured,
+        /// request-scoped snapshot: the capture runs the import predicate at
+        /// capture time, because the captured record carries no texture
+        /// reference to ask later.
+        /// </summary>
+        internal bool ColorValuesProvenInUnitRange { get; }
         internal bool HasAlphaChannel { get; }
         internal AlphaMipChain AlphaChannel { get; }
 
@@ -401,6 +412,7 @@ namespace Alrauna.Amuse.Editor.Host
             TextureColorInterpretation colorInterpretation,
             bool sampledAlphaIsProvenOne,
             bool isCanonicalNormalMap,
+            bool colorValuesProvenInUnitRange,
             bool hasAlphaChannel,
             AlphaMipChain alphaChannel,
             TextureCaptureRefusalReason alphaCaptureRefusal,
@@ -418,6 +430,7 @@ namespace Alrauna.Amuse.Editor.Host
             ColorInterpretation = colorInterpretation;
             SampledAlphaIsProvenOne = sampledAlphaIsProvenOne;
             IsCanonicalNormalMap = isCanonicalNormalMap;
+            ColorValuesProvenInUnitRange = colorValuesProvenInUnitRange;
             HasAlphaChannel = hasAlphaChannel;
             AlphaChannel = alphaChannel;
             AlphaChannelIsProvenFullyOpaque =
@@ -1359,6 +1372,9 @@ namespace Alrauna.Amuse.Editor.Host
                 (evidence & TextureEvidenceKinds.ColorInterpretation) != 0 &&
                 UnityTextureEvidence.TryGetColorInterpretation(
                     texture, out colorInterpretation);
+            var hasBoundedColorRange =
+                (evidence & TextureEvidenceKinds.BoundedColorRange) != 0 &&
+                UnityTextureEvidence.TryProveColorValuesInUnitRange(texture);
             var sampledAlphaIsOne =
                 (evidence & TextureEvidenceKinds.SampledAlphaIsOne) != 0 &&
                 UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
@@ -1367,11 +1383,11 @@ namespace Alrauna.Amuse.Editor.Host
                 UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
             AlphaMipChain alphaChannel = null;
             var alphaRefusal = TextureCaptureRefusalReason.None;
-            // Both channels read under the active policy: the red channel
-            // serves alpha-mask products, so the same alpha policy governs
-            // every field the proof consults. A refused channel carries its
-            // named reason beside the absence it explains; an unrequested
-            // channel never calls the capture and carries None.
+            // The alpha channel reads under the active policy. The red channel
+            // reads under the inert bounds: the Analysis mapped arm evaluates a
+            // red field sample at exactly 1, so byte 255 must mark exactly the
+            // texels whose value is exactly 1. An active policy verdict on red
+            // would store 255 for a sub-one texel and break the mapped contract.
             var hasAlphaChannel =
                 (evidence & TextureEvidenceKinds.AlphaChannel) != 0 &&
                 UnityAlphaFieldEvidence.TryCapture(
@@ -1391,11 +1407,15 @@ namespace Alrauna.Amuse.Editor.Host
                     texture,
                     TextureChannel.Red,
                     1.0f,
-                    bounds,
+                    AlphaPolicyBounds.Inert,
                     out _,
                     out redChannel,
                     out redRefusal,
                     originMaterial: originMaterial);
+            if (hasRedChannel)
+            {
+                AssertRedFieldContract(redChannel);
+            }
             // The alpha arm's predicate rides beside the chain: the routes
             // binarize a declared cutoff into the stored verdicts, so the
             // field's key must carry the threshold the bytes mean. Clamped
@@ -1412,12 +1432,52 @@ namespace Alrauna.Amuse.Editor.Host
                 colorInterpretation,
                 sampledAlphaIsOne,
                 canonicalNormal,
+                hasBoundedColorRange,
                 hasAlphaChannel,
                 alphaChannel,
                 alphaRefusal,
                 hasRedChannel,
                 redChannel,
                 redRefusal);
+        }
+
+        /// <summary>
+        /// Asserts the Analysis field contract on a red chain at the capture
+        /// seam: byte 255 marks exactly the texels whose value is exactly 1
+        /// and every other byte marks a value strictly below 1, so an inert
+        /// red chain carries only 255 and 0. The inert bounds never erase,
+        /// so the erased flag byte proves a capture seam defect. A violation
+        /// throws instead of serving evidence the proof core would misread.
+        /// </summary>
+        internal static void AssertRedFieldContract(AlphaMipChain chain)
+        {
+            if (chain == null)
+            {
+                throw new ArgumentNullException(nameof(chain));
+            }
+            for (var mip = 0; mip < chain.Count; mip++)
+            {
+                if (chain.IsLevelWithoutEvidence(mip))
+                {
+                    continue;
+                }
+                var level = chain[mip];
+                for (var y = 0; y < level.Height; y++)
+                {
+                    for (var x = 0; x < level.Width; x++)
+                    {
+                        var verdict = level.GetAlpha(x, y);
+                        if (verdict == byte.MaxValue || verdict == 0)
+                        {
+                            continue;
+                        }
+                        throw new InvalidOperationException(
+                            "Red evidence breaks the exact-255 field contract: " +
+                            "level " + mip + " texel (" + x + ", " + y + ") stores " +
+                            verdict + ", which is neither exactly one nor below one.");
+                    }
+                }
+            }
         }
 
         /// <summary>

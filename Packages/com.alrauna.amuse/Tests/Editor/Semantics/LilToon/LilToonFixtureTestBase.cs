@@ -43,9 +43,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
         [SetUp]
         public void BaseSetUp()
         {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads a default anisoLevel 1
+            // texture as anisotropic, which the footprint and wrap proofs
+            // refuse. Every fixture texture carries a default anisoLevel, so
+            // the Per Texture mode is the mode these equations were written
+            // under. The pin is per test and restores the editor mode on
+            // teardown, which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
             _scope.EnsureTempFolder();
         }
 
@@ -53,6 +66,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void BaseTearDown()
         {
             _scope.TearDown();
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
         }
 
         protected T Track<T>(T obj) where T : UnityEngine.Object

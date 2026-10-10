@@ -201,6 +201,14 @@ namespace Alrauna.Amuse.Editor.Host
             foreach (var key in keys)
             {
                 if (key.weightedMode != WeightedMode.None) return false;
+                if (float.IsNaN(key.value) || float.IsInfinity(key.value))
+                {
+                    // A non-finite key value never animates a proof-relevant
+                    // property exactly. Answer false before the adjacency
+                    // loop, so a degenerate run of equal non-finite keys
+                    // cannot pass as a flat run.
+                    return false;
+                }
             }
 
             for (var index = 0; index + 1 < keys.Count; index++)

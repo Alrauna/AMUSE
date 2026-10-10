@@ -37,6 +37,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class AlphaSeparationPreparationTests
     {
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
+        [SetUp]
+        public void PinPerTextureAnisotropicFiltering()
+        {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the
+            // pipeline's triangle proofs refuse every triangle. The Per
+            // Texture mode is the mode these fixtures were written under.
+            // The pin is per test and restores the editor mode on teardown,
+            // which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+        }
+
+        [TearDown]
+        public void RestoreAnisotropicFiltering()
+        {
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
+        }
+
         [Test]
         public void CandidateRendererProducesARetainedRecord()
         {
@@ -310,7 +335,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState baseline = null;
             try
             {
-                baselineMaterial = VerifiedOpaqueMaterial();
+                baselineMaterial = VerifiedOpaqueZWriteDefaultMaterial();
                 AddSingleTriangleRenderer(
                     baselineRoot, baselineMaterial, out baselineMesh);
                 baseline = RunBarrier(baselineRoot);
@@ -348,7 +373,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState refused = null;
             try
             {
-                refusedMaterial = VerifiedOpaqueMaterial();
+                refusedMaterial = VerifiedOpaqueZWriteDefaultMaterial();
                 Assert.That(
                     refusedMaterial.GetFloat("_ZWrite"), Is.EqualTo(1f),
                     "fixture precondition: the material's serialized " +
@@ -405,7 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState prepared = null;
             try
             {
-                preparedMaterial = VerifiedOpaqueMaterial();
+                preparedMaterial = VerifiedOpaqueZWriteDefaultMaterial();
                 AddSingleTriangleRenderer(
                     preparedRoot, preparedMaterial, out preparedMesh);
                 preparedClip = NewFloatClip(
@@ -1650,6 +1675,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 materialA.SetFloat("_MainAlphaMaskMode", 0f);
                 materialA.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
                 materialA.SetFloat("_AlphaPremultiply", 1f);
+                PoiyomiFixtureTestBase.ApplyConvertibleRenderState(materialA);
                 meshA = new Mesh
                 {
                     vertices = new[]
@@ -1740,6 +1766,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 materialB.SetFloat("_MainAlphaMaskMode", 0f);
                 materialB.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
                 materialB.SetFloat("_AlphaPremultiply", 0f);
+                PoiyomiFixtureTestBase.ApplyConvertibleRenderState(materialB);
                 meshB = new Mesh
                 {
                     vertices = new[]
@@ -8719,6 +8746,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// The convertible opaque stand-in with a canonical serialized
+        /// <c>_ZWrite</c> default, for the conversion-animation fixture that
+        /// animates <c>_ZWrite</c> away from its serialized value and back:
+        /// the Fade render state keeps the material convertible, and the
+        /// untouched z-write keeps the animated-at-default case meaningful.
+        /// </summary>
+        private static Material VerifiedOpaqueZWriteDefaultMaterial()
+        {
+            var material = VerifiedOpaqueMaterial();
+            material.SetFloat("_ZWrite", 1f);
             return material;
         }
 
@@ -8728,6 +8770,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 
@@ -8737,6 +8780,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// the attested source requires proven zero (design §3.2) is set
         /// explicitly, mirroring
         /// <c>PoiyomiAlphaTests.NonForcedMainTexNonIdentityStPreservesMappingAndClassifies</c>.
+        /// The stand-in's Fade-preset render state keeps the material
+        /// convertible instead of AlreadyOpaque.
         /// </summary>
         private static Material TextureBackedNonIdentityStMaterial(
             Texture texture, Vector2 scale, Vector2 offset)
@@ -8754,6 +8799,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_MainTexStochastic", 0f);
             material.SetFloat("_PoiParallax", 0f);
             material.SetFloat("_PoiInternalParallax", 0f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 

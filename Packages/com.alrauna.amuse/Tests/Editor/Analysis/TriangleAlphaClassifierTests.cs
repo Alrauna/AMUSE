@@ -351,6 +351,75 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(nearEdge, Is.True);
         }
 
+        private static TriangleAlphaInput DiagonalTriangle(
+            float u0x, float u0y, float u1x, float u1y, float u2x, float u2y)
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(u0x, u0y), new Vector2(u1x, u1y), new Vector2(u2x, u2y));
+        }
+
+        private static AlphaTextureData EightByEightOneWitnessTexture()
+        {
+            var bytes = new byte[64];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = 255;
+            }
+            bytes[27] = 0;
+            return new AlphaTextureData(8, 8, bytes);
+        }
+
+        [Test]
+        public void BilinearClampLargeCoordinateRunMatchesSmallRunVerdict()
+        {
+            var texture = EightByEightOneWitnessTexture();
+            var sampling = new TextureSampling(
+                TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
+
+            // Small control: same shape near the origin, vertices in texel
+            // units (-8, -8), (10, 10), (-8, 10), so UV units divide by 8.
+            var small = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(-1f, -1f, 1.25f, 1.25f, -1f, 1.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            // Large run: the same shape near plus and minus 16 million texel
+            // units, so UV units are the texel units divided by 8.
+            // RED note: the plan expected the large run to return
+            // ProvenOpaque before the fix. It did not. Witness indices 27,
+            // 18, and 36 were tried, then all 64 indices were swept. The
+            // large run matched the small run at every index. The plan's
+            // diagonal is the line y = x. For that slope the separating
+            // axis products cancel exactly in binary64 at these
+            // magnitudes, so the old pre-filter cannot misfire here.
+            var large = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(
+                    -2000000f, -2000000f,
+                    2000000.25f, 2000000.25f,
+                    -2000000f, 2000000.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            Assert.That(small, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(large, Is.EqualTo(small));
+        }
+
+        [Test]
+        public void BilinearClampSixteenTexelShiftedRunMatchesSmallRunVerdict()
+        {
+            var texture = EightByEightOneWitnessTexture();
+            var sampling = new TextureSampling(
+                TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
+            var shifted = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(
+                    -1999998f, -1999998f,
+                    2000002.25f, 2000002.25f,
+                    -1999998f, 2000002.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            Assert.That(
+                shifted, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
         // --- A7 widenings: trilinear and anisotropic --------------------
 
         /// <summary>
@@ -1914,6 +1983,24 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(a, Is.EqualTo(uvA));
             Assert.That(b, Is.EqualTo(uvB));
             Assert.That(c, Is.EqualTo(uvC));
+        }
+
+        [Test]
+        public void BilinearClampIntegerUvTriangleStillFindsSubOpaqueTexel()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f));
+            var texture = new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 255, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new TextureSampling(
+                        TextureFilterMode.Bilinear, TextureWrapMode.Clamp),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
     }
 }

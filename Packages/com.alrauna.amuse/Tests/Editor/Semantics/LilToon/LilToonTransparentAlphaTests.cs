@@ -856,6 +856,55 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             };
         }
 
+        // Finding 2 falsifier, part B: a transparent claim over a field the
+        // capture binarized by _Cutoff reads byte 255 as alpha exactly one.
+        // The Poiyomi frontend refuses this disagreement naming _Cutoff. The
+        // transparent frontend gains the same gate. The proven-one importer
+        // theorem arm and the identity refusal keep their precedence ahead of
+        // the gate, because neither reads the field.
+        // --- Falsifier: a transparent frontend that consumes a binarized field under the exact-one rule fails this fixture. ---
+        [Test]
+        public void BinarizedMainFieldUnderTheTransparentClaimRefusesNamingCutoff()
+        {
+            var material = NewTransparentFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    "transparent_claim_binarized",
+                    4, 4, SolidGrid(4, 4, 128)));
+            material.SetFloat(CutoffProperty, 0.3f);
+
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    LilToonMultiResolution.MultiEvidenceRequest),
+            })[0];
+            Assert.That(
+                captured.TryGetTexture(MainTextureProperty, out var main),
+                Is.True,
+                "fixture precondition: _MainTex must be captured");
+            Assert.That(
+                main.Texture.CaptureThreshold,
+                Is.EqualTo(0.3f),
+                "fixture precondition: the capture must binarize _MainTex");
+
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured, out var reason);
+
+            Assert.That(
+                alpha.IsComplete,
+                Is.False,
+                "a binarized field cannot answer the exact-one rule");
+            Assert.That(reason, Is.Not.Null);
+            Assert.That(
+                reason.Kind,
+                Is.EqualTo(AlphaUnknownKind.UnsupportedFeature));
+            Assert.That(
+                reason.Property,
+                Does.Contain("_Cutoff"));
+        }
+
         [Test]
         public void TransparentTexelOnlyInALowerMip_ForcesMustRemainTransparent()
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
@@ -405,25 +406,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 live, out var queue, out var renderType);
             var eligibility = evaluateEligibility(
                 derived, queue, renderType, allowDepthTestChange);
-            if (eligibility.Outcome !=
-                LilToonOpaqueConversionOutcome.Convertible)
-            {
-                opaque = null;
-                refusal = eligibility.Refusal;
-                depthTestDivergence = false;
-                return false;
-            }
-
-            // An already-prepared artifact for this source is reused here;
-            // only a first conversion creates the canonical clone. The
-            // tuple-carrying opaque stand-in is the attested target.
-            opaque = preparedOpaque ??
-                LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
-                    live, Shader.Find(
-                        LilToonFixtureTestBase.OpaqueConversionShaderName));
-            refusal = LilToonOpaqueConversionRefusal.None;
-            depthTestDivergence = eligibility.DepthTestDivergence;
-            return true;
+            // The tuple-carrying opaque stand-in is the attested target.
+            return AlphaSeparationPreparation.TryMapLilToonOutcome(
+                eligibility,
+                () => preparedOpaque ??
+                    LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                        live, Shader.Find(
+                            LilToonFixtureTestBase
+                                .OpaqueConversionShaderName)),
+                out opaque, out refusal, out depthTestDivergence);
         }
 
         /// <summary>

@@ -6,11 +6,13 @@ namespace Alrauna.Amuse.Editor.Host
 {
     /// <summary>
     /// Builds the source-image route's alpha chain under an alpha policy.
-    /// The builder masks before averaging: a noise texel takes no part in
-    /// its block's average, because a stray the user called invisible
-    /// must not drag a coarser level below the opaque bound. A block
-    /// whose every source texel is noise carries the erased flag. All
-    /// comparisons are exact integers; no float crosses a verdict.
+    /// The builder averages every texel of a block. That plain average is
+    /// what the imported mip chain stores, so both capture routes resolve
+    /// each level against the same effective content. The builder
+    /// publishes the policy verdict of the average: a block at or above
+    /// the opaque bound stores 255, a block below the noise bound carries
+    /// the erased flag, and the rest store 0. All comparisons are exact
+    /// integers. No float crosses a verdict.
     /// </summary>
     internal static class SourceImageMaskedChain
     {
@@ -78,27 +80,21 @@ namespace Alrauna.Amuse.Editor.Host
             AlphaPolicyBounds bounds)
         {
             long sum = 0;
-            long consulted = 0;
             for (var y = startY; y < endY; y++)
             {
                 for (var x = startX; x < endX; x++)
                 {
-                    var b = source[y * sourceWidth + x];
-                    if (bounds.NoiseBound > 0 && b < bounds.NoiseBound)
-                    {
-                        continue;
-                    }
-                    sum += b;
-                    consulted++;
+                    sum += source[y * sourceWidth + x];
                 }
             }
-            if (consulted == 0)
+            var count = (long)(endX - startX) * (endY - startY);
+            if (bounds.NoiseBound > 0 && sum < (long)bounds.NoiseBound * count)
             {
                 return AlphaTextureData.ErasedFlag;
             }
-            // Exact integer verdict: the masked average meets the
-            // opaque bound exactly when sum >= bound * count.
-            return sum >= (long)bounds.OpaqueBound * consulted
+            // Exact integer verdict: the plain average meets the opaque
+            // bound exactly when sum >= bound * count.
+            return sum >= (long)bounds.OpaqueBound * count
                 ? byte.MaxValue
                 : (byte)0;
         }

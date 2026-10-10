@@ -135,10 +135,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReports.ClosureFailureSentence(
                     MaterialDependencyClosureFailure.InvalidSwapValue),
                 Does.Contain("not a material"));
+            // None is the zero value, never a closure failure way. A
+            // sentence request for it is a defect, so the fails-closed
+            // default throws instead of printing an empty sentence.
             Assert.That(
-                AmuseReports.ClosureFailureSentence(
+                () => AmuseReports.ClosureFailureSentence(
                     MaterialDependencyClosureFailure.None),
-                Is.EqualTo(""));
+                Throws.InvalidOperationException);
         }
     }
 }

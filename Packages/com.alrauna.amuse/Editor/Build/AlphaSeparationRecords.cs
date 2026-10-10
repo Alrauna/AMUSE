@@ -234,6 +234,7 @@ namespace Alrauna.Amuse.Editor.Build
             CapturedAnimationEvidence evidence,
             IReadOnlyList<PreparedSlotSeparation> candidateSlots,
             IReadOnlyList<BlockStateEntry> blockStateAtPreparation,
+            IReadOnlyList<int> expectedSubmeshIndexCounts,
             string rendererTypeName = null)
         {
             Target = target ?? throw new ArgumentNullException(nameof(target));
@@ -249,6 +250,9 @@ namespace Alrauna.Amuse.Editor.Build
             if (blockStateAtPreparation == null)
                 throw new ArgumentNullException(
                     nameof(blockStateAtPreparation));
+            if (expectedSubmeshIndexCounts == null)
+                throw new ArgumentNullException(
+                    nameof(expectedSubmeshIndexCounts));
 
             var copy = new PreparedSlotSeparation[candidateSlots.Count];
             for (var index = 0; index < copy.Length; index++)
@@ -256,6 +260,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             CandidateSlots = Array.AsReadOnly(copy);
             BlockStateAtPreparation = blockStateAtPreparation;
+            ExpectedSubmeshIndexCounts = expectedSubmeshIndexCounts;
             RendererTypeName = rendererTypeName
                 ?? target.Renderer?.GetType().FullName;
         }
@@ -278,6 +283,13 @@ namespace Alrauna.Amuse.Editor.Build
         /// </summary>
         internal IReadOnlyList<BlockStateEntry> BlockStateAtPreparation
         { get; }
+
+        /// <summary>
+        /// The per-submesh index count of the expected mesh, captured when
+        /// this separation was prepared. Revalidation proves the candidate
+        /// stale when the live mesh no longer shows these counts.
+        /// </summary>
+        internal IReadOnlyList<int> ExpectedSubmeshIndexCounts { get; }
 
         /// <summary>Candidate slots in ascending material-slot order.</summary>
         internal IReadOnlyList<PreparedSlotSeparation> CandidateSlots { get; }

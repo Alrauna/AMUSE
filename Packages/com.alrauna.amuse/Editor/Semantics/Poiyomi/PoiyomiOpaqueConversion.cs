@@ -45,6 +45,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         UnsupportedDepthComparison,
         UnsupportedBlendEquation,
         UnsupportedForwardAddBlendEquation,
+        UnsupportedOutlineBlendEquation,
         ClipThresholdDiscardsOpaqueAlpha,
     }
 
@@ -200,9 +201,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             CanonicalOpaqueProperties { get; } =
                 new ReadOnlyCollection<(string, float)>(CanonicalOpaqueTuple);
 
-        internal const int CanonicalOpaqueRenderQueue = 2000;
-        internal const string RenderTypeTagName = "RenderType";
-        internal const string CanonicalOpaqueRenderType = "Opaque";
+        // The three Unity-level facts live once, on the shared verification
+        // skeleton. These aliases keep the family's own constant names for
+        // its callers. The values never drift, because each alias reads the
+        // one shared definition.
+        internal const int CanonicalOpaqueRenderQueue =
+            CanonicalOpaqueVerification.CanonicalOpaqueRenderQueue;
+        internal const string RenderTypeTagName =
+            CanonicalOpaqueVerification.RenderTypeTagName;
+        internal const string CanonicalOpaqueRenderType =
+            CanonicalOpaqueVerification.CanonicalOpaqueRenderType;
 
         // --- Conversion evidence -------------------------------------------
 
@@ -256,8 +264,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// capture and touches no live material, so it cannot read mutable
         /// state after the evidence a decision depends on.
         /// <para>
-        /// Order is load-bearing: the no-op classification precedes every gate
-        /// whose only purpose is to authorize mutation.
+        /// Order is load-bearing: the finiteness sweep is a data-validity
+        /// refusal, so it precedes the no-op classification. Every gate whose
+        /// only purpose is to authorize mutation still follows the no-op
+        /// classification, because a refusal mutates nothing.
         /// </para>
         /// </summary>
         internal static PoiyomiOpaqueConversionEligibility EvaluateVerifiedEligibility(
@@ -281,16 +291,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            // 2. AlreadyOpaque, before any transformation gate.
-            if (IsFunctionallyOpaque(values, effectiveRenderQueue, effectiveRenderType))
-            {
-                return PoiyomiOpaqueConversionEligibility.AlreadyOpaque();
-            }
-
-            // --- Transformation gates. Each exists to authorize a change, so
-            // none is reachable once step 2 has established that nothing will
-            // be changed.
-            // 3. Finiteness.
+            // 2. Finiteness.
             foreach (var value in values)
             {
                 if (float.IsNaN(value) || float.IsInfinity(value))
@@ -300,6 +301,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
+            // 3. AlreadyOpaque, before any transformation gate.
+            if (IsFunctionallyOpaque(values, effectiveRenderQueue, effectiveRenderType))
+            {
+                return PoiyomiOpaqueConversionEligibility.AlreadyOpaque();
+            }
+
+            // --- Transformation gates. Each exists to authorize a change, so
+            // none is reachable once step 3 has established that nothing will
+            // be changed.
             // 4. Premultiplication. The vendor premultiply feature scales
             //    the color by saturate(alpha) in three passes and never
             //    writes the alpha value (note 4.3). The proof moves only
@@ -375,7 +385,40 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         .UnsupportedForwardAddBlendEquation);
             }
 
-            // 9. Clip threshold. The pinned shader clips unconditionally in
+            // 9. Outline blend tuple. The recipe writes the six outline blend
+            //    fields, so the accepted source states must degenerate to the
+            //    canonical tuple at alpha 1 exactly like the base pass. The RGB
+            //    pair uses the base-pass argument: Add with a unit source factor
+            //    and a zero destination factor gives dst := src at alpha 1. The
+            //    alpha pair uses the alpha-proof vocabulary: with source factor
+            //    One and the destination factor in the vendor set, both the add
+            //    and the max operations yield exactly 1 at alpha 1. A material
+            //    that stores any other pair renders its outline differently from
+            //    the canonical clone, so it refuses by name.
+            if (Read(values, "_OutlineBlendOp") !=
+                    OpaqueConversionFactors.BlendOpAdd ||
+                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
+                    Read(values, "_OutlineSrcBlend")) ||
+                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
+                    Read(values, "_OutlineDstBlend")) ||
+                Read(values, "_OutlineSrcBlendAlpha") !=
+                    OpaqueConversionFactors.BlendFactorOne ||
+                (Read(values, "_OutlineDstBlendAlpha") !=
+                    OpaqueConversionFactors.BlendFactorZero &&
+                 Read(values, "_OutlineDstBlendAlpha") !=
+                    OpaqueConversionFactors.BlendFactorOne &&
+                 Read(values, "_OutlineDstBlendAlpha") !=
+                    OpaqueConversionFactors.BlendFactorOneMinusSrcAlpha) ||
+                (Read(values, "_OutlineBlendOpAlpha") !=
+                    OpaqueConversionFactors.BlendOpAdd &&
+                 Read(values, "_OutlineBlendOpAlpha") !=
+                    OpaqueConversionFactors.BlendOpMax))
+            {
+                return PoiyomiOpaqueConversionEligibility.Refused(
+                    PoiyomiOpaqueConversionRefusal.UnsupportedOutlineBlendEquation);
+            }
+
+            // 10. Clip threshold. The pinned shader clips unconditionally in
             //     all four shading passes with `clip(alpha - _Cutoff)`, which
             //     discards when the difference is negative. Alpha exactly 1
             //     therefore survives precisely when _Cutoff <= 1. Only once
@@ -469,33 +512,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             if (candidate == null) throw new ArgumentNullException(nameof(candidate));
 
-            foreach (var (property, value) in CanonicalOpaqueTuple)
-            {
-                if (!candidate.HasProperty(property) ||
-                    candidate.GetFloat(property) != value)
-                {
-                    factName = property;
-                    return true;
-                }
-            }
-
-            EffectiveRenderState.ReadEffectiveRenderState(
-                candidate, out var queue, out var renderType);
-            if (queue != CanonicalOpaqueRenderQueue)
-            {
-                factName = nameof(UnityEngine.Material.renderQueue);
-                return true;
-            }
-
-            if (!string.Equals(
-                    renderType, CanonicalOpaqueRenderType, StringComparison.Ordinal))
-            {
-                factName = RenderTypeTagName;
-                return true;
-            }
-
-            factName = null;
-            return false;
+            return CanonicalOpaqueVerification.TryFindNonCanonicalFact(
+                candidate, CanonicalOpaqueTuple, out factName);
         }
 
         // --- Preparation ------------------------------------------------------
@@ -517,6 +535,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// no determinism.
         /// </para>
         /// <para>
+        /// The clone, write, verify, destroy lifecycle lives on the shared
+        /// skeleton in
+        /// <see cref="Alrauna.Amuse.Editor.Semantics.CanonicalOpaqueVerification"/>.
+        /// This family keeps its own shader, adds no extra writes, and adds
+        /// no extra fact.
+        /// </para>
+        /// <para>
         /// Its precondition is an attested and eligible source.
         /// </para>
         /// </summary>
@@ -536,31 +561,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
 
-            var clone = new UnityEngine.Material(source);
-            foreach (var (property, value) in CanonicalOpaqueTuple)
-            {
-                clone.SetFloat(property, value);
-            }
-
-            clone.renderQueue = CanonicalOpaqueRenderQueue;
-            clone.SetOverrideTag(RenderTypeTagName, CanonicalOpaqueRenderType);
-
-            if (TryFindNonCanonicalFact(clone, out var fact))
-            {
-                UnityEngine.Object.DestroyImmediate(clone);
-                throw new InvalidOperationException(
-                    "Generated opaque material did not read back canonical '" +
-                    fact + "'.");
-            }
-
-            if (clone.shader != source.shader)
-            {
-                UnityEngine.Object.DestroyImmediate(clone);
-                throw new InvalidOperationException(
-                    "Generated opaque material did not preserve the source shader.");
-            }
-
-            return clone;
+            // The clone, write, verify, destroy lifecycle lives on the
+            // shared skeleton. This family keeps its own shader, so the
+            // target is null and the identity check reads the source
+            // shader. The family adds no writes and no extra fact.
+            return CanonicalOpaqueVerification.PrepareCanonicalClone(
+                source,
+                null,
+                CanonicalOpaqueTuple,
+                _ => { },
+                _ => null,
+                "Generated opaque material did not preserve the source shader.");
         }
 
         // --- Conversion source attestation ----------------------------------

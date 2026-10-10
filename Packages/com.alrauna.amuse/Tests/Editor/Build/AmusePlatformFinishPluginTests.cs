@@ -27,6 +27,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 {
     public sealed class AmusePlatformFinishPluginTests
     {
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
+        [SetUp]
+        public void PinPerTextureAnisotropicFiltering()
+        {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the
+            // pipeline's triangle proofs refuse every triangle. The Per
+            // Texture mode is the mode these fixtures were written under.
+            // The pin is per test and restores the editor mode on teardown,
+            // which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+        }
+
+        [TearDown]
+        public void RestoreAnisotropicFiltering()
+        {
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
+        }
+
         [Test]
         public void PlatformFinishBarrierRunsAfterAnonymousOptimizingProducer()
         {
@@ -875,7 +900,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         _SrcBlendAlphaFA (""SrcBlendAlphaFA"", Float) = 0
         _DstBlendAlphaFA (""DstBlendAlphaFA"", Float) = 1
         _BlendOpFA (""BlendOpFA"", Float) = 4
-        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4";
+        _BlendOpAlphaFA (""BlendOpAlphaFA"", Float) = 4
+        _Main2ndTexAlphaMode (""Main2ndTexAlphaMode"", Int) = 0
+        _Main3rdTexAlphaMode (""Main3rdTexAlphaMode"", Int) = 0";
         }
 
         [Test]
@@ -1106,8 +1133,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// A stored value outside the Range attribute is a defect against
         /// the component contract. The mappers clamp it defensively
         /// instead of classifying with a policy no inspector could have
-        /// saved, and the per-polygon clamp still applies the inspector
-        /// clamp after the defensive clamps.
+        /// saved. The parser enforces the clamp pair invariant for
+        /// preset files, and the inspector enforces it for live edits,
+        /// so the per-polygon clamp keeps only the 0 to 100 banding.
         /// </summary>
         [Test]
         public void PolicyMappersClampOutOfRangeStoredValuesDefensively()
@@ -1132,11 +1160,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 InvokePolicyMapperWithSerializedPolicy(150, 150, 150, "OpaquePercentFrom"),
                 Is.EqualTo(100));
 
-            // The clamp maps first to 80, then the inspector clamp
-            // keeps it strictly below the opaque percent 50.
+            // The parser enforces the pair invariant for preset files,
+            // and the inspector enforces it for live edits. A serialized
+            // out-of-band pair is tampering, so the mapper maps the
+            // stored clamp through the 0 to 100 banding unchanged.
             Assert.That(
                 InvokePolicyMapperWithSerializedPolicy(50, 80, 2, "PolygonClampPercentFrom"),
-                Is.EqualTo(49));
+                Is.EqualTo(80));
 
             // A clamp of 100 admits nothing, so it maps to the inert 0
             // regardless of the coverage slider.
@@ -1153,6 +1183,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 InvokePolicyMapperWithSerializedPolicy(100, 2, 100, "DensityCapFromCoveragePercent"),
                 Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Characterization: a valid in-band pair maps to the stored
+        /// clamp unchanged. The parser enforces the pair invariant for
+        /// preset files, so the mapper adds no compensation of its own.
+        /// This assertion holds before and after the invariant lands.
+        /// </summary>
+        [Test]
+        public void InBandClampPairMapsToStoredClampUnchanged()
+        {
+            Assert.That(
+                InvokePolicyMapperWithSerializedPolicy(60, 59, 2, "PolygonClampPercentFrom"),
+                Is.EqualTo(59));
         }
 
         /// <summary>
@@ -1873,6 +1917,117 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        private static int CountAvatarEntries(List<ErrorContext> reports)
+        {
+            var avatarEntries = 0;
+            foreach (var entry in reports)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey.StartsWith("amuse.avatar."))
+                {
+                    avatarEntries++;
+                }
+            }
+
+            return avatarEntries;
+        }
+
+        [Test]
+        public void AnUnoptedAvatarWithARefusingGraphStaysSilentButStoresTheRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE unopted refusing graph fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<LineRenderer>();
+            var controller = new AnimatorController { name = "unallowlisted" };
+
+            try
+            {
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root, TestVrchatPlatform.Instance));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "the structural pass must keep storing the refusal for " +
+                    "the gated path");
+                Assert.That(CountAvatarEntries(reports), Is.Zero,
+                    "an avatar without the opt-in component gets no " +
+                    "structural console entry");
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void ASwitchedOffAvatarWithARefusingGraphStaysSilentButStoresTheRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root =
+                new GameObject("AMUSE switched-off refusing graph fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+            var controller = new AnimatorController { name = "unallowlisted" };
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                var switchProperty =
+                    serialized.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(switchProperty, Is.Not.Null,
+                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+                switchProperty.boolValue = false;
+                serialized.ApplyModifiedProperties();
+
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root, TestVrchatPlatform.Instance));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "the structural pass must keep storing the refusal for " +
+                    "the gated path");
+                Assert.That(CountAvatarEntries(reports), Is.Zero,
+                    "an avatar with the feature switch off gets no " +
+                    "structural console entry");
+            }
+            finally
+            {
                 DestroyCommittedClone(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);

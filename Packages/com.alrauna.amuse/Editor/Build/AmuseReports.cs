@@ -414,8 +414,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// One plain sentence naming the way the material dependency
         /// closure failed. The renderer entry prints it so the reader
-        /// can tell a read failure from an unassigned slot. The empty
-        /// string keeps the entry readable when no way is known.
+        /// can tell a read failure from an unassigned slot. An
+        /// unhandled value throws, so every enum value needs its own
+        /// sentence.
         /// </summary>
         internal static string ClosureFailureSentence(
             MaterialDependencyClosureFailure failure)
@@ -433,7 +434,9 @@ namespace Alrauna.Amuse.Editor.Build
                     return "An animation swaps in something that is not " +
                            "a material. ";
                 default:
-                    return "";
+                    throw new InvalidOperationException(
+                        "MaterialDependencyClosureFailure has an unhandled value. " +
+                        "Every value needs its own report sentence.");
             }
         }
 

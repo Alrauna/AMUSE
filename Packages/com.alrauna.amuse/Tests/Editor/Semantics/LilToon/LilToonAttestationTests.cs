@@ -614,14 +614,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void Canonicalize_AppendedLtcgiTagToken_IsRemoved()
+        public void Canonicalize_AppendedLtcgiTagTokenInsideSubShader_IsRemoved()
         {
             const string clean =
-                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n";
+                "Shader \"s\" {\n" +
+                "    SubShader {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n" +
+                "    }\n" +
+                "}\n";
             const string tagged =
-                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n";
+                "Shader \"s\" {\n" +
+                "    SubShader {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
 
             Assert.That(Canon(tagged), Is.EqualTo(Canon(clean)));
+        }
+
+        [Test]
+        public void Canonicalize_AppendedLtcgiTagTokenOutsideSubShaderScope_IsRetained()
+        {
+            const string tagged =
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"ALWAYS\"}\n";
+
+            Assert.That(Canon(tagged), Does.Contain("\"LTCGI\"=\"ALWAYS\""));
+        }
+
+        [Test]
+        public void Canonicalize_PassTagsLineWithLtcgiToken_IsRetained()
+        {
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader {\n" +
+                "        Pass {\n" +
+                "            Tags {\"LightMode\" = \"ForwardBase\"}\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader {\n" +
+                "        Pass {\n" +
+                "            Tags {\"LightMode\" = \"ForwardBase\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Is.Not.EqualTo(Canon(clean)));
         }
 
         [Test]
@@ -649,8 +689,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var shipped =
                 "Shader \"lilToon\"\n" +
                 "{\n" +
-                "    SubShader\n" +
-                "    {\n" +
+                "    SubShader {\n" +
                 "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n" +
                 "        HLSLINCLUDE\n" +
                 "            #define LIL_FEATURE_MAIN2ND\n" +
@@ -669,8 +708,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var regenerated =
                 "Shader \"lilToon\"\n" +
                 "{\n" +
-                "    SubShader\n" +
-                "    {\n" +
+                "    SubShader {\n" +
                 "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n" +
                 "        HLSLINCLUDE\n" +
                 "            #define LIL_FEATURE_MAIN2ND\n" +
@@ -2752,14 +2790,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void ProfileForShaderName_TransparentShader_ReturnsTransparentProfile()
+        public void TryGetProfileForShaderName_TransparentShader_ReturnsTransparentProfile()
         {
             var m = typeof(LilToonSourceAttestation).GetMethod(
-                "ProfileForShaderName",
+                "TryGetProfileForShaderName",
                 BindingFlags.NonPublic | BindingFlags.Static);
             Assert.That(m, Is.Not.Null);
 
-            var profile = m.Invoke(null, new object[] { LilToonSourceAttestation.TransparentShaderName });
+            var args = new object[]
+            {
+                LilToonSourceAttestation.TransparentShaderName, null,
+            };
+            Assert.That((bool)m.Invoke(null, args), Is.True);
+
+            var profile = args[1];
             Assert.That(profile, Is.Not.Null);
 
             var nameProp = profile.GetType().GetProperty("ShaderName", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);

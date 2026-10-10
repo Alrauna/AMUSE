@@ -510,6 +510,13 @@ namespace Alrauna.Amuse.Editor.Build
                 return null;
             }
 
+            var expectedSubmeshIndexCounts = new int[target.ExpectedMesh.subMeshCount];
+            for (var submesh = 0; submesh < expectedSubmeshIndexCounts.Length; submesh++)
+            {
+                expectedSubmeshIndexCounts[submesh] =
+                    (int)target.ExpectedMesh.GetIndexCount(submesh);
+            }
+
             var prepared = new PreparedRendererSeparation(
                 target,
                 rendererPath,
@@ -518,6 +525,7 @@ namespace Alrauna.Amuse.Editor.Build
                 candidateSlots,
                 EffectiveMaterialMaterialization.CaptureBlockState(
                     target.Renderer),
+                expectedSubmeshIndexCounts,
                 rendererTypeName);
 
             // A mesh clone is created only when the plan requires a split and
@@ -694,23 +702,21 @@ namespace Alrauna.Amuse.Editor.Build
                                 .EvaluateVerifiedEligibility(
                                     derived, multiQueue, multiRenderType,
                                     multiMode, allowDepthTestChange);
-                        if (multiEligibility.Outcome !=
-                            LilToonOpaqueConversionOutcome.Convertible)
+                        if (!TryMapLilToonOutcome(
+                                multiEligibility,
+                                () => preparedOpaque ??
+                                    LilToonOpaqueTarget
+                                        .PrepareCanonicalOpaqueClone(
+                                            live, derived),
+                                out opaque,
+                                out var multiRefusal,
+                                out depthTestDivergence))
                         {
-                            refusedDetail = multiEligibility.Refusal.ToString();
+                            refusedDetail = multiRefusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
 
-                        depthTestDivergence =
-                            multiEligibility.DepthTestDivergence;
-
-                        // An already-prepared artifact for this source is
-                        // reused here; only a first conversion creates the
-                        // canonical clone.
-                        opaque = preparedOpaque ??
-                            LilToonOpaqueTarget
-                                .PrepareCanonicalOpaqueClone(live, derived);
                         return AlphaSeparationSlotRefusal.None;
                     }
 
@@ -793,24 +799,20 @@ namespace Alrauna.Amuse.Editor.Build
                                 .EvaluateVerifiedEligibility(
                                     derived, queue, renderType,
                                     allowDepthTestChange);
-                        if (eligibility.Outcome !=
-                            LilToonOpaqueConversionOutcome.Convertible)
+                        if (!TryMapLilToonOutcome(
+                                eligibility,
+                                () => preparedOpaque ??
+                                    LilToonOpaqueTarget
+                                        .PrepareCanonicalOpaqueClone(
+                                            live, derived),
+                                out opaque,
+                                out var sourceRefusal,
+                                out depthTestDivergence))
                         {
-                            refusedDetail =
-                                eligibility.Refusal.ToString();
+                            refusedDetail = sourceRefusal.ToString();
                             return AlphaSeparationSlotRefusal
                                 .OpaqueConversionRefused;
                         }
-
-                        depthTestDivergence =
-                            eligibility.DepthTestDivergence;
-
-                        // An already-prepared artifact for this source is
-                        // reused here; only a first conversion creates the
-                        // canonical clone.
-                        opaque = preparedOpaque ??
-                            LilToonOpaqueTarget
-                                .PrepareCanonicalOpaqueClone(live, derived);
                     }
 
                     return AlphaSeparationSlotRefusal.None;
@@ -891,29 +893,16 @@ namespace Alrauna.Amuse.Editor.Build
                                 .EvaluateVerifiedEligibility(
                                     derived, queue, renderType,
                                     allowDepthTestChange);
-                        switch (eligibility.Outcome)
+                        if (!TryMapPoiyomiOutcome(
+                                eligibility, live, preparedOpaque,
+                                out opaque,
+                                out var poiyomiRefusal,
+                                out depthTestDivergence,
+                                out premultiplyNormalization))
                         {
-                            case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
-                                opaque = live;
-                                break;
-                            case PoiyomiOpaqueConversionOutcome.Convertible:
-                                depthTestDivergence =
-                                    eligibility.DepthTestDivergence;
-                                premultiplyNormalization =
-                                    eligibility.PremultiplyNormalization;
-
-                                // An already-prepared artifact for this
-                                // source is reused here; only a first
-                                // conversion creates the canonical clone.
-                                opaque = preparedOpaque ??
-                                    PoiyomiOpaqueConversion
-                                        .PrepareCanonicalOpaqueClone(live);
-                                break;
-                            default:
-                                refusedDetail =
-                                    eligibility.Refusal.ToString();
-                                return AlphaSeparationSlotRefusal
-                                    .OpaqueConversionRefused;
+                            refusedDetail = poiyomiRefusal.ToString();
+                            return AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused;
                         }
                     }
 
@@ -924,6 +913,86 @@ namespace Alrauna.Amuse.Editor.Build
                     // and not every admitted runtime value could be mapped.
                     return AlphaSeparationSlotRefusal
                         .OpaqueConversionUnsupportedFamily;
+            }
+        }
+
+        /// <summary>
+        /// The one lilToon conversion outcome mapping: a refused eligibility
+        /// maps to its refusal and no material, and a convertible one maps to
+        /// the caller's clone. The production arms and the verified fixture
+        /// seam call this, so the outcome mapping cannot drift between the
+        /// production path and the fixture path.
+        /// </summary>
+        internal static bool TryMapLilToonOutcome(
+            LilToonOpaqueConversionEligibility eligibility,
+            Func<Material> createClone,
+            out Material opaque,
+            out LilToonOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence)
+        {
+            if (eligibility.Outcome !=
+                LilToonOpaqueConversionOutcome.Convertible)
+            {
+                opaque = null;
+                refusal = eligibility.Refusal;
+                depthTestDivergence = false;
+                return false;
+            }
+
+            // An already-prepared artifact for this source is reused here;
+            // only a first conversion creates the canonical clone. The caller
+            // owns the clone recipe, because the production route attests
+            // through the evidence overload while the verified seam pins an
+            // explicit stand-in shader.
+            opaque = createClone();
+            refusal = LilToonOpaqueConversionRefusal.None;
+            depthTestDivergence = eligibility.DepthTestDivergence;
+            return true;
+        }
+
+        /// <summary>
+        /// The one Poiyomi conversion outcome mapping: an already-opaque
+        /// source keeps the live material, a convertible source maps to the
+        /// prepared artifact or a fresh canonical clone, and a refused
+        /// eligibility maps to its refusal and no material. The production
+        /// arm and the verified fixture seam call this, so the outcome
+        /// mapping cannot drift between the two routes.
+        /// </summary>
+        internal static bool TryMapPoiyomiOutcome(
+            PoiyomiOpaqueConversionEligibility eligibility,
+            Material live,
+            Material preparedOpaque,
+            out Material opaque,
+            out PoiyomiOpaqueConversionRefusal refusal,
+            out bool depthTestDivergence,
+            out bool premultiplyNormalization)
+        {
+            switch (eligibility.Outcome)
+            {
+                case PoiyomiOpaqueConversionOutcome.AlreadyOpaque:
+                    opaque = live;
+                    refusal = PoiyomiOpaqueConversionRefusal.None;
+                    depthTestDivergence = false;
+                    premultiplyNormalization = false;
+                    return true;
+                case PoiyomiOpaqueConversionOutcome.Convertible:
+                    // An already-prepared artifact for this source is reused
+                    // here; only a first conversion creates the canonical
+                    // clone.
+                    opaque = preparedOpaque ??
+                        PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(
+                            live);
+                    refusal = PoiyomiOpaqueConversionRefusal.None;
+                    depthTestDivergence = eligibility.DepthTestDivergence;
+                    premultiplyNormalization =
+                        eligibility.PremultiplyNormalization;
+                    return true;
+                default:
+                    opaque = null;
+                    refusal = eligibility.Refusal;
+                    depthTestDivergence = false;
+                    premultiplyNormalization = false;
+                    return false;
             }
         }
 

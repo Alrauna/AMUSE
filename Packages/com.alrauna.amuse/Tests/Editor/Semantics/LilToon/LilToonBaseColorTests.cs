@@ -1,3 +1,5 @@
+using System.Linq;
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
@@ -389,6 +391,135 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonSemanticOutput.BaseColor,
                 LilToonSemanticDiagnosticCode.UnsupportedTextureImport,
                 "_MainTex");
+        }
+
+        // --- captured-evidence seam ---
+
+        [Test]
+        public void FullMaterialEvidenceRequest_MatchesTheIndependentExactSchema()
+        {
+            var request = LilToonMaterialSemantics.FullMaterialEvidenceRequest;
+
+            Assert.That(request.ShaderName, Is.True);
+            Assert.That(request.ActiveColorSpace, Is.False);
+            Assert.That(request.PresenceProperties, Is.EquivalentTo(new[]
+            {
+                "_MainTexHSVG",
+                "_MainTex_ScrollRotate",
+                "_DissolveParams",
+                "_BumpScale",
+            }));
+            Assert.That(request.ScalarProperties, Is.SupersetOf(new[]
+            {
+                "_ShiftBackfaceUV", "_UseParallax", "_UsePOM", "_UseAudioLink",
+                "_UseMain2ndTex", "_UseMain3rdTex", "_MainGradationStrength",
+                "_UseEmission2nd", "_UseReflection", "_UseMatCap",
+                "_UseMatCap2nd", "_UseRim", "_UseRimShade", "_UseGlitter",
+                "_UseBacklight", "_EmissionMainStrength", "_EmissionFluorescence",
+                "_EmissionUseGrad", "_AudioLink2Emission", "_EmissionParallaxDepth",
+                "_UseBump2ndMap", "_UseAnisotropy",
+                "_UseEmission", "_EmissionBlendMode", "_EmissionBlend",
+                "_EmissionMap_UVMode", "_UseBumpMap", "_BumpScale",
+            }));
+            // Combine unions in exactly three alpha scalars: _lilToonVersion,
+            // _Invisible, and _UDIMDiscardCompile. _Invisible is also a
+            // base-color writer gate, so the union holds 31 distinct names.
+            Assert.That(request.ScalarProperties.Count, Is.EqualTo(31));
+            Assert.That(request.ColorProperties, Is.EquivalentTo(new[]
+            {
+                "_Color", "_BackfaceColor", "_EmissionColor",
+            }));
+            Assert.That(request.VectorProperties, Is.EquivalentTo(new[]
+            {
+                "_MainTexHSVG", "_MainTex_ScrollRotate", "_DissolveParams",
+                "_EmissionBlink", "_EmissionMap_ScrollRotate",
+            }));
+            // CopyTextures sorts by property name.
+            Assert.That(request.TextureProperties.Count, Is.EqualTo(5));
+            Assert.That(
+                request.TextureProperties.Select(property => property.PropertyName),
+                Is.EquivalentTo(new[]
+                {
+                    "_MainTex", "_MainColorAdjustMask",
+                    "_EmissionMap", "_EmissionBlendMask", "_BumpMap",
+                }));
+            Assert.That(
+                request.TextureProperties[0].PropertyName,
+                Is.EqualTo("_BumpMap"));
+            Assert.That(
+                request.TextureProperties[0].Evidence,
+                Is.EqualTo(
+                    TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.CanonicalNormalMap));
+            Assert.That(
+                request.TextureProperties[1].PropertyName,
+                Is.EqualTo("_EmissionBlendMask"));
+            Assert.That(
+                request.TextureProperties[1].Evidence,
+                Is.EqualTo(TextureEvidenceKinds.None),
+                "the blend mask is a presence check over the assignment alone");
+            Assert.That(
+                request.TextureProperties[2].PropertyName,
+                Is.EqualTo("_EmissionMap"));
+            Assert.That(
+                request.TextureProperties[2].Evidence,
+                Is.EqualTo(
+                    TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.Sampling |
+                    TextureEvidenceKinds.ColorInterpretation |
+                    TextureEvidenceKinds.SampledAlphaIsOne));
+            Assert.That(
+                request.TextureProperties[3].PropertyName,
+                Is.EqualTo("_MainColorAdjustMask"));
+            Assert.That(
+                request.TextureProperties[3].Evidence,
+                Is.EqualTo(TextureEvidenceKinds.None),
+                "the adjust mask is a presence check over the assignment alone");
+            Assert.That(
+                request.TextureProperties[4].PropertyName,
+                Is.EqualTo("_MainTex"));
+            Assert.That(
+                request.TextureProperties[4].Evidence,
+                Is.EqualTo(
+                    TextureEvidenceKinds.ScaleOffset |
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.Sampling |
+                    TextureEvidenceKinds.ColorInterpretation |
+                    TextureEvidenceKinds.BoundedColorRange),
+                "the unit-range fact rides the main texture, the one tone-" +
+                "correction input");
+        }
+
+        [Test]
+        public void BaseColor_ReadsTheTintFromTheSnapshotNotTheLiveMaterial()
+        {
+            var material = NewFixtureMaterial();
+            material.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material, LilToonMaterialSemantics.FullMaterialEvidenceRequest),
+            })[0];
+            material.SetColor("_Color", new Color(0f, 1f, 0f, 1f));
+
+            var result = LilToonMaterialSemantics
+                .InterpretVerifiedMaterialFromEvidence(
+                    captured, ColorSpace.Linear, AllFeatures);
+
+            // The expectation states the snapshot fact: the tint is the
+            // conversion of the colour the capture saw, never the colour the
+            // material carries now. Both conversions are exact at zero and one.
+            var expectedTint = new Color(1f, 0f, 0f, 1f).linear;
+
+            Assert.That(result.IsSupportedMaterial, Is.True);
+            Assert.That(result.Semantics.BaseColor.IsComplete, Is.True);
+            var value = result.Semantics.BaseColor.GetCompleteValue();
+            Assert.That(value.Kind, Is.EqualTo(ColorSemanticValueKind.Constant));
+            Assert.That(
+                value.GetConstantValue(),
+                Is.EqualTo(new Vector3(expectedTint.r, expectedTint.g, expectedTint.b)));
         }
     }
 }

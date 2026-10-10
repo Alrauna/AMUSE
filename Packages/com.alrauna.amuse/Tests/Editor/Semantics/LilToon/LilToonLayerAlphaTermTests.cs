@@ -160,6 +160,60 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
         }
 
+        [Test]
+        public void LayerBlendMask_RequestedButAbsentFromEvidence_RefusesInsteadOfDroppingFactor()
+        {
+            var evidence = CreateLayerEvidenceWithBlendMaskEntryAbsent();
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            var term = LilToonLayerAlphaTerm.Interpret(
+                evidence, third: false, diagnostics);
+
+            Assert.That(
+                term.Kind,
+                Is.EqualTo(LilToonLayerAlphaTermKind.Refused));
+            Assert.That(
+                diagnostics.Any(d =>
+                    d.Code == LilToonSemanticDiagnosticCode.UnsupportedFeature &&
+                    d.Detail == "_Main2ndBlendMask"),
+                Is.True);
+        }
+
+        /// <summary>
+        /// Builds the standard layer evidence with one change: the
+        /// _Main2ndBlendMask entry stays requested but holds no value,
+        /// exactly as capture records a requested texture slot absent from
+        /// the material.
+        /// </summary>
+        private static CapturedMaterialEvidence
+            CreateLayerEvidenceWithBlendMaskEntryAbsent()
+        {
+            return CreateLayerEvidence(
+                mainAssignment: CreateTextureAssignment(
+                    "test:main_tex",
+                    hasSampling: true,
+                    sampling: new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        TextureWrapMode.Clamp),
+                    hasAlpha: false,
+                    hasRed: false),
+                layerAssignment: CreateTextureAssignment(
+                    "test:main_2nd_tex",
+                    hasSampling: true,
+                    sampling: new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        TextureWrapMode.Repeat),
+                    hasAlpha: true,
+                    hasRed: false),
+                blendMaskAssignment: CreateTextureAssignment(
+                    "test:main_2nd_blend_mask",
+                    hasSampling: false,
+                    sampling: default,
+                    hasAlpha: false,
+                    hasRed: true),
+                blendMaskEntryHasValue: false);
+        }
+
         private static CapturedTextureAssignment CreateTextureAssignment(
             string sourceIdentity,
             bool hasSampling,
@@ -178,6 +232,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 colorInterpretation: default,
                 sampledAlphaIsProvenOne: false,
                 isCanonicalNormalMap: false,
+                colorValuesProvenInUnitRange: false,
                 hasAlphaChannel: hasAlpha,
                 alphaChannel: null,
                 alphaCaptureRefusal: TextureCaptureRefusalReason.None,
@@ -201,7 +256,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private static CapturedMaterialEvidence CreateLayerEvidence(
             CapturedTextureAssignment? mainAssignment,
             CapturedTextureAssignment layerAssignment,
-            CapturedTextureAssignment? blendMaskAssignment)
+            CapturedTextureAssignment? blendMaskAssignment,
+            bool blendMaskEntryHasValue = true)
         {
             var textureEntries = new List<CapturedMaterialEvidence.TextureEntry>();
             var textures = new List<CapturedTextureEvidence>();
@@ -234,9 +290,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 textureEntries.Add(
                     new CapturedMaterialEvidence.TextureEntry(
                         "_Main2ndBlendMask",
-                        true,
-                        blendMaskAssignment.Value));
-                if (blendMaskAssignment.Value.Texture != null)
+                        blendMaskEntryHasValue,
+                        blendMaskEntryHasValue
+                            ? blendMaskAssignment.Value
+                            : default));
+                if (blendMaskEntryHasValue &&
+                    blendMaskAssignment.Value.Texture != null)
                 {
                     textures.Add(blendMaskAssignment.Value.Texture);
                 }

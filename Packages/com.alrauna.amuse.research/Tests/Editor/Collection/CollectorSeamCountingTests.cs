@@ -18,8 +18,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
     /// The substituted semantics are constructed here rather than in the
     /// collector package, so no production type exists whose only purpose is to
     /// be called by a test. The seam itself is AMUSE's own
-    /// BaseMaterialSemanticsProvider, used exactly as AMUSE's own integration
-    /// tests use it.
+    /// ResearchMaterialSemanticsProvider, used exactly as AMUSE's own
+    /// integration tests use it.
     /// </para>
     /// <para>
     /// The Semantics alias is not decoration: AMUSE declares its own
@@ -85,7 +85,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         private ObservedRenderer Observe(
             Renderer renderer, Semantics.MaterialSemantics semantics)
         {
-            BaseMaterialSemanticsProvider provider = material => semantics;
+            ResearchMaterialSemanticsProvider provider = material => semantics;
             return RendererObservationBuilder.Build(
                 renderer, "Path", new CensusShaderFamily(), provider);
         }

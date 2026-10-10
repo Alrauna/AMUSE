@@ -377,7 +377,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                        104) <= 0;
         }
 
-        private static ExactRational ToRational(ExactDyadic value)
+        internal static ExactRational ToRational(ExactDyadic value)
         {
             return value.Exponent >= 0
                 ? new ExactRational(value.Significand << value.Exponent)
@@ -405,7 +405,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
-        private static int BitLength(BigInteger value)
+        internal static int BitLength(BigInteger value)
         {
             var length = 0;
             while (value > BigInteger.Zero)
@@ -452,6 +452,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 DecodeFloat(triangle.Uv1.y),
                 DecodeFloat(triangle.Uv2.y)
             };
+            // The seed -1 is load bearing. The loop below can lower
+            // this exponent. It can never raise it. The texel scale is
+            // therefore always two or more. The classifier's interval
+            // builders BilinearRepeatInterval, BilinearClampInterval,
+            // PointRepeatInterval, and PointClampInterval compute the
+            // half texel offset with a truncating BigInteger division.
+            // A scale of one would truncate that half texel to zero.
+            // The support intervals would lose their half texel skirts.
+            // A witness texel that touches the triangle only through
+            // its skirt would go unseen. The classifier would then
+            // return a false ProvenOpaque.
             var exponent = -1;
             for (var index = 0; index < 3; index++)
             {

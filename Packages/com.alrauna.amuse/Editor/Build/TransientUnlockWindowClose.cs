@@ -11,7 +11,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// Closes the transient unlock window: the fourth and last
+    /// Closes the transient unlock window: the fifth and last
     /// PlatformFinish pass, ordered after the apply pass. The close
     /// outcome is reference reversion on every build path: every open
     /// pair returns from its unlocked clone U to its untouched locked
@@ -117,14 +117,15 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var pair in window.OpenPairs.ToList())
             {
-                InvertReferences(context, pair);
+                InvertReferences(committedClips, pair);
 
                 ReassertShippedSlots(pair, recorded);
 
-                DestroyPairCopiesOrNameRetention(
-                    context, finishState, pair, committedClips, graph);
-
-                window.Remove(pair);
+                if (DestroyPairCopiesOrNameRetention(
+                        context, finishState, pair, committedClips, graph))
+                {
+                    window.Remove(pair);
+                }
             }
         }
 
@@ -132,12 +133,13 @@ namespace Alrauna.Amuse.Editor.Build
         /// Destroys the pair's unlocked clone, but only after the caller
         /// inverted every reference: the committed graph was enumerated,
         /// so no rewritten curve can name a destroyed material. A curve
-        /// the close cannot enumerate keeps the clone alive, and every
-        /// affected slot gets the named retained-copy refusal, because a
-        /// destroyed material still referenced by a curve would serialize
-        /// as a missing reference.
+        /// or a renderer slot the close cannot clear keeps the clone
+        /// alive, and every affected slot gets the named retained-copy
+        /// refusal, because a destroyed material still referenced by a
+        /// curve or a slot would serialize as a missing reference.
         /// </summary>
-        private static void DestroyPairCopiesOrNameRetention(
+        /// <returns>Whether the clone was destroyed.</returns>
+        private static bool DestroyPairCopiesOrNameRetention(
             BuildContext context,
             AmusePlatformFinishState finishState,
             TransientUnlockWindowState.SwappedPair pair,
@@ -149,24 +151,25 @@ namespace Alrauna.Amuse.Editor.Build
                 UnityEngine.Object.DestroyImmediate(
                     pair.UnlockedClone, true);
                 pair.UnlockedClone = null;
+                return true;
             }
-            else
+
+            foreach (var slot in pair.Slots)
             {
-                foreach (var slot in pair.Slots)
-                {
-                    finishState.RecordSlotRefusal(
-                        AlphaSeparationSlotRefusal
-                            .TransientUnlockCloneRetained);
-                    AmuseReports.SlotSeparationRefusal(
-                        slot.Renderer,
-                        slot.SlotIndex,
-                        AlphaSeparationSlotRefusal
-                            .TransientUnlockCloneRetained,
-                        slot.Renderer != null
-                            ? slot.Renderer.gameObject.name
-                            : null);
-                }
+                finishState.RecordSlotRefusal(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained);
+                AmuseReports.SlotSeparationRefusal(
+                    slot.Renderer,
+                    slot.SlotIndex,
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained,
+                    slot.Renderer != null
+                        ? slot.Renderer.gameObject.name
+                        : null);
             }
+
+            return false;
         }
 
         /// <summary>
@@ -256,7 +259,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// and the reassertion return.
         /// </summary>
         private static void InvertReferences(
-            BuildContext context,
+            IReadOnlyList<AnimationClip> committedClips,
             TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
@@ -287,7 +290,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            InvertCommittedCurves(context, pair);
+            InvertCommittedCurves(committedClips, pair);
         }
 
         /// <summary>
@@ -309,18 +312,19 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Inverts committed object reference curves across all committed clips.
+        /// Inverts committed object reference curves across the clips the
+        /// caller hands it.
         /// The pass rewrites every keyframe referencing the unlocked clone back to the locked original.
         /// It operates directly without path or renderer type filters.
         /// </summary>
         internal static void InvertCommittedCurves(
-            BuildContext context,
+            IReadOnlyList<AnimationClip> committedClips,
             TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
             var locked = pair.LockedOriginal;
 
-            foreach (var clip in CommittedClips(context))
+            foreach (var clip in committedClips)
             {
                 foreach (var binding in AnimationUtility
                              .GetObjectReferenceCurveBindings(clip))
@@ -355,6 +359,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// Verifies whether curve inversion completed across all clips.
         /// It returns false when the graph returns a refusal.
         /// It returns false when any keyframe references the unlocked clone.
+        /// It returns false when any renderer slot array under the avatar
+        /// root names the unlocked clone.
         /// </summary>
         internal static bool CurveInversionWasComplete(
             BuildContext context,
@@ -406,6 +412,26 @@ namespace Alrauna.Amuse.Editor.Build
                         {
                             return false;
                         }
+                    }
+                }
+            }
+
+            var renderers = context != null && context.AvatarRootObject != null
+                ? context.AvatarRootObject
+                    .GetComponentsInChildren<Renderer>(true)
+                : Array.Empty<Renderer>();
+            foreach (var renderer in renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                foreach (var slot in renderer.sharedMaterials)
+                {
+                    if (NamesSwappedCopy(slot, pair.UnlockedClone))
+                    {
+                        return false;
                     }
                 }
             }

@@ -44,6 +44,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private readonly List<UnityEngine.Object> tracked =
             new List<UnityEngine.Object>();
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
+        [SetUp]
+        public void PinPerTextureAnisotropicFiltering()
+        {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the
+            // pipeline's triangle proofs refuse every triangle. The Per
+            // Texture mode is the mode these fixtures were written under.
+            // The pin is per test and restores the editor mode on teardown,
+            // which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+        }
+
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
@@ -58,6 +76,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             DestroyTracked();
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
         }
 
         private void DestroyTracked()
@@ -752,6 +772,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 

@@ -12,7 +12,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// The third PlatformFinish pass: validates every prepared candidate slot
+    /// The fourth PlatformFinish pass: validates every prepared candidate slot
     /// against live build state, finalizes against the surviving set, sweeps
     /// every transient no surviving slot references, and performs the single
     /// build-avatar mutation: the lifecycle gate, the preparation, and the
@@ -145,13 +145,41 @@ namespace Alrauna.Amuse.Editor.Build
                               ObjectReferenceKeyframe[], int)>();
                 var renderer = prepared.Target.Renderer;
                 var currentMesh = SharedMeshOf(renderer);
+                // The prepared record carries the transform path from the
+                // avatar root captured at preparation. The empty string is
+                // the valid path of a renderer on the avatar root, so the
+                // comparison is ordinal with no null-coalescing. A renderer
+                // moved outside the root has no path from the root and
+                // refuses. This refusal closes both named cases of the
+                // investigation: the dead path left behind by a reparent,
+                // and a foreign renderer that now owns the old path. The
+                // enumeration below still reads the prepared path, so a
+                // changed path refuses before any clip enumeration feeds
+                // validation or the appended write.
+                var liveRendererPath = renderer == null
+                    ? null
+                    : AnimationUtility.CalculateTransformPath(
+                        renderer.transform, context.AvatarRootObject.transform);
+                // Reference identity cannot see an in-place rewrite of the
+                // shared mesh by a same-phase pass. The per-submesh index
+                // counts captured at preparation detect any edit that changes
+                // a submesh's index length. An edit that preserves every
+                // count still passes, so the fingerprint narrows the window
+                // to count-preserving edits. It does not close it.
                 if (renderer == null ||
                     !ReferenceEquals(currentMesh, prepared.Target.ExpectedMesh) ||
                     renderer.sharedMaterials.Length !=
                         prepared.Target.ExpectedMaterialSlotCount ||
                     currentMesh == null ||
+                    !SubmeshIndexCountsMatch(
+                        currentMesh,
+                        prepared.ExpectedSubmeshIndexCounts) ||
                     currentMesh.subMeshCount !=
-                        prepared.Target.ExpectedMaterialSlotCount)
+                        prepared.Target.ExpectedMaterialSlotCount ||
+                    !string.Equals(
+                        liveRendererPath,
+                        prepared.RendererPath,
+                        StringComparison.Ordinal))
                 {
                     // An ordinary refusal, not a defect: another pass in this
                     // phase may legitimately have replaced the mesh or the
@@ -627,6 +655,11 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
+                if (target.Curve == null || target.Curve.Length == 0)
+                {
+                    continue;
+                }
+
                 // The live clip is the authoritative marker check: editing
                 // one would silently no-op, so the slot must be refused.
                 if (target.Clip.IsMarkerClip)
@@ -646,8 +679,10 @@ namespace Alrauna.Amuse.Editor.Build
 
                 // Every keyframe value must be a key in the slot's mapping.
                 // A null or non-Material value cannot occur for a closed
-                // renderer, and an empty curve was never discovered, but a
-                // value this slot did not prove cannot be mapped.
+                // renderer. NDMF declares GetObjectCurve nullable, the
+                // discovery loop stores it unguarded, and both consumers
+                // skip a null or empty curve. A value this slot did not
+                // prove cannot be mapped.
                 foreach (var keyframe in target.Curve)
                 {
                     if (!(keyframe.value is Material source) ||
@@ -862,6 +897,30 @@ namespace Alrauna.Amuse.Editor.Build
 
             var filter = renderer.GetComponent<MeshFilter>();
             return filter != null ? filter.sharedMesh : null;
+        }
+
+        /// <summary>
+        /// Whether the live mesh still shows the per-submesh index counts
+        /// captured at preparation. A null mesh or a changed submesh count
+        /// refuses, and any changed submesh index count refuses.
+        /// </summary>
+        private static bool SubmeshIndexCountsMatch(
+            Mesh mesh, IReadOnlyList<int> expected)
+        {
+            if (mesh == null || mesh.subMeshCount != expected.Count)
+            {
+                return false;
+            }
+
+            for (var submesh = 0; submesh < expected.Count; submesh++)
+            {
+                if (mesh.GetIndexCount(submesh) != (uint)expected[submesh])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

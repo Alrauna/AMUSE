@@ -123,15 +123,52 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
         }
 
+        [Test]
+        public void AlphaMask_UnassignedWithSubOneMultiplyConstant_YieldsConstantMultiplier()
+        {
+            var evidence = CreateMaskEvidence(
+                Vector2.one, Vector2.zero,
+                mode: 2f, maskScale: 0.5f, maskValue: 0f,
+                isAssigned: false);
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            var term = LilToonAlphaMaskTerm.Interpret(evidence, diagnostics);
+
+            Assert.That(
+                term.Kind,
+                Is.EqualTo(LilToonAlphaMaskTermKind.ConstantMultiplier));
+            Assert.That(term.Constant, Is.EqualTo(0.5f));
+            Assert.That(term.ReplacesMainAlpha, Is.False);
+            Assert.That(diagnostics, Is.Empty);
+        }
+
+        [Test]
+        public void AlphaMask_AssignedZeroScaleWithoutIdentity_YieldsConstantMultiplierWithoutIdentityDemand()
+        {
+            var evidence = CreateMaskEvidenceWithoutSourceIdentity(
+                mode: 2f, maskScale: 0f, maskValue: 0.4f);
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            var term = LilToonAlphaMaskTerm.Interpret(evidence, diagnostics);
+
+            Assert.That(
+                term.Kind,
+                Is.EqualTo(LilToonAlphaMaskTermKind.ConstantMultiplier));
+            Assert.That(term.Constant, Is.EqualTo(0.4f));
+            Assert.That(diagnostics, Is.Empty);
+        }
+
         private static CapturedMaterialEvidence CreateMaskEvidence(
             Vector2 scale,
             Vector2 offset,
             float mode = 1f,
             float maskScale = 1f,
-            float maskValue = 0f)
+            float maskValue = 0f,
+            bool isAssigned = true,
+            bool hasSourceIdentity = true)
         {
             var textureEvidence = new CapturedTextureEvidence(
-                hasSourceIdentity: true,
+                hasSourceIdentity: hasSourceIdentity,
                 sourceIdentity: new TextureSourceId("test:alpha_mask"),
                 captureThreshold: 1f,
                 captureBounds: AlphaPolicyBounds.Inert,
@@ -141,6 +178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 colorInterpretation: default,
                 sampledAlphaIsProvenOne: false,
                 isCanonicalNormalMap: false,
+                colorValuesProvenInUnitRange: false,
                 hasAlphaChannel: false,
                 alphaChannel: null,
                 alphaCaptureRefusal: TextureCaptureRefusalReason.None,
@@ -149,7 +187,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 redCaptureRefusal: TextureCaptureRefusalReason.None);
 
             var maskAssignment = new CapturedTextureAssignment(
-                isAssigned: true,
+                isAssigned: isAssigned,
                 requestedEvidence: TextureEvidenceKinds.SourceIdentity,
                 hasScaleOffset: true,
                 scale: scale,
@@ -176,6 +214,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     new CapturedMaterialEvidence.TextureEntry("_AlphaMask", true, maskAssignment),
                 },
                 textures: new[] { textureEvidence });
+        }
+
+        private static CapturedMaterialEvidence CreateMaskEvidenceWithoutSourceIdentity(
+            float mode,
+            float maskScale,
+            float maskValue)
+        {
+            return CreateMaskEvidence(
+                Vector2.one, Vector2.zero,
+                mode: mode,
+                maskScale: maskScale,
+                maskValue: maskValue,
+                hasSourceIdentity: false);
         }
     }
 }

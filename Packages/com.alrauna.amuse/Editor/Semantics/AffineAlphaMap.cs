@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using Alrauna.Amuse.Editor.Analysis;
 
 namespace Alrauna.Amuse.Editor.Semantics
 {
@@ -140,33 +141,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
-        // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
-        /// <summary>Counts the significant bits of a non-negative value.</summary>
-        private static int BitLength(BigInteger value)
-        {
-            var bytes = value.ToByteArray();
-            var length = bytes.Length * 8;
-            for (var index = bytes.Length - 1; index >= 0; index--)
-            {
-                var top = bytes[index];
-                if (top == 0)
-                {
-                    length -= 8;
-                    continue;
-                }
-
-                while (top > 0 && top < 0x80)
-                {
-                    length--;
-                    top <<= 1;
-                }
-
-                break;
-            }
-
-            return length;
-        }
-
         /// <summary>Exact sum (n1 * 2^d1) + (n2 * 2^d2) as n * 2^d.</summary>
         private static (BigInteger n, int d) Sum(
             BigInteger n1, int d1, BigInteger n2, int d2)
@@ -188,7 +162,7 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             var negative = n.Sign < 0;
             var abs = BigInteger.Abs(n);
-            var exponent = BitLength(abs) - 1 + d;
+            var exponent = ExactUvGeometry.BitLength(abs) - 1 + d;
 
             if (exponent > 127)
             {
@@ -201,7 +175,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (exponent >= -126)
             {
                 // Normal: 24 significant bits, implicit leading one.
-                var shift = BitLength(abs) - 24;
+                var shift = ExactUvGeometry.BitLength(abs) - 24;
                 if (shift > 0)
                 {
                     mantissa = abs >> shift;

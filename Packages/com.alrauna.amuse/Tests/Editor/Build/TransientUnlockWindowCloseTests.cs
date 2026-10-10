@@ -514,7 +514,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the retention of the unlocked clone must be named, " +
                 "never pass silently");
             Assert.That(
-                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
+        }
+
+        /// <summary>
+        /// A slot the pair never recorded can still name the unlocked
+        /// clone. The destroy gate must scan every renderer slot array
+        /// under the avatar root, not only the committed curves. When an
+        /// unrecorded slot names the clone, the close cannot prove the
+        /// inversion complete. The clone stays alive, the retention is
+        /// named, and the pair stays open in the window.
+        /// </summary>
+        [Test]
+        public void
+            ACloneThatAnUnrecordedSlotNamesIsRetainedAndThePairStaysOpen()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE foreign slot fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
+                "ForeignSlotCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked);
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            var cloneRef = default(Object);
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var pair = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0];
+                cloneRef = pair.UnlockedClone;
+                var holder = Track(new GameObject("AMUSE foreign holder"));
+                holder.transform.SetParent(root.transform, false);
+                var foreignRenderer = holder.AddComponent<MeshRenderer>();
+                foreignRenderer.sharedMaterials =
+                    new[] { pair.UnlockedClone };
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            Assert.That(cloneRef == null, Is.False,
+                "the close must keep the clone alive when an " +
+                "unrecorded slot still names it");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(1),
+                "the retention of the clone must be named, never " +
+                "pass silently");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
         }
 
         /// <summary>
@@ -845,7 +907,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
                 GenericPlatformAnimatorBindings.Instance;
 
-            TransientUnlockWindowClose.InvertCommittedCurves(context, pair);
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(
+                committedClips, pair);
 
             var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
             Assert.That(restoredCurve, Is.Not.Null);
@@ -874,12 +940,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnlockedClone = clone,
             };
 
-            var recordedBinding = EditorCurveBinding.PPtrCurve(
-                "Body",
-                typeof(MeshRenderer),
-                "m_Materials.Array.data[0]");
-            pair.AddBinding(recordedBinding, 0);
-
             var clip = Track(new AnimationClip { name = "AsymmetricClip" });
             var clipBinding = EditorCurveBinding.PPtrCurve(
                 "Body",
@@ -907,13 +967,89 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
                 GenericPlatformAnimatorBindings.Instance;
 
-            TransientUnlockWindowClose.InvertCommittedCurves(context, pair);
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(
+                committedClips, pair);
 
             var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, clipBinding);
             Assert.That(restoredCurve, Is.Not.Null);
             Assert.That(restoredCurve.Length, Is.EqualTo(1));
             Assert.That(restoredCurve[0].value, Is.EqualTo(locked),
                 "asymmetric renderer binding keyframe must revert to the locked original");
+        }
+
+        /// <summary>
+        /// The close pass inverts only the clips the caller hands it.
+        /// A clip that the call list excludes keeps its clone reference.
+        /// The full list reverts the keyframe to the locked original.
+        /// </summary>
+        [Test]
+        public void InvertCommittedCurves_InvertsOnlyTheClipsItIsGiven()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE explicit list fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var clip = Track(new AnimationClip { name = "ExplicitListClip" });
+            var binding = EditorCurveBinding.PPtrCurve(
+                "UnrecordedChild",
+                typeof(MeshRenderer),
+                "m_Materials.Array.data[0]");
+            var keyframes = new[]
+            {
+                new ObjectReferenceKeyframe
+                {
+                    time = 0f,
+                    value = clone,
+                },
+            };
+            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes);
+
+            var controller = Track(new AnimatorController { name = "ExplicitListController" });
+            controller.AddLayer("Base");
+            var state = controller.layers[0].stateMachine.AddState("State");
+            state.motion = clip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            Assert.That(committedClips, Does.Contain(clip),
+                "the harness clip must be committed before the inversion");
+
+            var excluded = committedClips.Where(item => item != clip).ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(excluded, pair);
+
+            var untouchedCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+            Assert.That(untouchedCurve, Is.Not.Null);
+            Assert.That(untouchedCurve.Length, Is.EqualTo(1));
+            Assert.That(untouchedCurve[0].value, Is.EqualTo(clone),
+                "a clip the call list excludes must keep the clone reference");
+
+            TransientUnlockWindowClose.InvertCommittedCurves(committedClips, pair);
+
+            var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+            Assert.That(restoredCurve, Is.Not.Null);
+            Assert.That(restoredCurve.Length, Is.EqualTo(1));
+            Assert.That(restoredCurve[0].value, Is.EqualTo(locked),
+                "the full list keyframe must revert to the locked original");
         }
 
         /// <summary>
