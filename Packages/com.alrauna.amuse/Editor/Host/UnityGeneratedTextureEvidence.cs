@@ -17,11 +17,15 @@ namespace Alrauna.Amuse.Editor.Host
     {
         private const GraphicsFormat TargetFormat = GraphicsFormat.R8G8B8A8_UNorm;
 
-        // The active mipmap limit rides in the key: a chain captured under
-        // one limit carries provenance for exactly that limit, so chains
-        // captured under different limits must never share a cache entry.
-        private static readonly Dictionary<(int instanceId, TextureChannel channel, float cutoff, AlphaPolicyBounds bounds, int activeMipmapLimit), AlphaMipChain>
-            SessionCache = new();
+        // The content fingerprint rides in the key: Unity bumps the update
+        // counter and the contents hash when capture visible pixels change,
+        // so an in place mutation or a recreated instance re-keys instead of
+        // serving stale evidence.
+        private static readonly Dictionary<
+            (int instanceId, TextureChannel channel, float cutoff,
+             AlphaPolicyBounds bounds, int activeMipmapLimit,
+             uint updateCount, Hash128 contentsHash),
+            AlphaMipChain> SessionCache = new();
 
         /// <summary>
         /// Clears the evidence cache.
@@ -99,7 +103,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             var threshold = Mathf.Clamp01(cutoffThreshold);
             var key = (texture.GetInstanceID(), channel, threshold, bounds,
-                activeMipmapLimit);
+                activeMipmapLimit, texture.updateCount, texture.imageContentsHash);
             if (SessionCache.TryGetValue(key, out chain))
             {
                 return true;

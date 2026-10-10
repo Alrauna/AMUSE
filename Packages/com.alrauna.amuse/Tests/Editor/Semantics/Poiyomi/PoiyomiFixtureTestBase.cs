@@ -28,9 +28,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
         [SetUp]
         public void BaseSetUp()
         {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads a default anisoLevel 1
+            // texture as anisotropic, which the texture proofs refuse. Every
+            // fixture texture carries a default anisoLevel, so the Per Texture
+            // mode is the mode these equations were written under. The pin is
+            // per test and restores the editor mode on teardown, which NUnit
+            // runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
             _scope.EnsureTempFolder();
         }
 
@@ -38,6 +51,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void BaseTearDown()
         {
             _scope.TearDown();
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
         }
 
         /// <summary>Registers a transient object for teardown destruction.</summary>
@@ -83,6 +98,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.Not.Null,
                 $"Test fixture shader '{FixtureShaderName}' must import.");
             return new Material(shader);
+        }
+
+        /// <summary>
+        /// Writes the pinned Poiyomi 9.3.64 Fade preset's render state onto a
+        /// stand-in material: mode two, the SrcAlpha/OneMinusSrcAlpha blend
+        /// pair, z-write off, the Transparent queue and RenderType. The plain
+        /// stand-in's shader defaults (mode zero, One/Zero, z-write on, queue
+        /// 2000, RenderType Opaque) already carry every essential opacity fact
+        /// conversion checks, so a default stand-in classifies AlreadyOpaque
+        /// and creates no clone. Fixtures whose test exercises the conversion
+        /// path must call this first. The alpha equation reads none of these
+        /// facts, so a fixture's alpha proof is unchanged.
+        /// </summary>
+        internal static void ApplyConvertibleRenderState(Material material)
+        {
+            material.SetFloat("_Mode", 2f);
+            material.SetFloat("_SrcBlend", 5f);
+            material.SetFloat("_DstBlend", 10f);
+            material.SetFloat("_ZWrite", 0f);
+            material.renderQueue = 3000;
+            material.SetOverrideTag("RenderType", "Transparent");
         }
 
         protected Material NewTwoPassFixtureMaterial()

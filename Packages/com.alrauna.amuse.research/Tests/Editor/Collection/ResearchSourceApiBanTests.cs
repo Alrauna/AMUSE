@@ -147,7 +147,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                 }
 
                 if (File.ReadAllText(file)
-                    .Contains("BaseMaterialSemanticsProvider"))
+                    .Contains("ResearchMaterialSemanticsProvider"))
                 {
                     carriers.Add(Path.GetFileName(file));
                 }

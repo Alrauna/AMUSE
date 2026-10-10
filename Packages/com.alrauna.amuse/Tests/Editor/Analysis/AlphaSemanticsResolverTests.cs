@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Analysis;
@@ -832,6 +833,81 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
+        // --- Finding 50: NaN refuses in every multiplier arm -------------------
+
+        private static ScalarSemanticValue ValueWithNaN(
+            ScalarSemanticValueKind kind)
+        {
+            var constructor = typeof(ScalarSemanticValue).GetConstructor(
+                BindingFlags.NonPublic | BindingFlags.Instance, null,
+                new[]
+                {
+                    typeof(ScalarSemanticValueKind), typeof(float),
+                    typeof(TextureSample), typeof(TextureChannel), typeof(float),
+                    typeof(TextureSample[]), typeof(TextureChannel[]),
+                    typeof(ScalarSemanticValue), typeof(ScalarSemanticValue),
+                    typeof(AffineAlphaMap?[]), typeof(AffineAlphaMap)
+                }, null);
+            var isChain =
+                kind == ScalarSemanticValueKind.ProductChainOfTextureSamples;
+            var isConstant = kind == ScalarSemanticValueKind.Constant;
+            return (ScalarSemanticValue)constructor.Invoke(new object[]
+            {
+                kind,
+                isConstant ? float.NaN : default(float),
+                Sample(),
+                TextureChannel.Alpha,
+                isConstant ? default(float) : float.NaN,
+                isChain ? new[] { Sample() } : null,
+                isChain ? new[] { TextureChannel.Alpha } : null,
+                null, null, null, default(AffineAlphaMap)
+            });
+        }
+
+        [Test]
+        public void ScaledSampleArmRefusesNaNMultiplier()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ValueWithNaN(
+                        ScalarSemanticValueKind.TextureSampleTimesConstant)),
+                Providing(AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.UnsupportedMultiplier));
+        }
+
+        [Test]
+        public void ProductChainArmRefusesNaNMultiplier()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ValueWithNaN(
+                        ScalarSemanticValueKind.ProductChainOfTextureSamples)),
+                Providing(AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.UnsupportedMultiplier));
+        }
+
+        [Test]
+        public void ConstantArmRefusesNaNMultiplier()
+        {
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(
+                    ValueWithNaN(ScalarSemanticValueKind.Constant)),
+                Providing(AllOpaqueChain()), 0);
+
+            Assert.That(resolution.IsResolved, Is.False);
+            Assert.That(
+                resolution.Failure,
+                Is.EqualTo(AlphaResolutionFailure.UnsupportedMultiplier));
+        }
+
         // --- Task 5: adversarial and pass-through coverage ---------------------
 
         [Test]
@@ -1619,9 +1695,14 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+
+            // The transparent corner leaves each factor proven below one.
+            // The fold composes no below-one proofs, because it carries no
+            // additive classifier. The honest answer is Unknown. The shared
+            // ruling mandates this expectation update.
             Assert.That(
                 resolution.Classify(TransparentCornerTriangle()),
-                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         [Test]
@@ -1682,11 +1763,53 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     OpaqueThenTransparentChain(),
                     OpaqueThenTransparentChain()), 0);
 
-            // Both factors refute every triangle through their second mip,
-            // so the disjunction answers the absorbing outcome.
+            // Both factors refute every triangle through their second mip.
+            // The absorbing arm now returns Unknown, because the fold
+            // carries no additive classifier. The shared ruling mandates
+            // this expectation update, because the old expectation pinned
+            // a false proof claim.
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
-                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void ComplementaryMasksSummingToIdenticallyOneAreNotProvenTransparent()
+        {
+            var fieldA = new AlphaTextureData(2, 2, new byte[] { 255, 255, 255, 0 });
+            var fieldB = new AlphaTextureData(2, 2, new byte[] { 0, 255, 255, 255 });
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Texture(Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(Chain(fieldA), Chain(fieldB)), 0);
+
+            // The triangle must cover both zero texels with positive area,
+            // so each factor holds a sub-one witness and neither factor
+            // proves anything alone. The spanning corner triangle misses
+            // texel (1, 1) in exact arithmetic, and the sound opaque arm
+            // then answers ProvenOpaque from field A alone.
+            Assert.That(
+                resolution.Classify(FlatTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void SaturatingSumOfTransparentScaledSampleAndRefutingFieldIsUnknown()
+        {
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.TextureTimesConstant(
+                    Sample(), TextureChannel.Alpha, 0.5f),
+                ScalarSemanticValue.Texture(MaskSample(), TextureChannel.Red));
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingTwo(
+                    Chain(Field(1, 1, 255)), OpaqueThenTransparentChain()), 0);
+
+            Assert.That(
+                resolution.Classify(OpaqueCornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
         // --- layer UV channels: stage B ---------------------------------------
@@ -2158,6 +2281,47 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
+        }
+
+        [Test]
+        public void LayerSamplingSecondaryChannelWithNaN_YieldsUnknownOutcomeWithoutThrowing()
+        {
+            var value = ScalarSemanticValue.Texture(
+                new TextureSample(
+                    new TextureSourceId("test:layer"),
+                    new UvMapping(
+                        1,
+                        new Vector2(1f, 1f),
+                        new Vector2(0f, 0f)),
+                    new TextureSampling(
+                        TextureFilterMode.Point, TextureWrapMode.Clamp)),
+                TextureChannel.Alpha);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                SemanticOutput<ScalarSemanticValue>.Complete(value),
+                ProvidingLayerField(AllOpaqueChain()), 0);
+
+            var uv1Set = new Vector2[]
+            {
+                new Vector2(float.NaN, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f))
+                .WithChannels(new IReadOnlyList<Vector2>[] { uv1Set }, 0, 1, 2);
+
+            Assert.That(resolution.IsResolved, Is.True);
+            var outcome = TriangleAlphaOutcome.MustRemainTransparent;
+            Assert.DoesNotThrow(() =>
+            {
+                outcome = resolution.Classify(triangle);
+            });
+            Assert.That(
+                outcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
     }

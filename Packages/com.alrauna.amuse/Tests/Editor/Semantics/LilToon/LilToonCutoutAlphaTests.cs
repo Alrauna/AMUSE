@@ -1087,6 +1087,36 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void AlphaMask_ConstantMultiplier_ComposesOverTheLayeredAlphaChain()
+        {
+            var material = NewGateOffMaterialWithOpaqueTexture("c_m2_constant_multiplier");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetFloat("_AlphaMaskScale", 0.5f);
+            material.SetFloat("_AlphaMaskValue", 0f);
+
+            var captured = CaptureCutoutEvidence(material);
+            var alpha =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
+                    captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha, ProvidingFor(captured, AllOpaqueChain()), 0);
+
+            // The unassigned mask's term is saturate(0.5 + 0) = 0.5, so the
+            // opaque main chain multiplies by exactly 0.5. A sub-one product
+            // is uniform transparency under the coverage transform.
+            Assert.That(alpha.IsComplete, Is.True);
+            Assert.That(
+                alpha.GetCompleteValue().Kind,
+                Is.EqualTo(ScalarSemanticValueKind
+                    .TextureSampleTimesConstant));
+            Assert.That(
+                alpha.GetCompleteValue().GetMultiplier(),
+                Is.EqualTo(0.5f));
+            AssertUniformOutcome(
+                resolution, TriangleAlphaOutcome.MustRemainTransparent);
+        }
+
+        [Test]
         public void AlphaMaskMode2_WithAllWhiteMask_ProvesTriangle()
         {
             var material = NewGateOffMaterialWithOpaqueTexture("c_m2_white");

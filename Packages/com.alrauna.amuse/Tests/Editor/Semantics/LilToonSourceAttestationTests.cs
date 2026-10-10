@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
 using Alrauna.Amuse.Tests.Editor.Shared;
+using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
@@ -23,6 +26,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// </summary>
     public sealed class LilToonSourceAttestationTests
     {
+
+        // --- Characterization: the shared normalize rule on the public seam. ---
+
+        /// <summary>
+        /// Characterization, not a behavior change. The assertions pass
+        /// before and after the Task 10 extraction. They pin the BOM drop
+        /// and the newline fold on the public seam, so no later edit of the
+        /// private rule can silently move the digests.
+        /// </summary>
+        [Test]
+        public void NormalizeTextMatchesTheAttestationRule()
+        {
+            Assert.That(
+                NormalizedSourceHash.NormalizeText("﻿a\r\nb\rc"),
+                Is.EqualTo("a\nb\nc"));
+            Assert.That(
+                NormalizedSourceHash.Compute("a\r\nb"),
+                Is.EqualTo(
+                    NormalizedSourceHash.Compute("a\nb")));
+        }
 
         private const string DefaultSettingsBlock =
             "            #define LIL_OPTIMIZE_APPLY_SHADOW_FA\n" +
@@ -518,6 +541,50 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.True,
                 "the canonical text must retain at least one input set " +
                 "declaration");
+        }
+
+        /// <summary>
+        /// A shader name that matches no pinned profile refuses before any
+        /// gather. The refusal carries the unsupported-shader code. The old
+        /// lookup defaulted an unmatched name to the opaque profile and
+        /// gathered anyway.
+        /// </summary>
+        [Test]
+        public void TryGatherSourceEvidenceForShaderName_UnknownShaderName_ReturnsFalseWithNamedRefusal()
+        {
+            // The built-in shader's name matches no pinned profile. The
+            // capture follows the LilToonOpaqueTargetTests shape under the
+            // standard cutout request.
+            var shader = Shader.Find("Unlit/Color");
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: Unlit/Color must exist");
+            var source = new Material(shader);
+            try
+            {
+                var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        source,
+                        LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                })[0];
+
+                var matched = LilToonSourceAttestation
+                    .TryGatherSourceEvidenceForShaderName(
+                        source.shader, captured,
+                        out var evidence, out var refusal);
+
+                Assert.That(matched, Is.False);
+                Assert.That(evidence, Is.Null);
+                Assert.That(refusal, Is.Not.Null);
+                Assert.That(
+                    refusal.Code,
+                    Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShader));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(source);
+            }
         }
     }
 }

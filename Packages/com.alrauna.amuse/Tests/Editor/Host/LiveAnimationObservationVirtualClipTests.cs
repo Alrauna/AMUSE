@@ -87,5 +87,35 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(
                     realObject.Values.Select(v => v.name).ToArray()));
         }
+
+        [Test]
+        public void SingleNonFiniteKeyIsNotFiniteExact()
+        {
+            var clip = new AnimationClip { name = "SingleNonFiniteKey" };
+            var binding = EditorCurveBinding.FloatCurve(
+                "Body", typeof(SkinnedMeshRenderer), "m_BlendShape.Weight");
+            AnimationUtility.SetEditorCurve(
+                clip, binding, new AnimationCurve(new Keyframe(0f, float.NaN)));
+
+            var observed = LiveAnimationObservation.ObserveClip(clip, false);
+
+            Assert.That(observed.Floats[0].IsFiniteExact, Is.False);
+        }
+
+        [Test]
+        public void AllEqualInfiniteRunIsNotFiniteExact()
+        {
+            var clip = new AnimationClip { name = "AllEqualInfiniteRun" };
+            var binding = EditorCurveBinding.FloatCurve(
+                "Body", typeof(SkinnedMeshRenderer), "m_BlendShape.Weight");
+            var curve = new AnimationCurve(
+                new Keyframe(0f, float.PositiveInfinity),
+                new Keyframe(1f, float.PositiveInfinity));
+            AnimationUtility.SetEditorCurve(clip, binding, curve);
+
+            var observed = LiveAnimationObservation.ObserveClip(clip, false);
+
+            Assert.That(observed.Floats[0].IsFiniteExact, Is.False);
+        }
     }
 }

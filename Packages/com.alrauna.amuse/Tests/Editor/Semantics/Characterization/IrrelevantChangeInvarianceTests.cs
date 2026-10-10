@@ -74,6 +74,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             "_AddDstBlendAlpha",
             "_ZWrite",
             "_ZTest",
+            // The six _Outline* blend fields stay irrelevant to the semantic
+            // output. Conversion now gates them, because the canonical recipe
+            // rewrites the tuple. The semantics layer never reads them, so the
+            // invariance claim holds.
             "_OutlineBlendOp",
             "_OutlineSrcBlend",
             "_OutlineDstBlend",

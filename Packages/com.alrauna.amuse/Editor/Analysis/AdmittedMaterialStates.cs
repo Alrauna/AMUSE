@@ -295,23 +295,9 @@ namespace Alrauna.Amuse.Editor.Analysis
                 // the capture: admission substitutes scalars only. The
                 // family's own alpha request decides which assignments the
                 // material actually samples.
-                var predicateRequest =
-                    UnityMaterialSemantics.AlphaRequestForFamily(
-                        material.Family);
-                AlphaFieldProvider materialFields =
-                    (TextureSourceId source,
-                        TextureChannel channel,
-                        out AlphaMipChain chain) =>
-                        alphaFields.TryGetFor(
-                            evidence,
-                            predicateRequest,
-                            source,
-                            channel,
-                            out chain);
                 var resolution =
-                    AlphaSemanticsResolver.Resolve(
-                        capturedSemantics.Semantics.Alpha,
-                        materialFields,
+                    ResolveAdmittedMaterialSemantics(
+                        admitted, capturedSemantics, alphaFields,
                         maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
@@ -342,6 +328,41 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return SlotResolutionResult.Resolved(resolutions);
+        }
+
+        /// <summary>
+        /// One per-material resolution rule: the family's own alpha request scopes
+        /// the field lookup to the material's own evidence, and the resolver runs
+        /// at the caller's noise bound. The admitted-slot loop and the Host probe
+        /// both call this, so field scoping cannot drift between the proof path
+        /// and the census calibration path.
+        /// </summary>
+        internal static AlphaResolution ResolveAdmittedMaterialSemantics(
+            CapturedAlphaMaterial material,
+            CapturedAlphaSemantics capturedSemantics,
+            AlphaFieldSet alphaFields,
+            int maxNoiseTexelPercent)
+        {
+            var predicateRequest =
+                UnityMaterialSemantics.AlphaRequestForFamily(
+                    material.Family);
+            AlphaFieldProvider materialFields =
+                (TextureSourceId source,
+                    TextureChannel channel,
+                    out AlphaMipChain chain) =>
+                {
+                    chain = null;
+                    return alphaFields.TryGetFor(
+                        material.Evidence,
+                        predicateRequest,
+                        source,
+                        channel,
+                        out chain);
+                };
+            return AlphaSemanticsResolver.Resolve(
+                capturedSemantics.Semantics.Alpha,
+                materialFields,
+                maxNoiseTexelPercent);
         }
 
         /// <summary>

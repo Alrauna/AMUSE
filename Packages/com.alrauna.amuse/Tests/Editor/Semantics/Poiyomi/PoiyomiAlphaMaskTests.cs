@@ -2,6 +2,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using CoreWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 
@@ -784,6 +785,78 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticOutput.Alpha,
                 PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
                 MaskValue);
+        }
+
+        // --- Finding 39: the refused red capture names the mask ------------
+
+        // The importer cannot reach ARGB4444 on this Unity version. The
+        // Standalone RGBAHalf override follows the suite's own refused-format
+        // convention. RGBAHalf sits outside the same capture allowlist, so
+        // the red capture refuses while the source identity stays intact.
+        private static void ImportRefusedRedFormat(TextureImporter importer)
+        {
+            var settings = importer.GetPlatformTextureSettings("Standalone");
+            settings.overridden = true;
+            settings.format = TextureImporterFormat.RGBAHalf;
+            importer.SetPlatformTextureSettings(settings);
+        }
+
+        [Test]
+        public void ReplaceBoundMask_RefusedRedCapture_IsUnsupportedFeatureNamingTheMask()
+        {
+            // The (1, 0) arm reads a texel, so a refused red capture must
+            // refuse and name the mask.
+            var material = BoundMaskMaterial();
+            material.SetTexture(
+                Mask,
+                ImportTexture(
+                    "bound_mask_refused_red",
+                    ImportRefusedRedFormat));
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                Mask);
+        }
+
+        [Test]
+        public void ReplaceBoundMask_AffineArm_RefusedRedCapture_IsUnsupportedFeatureNamingTheMask()
+        {
+            // The affine arm also reads a texel, so a refused red capture
+            // refuses there too and names the mask.
+            var material = BoundMaskMaterial();
+            material.SetFloat(BlendStrength, 1f);
+            material.SetFloat(MaskValue, 0.5f);
+            material.SetTexture(
+                Mask,
+                ImportTexture(
+                    "bound_mask_affine_refused_red",
+                    ImportRefusedRedFormat));
+
+            AssertUnsupportedOutput(
+                Interpret(material),
+                PoiyomiSemanticOutput.Alpha,
+                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
+                Mask);
+        }
+
+        [Test]
+        public void ReplaceBoundMask_SaturatedPair_IgnoresRefusedRedCapture()
+        {
+            // The saturated pair consults no texel of the mask. The refused
+            // red capture cannot stop the proof, so alpha stays complete.
+            var material = BoundMaskMaterial();
+            material.SetFloat(BlendStrength, 1f);
+            material.SetFloat(MaskValue, 1f);
+            material.SetTexture(
+                Mask,
+                ImportTexture(
+                    "bound_mask_saturated_refused_red",
+                    ImportRefusedRedFormat));
+
+            AssertOutputComplete(
+                Interpret(material), PoiyomiSemanticOutput.Alpha);
         }
 
         // --- Falsifier 4: mapped pair rounding boundary ---

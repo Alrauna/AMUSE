@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
+using Alrauna.Amuse.Tests.Editor.Host;
+using Alrauna.Amuse.Editor.Host;
+using nadena.dev.ndmf.animator;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
@@ -510,7 +514,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the retention of the unlocked clone must be named, " +
                 "never pass silently");
             Assert.That(
-                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
+        }
+
+        /// <summary>
+        /// A slot the pair never recorded can still name the unlocked
+        /// clone. The destroy gate must scan every renderer slot array
+        /// under the avatar root, not only the committed curves. When an
+        /// unrecorded slot names the clone, the close cannot prove the
+        /// inversion complete. The clone stays alive, the retention is
+        /// named, and the pair stays open in the window.
+        /// </summary>
+        [Test]
+        public void
+            ACloneThatAnUnrecordedSlotNamesIsRetainedAndThePairStaysOpen()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE foreign slot fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
+                "ForeignSlotCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked);
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            var cloneRef = default(Object);
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var pair = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0];
+                cloneRef = pair.UnlockedClone;
+                var holder = Track(new GameObject("AMUSE foreign holder"));
+                holder.transform.SetParent(root.transform, false);
+                var foreignRenderer = holder.AddComponent<MeshRenderer>();
+                foreignRenderer.sharedMaterials =
+                    new[] { pair.UnlockedClone };
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            Assert.That(cloneRef == null, Is.False,
+                "the close must keep the clone alive when an " +
+                "unrecorded slot still names it");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(1),
+                "the retention of the clone must be named, never " +
+                "pass silently");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
         }
 
         /// <summary>
@@ -676,6 +742,505 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // The material that was never locked is untouched.
             Assert.That(renderer.sharedMaterials[1], Is.EqualTo(unLocked),
                 "analyzed and unlocked materials stay untouched");
+        }
+
+        /// <summary>
+        /// The close pass enumerates clips from virtualized controllers
+        /// on child transforms. The enumeration must include both innate
+        /// and virtualized clips.
+        /// </summary>
+        [Test]
+        public void CommittedClips_IncludesVirtualizedAnimatorControllerOnChildTransform()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE virtualized child clip fixture");
+            var innateClip = Track(new AnimationClip { name = "InnateClip" });
+            var innateController = Track(
+                new AnimatorController { name = "InnateController" });
+            innateController.AddLayer("Base");
+            var innateState =
+                innateController.layers[0].stateMachine.AddState("InnateState");
+            innateState.motion = innateClip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = innateController;
+
+            var child = Track(new GameObject("ChildTransform"));
+            child.transform.SetParent(root.transform, false);
+
+            var childClip = Track(new AnimationClip { name = "ChildClip" });
+            var childController = Track(
+                new AnimatorController { name = "ChildController" });
+            childController.AddLayer("Base");
+            var childState =
+                childController.layers[0].stateMachine.AddState("ChildState");
+            childState.motion = childClip;
+
+            var virtualized = child.AddComponent<VirtualizedControllerProbe>();
+            virtualized.AnimatorController = childController;
+
+            var context = new BuildContext(
+                root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var clips = TransientUnlockWindowClose.CommittedClips(context).ToList();
+
+            Assert.That(clips, Does.Contain(innateClip),
+                "committed clips must contain innate controller clips");
+            Assert.That(clips, Does.Contain(childClip),
+                "committed clips must contain child virtualized controller clips");
+        }
+
+        /// <summary>
+        /// The close pass enumerates clips in sub-state machines and blend trees.
+        /// Duplicate clips and duplicate controllers must not cause cycles.
+        /// Each clip must appear once in the result.
+        /// </summary>
+        [Test]
+        public void CommittedClips_HandlesSubStateMachinesAndBlendTreesWithoutCycles()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE sub-state blend tree fixture");
+            var sharedClip = Track(new AnimationClip { name = "SharedClip" });
+            var subClip = Track(new AnimationClip { name = "SubClip" });
+            var blendClip = Track(new AnimationClip { name = "BlendClip" });
+
+            var controller = Track(
+                new AnimatorController { name = "ComplexController" });
+            controller.AddLayer("Base");
+            var machine = controller.layers[0].stateMachine;
+            var rootState = machine.AddState("RootState");
+            rootState.motion = sharedClip;
+
+            var subMachine = machine.AddStateMachine("SubMachine");
+            var subState = subMachine.AddState("SubState");
+            subState.motion = subClip;
+
+            var blendTree = Track(new BlendTree
+            {
+                name = "DirectTree",
+                blendType = BlendTreeType.Direct,
+            });
+            blendTree.AddChild(sharedClip);
+            blendTree.AddChild(blendClip);
+
+            var nestedTreeState = subMachine.AddState("BlendTreeState");
+            nestedTreeState.motion = blendTree;
+
+            var child1 = Track(new GameObject("ChildOne"));
+            child1.transform.SetParent(root.transform, false);
+            var virtualized1 = child1.AddComponent<VirtualizedControllerProbe>();
+            virtualized1.AnimatorController = controller;
+
+            var child2 = Track(new GameObject("ChildTwo"));
+            child2.transform.SetParent(root.transform, false);
+            var virtualized2 = child2.AddComponent<VirtualizedControllerProbe>();
+            virtualized2.AnimatorController = controller;
+
+            var context = new BuildContext(
+                root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var clips = TransientUnlockWindowClose.CommittedClips(context).ToList();
+
+            Assert.That(clips, Does.Contain(sharedClip),
+                "committed clips must contain the shared clip");
+            Assert.That(clips, Does.Contain(subClip),
+                "committed clips must contain the sub-state machine clip");
+            Assert.That(clips, Does.Contain(blendClip),
+                "committed clips must contain the blend tree clip");
+            Assert.That(clips.Count, Is.EqualTo(3),
+                "duplicate references must not duplicate clips or loop infinitely");
+        }
+
+        /// <summary>
+        /// The close pass inverts committed curves even when the transform path
+        /// was not recorded in the swapped pair.
+        /// Every keyframe referencing the unlocked clone returns to the locked original.
+        /// </summary>
+        [Test]
+        public void InvertCommittedCurves_RestoresKeyframesToLockedOriginal_EvenWhenPathNotRecorded()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE unrecorded path fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var clip = Track(new AnimationClip { name = "UnrecordedClip" });
+            var binding = EditorCurveBinding.PPtrCurve(
+                "UnrecordedChild",
+                typeof(MeshRenderer),
+                "m_Materials.Array.data[0]");
+            var keyframes = new[]
+            {
+                new ObjectReferenceKeyframe
+                {
+                    time = 0f,
+                    value = clone,
+                },
+            };
+            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes);
+
+            var controller = Track(new AnimatorController { name = "UnrecordedController" });
+            controller.AddLayer("Base");
+            var state = controller.layers[0].stateMachine.AddState("State");
+            state.motion = clip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(
+                committedClips, pair);
+
+            var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+            Assert.That(restoredCurve, Is.Not.Null);
+            Assert.That(restoredCurve.Length, Is.EqualTo(1));
+            Assert.That(restoredCurve[0].value, Is.EqualTo(locked),
+                "unrecorded path keyframe must revert to the locked original");
+        }
+
+        /// <summary>
+        /// The close pass inverts committed curves across different renderer types.
+        /// It restores keyframes when the recorded binding type and curve binding type differ.
+        /// </summary>
+        [Test]
+        public void InvertCommittedCurves_RestoresKeyframesAcrossSkinnedMeshAndMeshRendererBindings()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE asymmetric renderer fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var clip = Track(new AnimationClip { name = "AsymmetricClip" });
+            var clipBinding = EditorCurveBinding.PPtrCurve(
+                "Body",
+                typeof(SkinnedMeshRenderer),
+                "m_Materials.Array.data[0]");
+            var keyframes = new[]
+            {
+                new ObjectReferenceKeyframe
+                {
+                    time = 0f,
+                    value = clone,
+                },
+            };
+            AnimationUtility.SetObjectReferenceCurve(clip, clipBinding, keyframes);
+
+            var controller = Track(new AnimatorController { name = "AsymmetricController" });
+            controller.AddLayer("Base");
+            var state = controller.layers[0].stateMachine.AddState("State");
+            state.motion = clip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(
+                committedClips, pair);
+
+            var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, clipBinding);
+            Assert.That(restoredCurve, Is.Not.Null);
+            Assert.That(restoredCurve.Length, Is.EqualTo(1));
+            Assert.That(restoredCurve[0].value, Is.EqualTo(locked),
+                "asymmetric renderer binding keyframe must revert to the locked original");
+        }
+
+        /// <summary>
+        /// The close pass inverts only the clips the caller hands it.
+        /// A clip that the call list excludes keeps its clone reference.
+        /// The full list reverts the keyframe to the locked original.
+        /// </summary>
+        [Test]
+        public void InvertCommittedCurves_InvertsOnlyTheClipsItIsGiven()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE explicit list fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var clip = Track(new AnimationClip { name = "ExplicitListClip" });
+            var binding = EditorCurveBinding.PPtrCurve(
+                "UnrecordedChild",
+                typeof(MeshRenderer),
+                "m_Materials.Array.data[0]");
+            var keyframes = new[]
+            {
+                new ObjectReferenceKeyframe
+                {
+                    time = 0f,
+                    value = clone,
+                },
+            };
+            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes);
+
+            var controller = Track(new AnimatorController { name = "ExplicitListController" });
+            controller.AddLayer("Base");
+            var state = controller.layers[0].stateMachine.AddState("State");
+            state.motion = clip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var committedClips = TransientUnlockWindowClose
+                .CommittedClips(context)
+                .ToList();
+            Assert.That(committedClips, Does.Contain(clip),
+                "the harness clip must be committed before the inversion");
+
+            var excluded = committedClips.Where(item => item != clip).ToList();
+            TransientUnlockWindowClose.InvertCommittedCurves(excluded, pair);
+
+            var untouchedCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+            Assert.That(untouchedCurve, Is.Not.Null);
+            Assert.That(untouchedCurve.Length, Is.EqualTo(1));
+            Assert.That(untouchedCurve[0].value, Is.EqualTo(clone),
+                "a clip the call list excludes must keep the clone reference");
+
+            TransientUnlockWindowClose.InvertCommittedCurves(committedClips, pair);
+
+            var restoredCurve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+            Assert.That(restoredCurve, Is.Not.Null);
+            Assert.That(restoredCurve.Length, Is.EqualTo(1));
+            Assert.That(restoredCurve[0].value, Is.EqualTo(locked),
+                "the full list keyframe must revert to the locked original");
+        }
+
+        /// <summary>
+        /// CurveInversionWasComplete returns false when an animation clip on the avatar retains a keyframe referencing the unlocked clone.
+        /// </summary>
+        [Test]
+        public void CurveInversionWasComplete_ReturnsFalse_WhenAnyClipRetainsCloneReference()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE retain clone reference fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var clip = Track(new AnimationClip { name = "RetainedCloneClip" });
+            var binding = EditorCurveBinding.PPtrCurve(
+                "Body",
+                typeof(MeshRenderer),
+                "m_Materials.Array.data[0]");
+            var keyframes = new[]
+            {
+                new ObjectReferenceKeyframe
+                {
+                    time = 0f,
+                    value = clone,
+                },
+            };
+            AnimationUtility.SetObjectReferenceCurve(clip, binding, keyframes);
+
+            var controller = Track(new AnimatorController { name = "RetainedCloneController" });
+            controller.AddLayer("Base");
+            var state = controller.layers[0].stateMachine.AddState("State");
+            state.motion = clip;
+
+            var animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            var graph = new CommittedControllerGraphResult(
+                AvatarAnimationRefusal.None,
+                System.Array.Empty<CommittedLayer>());
+
+            var result = TransientUnlockWindowClose.CurveInversionWasComplete(
+                context, pair, new[] { clip }, graph);
+
+            Assert.That(result, Is.False,
+                "CurveInversionWasComplete must return false when a clip retains a clone reference.");
+        }
+
+        /// <summary>
+        /// CurveInversionWasComplete returns false when the committed controller graph returns a refusal.
+        /// </summary>
+        [Test]
+        public void CurveInversionWasComplete_ReturnsFalse_WhenCommittedGraphReturnsRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE refused graph fixture");
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
+            var clone = Track(Object.Instantiate(locked));
+            clone.name = locked.name + "_AmuseUnlockedClone";
+
+            var pair = new TransientUnlockWindowState.SwappedPair(locked)
+            {
+                UnlockedClone = clone,
+            };
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            var refusedGraph = new CommittedControllerGraphResult(
+                AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour,
+                System.Array.Empty<CommittedLayer>());
+
+            var result = TransientUnlockWindowClose.CurveInversionWasComplete(
+                context, pair, System.Array.Empty<AnimationClip>(), refusedGraph);
+
+            Assert.That(result, Is.False,
+                "CurveInversionWasComplete must return false when the committed graph returns a refusal.");
+        }
+
+        /// <summary>
+        /// ClipsInMotion terminates cleanly without throwing an exception when a blend tree contains a cycle.
+        /// </summary>
+        [Test]
+        public void ClipsInMotion_TerminatesCleanly_WhenBlendTreeContainsCycle()
+        {
+            var treeA = Track(new BlendTree { name = "TreeA" });
+            var treeB = Track(new BlendTree { name = "TreeB" });
+            var clip = Track(new AnimationClip { name = "CyclicClip" });
+
+            treeA.AddChild(clip);
+            treeA.AddChild(treeB);
+            treeB.AddChild(treeA);
+
+            var seenClips = new HashSet<AnimationClip>();
+            var visitedMotions = new HashSet<Motion>();
+
+            var clips = TransientUnlockWindowClose.ClipsInMotion(
+                treeA, seenClips, visitedMotions).ToList();
+
+            Assert.That(clips, Does.Contain(clip),
+                "ClipsInMotion must yield the clip within the cyclic blend tree.");
+            Assert.That(clips.Count, Is.EqualTo(1),
+                "ClipsInMotion must terminate cleanly and yield each clip once.");
+        }
+
+        /// <summary>
+        /// ClipsInStateMachine terminates cleanly without throwing an exception when a state machine contains a cycle.
+        /// </summary>
+        [Test]
+        public void ClipsInStateMachine_TerminatesCleanly_WhenStateMachineContainsCycle()
+        {
+            var rootMachine = Track(new AnimatorStateMachine { name = "RootMachine" });
+            var subMachine = rootMachine.AddStateMachine("SubMachine");
+            var clip = Track(new AnimationClip { name = "StateMachineClip" });
+            var state = subMachine.AddState("SubState");
+            state.motion = clip;
+
+            var seenClips = new HashSet<AnimationClip>();
+            var visitedStateMachines = new HashSet<AnimatorStateMachine> { subMachine };
+            var visitedMotions = new HashSet<Motion>();
+
+            var clips = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+
+            Assert.That(clips, Is.Empty,
+                "ClipsInStateMachine must terminate cleanly without entering already visited cyclic state machines.");
+
+            visitedStateMachines.Clear();
+            var firstPass = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+            Assert.That(firstPass, Does.Contain(clip));
+
+            var secondPass = TransientUnlockWindowClose.ClipsInStateMachine(
+                rootMachine, seenClips, visitedStateMachines, visitedMotions).ToList();
+            Assert.That(secondPass, Is.Empty,
+                "Re-entering an already visited state machine must terminate cleanly.");
+        }
+
+        /// <summary>
+        /// CommittedClips terminates cleanly and yields each clip once when a blend tree is shared across layers.
+        /// </summary>
+        [Test]
+        public void CommittedClips_TerminatesCleanly_WhenSharedBlendTreeExistsAcrossLayers()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE shared blend tree across layers fixture");
+            var sharedClip = Track(new AnimationClip { name = "SharedAcrossLayersClip" });
+
+            var sharedTree = Track(new BlendTree
+            {
+                name = "SharedTreeAcrossLayers",
+                blendType = BlendTreeType.Direct,
+            });
+            sharedTree.AddChild(sharedClip);
+
+            var controller = Track(new AnimatorController { name = "MultiLayerController" });
+            controller.AddLayer("Layer0");
+            controller.AddLayer("Layer1");
+
+            var state0 = controller.layers[0].stateMachine.AddState("State0");
+            state0.motion = sharedTree;
+
+            var state1 = controller.layers[1].stateMachine.AddState("State1");
+            state1.motion = sharedTree;
+
+            var child = Track(new GameObject("ChildWithController"));
+            child.transform.SetParent(root.transform, false);
+            var probe = child.AddComponent<VirtualizedControllerProbe>();
+            probe.AnimatorController = controller;
+
+            var context = new BuildContext(
+                root, TransientUnlockTestLifecycle.TempFolder);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            var clips = TransientUnlockWindowClose.CommittedClips(context).ToList();
+
+            Assert.That(clips, Does.Contain(sharedClip),
+                "CommittedClips must contain the clip from the shared blend tree.");
+            Assert.That(clips.Count, Is.EqualTo(1),
+                "CommittedClips must not duplicate clips from a blend tree shared across layers.");
         }
     }
 }

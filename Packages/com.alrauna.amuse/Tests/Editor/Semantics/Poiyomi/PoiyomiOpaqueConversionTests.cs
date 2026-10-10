@@ -702,6 +702,56 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiOpaqueConversionRefusal.UnsupportedForwardAddBlendEquation);
         }
 
+        [Test]
+        public void AdditiveOutlineRgbPair_RefusesWithNamedRefusal()
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_OutlineSrcBlend", 1f);
+            material.SetFloat("_OutlineDstBlend", 1f);
+
+            AssertRefusal(
+                EvaluateFor(material),
+                PoiyomiOpaqueConversionRefusal.UnsupportedOutlineBlendEquation);
+        }
+
+        [Test]
+        public void AdditiveOutlineAlphaPair_RefusesWithNamedRefusal()
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_OutlineSrcBlendAlpha", 0f);
+            material.SetFloat("_OutlineDstBlendAlpha", 1f);
+
+            AssertRefusal(
+                EvaluateFor(material),
+                PoiyomiOpaqueConversionRefusal.UnsupportedOutlineBlendEquation);
+        }
+
+        [Test]
+        public void OpaqueEquivalentOutlineRgbPairs_StayConvertible(
+            [Values(1f, 5f)] float srcBlend,
+            [Values(0f, 10f)] float dstBlend)
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_OutlineBlendOp", 0f);
+            material.SetFloat("_OutlineSrcBlend", srcBlend);
+            material.SetFloat("_OutlineDstBlend", dstBlend);
+
+            AssertConvertible(EvaluateFor(material));
+        }
+
+        [Test]
+        public void OpaqueEquivalentOutlineAlphaPairs_StayConvertible(
+            [Values(0f, 1f, 10f)] float dstBlendAlpha,
+            [Values(0f, 4f)] float blendOpAlpha)
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_OutlineSrcBlendAlpha", 1f);
+            material.SetFloat("_OutlineDstBlendAlpha", dstBlendAlpha);
+            material.SetFloat("_OutlineBlendOpAlpha", blendOpAlpha);
+
+            AssertConvertible(EvaluateFor(material));
+        }
+
         /// <summary>
         /// The recipe never writes <c>_AddBlendOp</c>, so the blend operation is
         /// identical on both sides of the conversion and cancels once the
@@ -944,6 +994,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 EvaluateFor(material).Outcome,
                 Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        /// <summary>
+        /// A canonical material whose cutoff is not finite must refuse by
+        /// name. NaN fails the cutoff comparison inside the no-op
+        /// classification, so the finiteness sweep must run first.
+        /// </summary>
+        [Test]
+        public void CanonicalMaterialWithNonFiniteCutoff_RefusesAsNotFinite()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+
+            AssertRefusal(
+                EvaluateWith(material, "_Cutoff", float.NaN),
+                PoiyomiOpaqueConversionRefusal.ConversionPropertyNotFinite);
         }
 
         /// <summary>

@@ -14,7 +14,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             out AlphaUvEnvelope envelope)
         {
             // Identity and missing UV evidence must preserve the input field-for-field.
-            if (IsIdentity(mapping) || !triangle.HasUv0)
+            if (mapping.IsIdentity || !triangle.HasUv0)
             {
                 transformed = triangle;
                 envelope = AlphaUvEnvelope.Zero;
@@ -89,9 +89,9 @@ namespace Alrauna.Amuse.Editor.Analysis
             var exact = IsE1(c0, c1, c2, scale, offset, t0, t1, t2) ||
                         IsE2(scale, offset) ||
                         IsE3(c0, c1, c2, scale, offset, p0, t0);
-            var e0 = ExactUvGeometry.EncodeToNearestFloat(ToRational(t0));
-            var e1 = ExactUvGeometry.EncodeToNearestFloat(ToRational(t1));
-            var e2 = ExactUvGeometry.EncodeToNearestFloat(ToRational(t2));
+            var e0 = ExactUvGeometry.EncodeToNearestFloat(ExactUvGeometry.ToRational(t0));
+            var e1 = ExactUvGeometry.EncodeToNearestFloat(ExactUvGeometry.ToRational(t1));
+            var e2 = ExactUvGeometry.EncodeToNearestFloat(ExactUvGeometry.ToRational(t2));
             result = new AxisResult(
                 e0.Value,
                 e1.Value,
@@ -100,14 +100,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                     ? new ExactRational(BigInteger.Zero)
                     : Envelope(c0, c1, c2, scale, p0, p1, p2, t0, t1, t2, e0.Error, e1.Error, e2.Error));
             return true;
-        }
-
-        private static bool IsIdentity(UvMapping mapping)
-        {
-            return mapping.Scale.x == 1f &&
-                   mapping.Scale.y == 1f &&
-                   mapping.Offset.x == 0f &&
-                   mapping.Offset.y == 0f;
         }
 
         private static bool IsE1(
@@ -171,13 +163,13 @@ namespace Alrauna.Amuse.Editor.Analysis
             ExactRational error2)
         {
             var p = ExactRational.Maximum(
-                ExactRational.Abs(ToRational(p0)),
-                ExactRational.Abs(ToRational(p1)),
-                ExactRational.Abs(ToRational(p2)));
+                ExactRational.Abs(ExactUvGeometry.ToRational(p0)),
+                ExactRational.Abs(ExactUvGeometry.ToRational(p1)),
+                ExactRational.Abs(ExactUvGeometry.ToRational(p2)));
             var m = ExactRational.Maximum(
-                ExactRational.Abs(ToRational(t0)),
-                ExactRational.Abs(ToRational(t1)),
-                ExactRational.Abs(ToRational(t2)));
+                ExactRational.Abs(ExactUvGeometry.ToRational(t0)),
+                ExactRational.Abs(ExactUvGeometry.ToRational(t1)),
+                ExactRational.Abs(ExactUvGeometry.ToRational(t2)));
             var encoding = ExactRational.Maximum(
                 ExactRational.Abs(error0),
                 ExactRational.Abs(error1),
@@ -190,11 +182,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                 new ExactRational(BigInteger.One, BigInteger.One << 126),
                 ExactRational.Add(
                     ExactRational.Add(
-                        ExactRational.Abs(ToRational(scale)),
+                        ExactRational.Abs(ExactUvGeometry.ToRational(scale)),
                         ExactRational.Maximum(
-                            ExactRational.Abs(ToRational(c0)),
-                            ExactRational.Abs(ToRational(c1)),
-                            ExactRational.Abs(ToRational(c2)))),
+                            ExactRational.Abs(ExactUvGeometry.ToRational(c0)),
+                            ExactRational.Abs(ExactUvGeometry.ToRational(c1)),
+                            ExactRational.Abs(ExactUvGeometry.ToRational(c2)))),
                     new ExactRational(BigInteger.One)));
             return ExactRational.Add(
                 ExactRational.Add(
@@ -230,7 +222,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             var magnitude = BigInteger.Abs(value.Significand);
-            var highest = value.Exponent + BitLength(magnitude) - 1;
+            var highest = value.Exponent + ExactUvGeometry.BitLength(magnitude) - 1;
             return highest >= 127;
         }
 
@@ -250,27 +242,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         private static bool Same(ExactDyadic left, ExactDyadic right)
         {
-            return ToRational(left).CompareTo(ToRational(right)) == 0;
-        }
-
-        private static ExactRational ToRational(ExactDyadic value)
-        {
-            return value.Exponent >= 0
-                ? new ExactRational(value.Significand << value.Exponent)
-                : new ExactRational(value.Significand, BigInteger.One << -value.Exponent);
-        }
-
-        // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
-        private static int BitLength(BigInteger value)
-        {
-            var length = 0;
-            while (value > BigInteger.Zero)
-            {
-                value >>= 1;
-                length++;
-            }
-
-            return length;
+            return ExactUvGeometry.ToRational(left).CompareTo(ExactUvGeometry.ToRational(right)) == 0;
         }
 
         private readonly struct AxisResult

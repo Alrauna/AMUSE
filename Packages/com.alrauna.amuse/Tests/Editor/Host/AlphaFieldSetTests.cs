@@ -57,6 +57,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 + " missing-evidence path");
         }
 
+        [Test]
+        public void ForRed_KeysTheInertBounds()
+        {
+            var evidence = new CapturedTextureEvidence(
+                true, new TextureSourceId(), 1f, AlphaPolicyBounds.From(80, 2),
+                false, default, false, default, false, false,
+                false, false, null, TextureCaptureRefusalReason.None,
+                true, null, TextureCaptureRefusalReason.None);
+
+            Assert.That(
+                AlphaFieldKey.ForRed(evidence).Bounds,
+                Is.EqualTo(AlphaPolicyBounds.Inert));
+        }
+
         /// <summary>
         /// One mip of fully opaque texels, the same shape the captured
         /// field bag hands consumers for an all-opaque source. Returns a
@@ -85,7 +99,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 false, default(TextureSampling),
                 false, default(TextureColorInterpretation),
                 false, false,
-                true, chain,
+                false, true, chain,
                 TextureCaptureRefusalReason.None,
                 false, null,
                 TextureCaptureRefusalReason.None);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
@@ -10,7 +11,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// Closes the transient unlock window: the fourth and last
+    /// Closes the transient unlock window: the fifth and last
     /// PlatformFinish pass, ordered after the apply pass. The close
     /// outcome is reference reversion on every build path: every open
     /// pair returns from its unlocked clone U to its untouched locked
@@ -49,6 +50,15 @@ namespace Alrauna.Amuse.Editor.Build
     internal static class TransientUnlockWindowClose
     {
         internal const string PassName = "AMUSE transient unlock window close";
+
+        /// <summary>
+        /// Alternate entry name for the close pass.
+        /// It calls Execute directly.
+        /// </summary>
+        internal static void ExecuteClose(BuildContext context)
+        {
+            Execute(context);
+        }
 
         /// <summary>
         /// The production entry and the only close. The close never
@@ -97,15 +107,25 @@ namespace Alrauna.Amuse.Editor.Build
             // clobber the canonical material apply derived from the
             // unlocked clone.
             var recorded = finishState.AppliedFinalization;
+            var bindings = finishState.AnimatorBindings;
+            var graph = (context.AvatarRootObject != null && bindings != null)
+                ? CommittedControllerGraph.Enumerate(context.AvatarRootObject, bindings)
+                : new CommittedControllerGraphResult(
+                    AvatarAnimationRefusal.UnsupportedAnimatorControllerForm,
+                    Array.Empty<CommittedLayer>());
+            var committedClips = CommittedClips(context).ToList();
+
             foreach (var pair in window.OpenPairs.ToList())
             {
-                InvertReferences(context, pair);
+                InvertReferences(committedClips, pair);
 
                 ReassertShippedSlots(pair, recorded);
 
-                DestroyPairCopiesOrNameRetention(context, finishState, pair);
-
-                window.Remove(pair);
+                if (DestroyPairCopiesOrNameRetention(
+                        context, finishState, pair, committedClips, graph))
+                {
+                    window.Remove(pair);
+                }
             }
         }
 
@@ -113,39 +133,43 @@ namespace Alrauna.Amuse.Editor.Build
         /// Destroys the pair's unlocked clone, but only after the caller
         /// inverted every reference: the committed graph was enumerated,
         /// so no rewritten curve can name a destroyed material. A curve
-        /// the close cannot enumerate keeps the clone alive, and every
-        /// affected slot gets the named retained-copy refusal, because a
-        /// destroyed material still referenced by a curve would serialize
-        /// as a missing reference.
+        /// or a renderer slot the close cannot clear keeps the clone
+        /// alive, and every affected slot gets the named retained-copy
+        /// refusal, because a destroyed material still referenced by a
+        /// curve or a slot would serialize as a missing reference.
         /// </summary>
-        private static void DestroyPairCopiesOrNameRetention(
+        /// <returns>Whether the clone was destroyed.</returns>
+        private static bool DestroyPairCopiesOrNameRetention(
             BuildContext context,
             AmusePlatformFinishState finishState,
-            TransientUnlockWindowState.SwappedPair pair)
+            TransientUnlockWindowState.SwappedPair pair,
+            IReadOnlyList<AnimationClip> committedClips,
+            CommittedControllerGraphResult graph)
         {
-            if (CurveInversionWasComplete(context, pair))
+            if (CurveInversionWasComplete(context, pair, committedClips, graph))
             {
                 UnityEngine.Object.DestroyImmediate(
                     pair.UnlockedClone, true);
                 pair.UnlockedClone = null;
+                return true;
             }
-            else
+
+            foreach (var slot in pair.Slots)
             {
-                foreach (var slot in pair.Slots)
-                {
-                    finishState.RecordSlotRefusal(
-                        AlphaSeparationSlotRefusal
-                            .TransientUnlockCloneRetained);
-                    AmuseReports.SlotSeparationRefusal(
-                        slot.Renderer,
-                        slot.SlotIndex,
-                        AlphaSeparationSlotRefusal
-                            .TransientUnlockCloneRetained,
-                        slot.Renderer != null
-                            ? slot.Renderer.gameObject.name
-                            : null);
-                }
+                finishState.RecordSlotRefusal(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained);
+                AmuseReports.SlotSeparationRefusal(
+                    slot.Renderer,
+                    slot.SlotIndex,
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained,
+                    slot.Renderer != null
+                        ? slot.Renderer.gameObject.name
+                        : null);
             }
+
+            return false;
         }
 
         /// <summary>
@@ -235,7 +259,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// and the reassertion return.
         /// </summary>
         private static void InvertReferences(
-            BuildContext context,
+            IReadOnlyList<AnimationClip> committedClips,
             TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
@@ -266,7 +290,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            InvertCommittedCurves(context, pair);
+            InvertCommittedCurves(committedClips, pair);
         }
 
         /// <summary>
@@ -278,150 +302,177 @@ namespace Alrauna.Amuse.Editor.Build
         private static bool NamesSwappedCopy(
             UnityEngine.Object candidate, Material clone)
         {
+            if (clone == null)
+            {
+                return false;
+            }
+
             var candidateMaterial = candidate as Material;
             return candidateMaterial == clone;
         }
 
         /// <summary>
-        /// Inverts committed material-slot curves on the recorded transform
-        /// paths and compatible renderer types. This includes appended
-        /// bindings that the split apply creates. The pass rewrites every
-        /// keyframe that references the pair's unlocked clone back to L.
-        /// The graph is committed by this pass, so these writes are final.
+        /// Inverts committed object reference curves across the clips the
+        /// caller hands it.
+        /// The pass rewrites every keyframe referencing the unlocked clone back to the locked original.
+        /// It operates directly without path or renderer type filters.
         /// </summary>
-        private static void InvertCommittedCurves(
-            BuildContext context,
+        internal static void InvertCommittedCurves(
+            IReadOnlyList<AnimationClip> committedClips,
             TransientUnlockWindowState.SwappedPair pair)
         {
             var clone = pair.UnlockedClone;
             var locked = pair.LockedOriginal;
 
-            var rendererTypesByPath =
-                new Dictionary<string, List<string>>(StringComparer.Ordinal);
-            foreach (var rewritten in pair.Bindings)
-            {
-                if (!rendererTypesByPath.TryGetValue(
-                        rewritten.Path, out var rendererTypes))
-                {
-                    rendererTypes = new List<string>();
-                    rendererTypesByPath.Add(
-                        rewritten.Path, rendererTypes);
-                }
-
-                if (!rendererTypes.Contains(rewritten.TypeName))
-                {
-                    rendererTypes.Add(rewritten.TypeName);
-                }
-            }
-
-            foreach (var clip in CommittedClips(context))
+            foreach (var clip in committedClips)
             {
                 foreach (var binding in AnimationUtility
                              .GetObjectReferenceCurveBindings(clip))
                 {
-                    if (!rendererTypesByPath.TryGetValue(
-                            binding.path, out var rendererTypes))
-                    {
-                        continue;
-                    }
-
-                    // Path membership is resolved by the dictionary above;
-                    // the helper re-checks it against the resolved path and
-                    // gates each candidate renderer type.
-                    var compatibleRenderer = false;
-                    foreach (var rendererType in rendererTypes)
-                    {
-                        if (UnityAnimationEvidenceCapture
-                                .TryParseMaterialSlotBindingFor(
-                                    binding.path,
-                                    binding.type.FullName,
-                                    binding.propertyName,
-                                    binding.path,
-                                    rendererType,
-                                    out _))
-                        {
-                            compatibleRenderer = true;
-                            break;
-                        }
-                    }
-
-                    if (!compatibleRenderer)
-                    {
-                        continue;
-                    }
-
                     var curve = AnimationUtility.GetObjectReferenceCurve(
                         clip, binding);
-                    if (curve == null)
+                    if (curve == null || curve.Length == 0)
                     {
                         continue;
                     }
 
-                    var changed = false;
+                    var modified = false;
                     for (var index = 0; index < curve.Length; index++)
                     {
                         if (NamesSwappedCopy(curve[index].value, clone))
                         {
-                            changed = true;
-                            break;
+                            curve[index].value = locked;
+                            modified = true;
                         }
                     }
 
-                    if (!changed)
+                    if (modified)
                     {
-                        continue;
+                        AnimationUtility.SetObjectReferenceCurve(
+                            clip, binding, curve);
                     }
-
-                    var mapped = new ObjectReferenceKeyframe[curve.Length];
-                    for (var index = 0; index < curve.Length; index++)
-                    {
-                        mapped[index] = NamesSwappedCopy(
-                                curve[index].value, clone)
-                            ? new ObjectReferenceKeyframe
-                            {
-                                time = curve[index].time,
-                                value = locked,
-                            }
-                            : curve[index];
-                    }
-
-                    AnimationUtility.SetObjectReferenceCurve(
-                        clip, binding, mapped);
                 }
             }
         }
 
         /// <summary>
-        /// Whether the fallback could enumerate and invert the committed
-        /// graph for this pair. The retained host bindings must exist and
-        /// the graph must enumerate cleanly; anything else means a
-        /// committed curve may still reference the pair's unlocked clone,
-        /// and the caller must keep the clone alive instead of destroying
-        /// it.
+        /// Verifies whether curve inversion completed across all clips.
+        /// It returns false when the graph returns a refusal.
+        /// It returns false when any keyframe references the unlocked clone.
+        /// It returns false when any renderer slot array under the avatar
+        /// root names the unlocked clone.
         /// </summary>
-        private static bool CurveInversionWasComplete(
-            BuildContext context, TransientUnlockWindowState.SwappedPair pair)
+        internal static bool CurveInversionWasComplete(
+            BuildContext context,
+            TransientUnlockWindowState.SwappedPair pair,
+            IReadOnlyList<AnimationClip> committedClips,
+            CommittedControllerGraphResult graph)
         {
+            if (graph == null || graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                return false;
+            }
+
+            if (pair == null)
+            {
+                return false;
+            }
+
+            var allClips = new HashSet<AnimationClip>(
+                committedClips ?? Array.Empty<AnimationClip>());
+            if (context != null && context.AvatarRootObject != null)
+            {
+                foreach (var clip in AnimationUtility.GetAnimationClips(context.AvatarRootObject))
+                {
+                    if (clip != null)
+                    {
+                        allClips.Add(clip);
+                    }
+                }
+            }
+
+            foreach (var clip in allClips)
+            {
+                if (clip == null)
+                {
+                    continue;
+                }
+
+                foreach (var binding in AnimationUtility.GetObjectReferenceCurveBindings(clip))
+                {
+                    var curve = AnimationUtility.GetObjectReferenceCurve(clip, binding);
+                    if (curve == null)
+                    {
+                        continue;
+                    }
+
+                    for (var index = 0; index < curve.Length; index++)
+                    {
+                        if (NamesSwappedCopy(curve[index].value, pair.UnlockedClone))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            var renderers = context != null && context.AvatarRootObject != null
+                ? context.AvatarRootObject
+                    .GetComponentsInChildren<Renderer>(true)
+                : Array.Empty<Renderer>();
+            foreach (var renderer in renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                foreach (var slot in renderer.sharedMaterials)
+                {
+                    if (NamesSwappedCopy(slot, pair.UnlockedClone))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Convenience overload enumerating graph and clips for one pair.
+        /// </summary>
+        internal static bool CurveInversionWasComplete(
+            BuildContext context,
+            TransientUnlockWindowState.SwappedPair pair)
+        {
+            if (context == null)
+            {
+                return false;
+            }
+
             var bindings = context
                 .GetState<AmusePlatformFinishState>().AnimatorBindings;
-            if (bindings == null)
+            if (bindings == null || context.AvatarRootObject == null)
             {
                 return false;
             }
 
             var graph = CommittedControllerGraph.Enumerate(
                 context.AvatarRootObject, bindings);
-            return graph.Refusal ==
-                AvatarAnimationRefusal.None;
+            var committedClips = CommittedClips(context).ToList();
+            return CurveInversionWasComplete(
+                context, pair, committedClips, graph);
         }
 
         /// <summary>
-        /// Every committed clip the avatar's innate animator sources
-        /// currently carry, in deterministic source order. The host
-        /// bindings re-read the controllers the extension committed, so
-        /// this is the graph the build ships, not the pre-build graph.
+        /// Every committed clip the avatar innate animator sources and
+        /// virtualized controllers carry, in deterministic source order.
+        /// The host bindings re-read the controllers the extension
+        /// committed, so this is the graph the build ships, not the
+        /// pre-build graph.
         /// </summary>
-        private static IEnumerable<AnimationClip> CommittedClips(
+        internal static IEnumerable<AnimationClip> CommittedClips(
             BuildContext context)
         {
             var bindings = context
@@ -431,30 +482,65 @@ namespace Alrauna.Amuse.Editor.Build
                 yield break;
             }
 
-            var seen = new HashSet<AnimationClip>();
+            var seenClips = new HashSet<AnimationClip>();
+            var seenControllers = new HashSet<RuntimeAnimatorController>();
+
             foreach (var entry in bindings.GetInnateControllers(
                          context.AvatarRootObject))
             {
-                if (!(entry.Item2 is AnimatorController controller))
+                if (entry.Item2 is AnimatorController controller &&
+                    seenControllers.Add(controller))
                 {
-                    continue;
-                }
+                    var visitedStateMachines = new HashSet<AnimatorStateMachine>();
+                    var visitedMotions = new HashSet<Motion>();
 
-                foreach (var layer in controller.layers)
-                {
-                    foreach (var clip in ClipsInStateMachine(
-                                 layer.stateMachine, seen))
+                    foreach (var layer in controller.layers)
                     {
-                        yield return clip;
+                        foreach (var clip in ClipsInStateMachine(
+                                     layer.stateMachine, seenClips, visitedStateMachines, visitedMotions))
+                        {
+                            yield return clip;
+                        }
+                    }
+                }
+            }
+
+            foreach (var source in context.AvatarRootObject
+                         .GetComponentsInChildren<IVirtualizeAnimatorController>(true))
+            {
+                if (source.AnimatorController is AnimatorController controller &&
+                    seenControllers.Add(controller))
+                {
+                    var visitedStateMachines = new HashSet<AnimatorStateMachine>();
+                    var visitedMotions = new HashSet<Motion>();
+
+                    foreach (var layer in controller.layers)
+                    {
+                        foreach (var clip in ClipsInStateMachine(
+                                     layer.stateMachine, seenClips, visitedStateMachines, visitedMotions))
+                        {
+                            yield return clip;
+                        }
                     }
                 }
             }
         }
 
-        private static IEnumerable<AnimationClip> ClipsInStateMachine(
-            AnimatorStateMachine stateMachine, HashSet<AnimationClip> seen)
+        internal static IEnumerable<AnimationClip> ClipsInStateMachine(
+            AnimatorStateMachine stateMachine,
+            HashSet<AnimationClip> seenClips,
+            HashSet<AnimatorStateMachine> visitedStateMachines = null,
+            HashSet<Motion> visitedMotions = null)
         {
             if (stateMachine == null)
+            {
+                yield break;
+            }
+
+            visitedStateMachines ??= new HashSet<AnimatorStateMachine>();
+            visitedMotions ??= new HashSet<Motion>();
+
+            if (!visitedStateMachines.Add(stateMachine))
             {
                 yield break;
             }
@@ -466,7 +552,7 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                foreach (var clip in ClipsInMotion(state.state.motion, seen))
+                foreach (var clip in ClipsInMotion(state.state.motion, seenClips, visitedMotions))
                 {
                     yield return clip;
                 }
@@ -480,19 +566,32 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 foreach (var clip in ClipsInStateMachine(
-                             child.stateMachine, seen))
+                             child.stateMachine, seenClips, visitedStateMachines, visitedMotions))
                 {
                     yield return clip;
                 }
             }
         }
 
-        private static IEnumerable<AnimationClip> ClipsInMotion(
-            Motion motion, HashSet<AnimationClip> seen)
+        internal static IEnumerable<AnimationClip> ClipsInMotion(
+            Motion motion,
+            HashSet<AnimationClip> seenClips,
+            HashSet<Motion> visitedMotions = null)
         {
+            if (motion == null)
+            {
+                yield break;
+            }
+
+            visitedMotions ??= new HashSet<Motion>();
+            if (!visitedMotions.Add(motion))
+            {
+                yield break;
+            }
+
             if (motion is AnimationClip clip)
             {
-                if (seen.Add(clip))
+                if (seenClips.Add(clip))
                 {
                     yield return clip;
                 }
@@ -510,7 +609,7 @@ namespace Alrauna.Amuse.Editor.Build
                 foreach (var child in blendTree.children)
                 {
                     foreach (var found in ClipsInMotion(
-                                 child.motion, seen))
+                                 child.motion, seenClips, visitedMotions))
                     {
                         yield return found;
                     }

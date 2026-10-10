@@ -100,11 +100,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// split texture. Full colour alpha is set explicitly to pin the
         /// semantic precondition and stay aligned with the existing green
         /// sampled-alpha integration fixture. Its render state passes every
-        /// conversion gate, so it is convertible.
+        /// conversion gate, so it is convertible: the stand-in's Fade-preset
+        /// render state is applied explicitly, because the plain stand-in's
+        /// shader defaults already carry every essential opacity fact and
+        /// would classify AlreadyOpaque instead of converting.
         /// </summary>
         internal static Material SplitAlphaMaterial(Texture2D mainTex)
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -324,6 +328,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private readonly List<UnityEngine.Object> tracked =
             new List<UnityEngine.Object>();
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
+        [SetUp]
+        public void PinPerTextureAnisotropicFiltering()
+        {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the
+            // pipeline's triangle proofs refuse every triangle. The Per
+            // Texture mode is the mode these fixtures were written under.
+            // The pin is per test and restores the editor mode on teardown,
+            // which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+        }
+
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
@@ -338,6 +360,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             DestroyTracked();
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
         }
 
         private void DestroyTracked()
@@ -357,6 +381,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 
@@ -366,6 +391,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 

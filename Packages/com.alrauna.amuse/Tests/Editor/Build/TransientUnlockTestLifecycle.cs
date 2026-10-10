@@ -432,6 +432,37 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A locked stand-in material whose recorded original shader is the
+        /// named installed shader and whose saved render state is the
+        /// Poiyomi stand-in's convertible Fade preset. The plain locked
+        /// builder's material carries only the lock flag, so its restored
+        /// clone sits at the original shader's canonical essentials and the
+        /// conversion classifies it AlreadyOpaque instead of producing the
+        /// distinct canonical output the unlock-window tests assert. The
+        /// configured material's saved floats survive the shader swap and
+        /// the unlock restore, so the restored clone converts. The caller
+        /// owns destruction.
+        /// </summary>
+        internal static Material LockedConvertibleMaterialWithOriginal(
+            string materialName, string originalShaderName)
+        {
+            var originalShader = Shader.Find(originalShaderName);
+            if (originalShader == null)
+            {
+                throw new InvalidOperationException(
+                    "The recorded original shader must resolve so the " +
+                    "convertible lock can be configured.");
+            }
+
+            var configured = new Material(originalShader);
+            configured.SetFloat("_AlphaForceOpaque", 1f);
+            Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
+                .PoiyomiFixtureTestBase.ApplyConvertibleRenderState(
+                    configured);
+            return LockConfiguredMaterial(materialName, configured);
+        }
+
+        /// <summary>
         /// A locked stand-in material whose recorded original shader is
         /// the named installed shader. The stand-in restore rebinds the
         /// clone to whatever the tag records, so a schema-complete fixture

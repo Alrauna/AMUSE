@@ -72,6 +72,15 @@ namespace Alrauna.Amuse.Editor.Semantics
                    Offset.Equals(other.Offset);
         }
 
+        /// <summary>
+        /// True when the mapping scales and offsets by identity. The resolver
+        /// and the affine transform must decide identity from this one member,
+        /// so the envelope and the transform can never desynchronize.
+        /// </summary>
+        internal bool IsIdentity =>
+            Scale.x == 1f && Scale.y == 1f &&
+            Offset.x == 0f && Offset.y == 0f;
+
         public override bool Equals(object obj)
         {
             return obj is UvMapping other && Equals(other);
@@ -1036,17 +1045,14 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// Folds <paramref name="left"/> and <paramref name="right"/> into
         /// one closed form. <paramref name="recordRefusal"/> receives the
         /// <paramref name="refusalProperty"/> name when a saturating shape
-        /// refuses. <paramref name="threadMaps"/> carries the affine map
-        /// list: the lilToon and Poiyomi frontends thread one map per
-        /// factor and keep a single mapless factor in its own kind, so an
+        /// refuses. The fold always threads one map per factor, so an
         /// admitted mapped factor never loses its map.
         /// </summary>
         internal static ScalarSemanticValue Fold(
             ScalarSemanticValue left,
             ScalarSemanticValue right,
             string refusalProperty,
-            Action<string> recordRefusal,
-            bool threadMaps)
+            Action<string> recordRefusal)
         {
             if (left == null)
             {
@@ -1069,9 +1075,7 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             var samples = new List<TextureSample>();
             var channels = new List<TextureChannel>();
-            var maps = threadMaps
-                ? new List<AffineAlphaMap?>()
-                : null;
+            var maps = new List<AffineAlphaMap?>();
             var multiplier = 1f;
             multiplier = CollectFactors(
                 left, samples, channels, maps, multiplier);
@@ -1101,11 +1105,6 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         private static bool HasAnyMap(List<AffineAlphaMap?> maps)
         {
-            if (maps == null)
-            {
-                return false;
-            }
-
             for (var index = 0; index < maps.Count; index++)
             {
                 if (maps[index] != null)
@@ -1131,17 +1130,17 @@ namespace Alrauna.Amuse.Editor.Semantics
                 case ScalarSemanticValueKind.TextureSample:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
-                    maps?.Add(null);
+                    maps.Add(null);
                     return multiplier;
                 case ScalarSemanticValueKind.TextureSampleTimesConstant:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
-                    maps?.Add(null);
+                    maps.Add(null);
                     return multiplier * value.GetMultiplier();
                 case ScalarSemanticValueKind.MappedTextureSample:
                     samples.Add(value.GetTextureSample());
                     channels.Add(value.GetChannel());
-                    maps?.Add(value.GetMap());
+                    maps.Add(value.GetMap());
                     return multiplier;
                 case ScalarSemanticValueKind
                     .ProductChainOfTextureSamples:
@@ -1151,7 +1150,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                     {
                         samples.Add(value.GetChainSample(index));
                         channels.Add(value.GetChainChannel(index));
-                        maps?.Add(value.GetChainMap(index));
+                        maps.Add(value.GetChainMap(index));
                     }
 
                     return multiplier * value.GetProductMultiplier();

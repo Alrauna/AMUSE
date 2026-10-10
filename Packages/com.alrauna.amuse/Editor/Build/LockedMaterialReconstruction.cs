@@ -172,7 +172,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// residue, and deleting entries would be an extra mutation the
         /// in-memory contract does not need.
         /// </summary>
-        private static void MoveSuffixedSavedValues(
+        internal static void MoveSuffixedSavedValues(
             Material clone, Shader resolved)
         {
             var suffix = CleanNameSuffix(clone.GetTag(
@@ -206,6 +206,11 @@ namespace Alrauna.Amuse.Editor.Build
                     type == ShaderPropertyType.Range)
                 {
                     clone.SetFloat(plainName, entry.value);
+                }
+                else if (type == ShaderPropertyType.Int)
+                {
+                    clone.SetInteger(
+                        plainName, Mathf.RoundToInt(entry.value));
                 }
             }
 
@@ -321,7 +326,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// empty and harmless, because those values arrive through the
         /// colors container and are routed there.
         /// </summary>
-        private static void ReadSavedProperties(
+        internal static void ReadSavedProperties(
             Material clone,
             List<(string name, Texture texture, Vector2 scale,
                 Vector2 offset)> textures,
@@ -386,6 +391,28 @@ namespace Alrauna.Amuse.Editor.Build
                     }
 
                     floats.Add((name, second.floatValue));
+                }
+            }
+
+            var serializedInts = serialized.FindProperty(
+                "m_SavedProperties.m_Ints");
+            if (serializedInts != null)
+            {
+                for (var index = 0; index < serializedInts.arraySize;
+                     index++)
+                {
+                    var element =
+                        serializedInts.GetArrayElementAtIndex(index);
+                    var name = ElementKeyName(element);
+                    var second = element.FindPropertyRelative("second");
+                    if (name == null || second == null ||
+                        second.propertyType !=
+                        SerializedPropertyType.Integer)
+                    {
+                        continue;
+                    }
+
+                    floats.Add((name, second.intValue));
                 }
             }
 

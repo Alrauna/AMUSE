@@ -204,8 +204,9 @@ namespace Alrauna.Amuse.Editor.Build
             // The structural refusals read real authored clips, and
             // animation events survive only before virtualization: this
             // pass runs extension-free and first, stores the enumerated
-            // graph and its refusal, and reports the refusal when it
-            // fires. The passes after it read the same graph from state.
+            // graph and its refusal, and reports nothing. The barrier
+            // reports the stored refusal behind the consent gates. The
+            // passes after it read the same graph from state.
             sequence.Run(
                 StructuralGraphCheckPassName,
                 AmuseStructuralGraphCheck.Execute);
@@ -228,7 +229,7 @@ namespace Alrauna.Amuse.Editor.Build
                         ctx => AlphaSeparationApply.Execute(ctx));
                 });
 
-            // The window close is the fourth and last pass, extension-free
+            // The window close is the fifth and last pass, extension-free
             // and after the animator scope has closed. NDMF commits the
             // virtual animator graph when the scope deactivates, and that
             // commit's controller assignment makes the editor animator
@@ -463,10 +464,13 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 // Avatar scope: the exact named cause is preserved and the whole
                 // avatar stops. No renderer is analyzed, so no partial result and
-                // no per-renderer accounting can survive. The structural graph
-                // check pass named the cause, on the pass path and on the inline
-                // fallback path. This gate records the state and stops.
+                // no per-renderer accounting can survive. This gate names the
+                // cause exactly once, and only for avatars the gates above it
+                // admitted: positive lifecycle, the opt-in component on the
+                // avatar root, and the feature switch on.
                 state.AvatarRefusal = graph.Refusal;
+                AmuseReports.AvatarRefusal(
+                    context.AvatarRootObject, graph.Refusal);
                 return;
             }
 
@@ -1009,12 +1013,13 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Maps the optimizer's "Alpha Upper Clamp (Per Polygon)"
-        /// policy to the proof's noise percent. The clamp is the upper
-        /// bound of the tolerated stray band, so a clamp of 100 admits
-        /// nothing and maps to the inert 0. Otherwise the same
-        /// defensive clamps as <see cref="OpaquePercentFrom"/>, then
-        /// the inspector clamp that keeps the band strictly below the
-        /// opaque percent. A missing component maps to the inert 0.
+        /// policy to the proof's noise percent. The parser enforces
+        /// the clamp pair invariant for preset files, and the
+        /// inspector enforces it for live edits. This method keeps
+        /// only the 0 to 100 banding and the inert mapping of 100 to
+        /// 0, so its result covers a pair only when a serialized
+        /// component was tampered with. A missing component maps to
+        /// the inert 0.
         /// </summary>
         private static int PolygonClampPercentFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
@@ -1031,8 +1036,7 @@ namespace Alrauna.Amuse.Editor.Build
                 return 0;
             }
 
-            var opaque = OpaquePercentFrom(optimizer);
-            return AlphaPolicyBounds.ClampNoise(opaque, stored);
+            return stored;
         }
 
         /// <summary>

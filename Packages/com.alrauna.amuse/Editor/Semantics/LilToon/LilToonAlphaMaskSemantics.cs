@@ -27,6 +27,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         Constant,
 
         /// <summary>
+        /// Multiply mode with a provably constant term: the alpha value is
+        /// the plain main-term value times that constant.
+        /// </summary>
+        ConstantMultiplier,
+
+        /// <summary>
         /// The term is the sampled red channel at the mask's own affine of
         /// UV0, composed per the family's mode.
         /// </summary>
@@ -72,6 +78,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// and saturate are monotone, so <c>AffineAlphaMap</c> bounds it on any
     /// red interval by the map's endpoint evaluations with no texel
     /// threshold.
+    /// </para>
+    /// <para>
+    /// Both constant shapes admit multiply mode below one: the alpha value
+    /// is the plain main-term value times the constant, so the term is a
+    /// <see cref="LilToonAlphaMaskTermKind.ConstantMultiplier"/>. Replace
+    /// mode keeps the plain constant. The zero-scale check sits above the
+    /// source-identity check because its answer never reads the texture.
     /// </para>
     /// <para>
     /// The mask coordinate is <c>uvMain</c> transformed by the mask's own
@@ -141,6 +154,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return new LilToonAlphaMaskTerm(
                 LilToonAlphaMaskTermKind.Constant,
                 value, default, default, default, default, true,
+                default, null);
+        }
+
+        internal static LilToonAlphaMaskTerm ConstantMultiplierOf(float value)
+        {
+            return new LilToonAlphaMaskTerm(
+                LilToonAlphaMaskTermKind.ConstantMultiplier,
+                value, default, default, default, default, false,
                 default, null);
         }
 
@@ -252,17 +273,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // saturate(1 * scale + value), computed in binary32 with
                 // the same operands the shader adds.
                 var term = Mathf.Clamp01(scale + value);
-                if (mode == 1f)
-                {
-                    return ConstantTerm(term);
-                }
-
-                return term >= 1f
-                    ? MainUnchanged()
-                    : Refuse(
-                        diagnostics,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        ScaleProperty);
+                return mode == 1f
+                    ? ConstantTerm(term)
+                    : term >= 1f
+                        ? MainUnchanged()
+                        : ConstantMultiplierOf(term);
             }
 
             if (scale == 1f && value >= 1f)
@@ -275,10 +290,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     : MainUnchanged();
             }
 
-            // Every admitted shape below samples the mask (or is a constant
-            // derived without it), and each sample shape rides the mask's
-            // own source identity and plain affine, so both requirements
-            // gate all of them together.
+            if (scale == 0f)
+            {
+                // 0 * s is exactly zero and zero + v is exactly v in
+                // binary32, so the term is saturate(v) under both orders
+                // with the same operands the shader adds. The answer never
+                // reads the texture, so this arm sits above the source
+                // identity and scale-offset checks.
+                var constant = Mathf.Clamp01(value);
+                return mode == 1f
+                    ? ConstantTerm(constant)
+                    : constant >= 1f
+                        ? MainUnchanged()
+                        : ConstantMultiplierOf(constant);
+            }
+
+            // Every admitted shape below samples the mask, and each sample
+            // shape rides the mask's own source identity and plain affine,
+            // so both requirements gate all of them together.
             if (!assignment.Texture.HasSourceIdentity)
             {
                 return Refuse(
@@ -288,7 +317,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MaskProperty);
             }
 
-            if (!assignment.HasScaleOffset)
+            if (!assignment.HasScaleOffset ||
+                !float.IsFinite(assignment.Scale.x) ||
+                !float.IsFinite(assignment.Scale.y) ||
+                !float.IsFinite(assignment.Offset.x) ||
+                !float.IsFinite(assignment.Offset.y))
             {
                 return Refuse(
                     diagnostics,
@@ -304,25 +337,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     assignment.Texture.SourceIdentity,
                     new UvMapping(0, assignment.Scale, assignment.Offset),
                     mode == 1f);
-            }
-
-            if (scale == 0f)
-            {
-                // 0 * s is exactly zero and zero + v is exactly v in
-                // binary32, so the term is saturate(v) under both orders
-                // with the same operands the shader adds.
-                var constant = Mathf.Clamp01(value);
-                if (mode == 1f)
-                {
-                    return ConstantTerm(constant);
-                }
-
-                return constant >= 1f
-                    ? MainUnchanged()
-                    : Refuse(
-                        diagnostics,
-                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        ScaleProperty);
             }
 
             return MappedSampleOf(

@@ -230,12 +230,16 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         /// <summary>
         /// The disjunction of two independently classified factors, the dual
-        /// of <see cref="Product"/>: the sum saturate(a + b) reaches exactly
-        /// one on a triangle exactly when either factor is one there, because
-        /// each factor is bounded in [0,1] by the field contract. The fold
-        /// mirrors the product's absorbing lattice: ProvenOpaque wins over
-        /// Unknown, Unknown wins over MustRemainTransparent, and
-        /// MustRemainTransparent needs both factors non-opaque.
+        /// of <see cref="Product"/>: alpha is the sum saturate(a + b), and
+        /// each factor is bounded in [0,1] by the field contract. The sum
+        /// reaches one whenever the factors add to at least one. It does
+        /// not need one factor to be one there. Complementary masks with
+        /// sub-one witnesses at different texels sum to identically one.
+        /// The opaque arm is sound: a factor proven exactly one decides the
+        /// sum alone, because the saturate clamps at one. The absorbing arm
+        /// returns Unknown: a factor proven below one says nothing about
+        /// the sum, and cross-field correlation is unknowable without an
+        /// additive classifier.
         /// <para>
         /// Both factors must be classified, never uniform: the resolver
         /// resolves uniform factors before it constructs a disjunction.
@@ -363,12 +367,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                     return TriangleAlphaOutcome.ProvenOpaque;
                 }
 
-                return first == TriangleAlphaOutcome
-                           .MustRemainTransparent &&
-                       second == TriangleAlphaOutcome
-                           .MustRemainTransparent
-                    ? TriangleAlphaOutcome.MustRemainTransparent
-                    : TriangleAlphaOutcome.Unknown;
+                return TriangleAlphaOutcome.Unknown;
             }
 
 
@@ -407,10 +406,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                     triangle.Position2, channelA, channelB, channelC);
             }
 
-            if (_mapping.Scale.x != 1f ||
-                _mapping.Scale.y != 1f ||
-                _mapping.Offset.x != 0f ||
-                _mapping.Offset.y != 0f)
+            if (!_mapping.IsIdentity)
             {
                 if (!AffineUvTransform.TryTransform(
                         _mapping, transformed, out transformed, out envelope))
@@ -547,6 +543,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaFieldProvider fieldProvider,
             int maxNoiseTexelPercent)
         {
+            if (float.IsNaN(multiplier))
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
             if (multiplier > 1f)
             {
                 return AlphaResolution.Refused(
@@ -638,6 +640,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             int maxNoiseTexelPercent)
         {
             var multiplier = value.GetProductMultiplier();
+            if (float.IsNaN(multiplier))
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
             if (multiplier > 1f)
             {
                 return AlphaResolution.Refused(
@@ -694,14 +702,15 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
-        /// alpha = saturate(first + second). A side attested exactly one
-        /// decides the sum alone, because the other side's field contract
-        /// bounds it in [0,1] and the saturate clamps at one. Two constants
-        /// fold through the saturate. Anything else stays conservative: the
-        /// sum reaches one on some triangle exactly when either side is one
-        /// there, and cross-field correlation between two sampled terms is
-        /// unknowable from two independent [0,1] contracts, so no per-triangle
-        /// proof exists without an additive classifier.
+        /// alpha = saturate(first + second). Each side is bounded in [0,1]
+        /// by the field contract, so the sum reaches one whenever the sides
+        /// add to at least one. Complementary masks with sub-one witnesses
+        /// at different texels sum to identically one. A side attested
+        /// exactly one decides the sum alone, because the saturate clamps
+        /// at one. Two constants fold through the saturate. Every other
+        /// composition answers Unknown: a side proven below one says
+        /// nothing about the sum, and cross-field correlation between two
+        /// sampled terms is unknowable without an additive classifier.
         /// </summary>
         private static AlphaResolution ResolveSaturatingSum(
             ScalarSemanticValue value,
@@ -751,14 +760,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             var secondTransparent = secondResolution.TryGetUniformOutcome(
                 out var secondOutcome) &&
                 secondOutcome == TriangleAlphaOutcome.MustRemainTransparent;
-            if (firstTransparent)
+            if (firstTransparent || secondTransparent)
             {
-                return secondResolution;
-            }
-
-            if (secondTransparent)
-            {
-                return firstResolution;
+                // No common-point additive argument exists. A sub-one witness
+                // for one factor says nothing about the sum at that texel.
+                return AlphaResolution.Uniform(
+                    TriangleAlphaOutcome.Unknown);
             }
 
             return AlphaResolution.Or(firstResolution, secondResolution);
@@ -878,10 +885,18 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// The multiplier lemma for a value already known to lie in [0, 1]
         /// before scaling. Exactly one is opaque; anything below one can never
         /// reach one; anything above one has no defined opacity meaning because
-        /// the semantic model states no clamp or saturate behavior.
+        /// the semantic model states no clamp or saturate behavior. A NaN
+        /// multiplier refuses as unsupported in every arm. NaN fails every
+        /// comparison here, so the arms must test it by name and refuse.
         /// </summary>
         private static AlphaResolution ResolveScalar(float scalar)
         {
+            if (float.IsNaN(scalar))
+            {
+                return AlphaResolution.Refused(
+                    AlphaResolutionFailure.UnsupportedMultiplier);
+            }
+
             if (scalar == 1f)
             {
                 return AlphaResolution.Uniform(

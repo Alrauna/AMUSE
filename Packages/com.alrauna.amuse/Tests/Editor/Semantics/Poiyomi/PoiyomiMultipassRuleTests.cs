@@ -76,6 +76,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// The second family's own alpha pair governs its pass. A divergent
+        /// pair must refuse the claim even when the first family's pair is
+        /// canonical. Falsifies a proof that rests on the wrong family's
+        /// properties.
+        /// </summary>
+        [Test]
+        public void DivergentSecondFamilyAlphaPair_RefusesCompleteAlpha()
+        {
+            var material = NewFixtureMaterial();
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            material.SetFloat("_SrcBlend2", 5f);
+            material.SetFloat("_DstBlend2", 10f);
+            material.SetFloat("_SrcBlendAlpha2", 0f);
+            material.SetFloat("_DstBlendAlpha2", 10f);
+
+            var alpha = Interpret(material);
+
+            Assert.That(alpha.IsComplete, Is.False);
+        }
+
+        /// <summary>
         /// The standard alpha pair is provable at alpha 1 on both passes:
         /// SrcAlpha 1 contributes the source and OneMinusSrcAlpha 0 drops
         /// what is behind. The gates must not over-refuse preset-driven
@@ -90,6 +111,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat("_DstBlend", 10f);
             material.SetFloat("_SrcBlend2", 5f);
             material.SetFloat("_DstBlend2", 10f);
+            material.SetFloat("_SrcBlendAlpha2", 1f);
+            material.SetFloat("_DstBlendAlpha2", 10f);
 
             var alpha = Interpret(material);
             Assert.That(alpha.IsComplete, Is.True);

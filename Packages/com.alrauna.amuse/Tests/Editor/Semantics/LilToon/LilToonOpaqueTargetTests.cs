@@ -62,6 +62,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         private const string ConversionTempFolder = "Assets/AmuseTests_LilToonConversion";
 
+        // A test-only guid for imported stand-in targets. No verify joins
+        // the tests that import them, so the pinned guid never gets a
+        // duplicate asset.
+        private const string TestOnlyStandInGuid =
+            "7f3c9a1e5d2b4f68a0c4e19b3d7568f2";
+
         /// <summary>
         /// The Thry optimizer lock-button attribute, stated literally. The
         /// scan's subject is the vendor attribute itself; deriving it from
@@ -255,6 +261,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// shader; the clone read-back still passes because the recipe writes
         /// are made against the swapped-in opaque target, which declares all
         /// 18 recipe properties.
+        /// <para>
+        /// This pin also carries the material-count assertion for the named
+        /// target-mismatch failure (Finding 42): a success leaves exactly one
+        /// material, the transient clone. The mismatch destroy site itself is
+        /// unreachable from test inputs, because a shader assignment always
+        /// reads back its own reference on this editor, so the gate can only
+        /// fire on an engine regression. The structural try and finally from
+        /// the Finding 42 change covers that site.
+        /// </para>
         /// </summary>
         [Test]
         public void PreparedClone_SwapsTheShaderToTheAttestedTarget()
@@ -270,10 +285,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 target, Is.Not.SameAs(source.shader),
                 "The swap test needs two distinct fixture shaders.");
+            var materialsBefore = LoadedMaterialCount();
 
             var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
                 source, target));
 
+            Assert.That(
+                LoadedMaterialCount(),
+                Is.EqualTo(materialsBefore + 1),
+                "The success path must leave exactly one material, the " +
+                "transient clone, and leak nothing else.");
             Assert.That(clone.shader, Is.SameAs(target));
             Assert.That(clone.shader, Is.Not.SameAs(source.shader));
             foreach (var (property, value) in ExpectedCanonicalTuple)
@@ -288,6 +309,70 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(clone.GetTag("RenderType", false), Is.EqualTo("Opaque"));
             Assert.That(clone.name, Is.Empty);
             AssertUnchanged(source, before, queueBefore, tagBefore);
+        }
+
+        // --- Mode keyword normalization on regular conversions ---------------
+
+        /// <summary>
+        /// Regular cutout-to-opaque conversions swap to a different target shader.
+        /// The clone inherits keywords from the source material.
+        /// Preparation must disable mode-specific cutout and overlay keywords.
+        /// </summary>
+        [Test]
+        public void
+            PrepareCanonicalOpaqueClone_RegularCutoutConversion_DisablesAllModeKeywords()
+        {
+            var source = NewCutoutFixtureMaterial();
+            source.EnableKeyword("UNITY_UI_ALPHACLIP");
+            source.EnableKeyword("UNITY_UI_CLIP_RECT");
+            source.EnableKeyword("ETC1_EXTERNAL_ALPHA");
+            source.EnableKeyword("_COLOROVERLAY_ON");
+            var target = Shader.Find(OpaqueConversionShaderName);
+            Assert.That(
+                target, Is.Not.Null,
+                $"Fixture shader '{OpaqueConversionShaderName}' must import.");
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(clone.IsKeywordEnabled("UNITY_UI_ALPHACLIP"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("UNITY_UI_CLIP_RECT"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("ETC1_EXTERNAL_ALPHA"), Is.False);
+            Assert.That(clone.IsKeywordEnabled("_COLOROVERLAY_ON"), Is.False);
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("UNITY_UI_ALPHACLIP"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("UNITY_UI_CLIP_RECT"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("ETC1_EXTERNAL_ALPHA"));
+            Assert.That(
+                clone.shaderKeywords,
+                Does.Not.Contain("_COLOROVERLAY_ON"));
+        }
+
+        /// <summary>
+        /// Regular cutout-to-opaque conversions must not strip feature keywords.
+        /// Keywords like normal map and emission must remain enabled on the clone.
+        /// </summary>
+        [Test]
+        public void PrepareCanonicalOpaqueClone_PreservesFeatureKeywords()
+        {
+            var source = NewCutoutFixtureMaterial();
+            source.EnableKeyword("_NORMALMAP");
+            source.EnableKeyword("_EMISSION");
+            var target = Shader.Find(OpaqueConversionShaderName);
+            Assert.That(
+                target, Is.Not.Null,
+                $"Fixture shader '{OpaqueConversionShaderName}' must import.");
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(clone.shaderKeywords, Does.Contain("_NORMALMAP"));
+            Assert.That(clone.shaderKeywords, Does.Contain("_EMISSION"));
         }
 
         // --- Source preservation ---------------------------------------------
@@ -559,6 +644,57 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// The Multi opaque clone must write _TransparentMode to zero.
+        /// The source material starts with a non-zero mode value.
+        /// The prepared clone must clear the mode to zero.
+        /// It must pass canonical fact validation.
+        /// </summary>
+        [TestCase(1f)]
+        [TestCase(2f)]
+        public void
+            PrepareCanonicalOpaqueClone_MultiContainer_SetsTransparentModeZero(
+                float initialTransparentMode)
+        {
+            var source = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            source.SetFloat("_TransparentMode", initialTransparentMode);
+            var target = source.shader;
+
+            var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                source, target));
+
+            Assert.That(
+                clone.GetFloat("_TransparentMode"),
+                Is.EqualTo(0f),
+                "The opaque clone must write _TransparentMode to zero.");
+            Assert.That(
+                LilToonOpaqueTarget.TryFindNonCanonicalFact(clone, out var fact),
+                Is.False,
+                $"The opaque clone must have no non-canonical facts, but found: {fact}");
+        }
+
+        /// <summary>
+        /// A non-zero _TransparentMode value is not canonical.
+        /// The method must identify _TransparentMode as the non-canonical fact.
+        /// </summary>
+        [TestCase(1f)]
+        [TestCase(2f)]
+        public void
+            TryFindNonCanonicalFact_MultiContainerWithNonZeroMode_IdentifiesTransparentMode(
+                float nonZeroMode)
+        {
+            var material = NewMultiContainerMaterial(
+                MultiBaseContainerShaderName);
+            material.SetFloat("_TransparentMode", nonZeroMode);
+
+            var found = LilToonOpaqueTarget.TryFindNonCanonicalFact(
+                material, out var factName);
+
+            Assert.That(found, Is.True);
+            Assert.That(factName, Is.EqualTo("_TransparentMode"));
+        }
+
+        /// <summary>
         /// The closed request the clone capture runs under: the three Multi
         /// scalars the mode read and the gate rules consume, plus the
         /// keyword set. The request names exactly the facts the fixture
@@ -692,6 +828,126 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
         }
 
+        /// <summary>
+        /// Characterization of the named non-canonical read-back failure
+        /// (Finding 42). A target that declares <c>_TransparentMode</c>
+        /// while the source carries a non-zero value makes the clone read
+        /// back non-canonical on the regular conversion path: the recipe
+        /// writes that scalar only on the Multi path, so the copied value
+        /// survives to the read-back. Preparation must throw the
+        /// <see cref="InvalidOperationException"/> with the failed clone
+        /// destroyed, so the material count stays flat. This pin passes
+        /// before the try and finally change as well: the named site
+        /// already destroyed the clone explicitly.
+        /// </summary>
+        [Test]
+        public void PrepareCanonicalOpaqueClone_ReadBackFailure_DestroysTheClone()
+        {
+            var declaringTransparentModeTarget =
+                "Shader \"Hidden/Alrauna/AmuseTests/LilToonConversionDeclaresTransparentMode\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        _Cutoff (\"Cutoff\", Range(0,1)) = 0.5\n" +
+                "        _SrcBlend (\"SrcBlend\", Float) = 1\n" +
+                "        _DstBlend (\"DstBlend\", Float) = 0\n" +
+                "        _AlphaToMask (\"AlphaToMask\", Float) = 0\n" +
+                "        _ZWrite (\"ZWrite\", Float) = 1\n" +
+                "        _ZTest (\"ZTest\", Float) = 4\n" +
+                "        _OffsetFactor (\"OffsetFactor\", Float) = 0\n" +
+                "        _OffsetUnits (\"OffsetUnits\", Float) = 0\n" +
+                "        _ColorMask (\"ColorMask\", Float) = 15\n" +
+                "        _SrcBlendAlpha (\"SrcBlendAlpha\", Float) = 1\n" +
+                "        _DstBlendAlpha (\"DstBlendAlpha\", Float) = 10\n" +
+                "        _BlendOp (\"BlendOp\", Float) = 0\n" +
+                "        _BlendOpAlpha (\"BlendOpAlpha\", Float) = 0\n" +
+                "        _SrcBlendFA (\"SrcBlendFA\", Float) = 1\n" +
+                "        _DstBlendFA (\"DstBlendFA\", Float) = 1\n" +
+                "        _SrcBlendAlphaFA (\"SrcBlendAlphaFA\", Float) = 0\n" +
+                "        _DstBlendAlphaFA (\"DstBlendAlphaFA\", Float) = 1\n" +
+                "        _BlendOpFA (\"BlendOpFA\", Float) = 4\n" +
+                "        _BlendOpAlphaFA (\"BlendOpAlphaFA\", Float) = 4\n" +
+                "        _TransparentMode (\"TransparentMode\", Float) = 0\n" +
+                "    }\n" +
+                "\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags { \"RenderType\" = \"Opaque\" }\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            CGPROGRAM\n" +
+                "            #pragma vertex vert\n" +
+                "            #pragma fragment frag\n" +
+                "            #include \"UnityCG.cginc\"\n" +
+                "            float4 vert(float4 vertex : POSITION) : SV_POSITION\n" +
+                "            { return UnityObjectToClipPos(vertex); }\n" +
+                "            fixed4 frag() : SV_Target { return fixed4(1, 1, 1, 1); }\n" +
+                "            ENDCG\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+            var modeOneSource =
+                "Shader \"Hidden/Alrauna/AmuseTests/LilToonConversionModeOneSource\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        _TransparentMode (\"TransparentMode\", Float) = 1\n" +
+                "    }\n" +
+                "\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags { \"RenderType\" = \"TransparentCutout\" }\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            CGPROGRAM\n" +
+                "            #pragma vertex vert\n" +
+                "            #pragma fragment frag\n" +
+                "            #include \"UnityCG.cginc\"\n" +
+                "            float4 vert(float4 vertex : POSITION) : SV_POSITION\n" +
+                "            { return UnityObjectToClipPos(vertex); }\n" +
+                "            fixed4 frag() : SV_Target { return fixed4(1, 1, 1, 1); }\n" +
+                "            ENDCG\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+
+            try
+            {
+                var target = ImportTempShader(
+                    "LilToonConversionDeclaresTransparentMode.shader",
+                    declaringTransparentModeTarget);
+                var sourceShader = ImportTempShader(
+                    "LilToonConversionModeOneSource.shader",
+                    modeOneSource);
+                var source = Track(new Material(sourceShader));
+                // Stated explicitly so the pin does not depend on a stand-in
+                // default: the value must survive the material copy, and a
+                // copy carries only values the source's own shader declares.
+                source.SetFloat("_TransparentMode", 1f);
+                var materialsBefore = LoadedMaterialCount();
+
+                var thrown = Assert.Throws<InvalidOperationException>(
+                    () => LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
+                        source, target));
+
+                Assert.That(
+                    thrown.Message,
+                    Does.Contain("did not read back canonical"));
+                Assert.That(
+                    thrown.Message,
+                    Does.Contain("_TransparentMode"),
+                    "The read-back site must be the named failure that threw.");
+                Assert.That(
+                    LoadedMaterialCount(),
+                    Is.EqualTo(materialsBefore),
+                    "The failed clone must be destroyed before the throw.");
+            }
+            finally
+            {
+                DeleteConversionTempFolder();
+            }
+        }
+
         [Test]
         public void OpaqueTargetGather_UsesTargetNameNotCutoutSourceName()
         {
@@ -782,15 +1038,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     source,
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
             })[0];
-            var target = Shader.Find(OpaqueConversionShaderName);
-            Assert.That(target, Is.Not.Null);
+            // The matched path needs a pinned target name. The stand-in
+            // carries the pinned opaque name, so the profile lookup
+            // matches and the gather runs. No verify joins this test, so
+            // the stand-in carries a test-only guid and never duplicates
+            // the pinned asset identity.
+            try
+            {
+                var target = ImportTempShader(
+                    "lilToon.shader",
+                    ValidStandInLilToonSource(TestOnlyStandInGuid));
+                Assert.That(target, Is.Not.Null);
 
-            var targetEvidence =
-                LilToonSourceAttestation.GatherSourceEvidenceForShaderName(
-                    target, captured);
+                var matched = LilToonSourceAttestation
+                    .TryGatherSourceEvidenceForShaderName(
+                        target, captured, out var targetEvidence, out _);
+                Assert.That(matched, Is.True);
 
-            Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
-            Assert.That(targetEvidence.ShaderName, Is.Not.EqualTo(captured.ShaderName));
+                Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
+                Assert.That(targetEvidence.ShaderName, Is.Not.EqualTo(captured.ShaderName));
+            }
+            finally
+            {
+                DeleteConversionTempFolder();
+            }
         }
 
         [Test]

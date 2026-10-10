@@ -362,7 +362,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             var failed = new List<int>();
             for (var index = 0; index < result.Count; index++)
             {
-                if (IsAttestedAlphaMaterial(result[index]))
+                if (IsAttestedAlphaMaterial(result[index], true))
                 {
                     captured.Add(result[index]);
                     continue;
@@ -431,7 +431,10 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// missing family-specific evidence still answers all-Unknown, which
         /// keeps the fail-closed direction inside the transferred mode. The
         /// verification gate is skipped by the parameter, not by a second
-        /// switch.
+        /// switch. All five families honor the parameter, so no family arm
+        /// keeps an unconditional verify. A Poiyomi material reaches this
+        /// path only attested, because the capture never grants Poiyomi
+        /// names.
         /// </summary>
         internal static CapturedAlphaSemantics AnalyzeAlphaMaterialTransferred(
             CapturedAlphaMaterial captured)
@@ -487,7 +490,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 }
 
                 var capturedList = CaptureAlphaMaterials(new[] { material });
-                if (IsAttestedAlphaMaterial(capturedList[0]))
+                if (IsAttestedAlphaMaterial(capturedList[0], true))
                 {
                     continue;
                 }
@@ -817,6 +820,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     return LilToonTransparentMaterialSemantics
                         .AlphaEvidenceRequest;
+                case CapturedAlphaMaterialFamily.LilToonMulti:
+                    return LilToonMultiResolution.MultiEvidenceRequest;
                 default:
                     return null;
             }
@@ -909,7 +914,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         private static bool IsAttestedAlphaMaterial(
-            CapturedAlphaMaterial material)
+            CapturedAlphaMaterial material,
+            bool verifyIdentity)
         {
             // A Multi material attests through the resolver's row verify at
             // the one resolution point, never through a regular family
@@ -923,14 +929,16 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (material.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
-                        material.PoiyomiEvidence, out _);
+                    return verifyIdentity &&
+                        PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                            material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
                     // The conjunction attests each Poiyomi identity against
                     // its own pinned GUID and digest, so the Two Pass
                     // original verifies through the same call.
-                    return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
-                        material.PoiyomiEvidence, out _);
+                    return verifyIdentity &&
+                        PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                            material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.LilToon:
                     return material.LilToonEvidence != null &&
                         LilToonSourceAttestation.TryVerifyLilToonIdentity(
@@ -997,7 +1005,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (captured.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    if (verifyIdentity &&
+                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(
@@ -1009,7 +1018,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                         captured.Evidence, out unknownReason);
                     break;
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    if (!PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                    if (verifyIdentity &&
+                        !PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             captured.PoiyomiEvidence, out _))
                     {
                         return UnknownWithShaderReason(

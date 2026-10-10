@@ -1,6 +1,8 @@
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -165,6 +167,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 CaptureMultiConversion(material), queue, renderType, mode);
         }
 
+        private static LilToonOpaqueConversionEligibility
+            EvaluateUnderProductionRequest(Material material, int mode)
+        {
+            EffectiveRenderState.ReadEffectiveRenderState(
+                material, out var queue, out var renderType);
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    LilToonMultiResolution.MultiEvidenceRequest),
+            })[0];
+            return LilToonMultiSourceEligibility.EvaluateVerifiedEligibility(
+                captured, queue, renderType, mode);
+        }
+
         /// <summary>
         /// The parity twin leg, labeled: the regular cutout evaluator over
         /// the regular cutout stand-in, captured under the regular family's
@@ -212,6 +229,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             })[0];
             return LilToonTransparentSourceEligibility
                 .EvaluateVerifiedEligibility(captured, queue, renderType);
+        }
+
+        private static Color32[] MixedAlphaGrid(byte alpha)
+        {
+            var pixels = new Color32[4 * 4];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(255, 255, 255, alpha);
+            }
+
+            return pixels;
         }
 
         // --- Eligibility matrix -----------------------------------------------
@@ -693,6 +721,132 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 multiResult.Outcome,
                 Is.EqualTo(twinResult.Outcome),
                 "refusal was " + multiResult.Refusal);
+        }
+
+        // Finding 2 runtime confirmation (investigation 2026-10-09). The probe
+        // runs before any production change. It pins the capture mechanism and
+        // reports the observed classification direction through the test output.
+        // Finding 1 falsifier: the eligibility schema opens with the canonical
+        // recipe names, and the Multi capture under the production request names
+        // none of them. A resolved, fully proven Multi material then throws
+        // "Property '_SrcBlend' was not requested." inside EvaluateVerifiedEligibility.
+        // --- Falsifier: a Multi request that misses one recipe name crashes the conversion boundary. ---
+        [Test]
+        public void ProductionMultiRequestCarriesTheCanonicalRecipeSchema()
+        {
+            foreach (var recipeProperty in LilToonOpaqueTarget.RecipeSchemaProperties)
+            {
+                CollectionAssert.Contains(
+                    LilToonMultiResolution.MultiEvidenceRequest.ScalarProperties,
+                    recipeProperty,
+                    recipeProperty + " must ride the one Multi capture");
+            }
+        }
+
+        // The production capture schema plus the production evaluator at mode 1.
+        // The committed cutout container stand-in already declares the recipe
+        // scalars, so the widened capture evaluates instead of throwing.
+        // --- Falsifier: a conversion boundary that throws on the first admissible Multi conversion fails this fixture. ---
+        [Test]
+        public void ProductionMultiCaptureEvaluatesModeOneEligibilityToConvertible()
+        {
+            var material = CutoutModeContainerMaterial(BaseContainerShaderPath);
+            Assert.DoesNotThrow(
+                () => EvaluateUnderProductionRequest(material, CutoutMode));
+            AssertConvertible(
+                EvaluateUnderProductionRequest(material, CutoutMode));
+        }
+
+        // The mode-2 twin on the committed transparent container stand-in.
+        // --- Falsifier: a widened request that flips a mode-2 admission into a refusal fails this fixture. ---
+        [Test]
+        public void ProductionMultiCaptureEvaluatesModeTwoEligibilityToConvertible()
+        {
+            var material = TransparentModeContainerMaterial(
+                BaseTransparentContainerShaderPath);
+            Assert.DoesNotThrow(
+                () => EvaluateUnderProductionRequest(material, TransparentMode));
+            AssertConvertible(
+                EvaluateUnderProductionRequest(material, TransparentMode));
+        }
+
+        // Finding 2 pinned refusal. Task 1's probe ran this state pre-fix.
+        // Before running this test, write the classify value the Task 1 probe
+        // printed into the next comment line and keep it as the record.
+        // The Task 1 probe printed: observed classify: MustRemainTransparent.
+        // The production capture binarizes _MainTex by the union's cutout
+        // declaration, so a transparent-resolved Multi refuses naming _Cutoff
+        // instead of proving triangles from a lying field.
+        // --- Falsifier: a resolved transparent Multi that proves opaque from a binarized field fails this fixture. ---
+        [Test]
+        public void ResolvedTransparentMultiWithBinarizedMainFieldStaysUnknownNamingCutoff()
+        {
+            var containerName = LilToonMultiResolutionTests.BaseContainerName;
+            var material = Track(CreateCutoutSchemaStandIn(
+                TempFolder,
+                containerName,
+                2f,
+                new[] { "UNITY_UI_CLIP_RECT" }));
+            material.SetTexture(
+                "_MainTex",
+                ImportMipmapTexture(
+                    "multi_direction_probe",
+                    4, 4, MixedAlphaGrid(128)));
+            material.SetFloat("_Cutoff", 0.3f);
+
+            var evidence = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material,
+                    LilToonMultiResolution.MultiEvidenceRequest,
+                    UnityMaterialSemantics.AlphaPredicateRequestFor(
+                        material, CapturedAlphaMaterialFamily.LilToonMulti)),
+            })[0];
+
+            var sourceEvidence =
+                LilToonMultiResolutionTests.MatchingSourceEvidence(containerName);
+            var resolved = LilToonMultiResolution.Resolve(
+                evidence,
+                sourceEvidence,
+                LilToonMultiResolutionTests.MatchingProfile(containerName),
+                keywordsRequested: true,
+                out var family,
+                out _,
+                out var refusal);
+            Assert.That(resolved, Is.True, refusal.ToString());
+            Assert.That(
+                family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent));
+
+            var captured = new CapturedAlphaMaterial(
+                family,
+                evidence,
+                default(PoiyomiSourceEvidence),
+                sourceEvidence,
+                multiResolution: LilToonMultiResolutionRecord.Admitted(
+                    sourceEvidence));
+
+            Assert.That(
+                captured.Evidence.TryGetTexture("_MainTex", out var main),
+                Is.True,
+                "fixture precondition: _MainTex must be captured");
+            Assert.That(
+                main.Texture.CaptureThreshold,
+                Is.EqualTo(0.3f),
+                "fixture precondition: the production capture must binarize _MainTex");
+
+            var analysis = UnityMaterialSemantics.AnalyzeAlphaMaterial(captured);
+            Assert.That(
+                analysis.Semantics.Alpha.IsComplete,
+                Is.False,
+                "a binarized field cannot answer the transparent exact-one rule");
+            Assert.That(analysis.AlphaUnknownReason, Is.Not.Null);
+            Assert.That(
+                analysis.AlphaUnknownReason.Kind,
+                Is.EqualTo(AlphaUnknownKind.UnsupportedFeature));
+            Assert.That(
+                analysis.AlphaUnknownReason.Property,
+                Does.Contain("_Cutoff"));
         }
     }
 }

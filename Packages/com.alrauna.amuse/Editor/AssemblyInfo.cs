@@ -11,7 +11,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Alrauna.Amuse.Research.Editor")]
 
 // The census tests construct MaterialSemantics values to drive AMUSE's existing
-// BaseMaterialSemanticsProvider seam, because the public development project
+// ResearchMaterialSemanticsProvider seam, because the public development project
 // installs no vendor shader and therefore cannot reach ProvenOpaque any other
 // way. The alternative was a permanent calibration class inside the collector's
 // production assembly - a hidden extension point whose only caller is a test.

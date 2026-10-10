@@ -389,6 +389,36 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void Fold_WithMappedFactor_KeepsTheMapInTheProductChain()
+        {
+            var source = new TextureSourceId("test:fold_map");
+            var mapping = new UvMapping(0, Vector2.one, Vector2.zero);
+            var sampling = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Repeat,
+                TextureAnisoMode.None);
+            var sampleA = new TextureSample(source, mapping, sampling);
+            var sampleB = new TextureSample(source, mapping, sampling);
+            var map = AffineAlphaMap.FromBinary32(2f, -0.5f);
+
+            var folded = ScalarProductFold.Fold(
+                ScalarSemanticValue.MappedTexture(
+                    sampleA, TextureChannel.Alpha, map),
+                ScalarSemanticValue.Texture(sampleB, TextureChannel.Alpha),
+                "_FoldProperty",
+                property => Assert.Fail("no refusal is expected"));
+
+            Assert.That(folded, Is.Not.Null);
+            Assert.That(
+                folded.Kind,
+                Is.EqualTo(ScalarSemanticValueKind
+                    .ProductChainOfTextureSamples));
+            Assert.That(folded.GetChainFactorCount(), Is.EqualTo(2));
+            Assert.That(folded.GetChainMap(0), Is.Not.Null);
+            Assert.That(folded.GetChainMap(1), Is.Null);
+        }
+
+        [Test]
         public void IndependentlyConstructedValuesCompareStructurally()
         {
             var first = ColorSemanticValue.TextureTimesConstant(

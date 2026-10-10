@@ -428,6 +428,57 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void SessionCache_DoesNotServeStaleEvidenceAfterInPlaceMutation()
+        {
+            UnityGeneratedTextureEvidence.ClearCache();
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, true);
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(255, 255, 255, 0);
+            }
+            // Each mip needs its own array: Unity refuses an oversized
+            // array on a smaller mip.
+            for (var m = 0; m < texture.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, 4 >> m);
+                var mipPixels = new Color32[dim * dim];
+                for (var i = 0; i < mipPixels.Length; i++)
+                {
+                    mipPixels[i] = pixels[i];
+                }
+
+                texture.SetPixels32(mipPixels, m);
+            }
+            texture.Apply(false, false);
+            texture.name = "MutatedCacheKey (AAO UV Packed)";
+            AssetDatabase.AddObjectToAsset(texture, _container);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(
+                UnityGeneratedTextureEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out var first),
+                Is.True);
+            Assert.That(first[0].GetAlpha(1, 0), Is.EqualTo(0));
+
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(255, 255, 255, 255);
+            }
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+
+            Assert.That(
+                UnityGeneratedTextureEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out var second),
+                Is.True);
+            Assert.That(second[0].GetAlpha(1, 0), Is.EqualTo(255),
+                "A mutated texture must re-capture instead of serving stale evidence.");
+        }
+
+        [Test]
         public void SessionCache_DoesNotReturnStaleResultAcrossSlightlyDifferentCutoffs()
         {
             var deltaTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);

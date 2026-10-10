@@ -78,9 +78,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CanonicalOpaqueProperties { get; } =
                 new ReadOnlyCollection<(string, float)>(CanonicalOpaqueTuple);
 
-        internal const int CanonicalOpaqueRenderQueue = 2000;
-        internal const string RenderTypeTagName = "RenderType";
-        internal const string CanonicalOpaqueRenderType = "Opaque";
+        // The three Unity-level facts live once, on the shared verification
+        // skeleton. These aliases keep the family's own constant names for
+        // its callers. The values never drift, because each alias reads the
+        // one shared definition.
+        internal const int CanonicalOpaqueRenderQueue =
+            CanonicalOpaqueVerification.CanonicalOpaqueRenderQueue;
+        internal const string RenderTypeTagName =
+            CanonicalOpaqueVerification.RenderTypeTagName;
+        internal const string CanonicalOpaqueRenderType =
+            CanonicalOpaqueVerification.CanonicalOpaqueRenderType;
 
         /// <summary>
         /// The recipe's own property names, projected from the tuple rather
@@ -135,28 +142,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             if (candidate == null) throw new ArgumentNullException(nameof(candidate));
 
-            foreach (var (property, value) in CanonicalOpaqueTuple)
+            if (CanonicalOpaqueVerification.TryFindNonCanonicalFact(
+                    candidate, CanonicalOpaqueTuple, out factName))
             {
-                if (!candidate.HasProperty(property) ||
-                    candidate.GetFloat(property) != value)
-                {
-                    factName = property;
-                    return true;
-                }
-            }
-
-            EffectiveRenderState.ReadEffectiveRenderState(
-                candidate, out var queue, out var renderType);
-            if (queue != CanonicalOpaqueRenderQueue)
-            {
-                factName = nameof(Material.renderQueue);
                 return true;
             }
 
-            if (!string.Equals(
-                    renderType, CanonicalOpaqueRenderType, StringComparison.Ordinal))
+            if (candidate.HasProperty("_TransparentMode") &&
+                candidate.GetFloat("_TransparentMode") != 0f)
             {
-                factName = RenderTypeTagName;
+                factName = "_TransparentMode";
                 return true;
             }
 
@@ -188,6 +183,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// no determinism.
         /// </para>
         /// <para>
+        /// The clone, write, verify, destroy lifecycle lives on the shared
+        /// skeleton in
+        /// <see cref="Alrauna.Amuse.Editor.Semantics.CanonicalOpaqueVerification"/>.
+        /// The family contribution is the name clear, the Multi branch or
+        /// the regular keyword disables, the <c>_TransparentMode</c> scan,
+        /// and the shader-identity sentence.
+        /// </para>
+        /// <para>
         /// Its precondition is an attested and eligible source plus the
         /// attested opaque target resolved by the caller (the production
         /// wrapper below resolves it from the pinned environment; tests and
@@ -200,9 +203,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// read back, or the clone did not take the
         /// attested target shader. The property check runs before
         /// <c>new Material(source)</c>, so that throw leaves no clone to
-        /// destroy; the other three throw after
-        /// <see cref="UnityEngine.Object.DestroyImmediate"/> has destroyed
-        /// the clone, so no material leaks. The source gates have already
+        /// destroy. Every later throw, named or unexpected, leaves the clone
+        /// to the destroy-on-failure path of the shared skeleton, so no
+        /// material leaks. The source gates have already
         /// proven every property present on the SOURCE and every input
         /// finite, and
         /// this method writes exact canonical constants, so a read-back
@@ -251,46 +254,44 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            var clone = new Material(source);
-            clone.name = string.Empty;
-            clone.shader = attestedTarget;
-            foreach (var (property, value) in CanonicalOpaqueTuple)
-            {
-                clone.SetFloat(property, value);
-            }
+            // The clone, write, verify, destroy lifecycle lives on the
+            // shared skeleton. The family contribution is the name clear,
+            // the keyword writes, the mode scan, and the identity sentence.
+            return CanonicalOpaqueVerification.PrepareCanonicalClone(
+                source,
+                attestedTarget,
+                CanonicalOpaqueTuple,
+                clone =>
+                {
+                    clone.name = string.Empty;
 
-            clone.renderQueue = CanonicalOpaqueRenderQueue;
-            clone.SetOverrideTag(RenderTypeTagName, CanonicalOpaqueRenderType);
-
-            // The Multi call shape: the resolution resolves a Multi
-            // container to itself, so the attested target IS the source's
-            // own shader. The regular family always swaps the clone onto a
-            // different attested opaque shader, so this identity is exactly
-            // the recipe rule that the Multi target is the source asset
-            // itself (spec, conversion recipe 1). Tests drive the same
-            // shape with container stand-ins.
-            if (attestedTarget == source.shader)
-            {
-                WriteMultiModeZeroKeywordSet(clone);
-            }
-
-            if (TryFindNonCanonicalFact(clone, out var fact))
-            {
-                UnityEngine.Object.DestroyImmediate(clone);
-                throw new InvalidOperationException(
-                    "Generated opaque material did not read back canonical '" +
-                    fact + "'.");
-            }
-
-            if (clone.shader != attestedTarget)
-            {
-                UnityEngine.Object.DestroyImmediate(clone);
-                throw new InvalidOperationException(
-                    "Generated opaque material did not take the attested " +
-                    "opaque target shader.");
-            }
-
-            return clone;
+                    // The Multi call shape: the resolution resolves a Multi
+                    // container to itself, so the attested target IS the source's
+                    // own shader. The regular family always swaps the clone onto a
+                    // different attested opaque shader, so this identity is exactly
+                    // the recipe rule that the Multi target is the source asset
+                    // itself (spec, conversion recipe 1). Tests drive the same
+                    // shape with container stand-ins.
+                    if (attestedTarget == source.shader)
+                    {
+                        clone.SetFloat("_TransparentMode", 0f);
+                        WriteMultiModeZeroKeywordSet(clone);
+                    }
+                    else
+                    {
+                        clone.DisableKeyword("UNITY_UI_ALPHACLIP");
+                        clone.DisableKeyword("UNITY_UI_CLIP_RECT");
+                        clone.DisableKeyword("ETC1_EXTERNAL_ALPHA");
+                        clone.DisableKeyword("_COLOROVERLAY_ON");
+                    }
+                },
+                clone =>
+                    clone.HasProperty("_TransparentMode") &&
+                        clone.GetFloat("_TransparentMode") != 0f
+                        ? "_TransparentMode"
+                        : null,
+                "Generated opaque material did not take the attested " +
+                "opaque target shader.");
         }
 
         /// <summary>
@@ -316,11 +317,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </para>
         /// </summary>
         /// <exception cref="InvalidOperationException">
-        /// The keyword write did not read back. Like every canonical write
-        /// in this recipe, a read-back disagreement falsifies the
-        /// assumption that AMUSE can write this material's state, so the
-        /// clone is destroyed and the failure throws instead of silently
-        /// passing.
+        /// The keyword write did not read back. The method throws and its
+        /// caller's finally destroys the clone, so nothing leaks. Like every
+        /// canonical write in this recipe, a read-back disagreement
+        /// falsifies the assumption that AMUSE can write this material's
+        /// state, so the failure throws instead of silently passing.
         /// </exception>
         private static void WriteMultiModeZeroKeywordSet(Material clone)
         {
@@ -336,7 +337,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var readBack = clone.shaderKeywords;
             if (!KeywordSetReadsBack(readBack, written))
             {
-                UnityEngine.Object.DestroyImmediate(clone);
                 throw new InvalidOperationException(
                     "Generated Multi material did not read back the " +
                     "mode-0 keyword set.");
@@ -419,11 +419,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "' did not resolve.");
             }
 
-            var targetEvidence =
-                LilToonSourceAttestation.GatherSourceEvidenceForShaderName(
-                    target, evidence);
+            if (!LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                    target, evidence, out var targetEvidence, out var diagnostic))
+            {
+                throw new InvalidOperationException(
+                    "The attested lilToon opaque target failed source " +
+                    "attestation: " + diagnostic?.Detail);
+            }
             if (!VerifyTargetIdentity(
-                    targetEvidence, out var diagnostic))
+                    targetEvidence, out diagnostic))
             {
                 throw new InvalidOperationException(
                     "The attested lilToon opaque target failed source " +

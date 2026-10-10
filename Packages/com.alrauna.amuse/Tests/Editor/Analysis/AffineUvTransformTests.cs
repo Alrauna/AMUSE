@@ -325,6 +325,28 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return new UvMapping(0, new Vector2(scaleX, scaleY), new Vector2(offsetX, offsetY));
         }
 
+        [TestCase(1f, 1f, 0f, 0f, 0, true)]
+        [TestCase(2f, 1f, 0f, 0f, 0, false)]
+        [TestCase(1f, 0.5f, 0f, 0f, 0, false)]
+        [TestCase(1f, 1f, 0.5f, 0f, 0, false)]
+        [TestCase(1f, 1f, 0f, -0.5f, 0, false)]
+        [TestCase(1f, 1f, 0f, 0f, 2, true)]
+        public void UvMappingIdentityMatchesPerComponentComparison(
+            float scaleX, float scaleY, float offsetX, float offsetY,
+            int channel, bool expected)
+        {
+            var mapping = new UvMapping(
+                channel, new Vector2(scaleX, scaleY),
+                new Vector2(offsetX, offsetY));
+
+            Assert.That(mapping.IsIdentity, Is.EqualTo(expected));
+            Assert.That(
+                mapping.IsIdentity,
+                Is.EqualTo(
+                    mapping.Scale.x == 1f && mapping.Scale.y == 1f &&
+                    mapping.Offset.x == 0f && mapping.Offset.y == 0f));
+        }
+
         private static TriangleAlphaInput Triangle(float x0, float x1, float x2, float y0, float y1, float y2)
         {
             return TriangleAlphaInput.WithUv0(

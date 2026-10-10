@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -348,6 +349,75 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 2.0, 4.0);
 
             Assert.That(nearEdge, Is.True);
+        }
+
+        private static TriangleAlphaInput DiagonalTriangle(
+            float u0x, float u0y, float u1x, float u1y, float u2x, float u2y)
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(u0x, u0y), new Vector2(u1x, u1y), new Vector2(u2x, u2y));
+        }
+
+        private static AlphaTextureData EightByEightOneWitnessTexture()
+        {
+            var bytes = new byte[64];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                bytes[index] = 255;
+            }
+            bytes[27] = 0;
+            return new AlphaTextureData(8, 8, bytes);
+        }
+
+        [Test]
+        public void BilinearClampLargeCoordinateRunMatchesSmallRunVerdict()
+        {
+            var texture = EightByEightOneWitnessTexture();
+            var sampling = new TextureSampling(
+                TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
+
+            // Small control: same shape near the origin, vertices in texel
+            // units (-8, -8), (10, 10), (-8, 10), so UV units divide by 8.
+            var small = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(-1f, -1f, 1.25f, 1.25f, -1f, 1.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            // Large run: the same shape near plus and minus 16 million texel
+            // units, so UV units are the texel units divided by 8.
+            // RED note: the plan expected the large run to return
+            // ProvenOpaque before the fix. It did not. Witness indices 27,
+            // 18, and 36 were tried, then all 64 indices were swept. The
+            // large run matched the small run at every index. The plan's
+            // diagonal is the line y = x. For that slope the separating
+            // axis products cancel exactly in binary64 at these
+            // magnitudes, so the old pre-filter cannot misfire here.
+            var large = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(
+                    -2000000f, -2000000f,
+                    2000000.25f, 2000000.25f,
+                    -2000000f, 2000000.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            Assert.That(small, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+            Assert.That(large, Is.EqualTo(small));
+        }
+
+        [Test]
+        public void BilinearClampSixteenTexelShiftedRunMatchesSmallRunVerdict()
+        {
+            var texture = EightByEightOneWitnessTexture();
+            var sampling = new TextureSampling(
+                TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
+            var shifted = TriangleAlphaClassifier.Classify(
+                DiagonalTriangle(
+                    -1999998f, -1999998f,
+                    2000002.25f, 2000002.25f,
+                    -1999998f, 2000002.25f),
+                texture, sampling, AlphaUvEnvelope.Zero);
+
+            Assert.That(
+                shifted, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
         // --- A7 widenings: trilinear and anisotropic --------------------
@@ -1471,6 +1541,466 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 TextureFilterMode.Point,
                 TextureWrapMode.Clamp,
                 TextureAnisoMode.Anisotropic);
+        }
+
+        [Test]
+        public void RepeatCoordinateDifferenceOverflow_ReturnsUnknown()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+            var bilinearSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Repeat);
+            var pointSampling = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Repeat);
+
+            var bilinearEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var pointEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            var bilinearOutcome = TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                bilinearSampling,
+                bilinearEnvelope);
+            Assert.That(
+                bilinearOutcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            var pointOutcome = TriangleAlphaClassifier.Classify(
+                triangle,
+                texture,
+                pointSampling,
+                pointEnvelope);
+            Assert.That(
+                pointOutcome,
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        [Test]
+        public void WitnessRepeatCoordinateOverflow_ReturnsTrue()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+
+            var bilinearEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var pointEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointEnvelope),
+                Is.True);
+        }
+
+        [Test]
+        public void RepeatBoundaryCoordinates_PreventLoopRollover()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.zero,
+                Vector2.zero);
+            var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+
+            var pointXEnvelope = new AlphaUvEnvelope(
+                new ExactRational(2147483647, 4),
+                new ExactRational(BigInteger.Zero));
+            var pointYEnvelope = new AlphaUvEnvelope(
+                new ExactRational(BigInteger.Zero),
+                new ExactRational(2147483647, 2));
+            var pointSampling = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Repeat);
+            var bilinearSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Repeat);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    pointSampling,
+                    pointXEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointXEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    pointSampling,
+                    pointYEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessPointRepeat(
+                    triangle,
+                    texture,
+                    pointYEnvelope),
+                Is.True);
+
+            var bilinearXEnvelope = new AlphaUvEnvelope(
+                new ExactRational(1073741823, 2),
+                new ExactRational(BigInteger.Zero));
+            var bilinearYEnvelope = new AlphaUvEnvelope(
+                new ExactRational(BigInteger.Zero),
+                new ExactRational(1073741823));
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    bilinearSampling,
+                    bilinearXEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearXEnvelope),
+                Is.True);
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle,
+                    texture,
+                    bilinearSampling,
+                    bilinearYEnvelope),
+                Is.EqualTo(TriangleAlphaOutcome.Unknown));
+
+            Assert.That(
+                TriangleAlphaClassifier.HasMappedWitnessBilinearRepeat(
+                    triangle,
+                    texture,
+                    bilinearYEnvelope),
+                Is.True);
+        }
+
+        [Test]
+        public void TryGetUvSet_WithTruncatedChannelBuffer_ReturnsFalseWithoutThrowing()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_WithNegativeVertexIndices_ReturnsFalseWithoutThrowing()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangleA = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, -1, 1, 2);
+            var triangleB = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, -1, 2);
+            var triangleC = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                Vector2.zero,
+                Vector2.right,
+                Vector2.up)
+                .WithChannels(extraUvSets, 0, 1, -1);
+
+            Assert.That(triangleA.TryGetUvSet(1, out var a1, out var b1, out var c1), Is.False);
+            Assert.That(a1, Is.EqualTo(Vector2.zero));
+            Assert.That(b1, Is.EqualTo(Vector2.zero));
+            Assert.That(c1, Is.EqualTo(Vector2.zero));
+
+            Assert.That(triangleB.TryGetUvSet(1, out var a2, out var b2, out var c2), Is.False);
+            Assert.That(a2, Is.EqualTo(Vector2.zero));
+            Assert.That(b2, Is.EqualTo(Vector2.zero));
+            Assert.That(c2, Is.EqualTo(Vector2.zero));
+
+            Assert.That(triangleC.TryGetUvSet(1, out var a3, out var b3, out var c3), Is.False);
+            Assert.That(a3, Is.EqualTo(Vector2.zero));
+            Assert.That(b3, Is.EqualTo(Vector2.zero));
+            Assert.That(c3, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsTrue_ForValidPrimaryChannelZero()
+        {
+            var uv0 = new Vector2(0.1f, 0.2f);
+            var uv1 = new Vector2(0.3f, 0.4f);
+            var uv2 = new Vector2(0.5f, 0.6f);
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                uv0,
+                uv1,
+                uv2);
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.True);
+            Assert.That(a, Is.EqualTo(uv0));
+            Assert.That(b, Is.EqualTo(uv1));
+            Assert.That(c, Is.EqualTo(uv2));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenPrimaryChannelContainsNaN()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(float.NaN, 0f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenPrimaryChannelContainsInfinity()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(float.PositiveInfinity, 0.5f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(0, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenChannelIndexIsNegative()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f));
+
+            var success = triangle.TryGetUvSet(-1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenChannelIndexExceedsAvailableSets()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(2, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsNaN()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(float.NaN, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsPositiveInfinity()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(float.PositiveInfinity, 0.2f), new Vector2(0.3f, 0.3f) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsFalse_WhenSecondaryChannelContainsNegativeInfinity()
+        {
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { new Vector2(0.1f, 0.1f), new Vector2(0.2f, 0.2f), new Vector2(0.3f, float.NegativeInfinity) }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.False);
+            Assert.That(a, Is.EqualTo(Vector2.zero));
+            Assert.That(b, Is.EqualTo(Vector2.zero));
+            Assert.That(c, Is.EqualTo(Vector2.zero));
+        }
+
+        [Test]
+        public void TryGetUvSet_ReturnsTrue_WhenSecondaryChannelContainsValidCoordinates()
+        {
+            var uvA = new Vector2(0.1f, 0.1f);
+            var uvB = new Vector2(0.2f, 0.2f);
+            var uvC = new Vector2(0.3f, 0.3f);
+            var extraUvSets = new IReadOnlyList<Vector2>[]
+            {
+                new[] { uvA, uvB, uvC }
+            };
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f))
+                .WithChannels(extraUvSets, 0, 1, 2);
+
+            var success = triangle.TryGetUvSet(1, out var a, out var b, out var c);
+
+            Assert.That(success, Is.True);
+            Assert.That(a, Is.EqualTo(uvA));
+            Assert.That(b, Is.EqualTo(uvB));
+            Assert.That(c, Is.EqualTo(uvC));
+        }
+
+        [Test]
+        public void BilinearClampIntegerUvTriangleStillFindsSubOpaqueTexel()
+        {
+            var triangle = TriangleAlphaInput.WithUv0(
+                Vector3.zero, Vector3.right, Vector3.up,
+                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f));
+            var texture = new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 255, 0 });
+
+            Assert.That(
+                TriangleAlphaClassifier.Classify(
+                    triangle, texture,
+                    new TextureSampling(
+                        TextureFilterMode.Bilinear, TextureWrapMode.Clamp),
+                    AlphaUvEnvelope.Zero),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
     }
 }

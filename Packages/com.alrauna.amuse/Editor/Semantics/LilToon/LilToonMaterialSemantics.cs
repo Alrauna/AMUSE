@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
+using static Alrauna.Amuse.Editor.Semantics.LilToon.LilToonUnknownRecord;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -138,7 +137,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
-                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    material, FullMaterialEvidenceRequest),
             })[0];
             var evidence = LilToonSourceAttestation.GatherSourceEvidence(
                 material.shader, captured);
@@ -176,7 +176,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var captured = UnityMaterialEvidenceCapture.Capture(new[]
             {
-                new MaterialEvidenceCaptureInput(material, AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    material, FullMaterialEvidenceRequest),
             })[0];
             return InterpretVerifiedMaterial(
                 material,
@@ -185,28 +186,58 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 captured);
         }
 
-        private static LilToonSemanticResult InterpretVerifiedMaterial(
-            Material material,
+        /// <summary>
+        /// Interprets one captured material. The caller must have captured
+        /// the evidence under <see cref="FullMaterialEvidenceRequest"/> and
+        /// must have established admission upstream. The reads below consume
+        /// only the captured snapshot. They never touch the live material. A
+        /// captured read the evidence cannot answer refuses with a diagnostic
+        /// that names the property.
+        /// </summary>
+        internal static LilToonSemanticResult InterpretVerifiedMaterialFromEvidence(
+            CapturedMaterialEvidence captured,
             ColorSpace activeColorSpace,
-            IReadOnlyCollection<string> compiledFeatures,
-            CapturedMaterialEvidence captured)
+            IReadOnlyCollection<string> compiledFeatures)
         {
+            if (captured == null)
+            {
+                throw new ArgumentNullException(nameof(captured));
+            }
+
+            if (compiledFeatures == null)
+            {
+                throw new ArgumentNullException(nameof(compiledFeatures));
+            }
+
             // A verified material is a supported material; each output is proven
             // independently and stays Unknown, with a diagnostic, when its
             // equation is not representable.
             var diagnostics = new List<LilToonSemanticDiagnostic>();
 
             var baseColor = InterpretBaseColor(
-                material, activeColorSpace, diagnostics);
+                captured, activeColorSpace, diagnostics);
             var alpha = InterpretAlpha(captured, diagnostics);
             var emission = InterpretEmission(
-                material, activeColorSpace, compiledFeatures, diagnostics);
-            var normal = InterpretNormal(material, compiledFeatures, diagnostics);
+                captured, activeColorSpace, compiledFeatures, diagnostics);
+            var normal = InterpretNormal(captured, compiledFeatures, diagnostics);
 
             return new LilToonSemanticResult(
                 true,
                 new MaterialSemantics(baseColor, alpha, emission, normal),
                 diagnostics);
+        }
+
+        private static LilToonSemanticResult InterpretVerifiedMaterial(
+            Material material,
+            ColorSpace activeColorSpace,
+            IReadOnlyCollection<string> compiledFeatures,
+            CapturedMaterialEvidence captured)
+        {
+            // material is the capture's source. The interpreters read only the
+            // captured snapshot, so a later mutation of the live material
+            // cannot change an already-captured answer.
+            return InterpretVerifiedMaterialFromEvidence(
+                captured, activeColorSpace, compiledFeatures);
         }
 
         private const string ColorProperty = "_Color";
@@ -242,7 +273,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// flag.
         /// </summary>
         private static SemanticOutput<ColorSemanticValue> InterpretBaseColor(
-            Material material,
+            CapturedMaterialEvidence evidence,
             ColorSpace activeColorSpace,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
@@ -255,7 +286,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     activeColorSpace.ToString());
             }
 
-            var writerGate = FirstFailedZeroGate(material, BaseColorWriterGates);
+            var writerGate = FirstFailedZeroGate(evidence, BaseColorWriterGates);
             if (writerGate != null)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -270,12 +301,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // component: Unity's aggregate vector equality is epsilon-based
             // and is intentionally excluded from semantic proof decisions,
             // because a near-identity HSVG still tone-corrects the color.
-            var hasHsvg = material.HasProperty(MainTexHsvgProperty);
-            var hsvg = hasHsvg
-                ? material.GetVector(MainTexHsvgProperty)
-                : Vector4.zero;
-            if (!hasHsvg ||
-                hsvg.x != IdentityHsvg.x ||
+            if (!evidence.TryGetVector(MainTexHsvgProperty, out var hsvg))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    MainTexHsvgProperty);
+            }
+
+            if (hsvg.x != IdentityHsvg.x ||
                 hsvg.y != IdentityHsvg.y ||
                 hsvg.z != IdentityHsvg.z ||
                 hsvg.w != IdentityHsvg.w)
@@ -289,8 +324,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // An assigned adjust mask lerps between corrected and uncorrected
             // colour, a second sample the closed vocabulary cannot express.
-            if (material.HasProperty(MainColorAdjustMaskProperty) &&
-                material.GetTexture(MainColorAdjustMaskProperty) != null)
+            if (evidence.TryGetTexture(
+                    MainColorAdjustMaskProperty, out var adjustMask) &&
+                adjustMask.IsAssigned)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -299,7 +335,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MainColorAdjustMaskProperty);
             }
 
-            var color = material.GetColor(ColorProperty);
+            if (!evidence.TryGetColor(ColorProperty, out var color))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    ColorProperty);
+            }
+
             if (!IsFinite(color.r) || !IsFinite(color.g) || !IsFinite(color.b))
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -310,16 +354,33 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var linear = color.linear;
+            if (!IsFinite(linear.r) || !IsFinite(linear.g) || !IsFinite(linear.b))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    ColorProperty);
+            }
             var tint = new Vector3(linear.r, linear.g, linear.b);
 
-            var texture = material.GetTexture(MainTextureProperty);
-            if (texture == null)
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var mainAssignment))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.BaseColor,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    MainTextureProperty);
+            }
+
+            if (!mainAssignment.IsAssigned)
             {
                 return SemanticOutput<ColorSemanticValue>.Complete(
                     ColorSemanticValue.Constant(tint));
             }
 
-            if (!TryGetMainUvMapping(material, out var mapping))
+            if (!TryGetMainUvMapping(evidence, mainAssignment, out var mapping))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -328,7 +389,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MainTexScrollRotateProperty);
             }
 
-            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
+            if (!mainAssignment.Texture.HasSourceIdentity)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -336,8 +397,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
                     MainTextureProperty);
             }
+            var sourceId = mainAssignment.Texture.SourceIdentity;
 
-            if (!UnityTextureEvidence.TryGetSampling(texture, out var sampling))
+            if (!mainAssignment.Texture.HasSampling)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -345,10 +407,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedSampling,
                     MainTextureProperty);
             }
+            var sampling = mainAssignment.Texture.Sampling;
 
-            if (!UnityTextureEvidence.TryGetColorInterpretation(
-                    texture, out var interpretation) ||
-                !TryProveSampledColorInUnitRange(texture))
+            if (!mainAssignment.Texture.HasColorInterpretation ||
+                !mainAssignment.Texture.ColorValuesProvenInUnitRange)
             {
                 // lilToneCorrection is the identity only on [0,1]: its saturate
                 // calls would clamp anything above 1.
@@ -358,6 +420,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedTextureImport,
                     MainTextureProperty);
             }
+            var interpretation = mainAssignment.Texture.ColorInterpretation;
 
             var sample = new TextureSample(sourceId, mapping, sampling);
             // Unit-tint simplification is exact per binary32 component: a
@@ -375,18 +438,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// selector.
         /// </summary>
         private static bool TryGetMainUvMapping(
-            Material material,
+            CapturedMaterialEvidence evidence,
+            CapturedTextureAssignment assignment,
             out UvMapping mapping)
         {
             mapping = default;
 
-            if (!material.HasProperty(MainTexScrollRotateProperty))
-            {
-                return false;
-            }
-
-            var scrollRotate = material.GetVector(MainTexScrollRotateProperty);
-            if (!IsFinite(scrollRotate) ||
+            if (!evidence.TryGetVector(
+                    MainTexScrollRotateProperty, out var scrollRotate) ||
+                !IsFinite(scrollRotate) ||
                 scrollRotate.x != 0f ||
                 scrollRotate.y != 0f ||
                 scrollRotate.z != 0f ||
@@ -395,8 +455,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            var scale = material.GetTextureScale(MainTextureProperty);
-            var offset = material.GetTextureOffset(MainTextureProperty);
+            if (!assignment.HasScaleOffset)
+            {
+                return false;
+            }
+
+            var scale = assignment.Scale;
+            var offset = assignment.Offset;
             if (!IsFinite(scale) || !IsFinite(offset))
             {
                 return false;
@@ -405,93 +470,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             mapping = new UvMapping(0, scale, offset);
             return true;
         }
-
-        /// <summary>
-        /// Positively proves that every effective sampled colour value for this
-        /// texture is finite and confined to [0,1], the range in which
-        /// <c>lilToneCorrection</c> at <c>_MainTexHSVG = (0,1,1,1)</c> is the
-        /// identity.
-        ///
-        /// Only imported formats on the allow-list below succeed. Every other
-        /// format — signed-normalized, half, float, shared-exponent, BC6H — and
-        /// every texture whose importer cannot be read, refuses. A format Unity
-        /// adds in a future version is not on the list and therefore refuses.
-        /// Nothing is clamped, approximated, or assumed bounded. The predicate
-        /// is lilToon-local: it has one consumer and a lilToon-specific
-        /// justification, so it does not belong in the shared texture evidence.
-        /// </summary>
-        private static bool TryProveSampledColorInUnitRange(Texture texture)
-        {
-            if (texture == null)
-            {
-                return false;
-            }
-
-            var path = AssetDatabase.GetAssetPath(texture);
-            if (string.IsNullOrEmpty(path) ||
-                !(AssetImporter.GetAtPath(path) is TextureImporter))
-            {
-                return false;
-            }
-
-            return BoundedColorFormats.Contains(texture.graphicsFormat);
-        }
-
-        /// <summary>
-        /// Unsigned-normalized and sRGB formats, whose decoded values are
-        /// exactly the closed interval [0,1]. Enumerated rather than
-        /// pattern-matched so an unrecognized format cannot pass by accident.
-        /// </summary>
-        private static readonly HashSet<GraphicsFormat> BoundedColorFormats =
-            new HashSet<GraphicsFormat>
-            {
-                GraphicsFormat.R8_UNorm,
-                GraphicsFormat.R8G8_UNorm,
-                GraphicsFormat.R8G8B8_UNorm,
-                GraphicsFormat.R8G8B8A8_UNorm,
-                GraphicsFormat.R8G8B8_SRGB,
-                GraphicsFormat.R8G8B8A8_SRGB,
-                GraphicsFormat.B8G8R8_UNorm,
-                GraphicsFormat.B8G8R8A8_UNorm,
-                GraphicsFormat.B8G8R8_SRGB,
-                GraphicsFormat.B8G8R8A8_SRGB,
-                GraphicsFormat.R16_UNorm,
-                GraphicsFormat.R16G16_UNorm,
-                GraphicsFormat.R16G16B16_UNorm,
-                GraphicsFormat.R16G16B16A16_UNorm,
-                GraphicsFormat.R5G6B5_UNormPack16,
-                GraphicsFormat.R4G4B4A4_UNormPack16,
-                GraphicsFormat.R5G5B5A1_UNormPack16,
-                GraphicsFormat.RGBA_DXT1_UNorm,
-                GraphicsFormat.RGBA_DXT1_SRGB,
-                GraphicsFormat.RGBA_DXT3_UNorm,
-                GraphicsFormat.RGBA_DXT3_SRGB,
-                GraphicsFormat.RGBA_DXT5_UNorm,
-                GraphicsFormat.RGBA_DXT5_SRGB,
-                GraphicsFormat.R_BC4_UNorm,
-                GraphicsFormat.RG_BC5_UNorm,
-                GraphicsFormat.RGBA_BC7_UNorm,
-                GraphicsFormat.RGBA_BC7_SRGB,
-                GraphicsFormat.RGB_ETC_UNorm,
-                GraphicsFormat.RGB_ETC2_UNorm,
-                GraphicsFormat.RGB_ETC2_SRGB,
-                GraphicsFormat.RGB_A1_ETC2_UNorm,
-                GraphicsFormat.RGB_A1_ETC2_SRGB,
-                GraphicsFormat.RGBA_ETC2_UNorm,
-                GraphicsFormat.RGBA_ETC2_SRGB,
-                GraphicsFormat.RGBA_ASTC4X4_UNorm,
-                GraphicsFormat.RGBA_ASTC4X4_SRGB,
-                GraphicsFormat.RGBA_ASTC5X5_UNorm,
-                GraphicsFormat.RGBA_ASTC5X5_SRGB,
-                GraphicsFormat.RGBA_ASTC6X6_UNorm,
-                GraphicsFormat.RGBA_ASTC6X6_SRGB,
-                GraphicsFormat.RGBA_ASTC8X8_UNorm,
-                GraphicsFormat.RGBA_ASTC8X8_SRGB,
-                GraphicsFormat.RGBA_ASTC10X10_UNorm,
-                GraphicsFormat.RGBA_ASTC10X10_SRGB,
-                GraphicsFormat.RGBA_ASTC12X12_UNorm,
-                GraphicsFormat.RGBA_ASTC12X12_SRGB,
-            };
 
         // On LIL_RENDER 0 the alpha value is forced to exactly one after every
         // alpha-writing block (lil_pass_forward_normal.hlsl:393-396), and the
@@ -713,12 +691,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <c>emissionColor.a</c>, so an RGBA map would scale its own emission.
         /// </summary>
         private static SemanticOutput<ColorSemanticValue> InterpretEmission(
-            Material material,
+            CapturedMaterialEvidence evidence,
             ColorSpace activeColorSpace,
             IReadOnlyCollection<string> compiledFeatures,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
-            var writerGate = FirstFailedZeroGate(material, EmissiveWriterGates);
+            var writerGate = FirstFailedZeroGate(evidence, EmissiveWriterGates);
             if (writerGate != null)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -728,8 +706,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     writerGate);
             }
 
-            var backfaceColor = material.GetColor(BackfaceColorProperty);
-            if (!IsFinite(backfaceColor.a) || backfaceColor.a != 0f)
+            if (!evidence.TryGetColor(BackfaceColorProperty, out var backfaceColor) ||
+                !IsFinite(backfaceColor.a) ||
+                backfaceColor.a != 0f)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -741,7 +720,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // Dissolve adds its own emissive term and is required inert for both
             // the zero and the slot-1 claim. Only the mode component is proven;
             // no general dissolve semantics are modelled.
-            if (!material.HasProperty(DissolveParamsProperty))
+            if (!evidence.HasProperty(DissolveParamsProperty))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -750,7 +729,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     DissolveParamsProperty);
             }
 
-            var dissolveParams = material.GetVector(DissolveParamsProperty);
+            if (!evidence.TryGetVector(DissolveParamsProperty, out var dissolveParams))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    DissolveParamsProperty);
+            }
+
             if (!IsFinite(dissolveParams) || dissolveParams.x != 0f)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -760,7 +747,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     DissolveParamsProperty);
             }
 
-            if (!TryReadBinary(material, UseEmissionProperty, out var useEmission))
+            if (!TryReadBinary(evidence, UseEmissionProperty, out var useEmission))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -794,7 +781,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     activeColorSpace.ToString());
             }
 
-            var modifierGate = FirstFailedZeroGate(material, EmissionModifierGates);
+            var modifierGate = FirstFailedZeroGate(evidence, EmissionModifierGates);
             if (modifierGate != null)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -805,7 +792,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // Only Add (1) makes lilBlendColor an additive emission term.
-            var blendMode = material.GetFloat(EmissionBlendModeProperty);
+            if (!evidence.TryGetScalar(
+                    EmissionBlendModeProperty, out var blendMode))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionBlendModeProperty);
+            }
+
             if (!IsFinite(blendMode) || blendMode != 1f)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -816,7 +812,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // lilCalcBlink is exactly one when blink.x is zero.
-            var blink = material.GetVector(EmissionBlinkProperty);
+            if (!evidence.TryGetVector(EmissionBlinkProperty, out var blink))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionBlinkProperty);
+            }
+
             if (!IsFinite(blink) || blink.x != 0f)
             {
                 return RecordUnknown<ColorSemanticValue>(
@@ -827,8 +831,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // An assigned mask multiplies a second sample this equation omits.
-            if (material.HasProperty(EmissionBlendMaskProperty) &&
-                material.GetTexture(EmissionBlendMaskProperty) != null)
+            if (evidence.TryGetTexture(
+                    EmissionBlendMaskProperty, out var blendMask) &&
+                blendMask.IsAssigned)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -837,8 +842,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     EmissionBlendMaskProperty);
             }
 
-            var blend = material.GetFloat(EmissionBlendProperty);
-            var color = material.GetColor(EmissionColorProperty);
+            if (!evidence.TryGetScalar(EmissionBlendProperty, out var blend))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionBlendProperty);
+            }
+
+            if (!evidence.TryGetColor(EmissionColorProperty, out var color))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionColorProperty);
+            }
+
             if (!IsFinite(blend) ||
                 !IsFinite(color.r) || !IsFinite(color.g) ||
                 !IsFinite(color.b) || !IsFinite(color.a))
@@ -852,9 +873,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var linear = color.linear;
             var tint = new Vector3(linear.r, linear.g, linear.b) * (blend * color.a);
+            if (!IsFinite(tint.x) || !IsFinite(tint.y) || !IsFinite(tint.z))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionColorProperty);
+            }
 
-            var texture = material.GetTexture(EmissionMapProperty);
-            if (texture == null)
+            if (!evidence.TryGetTexture(
+                    EmissionMapProperty, out var emissionAssignment))
+            {
+                return RecordUnknown<ColorSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Emission,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    EmissionMapProperty);
+            }
+
+            if (!emissionAssignment.IsAssigned)
             {
                 return SemanticOutput<ColorSemanticValue>.Complete(
                     ColorSemanticValue.Constant(tint));
@@ -869,7 +907,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     EmissionMapFeature);
             }
 
-            if (!TryGetEmissionUvMapping(material, out var mapping))
+            if (!TryGetEmissionUvMapping(evidence, emissionAssignment, out var mapping))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -879,7 +917,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // The emission map declares its own sampler_EmissionMap.
-            if (!UnityTextureEvidence.TryGetSampling(texture, out var sampling))
+            if (!emissionAssignment.Texture.HasSampling)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -887,8 +925,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedSampling,
                     EmissionMapProperty);
             }
+            var sampling = emissionAssignment.Texture.Sampling;
 
-            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
+            if (!emissionAssignment.Texture.HasSourceIdentity)
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -896,10 +935,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
                     EmissionMapProperty);
             }
+            var sourceId = emissionAssignment.Texture.SourceIdentity;
 
-            if (!UnityTextureEvidence.TryGetColorInterpretation(
-                    texture, out var interpretation) ||
-                !UnityTextureEvidence.TryProveSampledAlphaIsOne(texture))
+            if (!emissionAssignment.Texture.HasColorInterpretation ||
+                !emissionAssignment.Texture.SampledAlphaIsProvenOne)
             {
                 // emissionColor.a scales the blend, so an RGBA map would scale
                 // its own emission: rgb times the same sample's alpha is not
@@ -910,6 +949,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedTextureImport,
                     EmissionMapProperty);
             }
+            var interpretation = emissionAssignment.Texture.ColorInterpretation;
 
             var sample = new TextureSample(sourceId, mapping, sampling);
             var value = tint.x == 1f && tint.y == 1f && tint.z == 1f
@@ -925,12 +965,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// selects rim UV and is unsupported.
         /// </summary>
         private static bool TryGetEmissionUvMapping(
-            Material material,
+            CapturedMaterialEvidence evidence,
+            CapturedTextureAssignment assignment,
             out UvMapping mapping)
         {
             mapping = default;
 
-            var rawMode = material.GetFloat(EmissionMapUvModeProperty);
+            if (!evidence.TryGetScalar(EmissionMapUvModeProperty, out var rawMode))
+            {
+                return false;
+            }
+
             if (!IsFinite(rawMode))
             {
                 return false;
@@ -946,8 +991,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            var scrollRotate = material.GetVector(EmissionMapScrollRotateProperty);
-            if (!IsFinite(scrollRotate) ||
+            if (!evidence.TryGetVector(
+                    EmissionMapScrollRotateProperty, out var scrollRotate) ||
+                !IsFinite(scrollRotate) ||
                 scrollRotate.x != 0f ||
                 scrollRotate.y != 0f ||
                 scrollRotate.z != 0f ||
@@ -956,8 +1002,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            var scale = material.GetTextureScale(EmissionMapProperty);
-            var offset = material.GetTextureOffset(EmissionMapProperty);
+            if (!assignment.HasScaleOffset)
+            {
+                return false;
+            }
+
+            var scale = assignment.Scale;
+            var offset = assignment.Offset;
             if (!IsFinite(scale) || !IsFinite(offset))
             {
                 return false;
@@ -985,6 +1036,91 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         };
 
         /// <summary>
+        /// The full opaque request: the alpha request's schema plus every name
+        /// the base-color, emission, and normal reads touch, and the texture
+        /// facts those reads consume. The capture is a value snapshot, so the
+        /// request must carry each fact before the frontend can read it. The
+        /// alpha request keeps its exact content. It serves the transferred
+        /// analysis and every alpha-only consumer, and widening it would
+        /// pollute those captures.
+        /// This declaration sits after the four gate arrays on purpose.
+        /// Static field initializers run in textual order, so the Combine
+        /// expression below needs every gate array initialized first.
+        /// </summary>
+        internal static MaterialEvidenceRequest FullMaterialEvidenceRequest { get; } =
+            MaterialEvidenceRequest.Combine(
+                AlphaEvidenceRequest,
+                new MaterialEvidenceRequest(
+                    shaderName: false,
+                    activeColorSpace: false,
+                    presenceProperties: new[]
+                    {
+                        MainTexHsvgProperty,
+                        MainTexScrollRotateProperty,
+                        DissolveParamsProperty,
+                        BumpScaleProperty,
+                    },
+                    scalarProperties: BaseColorWriterGates
+                        .Concat(EmissiveWriterGates)
+                        .Concat(EmissionModifierGates)
+                        .Concat(NormalWriterGates)
+                        .Concat(new[]
+                        {
+                            UseEmissionProperty,
+                            EmissionBlendModeProperty,
+                            EmissionBlendProperty,
+                            EmissionMapUvModeProperty,
+                            UseBumpMapProperty,
+                            BumpScaleProperty,
+                        })
+                        // The gate arrays share four names across outputs. One
+                        // request category carries each name once.
+                        .Distinct()
+                        .ToArray(),
+                    colorProperties: new[]
+                    {
+                        ColorProperty,
+                        BackfaceColorProperty,
+                        EmissionColorProperty,
+                    },
+                    vectorProperties: new[]
+                    {
+                        MainTexHsvgProperty,
+                        MainTexScrollRotateProperty,
+                        DissolveParamsProperty,
+                        EmissionBlinkProperty,
+                        EmissionMapScrollRotateProperty,
+                    },
+                    textureProperties: new[]
+                    {
+                        new TexturePropertyEvidenceRequest(
+                            MainTextureProperty,
+                            TextureEvidenceKinds.ScaleOffset |
+                            TextureEvidenceKinds.SourceIdentity |
+                            TextureEvidenceKinds.Sampling |
+                            TextureEvidenceKinds.ColorInterpretation |
+                            TextureEvidenceKinds.BoundedColorRange),
+                        new TexturePropertyEvidenceRequest(
+                            MainColorAdjustMaskProperty,
+                            TextureEvidenceKinds.None),
+                        new TexturePropertyEvidenceRequest(
+                            EmissionMapProperty,
+                            TextureEvidenceKinds.ScaleOffset |
+                            TextureEvidenceKinds.SourceIdentity |
+                            TextureEvidenceKinds.Sampling |
+                            TextureEvidenceKinds.ColorInterpretation |
+                            TextureEvidenceKinds.SampledAlphaIsOne),
+                        new TexturePropertyEvidenceRequest(
+                            EmissionBlendMaskProperty,
+                            TextureEvidenceKinds.None),
+                        new TexturePropertyEvidenceRequest(
+                            BumpMapProperty,
+                            TextureEvidenceKinds.ScaleOffset |
+                            TextureEvidenceKinds.SourceIdentity |
+                            TextureEvidenceKinds.CanonicalNormalMap),
+                    }));
+
+        /// <summary>
         /// Proves the normalized normal term. The writer gates are validated
         /// <em>before</em> either neutral <c>Unmodified</c> return, so an
         /// independently enabled normal mechanism can never hide behind a
@@ -994,11 +1130,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// the analysis to recover them.
         /// </summary>
         private static SemanticOutput<NormalSemanticValue> InterpretNormal(
-            Material material,
+            CapturedMaterialEvidence evidence,
             IReadOnlyCollection<string> compiledFeatures,
             List<LilToonSemanticDiagnostic> diagnostics)
         {
-            if (!TryReadBinary(material, UseBumpMapProperty, out var useBumpMap))
+            if (!TryReadBinary(evidence, UseBumpMapProperty, out var useBumpMap))
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1007,7 +1143,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     UseBumpMapProperty);
             }
 
-            var writerGate = FirstFailedZeroGate(material, NormalWriterGates);
+            var writerGate = FirstFailedZeroGate(evidence, NormalWriterGates);
             if (writerGate != null)
             {
                 return RecordUnknown<NormalSemanticValue>(
@@ -1017,12 +1153,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     writerGate);
             }
 
-            var texture = material.GetTexture(BumpMapProperty);
+            if (!evidence.TryGetTexture(BumpMapProperty, out var bumpAssignment))
+            {
+                return RecordUnknown<NormalSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Normal,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    BumpMapProperty);
+            }
 
             // Nothing is claimed: the toggle is off, or the "bump" default
             // resolves to (0.5,0.5,1,0.5), which lilUnpackNormalScale maps to
             // exactly (0,0,1). Reached only after the writer gates are proven.
-            if (!useBumpMap || texture == null)
+            if (!useBumpMap || !bumpAssignment.IsAssigned)
             {
                 return SemanticOutput<NormalSemanticValue>.Complete(
                     NormalSemanticValue.Unmodified());
@@ -1043,8 +1186,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            var scale = material.HasProperty(BumpScaleProperty)
-                ? material.GetFloat(BumpScaleProperty)
+            var scale = evidence.TryGetScalar(BumpScaleProperty, out var scaleValue)
+                ? scaleValue
                 : float.NaN;
             if (!IsFinite(scale) || scale != 1f)
             {
@@ -1055,7 +1198,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     BumpScaleProperty);
             }
 
-            if (!TryGetComposedUvMapping(material, BumpMapProperty, out var mapping))
+            if (!TryGetComposedUvMapping(evidence, bumpAssignment, out var mapping))
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1066,8 +1209,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // The bump map is sampled with sampler_MainTex, so the sampler state
             // comes from the _MainTex asset, not from _BumpMap.
-            var mainTexture = material.GetTexture(MainTextureProperty);
-            if (!UnityTextureEvidence.TryGetSampling(mainTexture, out var sampling))
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var mainAssignment) ||
+                !mainAssignment.IsAssigned ||
+                !mainAssignment.Texture.HasSampling)
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1075,8 +1220,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnsupportedSampling,
                     MainTextureProperty);
             }
+            var sampling = mainAssignment.Texture.Sampling;
 
-            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
+            if (!bumpAssignment.Texture.HasSourceIdentity)
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1084,8 +1230,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
                     BumpMapProperty);
             }
+            var sourceId = bumpAssignment.Texture.SourceIdentity;
 
-            if (!UnityTextureEvidence.IsCanonicalNormalMapImport(texture))
+            if (!bumpAssignment.Texture.IsCanonicalNormalMap)
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1106,19 +1253,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <see cref="UvMapping"/> expresses it exactly.
         /// </summary>
         private static bool TryGetComposedUvMapping(
-            Material material,
-            string textureProperty,
+            CapturedMaterialEvidence evidence,
+            CapturedTextureAssignment assignment,
             out UvMapping mapping)
         {
             mapping = default;
 
-            if (!TryGetMainUvMapping(material, out var main))
+            if (!evidence.TryGetTexture(
+                    MainTextureProperty, out var mainAssignment) ||
+                !TryGetMainUvMapping(evidence, mainAssignment, out var main))
             {
                 return false;
             }
 
-            var scale = material.GetTextureScale(textureProperty);
-            var offset = material.GetTextureOffset(textureProperty);
+            if (!assignment.HasScaleOffset)
+            {
+                return false;
+            }
+
+            var scale = assignment.Scale;
+            var offset = assignment.Offset;
             if (!IsFinite(scale) || !IsFinite(offset))
             {
                 return false;

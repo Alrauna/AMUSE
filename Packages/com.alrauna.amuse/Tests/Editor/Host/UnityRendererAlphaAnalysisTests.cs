@@ -1221,5 +1221,110 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "the uv1 coordinates name the opaque texel; reading uv0 " +
             "instead would answer transparent");
     }
+
+        /// <summary>
+        /// The probe Analyze path must pass the snapshot's extra UV sets to
+        /// Classify, exactly as the product and direct-Classify callers do.
+        /// The uv1 layer decides the triangle here. uv0 points into the
+        /// transparent region of the layer field. uv1 points into the opaque
+        /// region. A probe that drops the extra sets classifies with no
+        /// channel-one coordinates and answers Unknown.
+        /// </summary>
+        [Test]
+        public void ProbePathClassifiesThroughExtraUvSets()
+        {
+            var sourceId = new TextureSourceId("amuse-tests:uv1-probe:1");
+            var chain = new AlphaMipChain(new[]
+            {
+                new AlphaTextureData(
+                    2, 2, new byte[] { 255, 255, 0, 0 }),
+            });
+            var texture = new CapturedTextureEvidence(
+                true, sourceId, 1f, AlphaPolicyBounds.Inert,
+                true, new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
+                false, default(TextureColorInterpretation),
+                false, false,
+                false, true, chain,
+                TextureCaptureRefusalReason.None,
+                false, null,
+                TextureCaptureRefusalReason.None);
+            var assignment = new CapturedTextureAssignment(
+                true, TextureEvidenceKinds.AlphaChannel,
+                false, Vector2.one, Vector2.zero,
+                texture, new TextureCaptureRefusal[0]);
+            var evidence = new CapturedMaterialEvidence(
+                false, null, false, default(ColorSpace),
+                new CapturedMaterialEvidence.PresenceEntry[0],
+                new CapturedMaterialEvidence.ScalarEntry[0],
+                new CapturedMaterialEvidence.ColorEntry[0],
+                new CapturedMaterialEvidence.VectorEntry[0],
+                new[]
+                {
+                    new CapturedMaterialEvidence.TextureEntry(
+                        "_MainTex", true, assignment),
+                },
+                new[] { texture });
+            var captured = new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                evidence,
+                default(Alrauna.Amuse.Editor.Semantics.Poiyomi
+                    .PoiyomiSourceEvidence),
+                null);
+
+            var mesh = Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                Vector3.zero, Vector3.right, Vector3.up,
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.55f, 0.55f),
+                new Vector2(0.95f, 0.55f),
+                new Vector2(0.55f, 0.95f),
+            };
+            mesh.SetUVs(1, new List<Vector2>
+            {
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+            });
+            mesh.subMeshCount = 1;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            var renderer = NewSkinned(mesh, NewMaterial());
+
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, new[] { captured });
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+
+            var sample = new TextureSample(
+                sourceId,
+                new UvMapping(1, Vector2.one, Vector2.zero),
+                new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp));
+            var alpha = SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
+            var result = UnityRendererAlphaAnalysis.Analyze(
+                extraction.Snapshot,
+                material => new CapturedAlphaSemantics(
+                    new MaterialSemantics(
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        alpha,
+                        SemanticOutput<ColorSemanticValue>.Unknown(),
+                        SemanticOutput<NormalSemanticValue>.Unknown()),
+                    null));
+
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                result.Plan.OpaqueTriangleCount,
+                Is.EqualTo(1),
+                "the uv1 coordinates name the opaque texels; reading uv0 " +
+                "instead would answer transparent, and dropping the extra " +
+                "sets would answer Unknown");
+        }
     }
 }

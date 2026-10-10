@@ -45,9 +45,21 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private readonly List<Object> _transient = new List<Object>();
 
+        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+
         [SetUp]
         public void SetUp()
         {
+            // The dev editor project persists Forced On anisotropic filtering.
+            // Under Forced On the sampler evidence reads the fixture
+            // textures' default anisoLevel 1 as anisotropic, so the proofs
+            // collapse to Unknown. Pin Per Texture for the test. Restore in
+            // teardown, which NUnit runs even for a failed test.
+            _savedAnisotropicFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                UnityEngine.AnisotropicFiltering.Enable;
+
             if (!AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.CreateFolder(
@@ -58,6 +70,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TearDown]
         public void TearDown()
         {
+            UnityEngine.QualitySettings.anisotropicFiltering =
+                _savedAnisotropicFiltering;
             foreach (var obj in _transient)
             {
                 if (obj != null)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
+using static Alrauna.Amuse.Editor.Semantics.LilToon.LilToonUnknownRecord;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -63,12 +64,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// subpass shadow clip bound; empty for cutout, whose theorem has
         /// no post-clip writer.
         /// </param>
+        /// <param name="requiresExactMainField">
+        /// Whether the family's theorem reads the main alpha field under the
+        /// exact-255 exact-one rule. Transparent binds true. Cutout binds
+        /// false: its own request declares the cutoff, and its coverage
+        /// transform reads the binarized field by its own rule. When true,
+        /// an assigned _MainTex captured under a sub-one capture threshold
+        /// refuses naming _Cutoff before any field read, in the shape of the
+        /// Poiyomi frontend's field-predicate agreement check.
+        /// </param>
         internal static SemanticOutput<ScalarSemanticValue> Interpret(
             CapturedMaterialEvidence evidence,
             List<LilToonSemanticDiagnostic> diagnostics,
             string[] coverageGates,
             float maxProvableCutoff,
-            LilToonAlphaGate[] transparentOnlyGates)
+            LilToonAlphaGate[] transparentOnlyGates,
+            bool requiresExactMainField)
         {
             // (1) Every optional alpha/coverage feature exactly off. The
             // first failure names the offending property.
@@ -234,13 +245,23 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // coordinate, and the mask rides _MainTex's sampler.
             var hasMainSampler = false;
             ScalarSemanticValue alphaChain;
-            if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var assignment) ||
-                !assignment.IsAssigned)
+            if (!evidence.TryGetTexture(MainTextureProperty, out var assignment))
             {
-                // Declared-default arm (design 2026-09-26): every attested
-                // lilToon source declares _MainTex = "white" {}, and the
-                // canonical digests pin that Properties block. Playback
+                return RecordUnknown<ScalarSemanticValue>(
+                    diagnostics,
+                    LilToonSemanticOutput.Alpha,
+                    LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                    MainTextureProperty);
+            }
+
+            if (!assignment.IsAssigned)
+            {
+                // Declared-default arm (design 2026-09-26): the arm fires
+                // for a declared slot that binds no texture. It never fires
+                // for a slot absent from the material. That case refuses
+                // above. Every attested lilToon source declares
+                // _MainTex = "white" {}, and the canonical digests pin that
+                // Properties block. Playback
                 // binds the declared default when a material assigns no
                 // texture, so the sample is exactly one at every texel and
                 // coordinate-independent: the main sample collapses to its
@@ -317,6 +338,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             MainTextureProperty);
                     }
 
+                    if (requiresExactMainField &&
+                        assignment.Texture.CaptureThreshold < 1f)
+                    {
+                        return RecordUnknown<ScalarSemanticValue>(
+                            diagnostics,
+                            LilToonSemanticOutput.Alpha,
+                            LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                            CutoffProperty);
+                    }
+
                     // uvMain is UV0 under the identity gates above.
                     var mainSample = new TextureSample(
                         assignment.Texture.SourceIdentity,
@@ -386,6 +417,28 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
             }
 
+            if (maskTerm.Kind == LilToonAlphaMaskTermKind.ConstantMultiplier)
+            {
+                // Multiply mode with a provably constant term: the constant
+                // composes over the layered value exactly as the mask
+                // sample does, and the multiply cannot fold into a
+                // saturating sum or difference below it.
+                alphaChain = ScalarProductFold.Fold(
+                    alphaChain,
+                    ScalarSemanticValue.Constant(maskTerm.Constant),
+                    AlphaMaskModeProperty,
+                    property => diagnostics.Add(
+                        new LilToonSemanticDiagnostic(
+                            LilToonSemanticOutput.Alpha,
+                            LilToonSemanticDiagnosticCode
+                                .UnsupportedFeature,
+                            property)));
+                if (alphaChain == null)
+                {
+                    return SemanticOutput<ScalarSemanticValue>.Unknown();
+                }
+            }
+
             if (maskSample != null)
             {
                 // Multiply mode: the term composes over the layered value.
@@ -405,8 +458,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             LilToonSemanticOutput.Alpha,
                             LilToonSemanticDiagnosticCode
                                 .UnsupportedFeature,
-                            property)),
-                    threadMaps: true);
+                            property)));
                 if (multiplied == null)
                 {
                     return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -465,8 +517,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                                 LilToonSemanticOutput.Alpha,
                                 LilToonSemanticDiagnosticCode
                                     .UnsupportedFeature,
-                                property)),
-                        threadMaps: true);
+                                property)));
                 case 3f:
                     return ScalarSemanticValue.SaturatingSum(
                         baseValue, layerValue);

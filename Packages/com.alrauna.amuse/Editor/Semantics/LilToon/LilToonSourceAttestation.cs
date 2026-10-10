@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Host;
@@ -944,32 +943,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return NormalizedSourceHash.Compute(rawSource);
         }
 
-        private static string Normalize(string rawSource)
-        {
-            if (rawSource.Length > 0 && rawSource[0] == '﻿')
-            {
-                rawSource = rawSource.Substring(1);
-            }
-
-            return rawSource.Replace("\r\n", "\n").Replace("\r", "\n");
-        }
-
-        private static string Sha256(string text)
-        {
-            var bytes = new UTF8Encoding(false).GetBytes(text);
-            using (var sha = SHA256.Create())
-            {
-                var hash = sha.ComputeHash(bytes);
-                var builder = new StringBuilder(hash.Length * 2);
-                foreach (var value in hash)
-                {
-                    builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
-                }
-
-                return builder.ToString();
-            }
-        }
-
         /// <summary>
         /// Removes exactly the text lilToon's generator is proven to vary, so
         /// the remainder can be hashed against a pin. R1 drops the
@@ -1010,7 +983,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(includeTree));
             }
 
-            var lines = Normalize(rawShaderSource).Split('\n');
+            var lines = NormalizedSourceHash.NormalizeText(rawShaderSource).Split('\n');
             var regions = new List<LilToonRemovedRegion>();
             var activators = new List<LilToonActivatorOccurrence>();
 
@@ -1137,6 +1110,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             var builder = new StringBuilder(rawShaderSource.Length);
             var first = true;
+            var ltcgiTagStripScope = ComputeLtcgiTagStripScope(lines);
             for (var i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
@@ -1171,7 +1145,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 first = false;
                 builder.Append(
                     NormalizeIncludeLine(
-                        RemoveAppendedLtcgiTagToken(line, trimmed),
+                        ltcgiTagStripScope[i]
+                            ? RemoveAppendedLtcgiTagToken(line, trimmed)
+                            : line,
                         shaderDirectory, projectRoot, includeTree));
             }
 
@@ -1285,6 +1261,71 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// Marks the lines where the R6 LTCGI tag strip may run: a Tags line
+        /// whose innermost open brace scope is a SubShader block. One forward
+        /// walk tracks brace depth. A comment-only line carries no braces. The
+        /// anchor may under-strip: a Tags line that keeps its token contributes
+        /// its original text to the digest and the material refuses. It must
+        /// never widen the strip beyond SubShader scope.
+        /// </summary>
+        private static bool[] ComputeLtcgiTagStripScope(string[] lines)
+        {
+            var eligible = new bool[lines.Length];
+            var scopeKinds = new List<string>();
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var trimmed = lines[i].Trim();
+                var isComment = trimmed.StartsWith("//", StringComparison.Ordinal);
+                var firstToken = trimmed.Length == 0 || isComment
+                    ? string.Empty
+                    : trimmed.Split(' ')[0];
+
+                eligible[i] = !isComment &&
+                    trimmed.StartsWith("Tags {", StringComparison.Ordinal) &&
+                    scopeKinds.Count > 0 &&
+                    scopeKinds[scopeKinds.Count - 1] == "SubShader";
+
+                if (isComment)
+                {
+                    continue;
+                }
+
+                var opens = CountCharacter(trimmed, '{');
+                var closes = CountCharacter(trimmed, '}');
+                for (var open = 0; open < opens; open++)
+                {
+                    scopeKinds.Add(
+                        firstToken == "SubShader" && open == 0
+                            ? "SubShader"
+                            : "other");
+                }
+                for (var close = 0; close < closes; close++)
+                {
+                    if (scopeKinds.Count > 0)
+                    {
+                        scopeKinds.RemoveAt(scopeKinds.Count - 1);
+                    }
+                }
+            }
+
+            return eligible;
+        }
+
+        private static int CountCharacter(string text, char character)
+        {
+            var count = 0;
+            foreach (var candidate in text)
+            {
+                if (candidate == character)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
         /// R3. Rewrites an include directive only when its path is proven to
         /// resolve to a file inside the attested include tree, and preserves the
         /// file's path relative to that tree. A path that resolves outside the
@@ -1385,7 +1426,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             rows.Sort(StringComparer.Ordinal);
-            return Sha256(string.Join("\n", rows));
+            return NormalizedSourceHash.Compute(string.Join("\n", rows));
         }
 
         /// <summary>
@@ -1404,7 +1445,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return features;
             }
 
-            foreach (var rawLine in Normalize(passShaderSource).Split('\n'))
+            foreach (var rawLine in NormalizedSourceHash.NormalizeText(passShaderSource).Split('\n'))
             {
                 var match = FeatureDefine.Match(rawLine.Trim());
                 if (match.Success)
@@ -1432,7 +1473,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             var found = false;
-            foreach (var rawLine in Normalize(passShaderSource).Split('\n'))
+            foreach (var rawLine in NormalizedSourceHash.NormalizeText(passShaderSource).Split('\n'))
             {
                 var match = RenderDefine.Match(rawLine.Trim());
                 if (!match.Success)
@@ -1737,91 +1778,122 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The admitted profile whose pinned shader name is exactly the live
-        /// shader name, or the opaque profile when nothing matches; the
-        /// family verify refuses the name, so the default only decides which
-        /// pass asset a gather resolves for a shader that will refuse
-        /// anyway.
+        /// Reports whether the shader name is a pinned name, and yields the
+        /// matching profile when it is. An unmatched name returns false with
+        /// a null profile. No gather runs for an unmatched name.
         /// </summary>
-        private static LilToonSourceProfile ProfileForShaderName(
-            string shaderName)
+        private static bool TryGetProfileForShaderName(
+            string shaderName,
+            out LilToonSourceProfile profile)
         {
+            profile = null;
+            if (string.Equals(
+                    shaderName, SupportedShaderName, StringComparison.Ordinal))
+            {
+                profile = OpaqueProfile;
+                return true;
+            }
             if (string.Equals(
                     shaderName, OutlineShaderName, StringComparison.Ordinal))
             {
-                return OutlineOpaqueProfile;
+                profile = OutlineOpaqueProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     OutlineCutoutShaderName,
                     StringComparison.Ordinal))
             {
-                return OutlineCutoutProfile;
+                profile = OutlineCutoutProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     OutlineTransparentShaderName,
                     StringComparison.Ordinal))
             {
-                return OutlineTransparentProfile;
+                profile = OutlineTransparentProfile;
+                return true;
             }
             if (string.Equals(
-                    shaderName,
-                    CutoutShaderName,
-                    StringComparison.Ordinal))
+                    shaderName, CutoutShaderName, StringComparison.Ordinal))
             {
-                return CutoutProfile;
+                profile = CutoutProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     OnePassTransparentShaderName,
                     StringComparison.Ordinal))
             {
-                return OnePassTransparentProfile;
+                profile = OnePassTransparentProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     TwoPassTransparentShaderName,
                     StringComparison.Ordinal))
             {
-                return TwoPassTransparentProfile;
+                profile = TwoPassTransparentProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     OnePassTransparentOutlineShaderName,
                     StringComparison.Ordinal))
             {
-                return OnePassTransparentOutlineProfile;
+                profile = OnePassTransparentOutlineProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     TwoPassTransparentOutlineShaderName,
                     StringComparison.Ordinal))
             {
-                return TwoPassTransparentOutlineProfile;
+                profile = TwoPassTransparentOutlineProfile;
+                return true;
             }
             if (string.Equals(
                     shaderName,
                     TransparentShaderName,
                     StringComparison.Ordinal))
             {
-                return TransparentProfile;
+                profile = TransparentProfile;
+                return true;
             }
 
-            return OpaqueProfile;
+            return false;
         }
 
         /// <summary>
-        /// Gathers identity evidence for the target shader. Resolves the pass
-        /// asset that matches the target shader profile.
+        /// Gathers identity evidence for the shader's pinned profile. An
+        /// unmatched shader name returns false with a refusal. No gather
+        /// runs for that name.
         /// </summary>
-        internal static LilToonSourceEvidence GatherSourceEvidenceForShaderName(
+        internal static bool TryGatherSourceEvidenceForShaderName(
             Shader shader,
-            CapturedMaterialEvidence evidence)
+            CapturedMaterialEvidence captured,
+            out LilToonSourceEvidence evidence,
+            out LilToonSemanticDiagnostic refusal)
         {
             if (shader == null) throw new ArgumentNullException(nameof(shader));
-            return Gather(
-                shader, evidence, ProfileForShaderName(shader.name), shader.name);
+            if (captured == null)
+            {
+                throw new ArgumentNullException(nameof(captured));
+            }
+
+            evidence = null;
+            if (!TryGetProfileForShaderName(shader.name, out var profile))
+            {
+                refusal = MaterialDiagnostic(
+                    LilToonSemanticDiagnosticCode.UnsupportedShader,
+                    $"shader name '{shader.name}'");
+                return false;
+            }
+
+            refusal = null;
+            evidence = Gather(shader, captured, profile, shader.name);
+            return true;
         }
 
         /// <summary>
@@ -2402,7 +2474,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     shaderText, shaderDirectory, projectRoot, includeTree);
             var shaderDigest = shaderAnalysis == null
                 ? null
-                : Sha256(shaderAnalysis.CanonicalSource);
+                : NormalizedSourceHash.Compute(shaderAnalysis.CanonicalSource);
 
             var passShader = Shader.Find(profile.PassShaderName);
             string passGuid = null;
@@ -2426,7 +2498,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         Path.GetDirectoryName(passFullPath),
                         projectRoot,
                         includeTree);
-                    passDigest = Sha256(passAnalysis.CanonicalSource);
+                    passDigest = NormalizedSourceHash.Compute(passAnalysis.CanonicalSource);
                 }
             }
 
@@ -2503,7 +2575,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     shaderText, shaderDirectory, projectRoot, includeTree);
             var shaderDigest = shaderAnalysis == null
                 ? null
-                : Sha256(shaderAnalysis.CanonicalSource);
+                : NormalizedSourceHash.Compute(shaderAnalysis.CanonicalSource);
 
             return new LilToonSourceEvidence(
                 evidence.HasShaderName ? evidence.ShaderName : null,

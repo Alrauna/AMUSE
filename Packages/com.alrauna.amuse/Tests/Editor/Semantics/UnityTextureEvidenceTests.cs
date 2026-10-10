@@ -395,18 +395,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_DefaultImport_IsBilinearRepeat()
         {
-            var texture = Import("sampler", sourceHasAlpha: true);
-            texture.filterMode = FilterMode.Bilinear;
-            texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+            // The default import carries aniso level 1. Its gate answer
+            // depends on the global quality mode. This pin reads level 1
+            // under Per Texture, where it stays off.
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Enable;
+                var texture = Import("sampler", sourceHasAlpha: true);
+                texture.filterMode = FilterMode.Bilinear;
+                texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
 
-            Assert.That(
-                UnityTextureEvidence.TryGetSampling(texture, out var sampling),
-                Is.True);
-            Assert.That(
-                sampling,
-                Is.EqualTo(new TextureSampling(
-                    TextureFilterMode.Bilinear,
-                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                    Is.True);
+                Assert.That(
+                    sampling,
+                    Is.EqualTo(new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
         }
 
         /// <summary>
@@ -418,21 +431,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_MipmappedTexture_IsAdmitted()
         {
-            var texture = Import(
-                "mipped",
-                sourceHasAlpha: true,
-                importer => importer.mipmapEnabled = true);
-            texture.filterMode = FilterMode.Bilinear;
-            texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Enable;
+                var texture = Import(
+                    "mipped",
+                    sourceHasAlpha: true,
+                    importer => importer.mipmapEnabled = true);
+                texture.filterMode = FilterMode.Bilinear;
+                texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
 
-            Assert.That(texture.mipmapCount, Is.GreaterThan(1));
-            Assert.That(
-                UnityTextureEvidence.TryGetSampling(texture, out var sampling), Is.True);
-            Assert.That(
-                sampling,
-                Is.EqualTo(new TextureSampling(
-                    TextureFilterMode.Bilinear,
-                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+                Assert.That(texture.mipmapCount, Is.GreaterThan(1));
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var sampling), Is.True);
+                Assert.That(
+                    sampling,
+                    Is.EqualTo(new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
         }
 
         /// <summary>
@@ -443,25 +466,35 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_MipmappedWithBias_IsAdmitted()
         {
-            var negative = Import(
-                "mipped_biased_negative", sourceHasAlpha: true,
-                importer => importer.mipmapEnabled = true);
-            negative.mipMapBias = -1f;
-            Assert.That(
-                UnityTextureEvidence.TryGetSampling(negative, out var first),
-                Is.True);
-            Assert.That(
-                first,
-                Is.EqualTo(new TextureSampling(
-                    TextureFilterMode.Bilinear,
-                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Enable;
+                var negative = Import(
+                    "mipped_biased_negative", sourceHasAlpha: true,
+                    importer => importer.mipmapEnabled = true);
+                negative.mipMapBias = -1f;
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(negative, out var first),
+                    Is.True);
+                Assert.That(
+                    first,
+                    Is.EqualTo(new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
 
-            var positive = Import(
-                "mipped_biased_positive", sourceHasAlpha: true,
-                importer => importer.mipmapEnabled = true);
-            positive.mipMapBias = 2f;
-            Assert.That(
-                UnityTextureEvidence.TryGetSampling(positive, out _), Is.True);
+                var positive = Import(
+                    "mipped_biased_positive", sourceHasAlpha: true,
+                    importer => importer.mipmapEnabled = true);
+                positive.mipMapBias = 2f;
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(positive, out _), Is.True);
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
         }
 
         /// <summary>
@@ -512,6 +545,99 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 UnityTextureEvidence.TryGetSampling(maximum, out _), Is.True);
         }
 
+        // Finding 31. The probe of 2026-10-09 confirmed the hardware
+        // behavior: Forced On samples a level 1 texture anisotropically.
+        // Per Texture keeps level 1 off. The plan names a fourth quality
+        // mode, Enable On Build, but this Unity version defines only
+        // Disable, Enable, and ForceEnable. Enable On Build has no live
+        // enum member, so its test is not writable. Build-time forcing
+        // stays covered by the spec's editor versus player inference
+        // note. Member mapping: Forced On is ForceEnable. Per Texture is
+        // Enable.
+
+        /// <summary>
+        /// Forced On forces anisotropic sampling for level 1 as well.
+        /// </summary>
+        [Test]
+        public void TryGetSampling_LevelOneUnderForcedOn_IsAnisotropic()
+        {
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.ForceEnable;
+                var texture = Import("aniso_level1_forced", sourceHasAlpha: false);
+                texture.anisoLevel = 1;
+
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                    Is.True);
+                Assert.That(
+                    sampling.Aniso,
+                    Is.EqualTo(TextureAnisoMode.Anisotropic));
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
+        }
+
+        /// <summary>
+        /// Per Texture respects level 1 as off. The sample stays bilinear
+        /// within the selected level.
+        /// </summary>
+        [Test]
+        public void TryGetSampling_LevelOneUnderPerTexture_IsNone()
+        {
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Enable;
+                var texture = Import("aniso_level1_per_texture", sourceHasAlpha: false);
+                texture.anisoLevel = 1;
+
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                    Is.True);
+                Assert.That(
+                    sampling.Aniso,
+                    Is.EqualTo(TextureAnisoMode.None));
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
+        }
+
+        /// <summary>
+        /// Disable keeps level 1 off. The sample stays bilinear within
+        /// the selected level.
+        /// </summary>
+        [Test]
+        public void TryGetSampling_LevelOneUnderDisable_IsNone()
+        {
+            var original = QualitySettings.anisotropicFiltering;
+            try
+            {
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Disable;
+                var texture = Import("aniso_level1_disable", sourceHasAlpha: false);
+                texture.anisoLevel = 1;
+
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                    Is.True);
+                Assert.That(
+                    sampling.Aniso,
+                    Is.EqualTo(TextureAnisoMode.None));
+            }
+            finally
+            {
+                QualitySettings.anisotropicFiltering = original;
+            }
+        }
+
         [Test]
         public void TryGetSampling_MismatchedWrap_IsRefused()
         {
@@ -526,6 +652,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void TryGetSampling_Null_IsRefused()
         {
             Assert.That(UnityTextureEvidence.TryGetSampling(null, out _), Is.False);
+        }
+
+        [Test]
+        public void TryGetSampling_Non2DTexture_ReturnsFalse()
+        {
+            var cubemap = new Cubemap(16, TextureFormat.RGBA32, false);
+            try
+            {
+                Assert.That(UnityTextureEvidence.TryGetSampling(cubemap, out _), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cubemap);
+            }
+
+            var texture3D = new Texture3D(16, 16, 16, TextureFormat.RGBA32, false);
+            try
+            {
+                Assert.That(UnityTextureEvidence.TryGetSampling(texture3D, out _), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture3D);
+            }
         }
 
         // --- TryGetColorInterpretation ---
@@ -639,6 +789,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 importer => importer.alphaSource = TextureImporterAlphaSource.FromInput);
 
             Assert.That(UnityTextureEvidence.TryProveSampledAlphaIsOne(texture), Is.False);
+        }
+
+        [Test]
+        public void TryProveSampledAlphaIsOne_NormalMapImport_IsNotProven()
+        {
+            var texture = Import(
+                "noalpha_normalmap",
+                sourceHasAlpha: false,
+                configure: importer =>
+                {
+                    importer.textureType = TextureImporterType.NormalMap;
+                    importer.flipGreenChannel = false;
+                    importer.alphaSource = TextureImporterAlphaSource.None;
+                });
+
+            Assert.That(
+                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture),
+                Is.False);
+        }
+
+        [Test]
+        public void TryProveSampledAlphaIsOne_FlippedGreenNormalMapImport_IsNotProven()
+        {
+            var texture = Import(
+                "noalpha_normalflip",
+                sourceHasAlpha: false,
+                configure: importer =>
+                {
+                    importer.textureType = TextureImporterType.NormalMap;
+                    importer.flipGreenChannel = true;
+                    importer.alphaSource = TextureImporterAlphaSource.None;
+                });
+
+            Assert.That(
+                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture),
+                Is.False);
         }
 
         [Test]
@@ -786,7 +972,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         // --- shared-class boundary guard ---
 
         [Test]
-        public void SharedClass_ExposesExactlyFiveSemanticFacts()
+        public void SharedClass_ExposesExactlySixSemanticFacts()
         {
             var methods = typeof(UnityTextureEvidence).GetMethods(
                 BindingFlags.Static |
@@ -812,6 +998,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "TryGetColorInterpretation",
                     "TryProveSampledAlphaIsOne",
                     "IsCanonicalNormalMapImport",
+                    "TryProveColorValuesInUnitRange",
                 }));
         }
     }

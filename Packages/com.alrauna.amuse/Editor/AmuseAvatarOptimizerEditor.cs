@@ -290,14 +290,25 @@ namespace Alrauna.Amuse.Editor
                 "Mip 5", "Mip 6", "Mip 7", "Mip 8", "Mip 9", "Mip 10",
             };
             var stored = property.intValue;
+            if (StoredValueIsOutOfBand(stored, LowestMipCap, HighestMipCap))
+            {
+                EditorGUILayout.HelpBox(
+                    OutOfBandWarning(MipCapRowContent.text, stored,
+                        Mathf.Clamp(stored, LowestMipCap, HighestMipCap)),
+                    MessageType.Warning);
+            }
             var index = stored < 0
                 ? 0
                 : Mathf.Min(stored + 1, options.Length - 1);
+            EditorGUI.BeginChangeCheck();
             var selected = EditorGUILayout.Popup(
                 MipCapRowContent,
                 index,
                 options);
-            property.intValue = selected == 0 ? -1 : selected - 1;
+            if (EditorGUI.EndChangeCheck())
+            {
+                property.intValue = selected == 0 ? -1 : selected - 1;
+            }
         }
 
         private void DrawMinTextureSizePopup()
@@ -315,6 +326,14 @@ namespace Alrauna.Amuse.Editor
             }
 
             var storedSize = sizeProperty.intValue;
+            if (TextureSizeIsOutOfBand(storedSize))
+            {
+                EditorGUILayout.HelpBox(
+                    OutOfBandWarning(MinTextureRowContent.text,
+                        storedSize,
+                        NearestLegalTextureSize(storedSize)),
+                    MessageType.Warning);
+            }
             var sizeIndex = 0;
             if (storedSize > 0)
             {
@@ -327,23 +346,42 @@ namespace Alrauna.Amuse.Editor
                 }
             }
 
+            EditorGUI.BeginChangeCheck();
             var selectedSize = EditorGUILayout.Popup(
                 MinTextureRowContent,
                 sizeIndex,
                 sizeOptions);
-            sizeProperty.intValue = selectedSize == 0
-                ? -1
-                : Mathf.RoundToInt(Mathf.Pow(2, selectedSize));
+            if (EditorGUI.EndChangeCheck())
+            {
+                sizeProperty.intValue = selectedSize == 0
+                    ? -1
+                    : Mathf.RoundToInt(Mathf.Pow(2, selectedSize));
+            }
         }
 
         private int PercentSlider(string propertyPath, GUIContent content)
         {
             var property = serializedObject.FindProperty(propertyPath);
-            property.intValue = EditorGUILayout.IntSlider(
+            var stored = property.intValue;
+            if (StoredValueIsOutOfBand(stored, LowestPercent, HighestPercent))
+            {
+                EditorGUILayout.HelpBox(
+                    OutOfBandWarning(content.text, stored,
+                        Mathf.Clamp(stored, LowestPercent, HighestPercent)),
+                    MessageType.Warning);
+            }
+            var drawn = Mathf.Clamp(stored, LowestPercent, HighestPercent);
+            EditorGUI.BeginChangeCheck();
+            var selected = EditorGUILayout.IntSlider(
                 content,
-                Mathf.Clamp(property.intValue, 0, 100),
-                0, 100);
-            return property.intValue;
+                drawn,
+                LowestPercent, HighestPercent);
+            if (EditorGUI.EndChangeCheck())
+            {
+                property.intValue = selected;
+                return selected;
+            }
+            return drawn;
         }
 
         private void DrawCoverageSlider()
@@ -354,16 +392,23 @@ namespace Alrauna.Amuse.Editor
 
         private void DrawAlphaPolicyControls()
         {
+            // The clamp normalization is deliberate policy, not an
+            // out-of-band rewrite. It runs only when the user moved a
+            // slider on this repaint.
+            EditorGUI.BeginChangeCheck();
             var minimumOpaqueAlpha = PercentSlider(
                 "_minimumOpaqueAlphaPercent", TextureClampRowContent);
             PercentSlider("_polygonMinimumOpaqueCoveragePercent",
                 PolygonCoverageRowContent);
             var polygonClamp = PercentSlider(
                 "_polygonAlphaUpperClampPercent", PolygonClampRowContent);
-            var clampProperty = serializedObject.FindProperty(
-                "_polygonAlphaUpperClampPercent");
-            clampProperty.intValue = NormalizePolygonClamp(
-                minimumOpaqueAlpha, polygonClamp);
+            if (EditorGUI.EndChangeCheck())
+            {
+                var clampProperty = serializedObject.FindProperty(
+                    "_polygonAlphaUpperClampPercent");
+                clampProperty.intValue = NormalizePolygonClamp(
+                    minimumOpaqueAlpha, polygonClamp);
+            }
         }
 
         /// <summary>
@@ -386,6 +431,84 @@ namespace Alrauna.Amuse.Editor
 
             var opaque = opaquePercent <= 0 ? 100 : opaquePercent;
             return AlphaPolicyBounds.ClampNoise(opaque, drawnClamp);
+        }
+
+        private const int LowestMipCap = -1;
+        private const int HighestMipCap = 10;
+        private const int SmallestTextureSize = 2;
+        private const int LargestTextureSize = 8192;
+        private const int LowestPercent = 0;
+        private const int HighestPercent = 100;
+
+        /// <summary>
+        /// True when a stored value sits outside the legal band of
+        /// its control. The inspector never pulls a stored value back
+        /// into the band by itself. It draws a warning instead and
+        /// writes only when the user changes the control. The tests
+        /// assert this predicate directly.
+        /// </summary>
+        internal static bool StoredValueIsOutOfBand(
+            int stored, int lowestLegal, int highestLegal)
+        {
+            return stored < lowestLegal || stored > highestLegal;
+        }
+
+        /// <summary>
+        /// True when a stored texture size is neither All Sizes (-1)
+        /// nor a power of two between 2 and 8192. A texture size band
+        /// is not one range, so this rule has its own method. The
+        /// tests assert it directly.
+        /// </summary>
+        internal static bool TextureSizeIsOutOfBand(int stored)
+        {
+            if (stored == -1)
+            {
+                return false;
+            }
+            if (StoredValueIsOutOfBand(
+                    stored, SmallestTextureSize, LargestTextureSize))
+            {
+                return true;
+            }
+            return (stored & (stored - 1)) != 0;
+        }
+
+        /// <summary>
+        /// The nearest legal texture size for a stored value. Sizes
+        /// round up to the next power of two, up to the 8192 cap. A
+        /// stored value of zero or less reads as All Sizes.
+        /// </summary>
+        internal static int NearestLegalTextureSize(int stored)
+        {
+            if (stored <= 0)
+            {
+                return -1;
+            }
+            if (stored >= LargestTextureSize)
+            {
+                return LargestTextureSize;
+            }
+            var size = SmallestTextureSize;
+            while (size < stored)
+            {
+                size *= 2;
+            }
+            return size;
+        }
+
+        /// <summary>
+        /// One warning builder for every out-of-band control. The
+        /// text names the stored value, states the nearest legal
+        /// value, and states that AMUSE writes only when the user
+        /// changes the control.
+        /// </summary>
+        internal static string OutOfBandWarning(
+            string controlName, int stored, int nearestLegal)
+        {
+            return controlName + " holds " + stored + ". That " +
+                "value is outside the legal choices. The nearest " +
+                "legal value is " + nearestLegal + ". AMUSE writes " +
+                "a new value only when you change this control.";
         }
 
         /// <summary>

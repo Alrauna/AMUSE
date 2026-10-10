@@ -8,9 +8,9 @@ namespace Alrauna.Amuse.Editor.Build
     /// Runs extension-free, before any animator scope virtualizes the
     /// graph: the structural refusals read real authored clips, and
     /// animation events survive only before virtualization. Stores the
-    /// enumerated graph and its refusal for the passes that follow; this
-    /// pass itself changes nothing and reports only the avatar-scoped
-    /// refusal when it fires.
+    /// enumerated graph and its refusal for the passes that follow.
+    /// This pass changes nothing and reports nothing. The barrier
+    /// reports the stored refusal behind the lifecycle gates.
     /// </summary>
     internal static class AmuseStructuralGraphCheck
     {
@@ -23,11 +23,6 @@ namespace Alrauna.Amuse.Editor.Build
                     ?? VRChatPlatformAnimatorBindings.Instance);
             state.StructuralGraph = graph;
             state.AvatarRefusal = graph.Refusal;
-            if (graph.Refusal != AvatarAnimationRefusal.None)
-            {
-                AmuseReports.AvatarRefusal(
-                    context.AvatarRootObject, graph.Refusal);
-            }
         }
     }
 }

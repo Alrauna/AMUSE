@@ -202,6 +202,12 @@ namespace Alrauna.Amuse.Editor.Host
                 var schema = SchemaFor(slotMaterials[index], schemas);
                 if (schema == null)
                 {
+                    // This guard is a null-reference guard for a material
+                    // or shader without a schema. SchemaFor builds a
+                    // schema for any shader, so no schema gap exists here.
+                    // The one blind spot is a block key that no declared
+                    // property names. The class summary records that case
+                    // as an exact-copy note, not as a schema gap.
                     continue;
                 }
 

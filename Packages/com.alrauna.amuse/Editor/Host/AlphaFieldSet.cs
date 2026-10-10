@@ -61,7 +61,8 @@ namespace Alrauna.Amuse.Editor.Host
         /// The red arm of one captured texture assignment. Masks are always
         /// captured exact - a texel between a noise gate and a shader
         /// cutoff never applies to the mask product - so the arm's
-        /// threshold is fixed at one and the capture's own bounds govern.
+        /// threshold is fixed at one, and the capture pins the arm to the
+        /// inert bounds, which the key carries.
         /// </summary>
         internal static AlphaFieldKey ForRed(
             CapturedTextureEvidence texture)
@@ -70,7 +71,7 @@ namespace Alrauna.Amuse.Editor.Host
                 texture.SourceIdentity,
                 TextureChannel.Red,
                 1f,
-                texture.CaptureBounds);
+                AlphaPolicyBounds.Inert);
         }
 
         public bool Equals(AlphaFieldKey other)

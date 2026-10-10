@@ -159,6 +159,8 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _SrcBlend2 ("Src Blend Two Pass", Float) = 1
         _DstBlend2 ("Dst Blend Two Pass", Float) = 0
         _BlendOpAlpha2 ("Alpha Blend Op Two Pass", Int) = 0
+        _SrcBlendAlpha2 ("Alpha Source Blend", Int) = 1
+        _DstBlendAlpha2 ("Alpha Destination Blend", Int) = 10
 
         // ForwardAdd pass blend state. _AddBlendOp is declared ONLY so the
         // conversion tests can vary it and prove it changes nothing: the

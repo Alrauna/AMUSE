@@ -377,7 +377,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                        104) <= 0;
         }
 
-        private static ExactRational ToRational(ExactDyadic value)
+        internal static ExactRational ToRational(ExactDyadic value)
         {
             return value.Exponent >= 0
                 ? new ExactRational(value.Significand << value.Exponent)
@@ -405,7 +405,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         // Hand-rolled because the Unity 2022.3 profile lacks BigInteger.GetBitLength (measured 2026-09-29). Revisit on a Unity upgrade.
-        private static int BitLength(BigInteger value)
+        internal static int BitLength(BigInteger value)
         {
             var length = 0;
             while (value > BigInteger.Zero)
@@ -452,6 +452,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 DecodeFloat(triangle.Uv1.y),
                 DecodeFloat(triangle.Uv2.y)
             };
+            // The seed -1 is load bearing. The loop below can lower
+            // this exponent. It can never raise it. The texel scale is
+            // therefore always two or more. The classifier's interval
+            // builders BilinearRepeatInterval, BilinearClampInterval,
+            // PointRepeatInterval, and PointClampInterval compute the
+            // half texel offset with a truncating BigInteger division.
+            // A scale of one would truncate that half texel to zero.
+            // The support intervals would lose their half texel skirts.
+            // A witness texel that touches the triangle only through
+            // its skirt would go unseen. The classifier would then
+            // return a false ProvenOpaque.
             var exponent = -1;
             for (var index = 0; index < 3; index++)
             {
@@ -667,7 +678,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             return cross.Numerator.Sign;
         }
 
-        private static IReadOnlyList<ExactUvPoint> CreateHull(ExactUvPoint[] points)
+        internal static IReadOnlyList<ExactUvPoint> CreateHull(ExactUvPoint[] points)
         {
             var unique = new List<ExactUvPoint>(3);
             for (var index = 0; index < points.Length; index++)
@@ -682,13 +693,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return unique;
             }
 
-            var cross = Cross(unique[0], unique[1], unique[2]);
-            if (cross == BigInteger.Zero)
+            var orientation = Orientation(unique[0], unique[1], unique[2]);
+            if (orientation == 0)
             {
                 unique.Sort(ComparePoints);
-                return new[] { unique[0], unique[2] };
+                return new[] { unique[0], unique[unique.Count - 1] };
             }
-            if (cross < BigInteger.Zero)
+            if (orientation < 0)
             {
                 var swap = unique[1];
                 unique[1] = unique[2];
@@ -713,15 +724,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         {
             var x = left.X.CompareTo(right.X);
             return x != 0 ? x : left.Y.CompareTo(right.Y);
-        }
-
-        private static BigInteger Cross(ExactUvPoint first, ExactUvPoint second, ExactUvPoint third)
-        {
-            var ax = second.X.Numerator - first.X.Numerator;
-            var ay = second.Y.Numerator - first.Y.Numerator;
-            var bx = third.X.Numerator - first.X.Numerator;
-            var by = third.Y.Numerator - first.Y.Numerator;
-            return ax * by - ay * bx;
         }
 
         private static List<ExactUvPoint> Clip(
@@ -865,6 +867,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                 remainder += modulus;
             }
             return (int)remainder;
+        }
+
+        internal static int FloorMod(int value, int modulus)
+        {
+            if (modulus <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(modulus));
+            }
+            var remainder = value % modulus;
+            if (remainder < 0)
+            {
+                remainder += modulus;
+            }
+            return remainder;
         }
     }
 }

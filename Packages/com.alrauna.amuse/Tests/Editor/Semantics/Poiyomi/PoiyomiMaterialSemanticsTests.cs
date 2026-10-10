@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
@@ -148,6 +149,49 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 (int)PoiyomiSemanticOutput.Emission,
                 Is.LessThan((int)PoiyomiSemanticOutput.Normal));
         }
+
+        [Test]
+        public void FullTwoPassMaterialEvidenceRequest_ContainsAllRequiredSchemaPropertiesAndTwoPassAlphaProperties()
+        {
+            var request = PoiyomiMaterialSemantics.FullTwoPassMaterialEvidenceRequest;
+
+            Assert.That(request, Is.Not.Null);
+            Assert.That(request.PresenceProperties, Does.Contain("_BumpMap"));
+            Assert.That(request.PresenceProperties, Does.Contain("_EmissionMap"));
+            Assert.That(request.ScalarProperties, Does.Contain("_AlphaForceOpaque2"));
+            Assert.That(request.ScalarProperties, Does.Contain("_ModeTwoPass"));
+            Assert.That(request.ColorProperties, Does.Contain("_TwoPassColor"));
+        }
+
+        [Test]
+        public void InterpretVerifiedTwoPassMaterial_CapturesSecondPassAlphaParameters()
+        {
+            var material = NewMaterial(PoiyomiFixtureTestBase.TwoPassFixtureShaderName);
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            material.SetFloat("_AlphaForceOpaque2", 0f);
+            material.SetColor("_TwoPassColor", new Color(1f, 1f, 1f, 0.5f));
+
+            var singlePassResult = PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
+                material,
+                ColorSpace.Linear);
+            var twoPassResult = PoiyomiMaterialSemantics.InterpretVerifiedTwoPassMaterial(
+                material,
+                ColorSpace.Linear);
+
+            Assert.That(
+                singlePassResult.Semantics.Alpha.IsComplete,
+                Is.True,
+                "Single-pass interpretation ignores second-pass alpha inputs.");
+            Assert.That(
+                twoPassResult.Semantics.Alpha.IsComplete,
+                Is.False,
+                "Two-pass interpretation must capture second-pass alpha inputs.");
+            Assert.That(
+                twoPassResult.Diagnostics,
+                Has.Some.Matches<PoiyomiSemanticDiagnostic>(
+                    d => d.Output == PoiyomiSemanticOutput.Alpha &&
+                         d.Detail.Contains("_TwoPassColor")));
+        }
     }
 
     /// <summary>
@@ -214,6 +258,91 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void NormalizedHash_IsLowercaseSha256Hex()
         {
             Assert.That(Hash("abc"), Does.Match("^[0-9a-f]{64}$"));
+        }
+
+        private const string HashMemoFolder = "Assets/AmuseTests_Temp";
+
+        [Test]
+        public void CachedSourceHash_ReturnsTheFirstHashWhileMtimeIsUnchanged()
+        {
+            Directory.CreateDirectory(HashMemoFolder);
+            var path = Path.Combine(
+                HashMemoFolder,
+                "hash_memo_unchanged_" + Guid.NewGuid().ToString("N") + ".shader");
+            try
+            {
+                File.WriteAllText(path, "first source");
+                // The platform stores file times with microsecond
+                // precision. A fresh write time can carry finer detail.
+                // Round the stamp through the same write path first. The
+                // later set then restores a value the file system returns
+                // unchanged.
+                File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
+                var stamp = File.GetLastWriteTimeUtc(path);
+                var first = PoiyomiMaterialSemantics
+                    .TryReadNormalizedSourceHashCached(path, out var hash);
+                Assert.That(first, Is.True);
+
+                File.WriteAllText(path, "second source");
+                File.SetLastWriteTimeUtc(path, stamp);
+
+                var second = PoiyomiMaterialSemantics
+                    .TryReadNormalizedSourceHashCached(path, out var cached);
+                Assert.That(second, Is.True);
+                Assert.That(
+                    cached,
+                    Is.EqualTo(hash),
+                    "an unchanged write time must reuse the memoized digest");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void CachedSourceHash_RefreshesWhenFileContentChanges()
+        {
+            Directory.CreateDirectory(HashMemoFolder);
+            var path = Path.Combine(
+                HashMemoFolder,
+                "hash_memo_refresh_" + Guid.NewGuid().ToString("N") + ".shader");
+            try
+            {
+                File.WriteAllText(path, "first source");
+                PoiyomiMaterialSemantics.TryReadNormalizedSourceHashCached(
+                    path, out _);
+
+                File.WriteAllText(path, "second source");
+                File.SetLastWriteTimeUtc(
+                    path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
+
+                var refreshed = PoiyomiMaterialSemantics
+                    .TryReadNormalizedSourceHashCached(path, out var hash);
+                Assert.That(refreshed, Is.True);
+                Assert.That(
+                    hash,
+                    Is.EqualTo(PoiyomiMaterialSemantics
+                        .ComputeNormalizedSourceHash("second source")),
+                    "a changed write time must refresh the memo");
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void CachedSourceHash_MissingFileThrows()
+        {
+            Directory.CreateDirectory(HashMemoFolder);
+            var path = Path.Combine(
+                HashMemoFolder,
+                "hash_memo_missing_" + Guid.NewGuid().ToString("N") + ".shader");
+
+            Assert.Throws<FileNotFoundException>(() =>
+                PoiyomiMaterialSemantics.TryReadNormalizedSourceHashCached(
+                    path, out _));
         }
 
         [Test]

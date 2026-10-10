@@ -26,6 +26,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
         private const string LilToonFixtureShader =
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
+        private const string LilToonCutoutConversionShader =
+            "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
 
         private readonly List<Material> _materials = new List<Material>();
         private bool _ownsTempFolder;
@@ -1121,6 +1123,127 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(float.IsNaN(after), Is.True);
         }
 
+        [Test]
+        public void RedFieldUnderAnActivePolicyMatchesTheInertRedField()
+        {
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(217, 0, 0, 255);
+            }
+            var mask = TestTextureImport.WritePng(
+                Path.Combine(TempFolder, "red_seam_mask.png"), 4, 4, pixels);
+            var material = NewMaterial(LilToonCutoutConversionShader);
+            _materials.Add(material);
+            material.SetTexture("_AlphaMask", mask);
+
+            var active = UnityMaterialEvidenceCapture.Capture(
+                new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                },
+                AlphaPolicyBounds.From(80, 2))[0];
+            var inert = UnityMaterialEvidenceCapture.Capture(
+                new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                },
+                AlphaPolicyBounds.Inert)[0];
+
+            Assert.That(active.TryGetTexture("_AlphaMask", out var activeBound),
+                Is.True);
+            Assert.That(inert.TryGetTexture("_AlphaMask", out var inertBound),
+                Is.True);
+            var activeRed = activeBound.Texture.RedChannel;
+            var inertRed = inertBound.Texture.RedChannel;
+            Assert.That(activeRed, Is.Not.Null);
+            Assert.That(inertRed, Is.Not.Null);
+            for (var mip = 0; mip < activeRed.Count; mip++)
+            {
+                Assert.That(activeRed.IsLevelWithoutEvidence(mip),
+                    Is.EqualTo(inertRed.IsLevelWithoutEvidence(mip)));
+                if (activeRed.IsLevelWithoutEvidence(mip))
+                {
+                    continue;
+                }
+                for (var y = 0; y < activeRed[mip].Height; y++)
+                {
+                    for (var x = 0; x < activeRed[mip].Width; x++)
+                    {
+                        Assert.That(activeRed[mip].GetAlpha(x, y),
+                            Is.EqualTo(inertRed[mip].GetAlpha(x, y)),
+                            $"mip {mip} texel ({x}, {y})");
+                    }
+                }
+            }
+            Assert.That(activeRed[0].GetAlpha(0, 0), Is.EqualTo(0),
+                "Red 217 is below exactly one under the inert contract.");
+        }
+
+        [Test]
+        public void RedFieldUnderAnActivePolicyStoresZeroBelowExactOne()
+        {
+            // Red 250 sRGB-decodes to about 0.96. That is above the active
+            // opaque bound 0.8 but below exactly one. The capture pin must
+            // store 0 here, while the old active-bounds capture stored 255.
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(250, 0, 0, 255);
+            }
+            var mask = TestTextureImport.WritePng(
+                Path.Combine(TempFolder, "red_near_white_mask.png"), 4, 4,
+                pixels);
+            var material = NewMaterial(LilToonCutoutConversionShader);
+            _materials.Add(material);
+            material.SetTexture("_AlphaMask", mask);
+
+            var active = UnityMaterialEvidenceCapture.Capture(
+                new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material, LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                },
+                AlphaPolicyBounds.From(80, 2))[0];
+
+            Assert.That(active.TryGetTexture("_AlphaMask", out var activeBound),
+                Is.True);
+            var activeRed = activeBound.Texture.RedChannel;
+            Assert.That(activeRed, Is.Not.Null);
+            for (var y = 0; y < activeRed[0].Height; y++)
+            {
+                for (var x = 0; x < activeRed[0].Width; x++)
+                {
+                    Assert.That(activeRed[0].GetAlpha(x, y), Is.EqualTo(0),
+                        $"mip 0 texel ({x}, {y})");
+                }
+            }
+        }
+
+        [Test]
+        public void RedFieldContractAssertion_RefusesTheErasedFlagByte()
+        {
+            var level = new AlphaTextureData(
+                1, 1, new byte[] { AlphaTextureData.ErasedFlag });
+            var chain = new AlphaMipChain(new[] { level });
+
+            Assert.Throws<InvalidOperationException>(
+                () => UnityMaterialEvidenceCapture.AssertRedFieldContract(chain));
+        }
+
+        [Test]
+        public void RedFieldContractAssertion_AcceptsBinaryVerdicts()
+        {
+            // Characterization, not RED: binary verdicts satisfy the contract.
+            var level = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
+            var chain = new AlphaMipChain(new[] { level });
+
+            Assert.DoesNotThrow(
+                () => UnityMaterialEvidenceCapture.AssertRedFieldContract(chain));
+        }
+
         /// <summary>
         /// One schema-complete capture with every evidence category populated,
         /// so a substitution in one category can be shown not to disturb the
@@ -1275,7 +1398,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private static void AssertNoLiveObjectsOrDelegates(object root)
         {
-            Walk(root, new HashSet<object>(ReferenceEqualityComparer.Instance));
+            Walk(root, new HashSet<object>(
+                ReferenceEqualityComparer<object>.Instance));
         }
 
         private static void Walk(object value, HashSet<object> visited)
@@ -1324,22 +1448,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 {
                     Walk(field.GetValue(value), visited);
                 }
-            }
-        }
-
-        private sealed class ReferenceEqualityComparer : IEqualityComparer<object>
-        {
-            internal static readonly ReferenceEqualityComparer Instance =
-                new ReferenceEqualityComparer();
-
-            public new bool Equals(object x, object y)
-            {
-                return ReferenceEquals(x, y);
-            }
-
-            public int GetHashCode(object obj)
-            {
-                return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
             }
         }
     }

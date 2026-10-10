@@ -811,6 +811,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// Finding 2 falsifier, part A: the family request switch answers
+        /// null for the Multi family. The null reaches DeclaresCutoffFor,
+        /// which then keeps the union declaration by fallback instead of by
+        /// name.
+        /// </summary>
+        // --- Falsifier: a family switch that leaves the Multi member on the null default arm fails this fixture. ---
+        [Test]
+        public void AlphaRequestForTheMultiFamilyIsTheCombinedMultiRequest()
+        {
+            Assert.That(
+                UnityMaterialSemantics.AlphaRequestForFamily(
+                    CapturedAlphaMaterialFamily.LilToonMulti),
+                Is.SameAs(LilToonMultiResolution.MultiEvidenceRequest));
+
+            var material = NewMaterial(
+                "multi-predicate-request.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+            Assert.That(
+                UnityMaterialSemantics.AlphaPredicateRequestFor(
+                    material,
+                    CapturedAlphaMaterialFamily.LilToonMulti),
+                Is.SameAs(LilToonMultiResolution.MultiEvidenceRequest));
+        }
+
+        /// <summary>
         /// A resolver-refused Multi material answers all-Unknown alpha and
         /// carries the shared Multi cause kind, whose feature field names
         /// the refusal value in words for the slot-refusal report. With the
@@ -1259,6 +1285,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 outcome.UnattestedOrdinals, Is.EqualTo(new[] { 0 }));
         }
 
+        /// <summary>
+        /// Finding 33 falsifier: the identity-verify gate is one rule for
+        /// all five families. The transferred entry skips the verify for
+        /// every family through the shared parameter, and the plain entry
+        /// runs it for every family. This fixture pins the rule for both
+        /// Poiyomi arms, which kept an unconditional verify before this
+        /// fix. The stand-in source never attests, so the captured
+        /// Poiyomi evidence is deliberately stale.
+        /// </summary>
+        // --- Falsifier: a Poiyomi arm that ignores the verifyIdentity parameter refuses the transferred call and fails this fixture. ---
+        [Test]
+        public void TransferredAnalysis_PoiyomiFamily_HonorsVerifyIdentityParameter()
+        {
+            var material = NewMaterial(
+                "transferred-honor-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { material });
+
+            Assert.That(
+                captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+
+            var honored = UnityMaterialSemantics
+                .AnalyzeAlphaMaterialTransferred(captured[0]);
+            var guarded = UnityMaterialSemantics
+                .AnalyzeAlphaMaterial(captured[0]);
+
+            Assert.That(
+                guarded.AlphaUnknownReason.Kind,
+                Is.EqualTo(AlphaUnknownKind.UnattestedShader),
+                "the plain entry must re-verify the stale evidence");
+            Assert.That(
+                honored.AlphaUnknownReason,
+                Is.Null,
+                "the transferred entry must skip the identity verify " +
+                "for the Poiyomi family, exactly like the lilToon arms");
+            Assert.That(honored.Semantics.Alpha.IsComplete, Is.True);
+        }
+
         [Test]
         public void AnalyzeAlphaMaterialUnsupportedFamilyIsAllUnknown()
         {
@@ -1586,6 +1653,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _DstBlend2 (""Dst Blend 2"", Float) = 0
         _BlendOp2 (""Blend Op 2"", Int) = 0
         _BlendOpAlpha2 (""Alpha Blend Op 2"", Int) = 4
+        _SrcBlendAlpha2 (""Alpha Src 2"", Float) = 1
+        _DstBlendAlpha2 (""Alpha Dst 2"", Float) = 10
         _AlphaForceOpaque (""Force Opaque"", Float) = 1
         _MainIgnoreTexAlpha (""Ignore Alpha"", Float) = 0
         _AlphaToCoverage (""Coverage"", Float) = 0

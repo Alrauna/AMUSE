@@ -12,8 +12,12 @@ namespace Alrauna.Amuse.Editor.Host
     /// at native uncompressed resolution, building pure area-averaged box mip chains
     /// clamped to the material's cutout or opacity threshold. When an alpha policy
     /// is active and no shader cutoff applies, the chain is the masked policy
-    /// chain instead.
+    /// chain instead. The masked builder derives every level from the plain box
+    /// averages of the decoded mip 0 bytes. The coarse levels describe the same
+    /// effective content that the imported mip chain stores.
     /// Bypasses Unity's lossy BC7/DXT5 compression and texture downscaling.
+    /// An alpha channel read of a FromGrayScale import refuses, because the
+    /// import generates that channel from RGB grayscale.
     /// </summary>
     internal static class SourceImageAlphaReader
     {
@@ -23,8 +27,8 @@ namespace Alrauna.Amuse.Editor.Host
         /// shader cutoff keep the per-level float threshold route. An active
         /// alpha policy with no shader cutoff takes the masked route: mip 0 is
         /// decoded to exact bytes once and SourceImageMaskedChain derives
-        /// every level, because a policy verdict judges masked averages, not
-        /// a float threshold.
+        /// every level from the plain box averages, because a policy
+        /// verdict judges the average of every texel, not a float threshold.
         /// </summary>
         internal static bool TryReadSourceAlphaChain(
             Texture2D texture,
@@ -51,6 +55,18 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            if (importer != null &&
+                channel == TextureChannel.Alpha &&
+                importer.alphaSource == TextureImporterAlphaSource.FromGrayScale)
+            {
+                // Unity generates the alpha channel from RGB grayscale at
+                // import. The raw file bytes carry the authoring alpha, so this
+                // route cannot reproduce the imported representation. The clone
+                // route reproduces the import and stays the fallback.
+                return false;
+            }
+
             try
             {
                 var bytes = File.ReadAllBytes(assetPath);
@@ -68,7 +84,6 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
                 var isAlphaNone = importer != null && importer.alphaSource == TextureImporterAlphaSource.None;
                 if (uncompressed.width != texture.width || uncompressed.height != texture.height)
                 {
@@ -116,8 +131,9 @@ namespace Alrauna.Amuse.Editor.Host
                     else
                     {
                         // The masked route decodes mip 0 once and lets the
-                        // builder derive every level, so no Unity downscale
-                        // touches the evidence the policy judges.
+                        // builder derive every level from the plain box
+                        // averages, so no Unity downscale touches the
+                        // evidence the policy judges.
                         var pixels = uncompressed.GetPixels(0);
                         var decoded = new byte[pixels.Length];
 
@@ -146,11 +162,22 @@ namespace Alrauna.Amuse.Editor.Host
                     UnityEngine.Object.DestroyImmediate(uncompressed);
                 }
             }
-            catch
+            catch (Exception e) when (IsDecodeReadFailure(e))
             {
                 chain = null;
                 return false;
             }
+        }
+
+        /// <summary>
+        /// True for the failures that mean this route cannot read the
+        /// authoring image today: the file vanished, shrank, or refuses
+        /// access. Every other exception is a defect. A defect propagates
+        /// instead of masquerading as unsupported input.
+        /// </summary>
+        internal static bool IsDecodeReadFailure(Exception e)
+        {
+            return e is IOException || e is UnauthorizedAccessException;
         }
     }
 }

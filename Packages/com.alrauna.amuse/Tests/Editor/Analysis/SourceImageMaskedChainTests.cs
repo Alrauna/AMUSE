@@ -43,13 +43,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         }
 
         [Test]
-        public void SingleStraySubstitutesAtEveryLevel()
+        public void SingleStrayDragsEveryCoarseLevelBelowTheOpaqueBound()
         {
-            // 8x8, all 255 except one texel at 3. n = 6 erases it, so
-            // every masked level averages 255 and no level witnesses.
-            // Level 0 stores the erased flag for the stray, because its
-            // block is that one texel; IsFullyOpaque starts at level 1,
-            // where the flag no longer appears.
+            // 8x8, all 255 except one texel at 3. n = 6 erases the stray at
+            // level 0, and the plain average drags every block that contains
+            // it below the opaque bound. This matches the imported mip chain
+            // the clone route reads.
             var bytes = Uniform(64, 255);
             bytes[0] = 3;
             var bounds = AlphaPolicyBounds.From(100, 2);
@@ -61,7 +60,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(levels[0].GetAlpha(1, 0), Is.EqualTo(255));
             for (var level = 1; level < levels.Length; level++)
             {
-                Assert.That(levels[level].IsFullyOpaque, Is.True,
+                Assert.That(levels[level].IsFullyOpaque, Is.False,
+                    $"level {level}");
+                Assert.That(levels[level].GetAlpha(0, 0), Is.EqualTo(0),
                     $"level {level}");
             }
         }
@@ -69,9 +70,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void DenseNoiseKeepsWitnessing()
         {
-            // Half the texels at 0 with n = 6: blocks stay mixed or all
-            // noise, erased blocks carry the flag, and the level is not
-            // fully opaque.
+            // Half the texels at 0 with n = 6: a block whose plain
+            // average falls below the noise bound carries the flag, and
+            // the level is not fully opaque.
             var bytes = Uniform(64, 255);
             for (var i = 0; i < 64; i += 2)
             {
@@ -101,7 +102,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void MixedBlockBelowTheOpaqueBoundStaysWitness()
         {
             // One 4x4 block holds fourteen 255s and two 200s with n = 6:
-            // nothing is noise, and the masked sum 3970 stays below
+            // nothing is noise, and the plain sum 3970 stays below
             // 255 * 16 = 4080, so the block is witness.
             var bytes = Uniform(16, 255);
             bytes[0] = 200;

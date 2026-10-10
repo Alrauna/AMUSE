@@ -14,6 +14,22 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// </summary>
     internal static class NormalizedSourceHash
     {
+        /// <summary>
+        /// The public normalize half of the one rule. Drops an optional
+        /// leading UTF-8 BOM, then converts CRLF and lone CR to LF.
+        /// </summary>
+        internal static string NormalizeText(string rawSource)
+        {
+            if (rawSource.Length > 0 && rawSource[0] == '﻿')
+            {
+                rawSource = rawSource.Substring(1);
+            }
+
+            return rawSource
+                .Replace("\r\n", "\n")
+                .Replace("\r", "\n");
+        }
+
         internal static string Compute(string rawSource)
         {
             if (rawSource == null)
@@ -21,16 +37,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 throw new ArgumentNullException(nameof(rawSource));
             }
 
-            if (rawSource.Length > 0 && rawSource[0] == '﻿')
-            {
-                rawSource = rawSource.Substring(1);
-            }
-
-            rawSource = rawSource
-                .Replace("\r\n", "\n")
-                .Replace("\r", "\n");
-
-            var bytes = new UTF8Encoding(false).GetBytes(rawSource);
+            var normalized = NormalizeText(rawSource);
+            var bytes = new UTF8Encoding(false).GetBytes(normalized);
             using (var sha = SHA256.Create())
             {
                 var hash = sha.ComputeHash(bytes);
