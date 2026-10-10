@@ -633,6 +633,186 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
+        public void Canonicalize_AppendedLtcgiTagTokenInsideAllmanSubShader_IsRemoved()
+        {
+            // The shipped 2.3.4 containers place the SubShader brace on its
+            // own line. The R6 proof covers the token on that Tags line too.
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\"}\n" +
+                "    }\n" +
+                "}\n";
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"Queue\" = \"Geometry\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Is.EqualTo(Canon(clean)));
+        }
+
+        // --- Falsifier F7: an Allman Pass block never grants SubShader
+        // scope. Kills a repair that pushes SubShader for any keyword or
+        // brace line. ---
+        [Test]
+        public void Canonicalize_AllmanPassScopeLtcgiToken_IsRetained()
+        {
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            Tags {\"LightMode\" = \"ForwardBase\"}\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Pass\n" +
+                "        {\n" +
+                "            Tags {\"LightMode\" = \"ForwardBase\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Is.Not.EqualTo(Canon(clean)));
+        }
+
+        // --- Falsifier F8: an anonymous brace block grants no scope. Kills a
+        // repair that treats any bare brace line as SubShader. ---
+        [Test]
+        public void Canonicalize_AnonymousBraceBlockTagsLineLtcgiToken_IsRetained()
+        {
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Does.Contain("\"LTCGI\"=\"ALWAYS\""));
+        }
+
+        // --- Falsifier F9: quoted SubShader text grants no scope. Kills a
+        // repair that matches the keyword by containment. ---
+        [Test]
+        public void Canonicalize_QuotedSubShaderTextDoesNotOpenSubShaderScope()
+        {
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    // the text SubShader appears here\n" +
+                "    \"SubShader\"\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Does.Contain("\"LTCGI\"=\"ALWAYS\""));
+        }
+
+        // --- Falsifier F10: a content line between keyword and brace breaks
+        // the Allman pair. Kills a repair whose pending kind survives any
+        // intervening line. ---
+        [Test]
+        public void Canonicalize_ContentBetweenSubShaderKeywordAndBrace_BreaksEligibility()
+        {
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    LOD 200\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Does.Contain("\"LTCGI\"=\"ALWAYS\""));
+        }
+
+        // --- Falsifier F11: blank lines and comments between keyword and
+        // brace keep the pair. Kills a repair that clears the pending kind on
+        // blank or comment lines. ---
+        [Test]
+        public void Canonicalize_AllmanSubShaderBlankAndCommentLinesBeforeBrace_StillStrips()
+        {
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "\n" +
+                "    // a comment between keyword and brace\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\"}\n" +
+                "    }\n" +
+                "}\n";
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "\n" +
+                "    // a comment between keyword and brace\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Is.EqualTo(Canon(clean)));
+        }
+
+        // --- Falsifier F12: a different value or key stays hashed in Allman
+        // form. Kills a repair that strips any trailing quoted token. ---
+        [Test]
+        public void Canonicalize_AllmanSubShaderScopeTokenWithOtherLineEdits_IsRetained()
+        {
+            const string clean =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\"}\n" +
+                "    }\n" +
+                "}\n";
+            const string otherValue =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGI\"=\"OFF\"}\n" +
+                "    }\n" +
+                "}\n";
+            const string otherKey =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    {\n" +
+                "        Tags {\"RenderType\" = \"Opaque\" \"LTCGIX\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(otherValue), Is.Not.EqualTo(Canon(clean)));
+            Assert.That(Canon(otherKey), Is.Not.EqualTo(Canon(clean)));
+        }
+
+        // --- Falsifier F13: a SubShader keyword line followed by another
+        // block's inline brace line grants no SubShader scope to that block.
+        // Kills a repair whose pending kind attaches to any brace-carrying
+        // line. ---
+        [Test]
+        public void Canonicalize_SubShaderKeywordBeforeInlinePassBlock_DoesNotGrantScope()
+        {
+            const string tagged =
+                "Shader \"s\" {\n" +
+                "    SubShader\n" +
+                "    Pass {\n" +
+                "        Tags {\"LightMode\" = \"ForwardBase\" \"LTCGI\"=\"ALWAYS\"}\n" +
+                "    }\n" +
+                "}\n";
+
+            Assert.That(Canon(tagged), Does.Contain("\"LTCGI\"=\"ALWAYS\""));
+        }
+
+        [Test]
         public void Canonicalize_AppendedLtcgiTagTokenOutsideSubShaderScope_IsRetained()
         {
             const string tagged =
