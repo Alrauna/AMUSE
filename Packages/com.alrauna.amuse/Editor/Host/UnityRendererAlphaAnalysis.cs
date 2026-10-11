@@ -608,6 +608,27 @@ namespace Alrauna.Amuse.Editor.Host
             UnityRendererAlphaSnapshot snapshot,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
         {
+            // A direct host probe names no policy, so it stays on the
+            // conservative desktop proof: the documented authored level-one
+            // footprint keeps every mixed field unproven unless a controlled
+            // probe passes an explicit policy argument.
+            return Analyze(
+                snapshot,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                resolveSemantics);
+        }
+
+        /// <summary>
+        /// The controlled-probe seam: the same analysis with an explicit
+        /// closed sampling policy. Only a caller that owns the acceptance
+        /// decision names <see cref="AlphaSamplingPolicy.AcceptedNonAnisotropic"/>
+        /// here; the default overload stays conservative.
+        /// </summary>
+        internal static RendererAlphaAnalysis Analyze(
+            UnityRendererAlphaSnapshot snapshot,
+            AlphaSamplingPolicy samplingPolicy,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null)
+        {
             if (snapshot == null)
             {
                 throw new ArgumentNullException(nameof(snapshot));
@@ -623,6 +644,7 @@ namespace Alrauna.Amuse.Editor.Host
                 snapshot,
                 resolveSemantics,
                 fields,
+                samplingPolicy,
                 0);
         }
 
@@ -630,6 +652,7 @@ namespace Alrauna.Amuse.Editor.Host
             UnityRendererAlphaSnapshot snapshot,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             AlphaFieldSet alphaFields,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             var resolutions = new Dictionary<
@@ -644,7 +667,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var material = snapshot.Materials[submesh.MaterialSlotIndex];
                 var resolution = ResolveFor(
                     material, resolveSemantics, alphaFields, resolutions,
-                    maxNoiseTexelPercent);
+                    samplingPolicy, maxNoiseTexelPercent);
                 var outcomes = Classify(
                     submesh.Indices,
                     snapshot.Positions,
@@ -671,6 +694,7 @@ namespace Alrauna.Amuse.Editor.Host
             CapturedAlphaMaterialSemanticsResolver resolveSemantics,
             AlphaFieldSet alphaFields,
             Dictionary<CapturedAlphaMaterial, AlphaResolution> memo,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             if (material != null && memo.TryGetValue(material, out var cached))
@@ -703,6 +727,7 @@ namespace Alrauna.Amuse.Editor.Host
                         chain = null;
                         return false;
                     },
+                    samplingPolicy,
                     maxNoiseTexelPercent);
             }
             else
@@ -710,7 +735,7 @@ namespace Alrauna.Amuse.Editor.Host
                 resolution = AdmittedMaterialStates
                     .ResolveAdmittedMaterialSemantics(
                         material, semantics, alphaFields,
-                        maxNoiseTexelPercent);
+                        samplingPolicy, maxNoiseTexelPercent);
             }
 
             if (material != null)

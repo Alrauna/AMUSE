@@ -5,8 +5,10 @@ namespace Alrauna.Amuse.Editor.Presets
     /// <summary>
     /// Writes a preset onto the component through the serialized
     /// object, so Undo and Reset treat the change like every other
-    /// control. The apply covers exactly the nine mapped fields and
+    /// control. The apply covers exactly the eleven mapped fields and
     /// never the master switch or the inspector-only reveal flag.
+    /// Applying a preset replaces both acceptance settings, so no
+    /// earlier acceptance survives unless the selected preset grants it.
     /// </summary>
     internal static class PresetApplier
     {
@@ -36,6 +38,12 @@ namespace Alrauna.Amuse.Editor.Presets
                 .boolValue = preset.AllowDepthTestChange;
             serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots")
                 .boolValue = preset.IgnoreOutOfRangeMaterialSlots;
+            serializedObject.FindProperty(
+                    "_acceptDesktopAnisotropyDifferences")
+                .boolValue = preset.AcceptDesktopAnisotropyDifferences;
+            serializedObject.FindProperty(
+                    "_acceptMobileAnisotropyDifferences")
+                .boolValue = preset.AcceptMobileAnisotropyDifferences;
             serializedObject.ApplyModifiedProperties();
         }
     }

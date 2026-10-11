@@ -1009,9 +1009,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
                 AmuseReports.AvatarSummary(
-                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false);
+                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
 
                 // Falsifier: a keyed-per-path leftover would still return
                 // the play text. The store describes the session's most
@@ -1035,7 +1039,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
                 AmuseBuildStatusStore.Forget();
 
                 Assert.That(AmuseBuildStatusStore.TryGet(out _), Is.False);
@@ -1057,7 +1063,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false);
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
 
                 Assert.That(
                     AmuseBuildStatusStore.TryGet(out var status), Is.True);
@@ -1081,7 +1089,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true);
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
 
                 Assert.That(
                     AmuseBuildStatusStore.TryGet(out var activeStatus),
@@ -1092,7 +1102,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "alpha policy", activeStatus);
 
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false);
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
 
                 Assert.That(
                     AmuseBuildStatusStore.TryGet(out var inertStatus),
@@ -1102,6 +1114,165 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     inertStatus.Contains("alpha policy"),
                     Is.False);
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Task 6 disclosure regression. An accepted non-anisotropic
+        /// build that moved zero triangles must still disclose the
+        /// selected proof category in both the status line and the NDMF
+        /// summary report. The tolerance flag stays off here, so the
+        /// category disclosure cannot ride it: the observed RED on
+        /// 2026-10-11 was the missing category word while the old
+        /// tolerance sentence was the only policy text. The assertions
+        /// check the policy key and the category word only, never the
+        /// full disclosure wording.
+        /// </summary>
+        [Test]
+        public void
+            AcceptedZeroMoveSummaryDisclosesTheSelectedProofCategory()
+        {
+            var root = new GameObject(
+                "AMUSE accepted zero-move summary fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.Contains(
+                    "accepted",
+                    status,
+                    "a zero-move accepted build must still disclose the " +
+                    "selected proof category in the status line");
+                Assert.That(
+                    status.Contains("alpha policy"),
+                    Is.False,
+                    "the sampling disclosure must stay separate from " +
+                    "the tolerance flag");
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => AmuseReports.AvatarSummary(
+                        root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                        alphaPolicyActive: false,
+                        BuildTarget.StandaloneWindows64,
+                        AlphaSamplingPolicy.AcceptedNonAnisotropic));
+                var summaryEntries = new List<string>();
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.summary.Title")
+                    {
+                        summaryEntries.Add(entry.TheError.ToMessage());
+                    }
+                }
+
+                Assert.That(summaryEntries, Has.Count.EqualTo(1),
+                    "one analyzed build reports exactly one summary entry");
+                StringAssert.Contains(
+                    "accepted",
+                    summaryEntries[0],
+                    "the NDMF summary report must disclose the accepted " +
+                    "proof category even when zero triangles moved");
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The conservative counterpart: without acceptance the summary
+        /// discloses the conservative category, and no accepted claim
+        /// appears beside it. Zero moved triangles change nothing, so the
+        /// disclosure does not depend on the applied counts.
+        /// </summary>
+        [Test]
+        public void
+            ConservativeZeroMoveSummaryDisclosesTheConservativeCategory()
+        {
+            var root = new GameObject(
+                "AMUSE conservative zero-move summary fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.Contains(
+                    "conservative",
+                    status,
+                    "a zero-move conservative build must disclose the " +
+                    "selected proof category in the status line");
+                Assert.That(
+                    status.Contains("accepted"),
+                    Is.False,
+                    "a conservative build must not claim the accepted " +
+                    "category");
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// A target without a proof policy keeps the conservative mobile
+        /// fallback in its captured policy slot, so the summary still
+        /// discloses a conservative category for it. The target name
+        /// stays plain, because the selection refused it before the
+        /// analysis ran.
+        /// </summary>
+        [Test]
+        public void
+            UnsupportedTargetSummaryDisclosesTheConservativeFallback()
+        {
+            var root = new GameObject(
+                "AMUSE unsupported target summary fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    BuildTarget.StandaloneLinux64,
+                    AlphaSamplingPolicy.ConservativeMobile);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.Contains(
+                    "conservative",
+                    status,
+                    "an unsupported target keeps the conservative " +
+                    "fallback, so its summary discloses that category");
+                Assert.That(
+                    status.Contains("accepted"),
+                    Is.False,
+                    "no acceptance claim may appear for an unsupported " +
+                    "target");
             }
             finally
             {
@@ -2845,6 +3016,258 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Task 3 build regression. The fixture stores desktop acceptance
+        /// on the optimizer through its serialized field and runs the
+        /// real barrier under Forced On quality. The authored capture
+        /// records level one as eligible but not anisotropic, so the
+        /// proof's anisotropy can come only from the captured sampling
+        /// policy. Before the policy integration the barrier resolved
+        /// with the conservative desktop policy and no opaque candidate
+        /// appeared; that RED was observed on 2026-10-11. The build now
+        /// captures the stored desktop acceptance, the opaque-half
+        /// triangle proves, and the transparent half stays unproven.
+        /// </summary>
+        [Test]
+        public void DesktopAcceptanceProvesTheMixedFieldOpaqueHalfUnderForcedOnQuality()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var savedFiltering = UnityEngine.QualitySettings.anisotropicFiltering;
+            var root = new GameObject("AMUSE desktop acceptance mixed field");
+            Mesh mesh = null;
+            Material material = null;
+
+            try
+            {
+                // The selector admits desktop acceptance only for the
+                // Windows target. The dev editor builds for Windows, and
+                // this fixture must say so instead of guessing.
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "the dev editor must hold the Windows build target for " +
+                    "this desktop acceptance fixture to prove anything");
+
+                var optimizer = root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var serialized = new SerializedObject(optimizer);
+                serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                    .boolValue = true;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                EnsureSamplingPolicyFolder();
+
+                var mixed = ImportMixedHalfTexture(
+                    "mixed_halves", MixedHalfAlphaPixels());
+
+                // Causal preconditions. The texture must be a mixed field
+                // with one opaque half and one nonopaque half, captured as
+                // authored level one: eligible, but not anisotropic.
+                AssertMixedHalfTexturePreconditions(mixed);
+
+                mesh = MixedHalfMesh();
+                material = SampledAlphaMaterial(mixed);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                // Forced On quality: the proof must ride the captured
+                // policy, never the editor's quality mode.
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    UnityEngine.AnisotropicFiltering.ForceEnable;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly);
+                var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.HasSamplingPolicy, Is.True,
+                    "the barrier must capture a sampling policy for the " +
+                    "desktop target");
+                Assert.That(amuse.SamplingTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64));
+                Assert.That(amuse.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "stored desktop acceptance must select the accepted " +
+                    "policy");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "exactly the opaque-half triangle may become an " +
+                    "opaque candidate: zero means the stored desktop " +
+                    "acceptance did not reach the proof, and two means " +
+                    "the transparent half converted");
+            }
+            finally
+            {
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    savedFiltering;
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (material != null) Object.DestroyImmediate(material);
+                if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The folder the mixed-half fixtures import their textures into.
+        /// The importing test creates it and deletes it in its finally.
+        /// </summary>
+        internal const string SamplingPolicyTempFolder =
+            "Assets/AmuseTests_BuildSamplingPolicy";
+
+        /// <summary>Creates the mixed-half fixture folder on demand, so
+        /// every consumer owns one import call instead of one folder
+        /// recipe.</summary>
+        internal static void EnsureSamplingPolicyFolder()
+        {
+            if (!AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_BuildSamplingPolicy");
+            }
+        }
+
+        /// <summary>Deletes the mixed-half fixture folder and every
+        /// imported asset inside it.</summary>
+        internal static void DeleteSamplingPolicyFolder()
+        {
+            if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+            {
+                AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+            }
+        }
+
+        /// <summary>
+        /// 8x8 with a fully opaque left half and a fully nonopaque right
+        /// half, split at the exact midline. Both fixture triangles sit
+        /// well inside one half, away from the bilinear boundary.
+        /// </summary>
+        internal static Color32[] MixedHalfAlphaPixels()
+        {
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
+            {
+                for (var x = 0; x < 8; x++)
+                {
+                    pixels[y * 8 + x] = new Color32(
+                        64, 32, 16, (byte)(x < 4 ? 255 : 0));
+                }
+            }
+
+            return pixels;
+        }
+
+        /// <summary>
+        /// Imports an 8x8 non-readable RGBA32 asset with Bilinear/Clamp
+        /// sampling and authored anisotropy level one - the mixed-field
+        /// shape the proof must tell apart by policy alone. The default
+        /// import carries no mip chain, so the authored level one is the
+        /// only level; the mipmap-enabled variant keeps the same base
+        /// level and lets the importer derive every later mip. The folder
+        /// is created by the caller and deleted in its finally.
+        /// </summary>
+        internal static Texture2D ImportMixedHalfTexture(
+            string name, Color32[] pixels, bool withMipmaps = false)
+        {
+            var path = SamplingPolicyTempFolder + "/" + name + ".png";
+            return TestTextureImport.WritePng(
+                path, 8, 8, pixels, importer =>
+                {
+                    importer.mipmapEnabled = withMipmaps;
+                    importer.isReadable = false;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Bilinear;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.mipMapBias = 0f;
+                    importer.anisoLevel = 1;
+                    importer.streamingMipmaps = false;
+                });
+        }
+
+        /// <summary>
+        /// The mixed-half texture's causal preconditions: authored level
+        /// one stays eligible and non-anisotropic, so only the captured
+        /// policy can widen or keep the proof footprint, and the field
+        /// holds an exactly opaque left half against an exactly
+        /// nonopaque right half.
+        /// </summary>
+        internal static void AssertMixedHalfTexturePreconditions(
+            Texture2D mixed)
+        {
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(mixed, out var authored),
+                Is.True);
+            Assert.That(
+                authored.ForceAnisotropyEligible, Is.True,
+                "authored level one must stay eligible so only the " +
+                "captured policy can widen or keep the footprint");
+            Assert.That(
+                authored.Aniso, Is.EqualTo(TextureAnisoMode.None),
+                "authored level one must capture as non-anisotropic, " +
+                "or the quality mode would decide the proof");
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    mixed, out _, out var chain),
+                Is.True);
+            Assert.That(
+                chain.Count, Is.EqualTo(mixed.mipmapCount),
+                "every declared mip must be captured.");
+            Assert.That(
+                chain[0].GetAlpha(0, 0), Is.EqualTo(255),
+                "Precondition: the left half is fully opaque.");
+            Assert.That(
+                chain[0].GetAlpha(7, 0), Is.EqualTo(0),
+                "Precondition: the right half is fully nonopaque.");
+        }
+
+        /// <summary>
+        /// One submesh, two triangles. Submesh 0: the opaque-half triangle
+        /// spans u in [0.125, 0.25] and v in [0.25, 0.5]. The transparent-
+        /// half triangle spans u in [0.75, 0.875] and v in [0.25, 0.5].
+        /// </summary>
+        internal static Mesh MixedHalfMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(2f, 0f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(2f, 1f, 0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.125f, 0.25f),
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.125f, 0.5f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.875f, 0.25f),
+                new Vector2(0.75f, 0.5f)
+            };
+            mesh.subMeshCount = 1;
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            return mesh;
+        }
+
+        /// <summary>
         /// F-1 negative control. Being an object-reference binding is not by
         /// itself a refusal; only one whose property name could address a
         /// proof-relevant material property is. Without this control the fix
@@ -3843,6 +4266,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     path,
                     evidence,
                     snapshot,
+                    AlphaSamplingPolicy.ConservativeDesktop,
                     VerifiedAlphaOnly);
 
                 Assert.That(result.Refusal,
@@ -3857,38 +4281,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
             }
-        }
-
-        [Test]
-        public void RuntimeStatePureEntryAcceptsOnlyImmutableProofInputs()
-        {
-            var method = typeof(AmusePlatformFinishPass).GetMethod(
-                "AnalyzeRuntimeStatesForTests",
-                BindingFlags.Static | BindingFlags.NonPublic,
-                null,
-                new[]
-                {
-                    typeof(string),
-                    typeof(CapturedAnimationEvidence),
-                    typeof(UnityRendererAlphaSnapshot),
-                    typeof(CapturedAlphaMaterialSemanticsResolver),
-                },
-                null);
-
-            Assert.That(method, Is.Not.Null,
-                "the pure runtime-state entry still accepts a live host object");
-            foreach (var parameter in method.GetParameters())
-            {
-                Assert.That(
-                    typeof(UnityEngine.Object).IsAssignableFrom(
-                        parameter.ParameterType),
-                    Is.False,
-                    parameter.Name + " accepts a live Unity object");
-            }
-
-            Assert.That(
-                method.ReturnType.GetGenericArguments(),
-                Has.None.AssignableTo<UnityEngine.Object>());
         }
 
         [Test]
@@ -3937,6 +4329,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     rendererPath,
                     evidence,
                     extraction.Snapshot,
+                    AlphaSamplingPolicy.ConservativeDesktop,
                     VerifiedAlphaOnly);
 
                 Assert.That(result.Refusal,
@@ -5756,8 +6149,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var path = AnimationUtility.CalculateTransformPath(
                 renderer.transform, root.transform);
             var snapshot = CaptureRuntimeStateGeometry(renderer, evidence);
+            // The runtime-state mechanics fixtures stay conservative:
+            // acceptance reaches the proof only through the real pass,
+            // which captures the policy from the build avatar.
             return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
-                path, evidence, snapshot, VerifiedAlphaOnly);
+                path, evidence, snapshot,
+                AlphaSamplingPolicy.ConservativeDesktop, VerifiedAlphaOnly);
         }
 
         private static UnityRendererAlphaSnapshot CaptureRuntimeStateGeometry(

@@ -20,6 +20,8 @@ namespace Alrauna.Amuse.Editor.Presets
         internal int PolygonMinimumOpaqueCoveragePercent { get; }
         internal bool AllowDepthTestChange { get; }
         internal bool IgnoreOutOfRangeMaterialSlots { get; }
+        internal bool AcceptDesktopAnisotropyDifferences { get; }
+        internal bool AcceptMobileAnisotropyDifferences { get; }
 
         internal OptimizerPreset(
             string name,
@@ -32,7 +34,9 @@ namespace Alrauna.Amuse.Editor.Presets
             int polygonAlphaUpperClampPercent,
             int polygonMinimumOpaqueCoveragePercent,
             bool allowDepthTestChange,
-            bool ignoreOutOfRangeMaterialSlots)
+            bool ignoreOutOfRangeMaterialSlots,
+            bool acceptDesktopAnisotropyDifferences,
+            bool acceptMobileAnisotropyDifferences)
         {
             Name = name;
             Description = description;
@@ -45,10 +49,14 @@ namespace Alrauna.Amuse.Editor.Presets
             PolygonMinimumOpaqueCoveragePercent = polygonMinimumOpaqueCoveragePercent;
             AllowDepthTestChange = allowDepthTestChange;
             IgnoreOutOfRangeMaterialSlots = ignoreOutOfRangeMaterialSlots;
+            AcceptDesktopAnisotropyDifferences =
+                acceptDesktopAnisotropyDifferences;
+            AcceptMobileAnisotropyDifferences =
+                acceptMobileAnisotropyDifferences;
         }
 
         /// <summary>
-        /// True when the component equals this preset on all nine
+        /// True when the component equals this preset on all eleven
         /// mapped fields. The pressed state is computed from this
         /// comparison and never stored, so a manual edit of one value
         /// leaves every button unpressed.
@@ -70,7 +78,11 @@ namespace Alrauna.Amuse.Editor.Presets
                     == PolygonMinimumOpaqueCoveragePercent
                 && component.AllowDepthTestChange == AllowDepthTestChange
                 && component.IgnoreOutOfRangeMaterialSlots
-                    == IgnoreOutOfRangeMaterialSlots;
+                    == IgnoreOutOfRangeMaterialSlots
+                && component.AcceptDesktopAnisotropyDifferences
+                    == AcceptDesktopAnisotropyDifferences
+                && component.AcceptMobileAnisotropyDifferences
+                    == AcceptMobileAnisotropyDifferences;
         }
     }
 }

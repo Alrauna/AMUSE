@@ -198,7 +198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Unknown(),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -211,7 +211,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 default(SemanticOutput<ScalarSemanticValue>),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(
                 resolution.Failure,
@@ -223,7 +223,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Unknown(),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.Throws<InvalidOperationException>(
                 () => resolution.Classify(OpaqueCornerTriangle()));
@@ -235,7 +235,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.Throws<ArgumentNullException>(() => AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f)),
-                null, 0));
+                null, AlphaSamplingPolicy.ConservativeDesktop, 0));
         }
 
         // --- Task 2: constant alpha forms -------------------------------------
@@ -245,7 +245,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(value)),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }
 
         [Test]
@@ -313,7 +313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Constant(1f)),
-                provider, 0);
+                provider, AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(consulted, Is.False);
         }
@@ -323,12 +323,14 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaResolution ResolveSample(
             TextureSample sample,
             TextureChannel channel,
-            AlphaFieldProvider provider)
+            AlphaFieldProvider provider,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.Texture(sample, channel)),
-                provider, 0);
+                provider, samplingPolicy, 0);
         }
 
         private static SemanticOutput<ScalarSemanticValue> SampledAlpha()
@@ -341,8 +343,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void SampledAlphaDelegatesToTheClassifier()
         {
             var field = MixedField();
+            // The oracle compares against the plain captured sampling, so
+            // this test's precondition is a footprint-free local proof.
             var resolution = ResolveSample(
-                Sample(), TextureChannel.Alpha, Providing(field));
+                Sample(), TextureChannel.Alpha, Providing(field),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var sampling = new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp);
 
@@ -356,6 +361,40 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.Classify(TransparentCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        /// <summary>
+        /// The selected policy decides the mixed field's opaque corner. The
+        /// conservative desktop policy owns the documented authored level-one
+        /// footprint, so the projected sampling stays anisotropic and the
+        /// corner stays unproven. The accepted non-anisotropic policy drops
+        /// every footprint, so the same evidence proves the same corner.
+        /// The policy and outcome enums are internal, so a public NUnit
+        /// TestCase cannot carry them as parameters (CS0051); the pair is
+        /// enumerated inside one public test, like the channel sweep above.
+        /// </summary>
+        [Test]
+        public void SelectedPolicyControlsMixedFieldProof()
+        {
+            var cases = new[]
+            {
+                (AlphaSamplingPolicy.ConservativeDesktop,
+                    TriangleAlphaOutcome.Unknown),
+                (AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                    TriangleAlphaOutcome.ProvenOpaque),
+            };
+
+            foreach (var (policy, expected) in cases)
+            {
+                var alpha = SemanticOutput<ScalarSemanticValue>.Complete(
+                    ScalarSemanticValue.Texture(Sample(), TextureChannel.Alpha));
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    alpha, Providing(MixedField()), policy, 0);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
         }
 
         // The semantic and classifier enums are internal, so a public NUnit
@@ -384,7 +423,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     return true;
                 };
 
-                var resolution = ResolveSample(Sample(), channel, provider);
+                var resolution = ResolveSample(Sample(), channel, provider,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
                 Assert.That(requested, Is.EqualTo(channel), channel.ToString());
                 Assert.That(
@@ -413,10 +453,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                              TextureWrapMode.Clamp, TextureWrapMode.Repeat
                          })
                 {
+                    // The oracle carries the plain captured sampling, so the
+                    // local footprint must not interfere.
                     var resolution = ResolveSample(
                         Sample(filter, wrap),
                         TextureChannel.Alpha,
-                        Providing(field));
+                        Providing(field),
+                        AlphaSamplingPolicy.AcceptedNonAnisotropic);
                     var expected = new TextureSampling(filter, wrap);
 
                     foreach (var triangle in triangles)
@@ -455,7 +498,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             foreach (var sample in mappings)
             {
-                var resolution = ResolveSample(sample, TextureChannel.Alpha, opaque);
+                var resolution = ResolveSample(sample, TextureChannel.Alpha,
+                    opaque, AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
                 // Falsifies: retaining the former identity-ST resolver gate.
                 Assert.That(resolution.IsResolved, Is.True, sample.Coordinates.Scale.ToString());
@@ -492,7 +536,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var mirrored = ResolveSample(
                 Sample(scaleX: -2f, scaleY: 2f),
                 TextureChannel.Alpha,
-                Providing(mirrorField));
+                Providing(mirrorField),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             Assert.That(mirrored.IsResolved, Is.True);
             Assert.That(
@@ -512,7 +557,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     var resolution = ResolveSample(
                         Sample(filter, wrap, scaleX: 2f, scaleY: 2f),
                         TextureChannel.Alpha,
-                        opaque);
+                        opaque,
+                        AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
                     // Falsifies: supporting only one classifier sampling mode.
                     Assert.That(resolution.IsResolved, Is.True, filter + "/" + wrap);
@@ -547,7 +593,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = ResolveSample(
                 Sample(scaleX: 2f, scaleY: 2f, offsetX: 0.5f, offsetY: 0.25f),
                 TextureChannel.Alpha,
-                Providing(field));
+                Providing(field),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             // Falsifies: accepting ST but classifying the untransformed triangle.
             Assert.That(resolution.IsResolved, Is.True);
@@ -567,8 +614,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector2.zero,
                 new Vector2(0.2f, 0f),
                 new Vector2(0f, 0.2f));
+            // The oracle carries the plain captured sampling, so the local
+            // footprint must not interfere.
             var resolution = ResolveSample(
-                Sample(), TextureChannel.Alpha, Providing(field));
+                Sample(), TextureChannel.Alpha, Providing(field),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var sampling = new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp);
 
@@ -631,7 +681,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         offsetX: -scale,
                         offsetY: 0f),
                     TextureChannel.Alpha,
-                    opaque);
+                    opaque,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
                 // Falsifies: deriving B_st from cancellation magnitude alone.
                 Assert.That(resolution.IsResolved, Is.True);
@@ -690,7 +741,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ResolveSample(
                     Sample(scaleX: 2f, scaleY: 2f, offsetX: 0.5f, offsetY: 0.25f),
                     TextureChannel.Alpha,
-                    Providing(Chain(mipZero, lowerMip))).Classify(triangle),
+                    Providing(Chain(mipZero, lowerMip)),
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic)
+                    .Classify(triangle),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -739,20 +792,25 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
         private static AlphaResolution ResolveMultiplied(
             float multiplier,
-            AlphaFieldProvider provider)
+            AlphaFieldProvider provider,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ScalarSemanticValue.TextureTimesConstant(
                         Sample(), TextureChannel.Alpha, multiplier)),
-                provider, 0);
+                provider, samplingPolicy, 0);
         }
 
         [Test]
         public void MultiplierOfExactlyOnePreservesTheClassifierPredicate()
         {
             var field = MixedField();
-            var resolution = ResolveMultiplied(1f, Providing(field));
+            // The oracle compares against the plain captured sampling, so
+            // this test's precondition is a footprint-free local proof.
+            var resolution = ResolveMultiplied(1f, Providing(field),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var sampling = new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp);
 
@@ -826,7 +884,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         Sample(TextureFilterMode.Point, TextureWrapMode.Clamp, 1),
                         TextureChannel.Alpha,
                         0.5f)),
-                Providing(MixedField()), 0);
+                Providing(MixedField()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -871,7 +929,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ValueWithNaN(
                         ScalarSemanticValueKind.TextureSampleTimesConstant)),
-                Providing(AllOpaqueChain()), 0);
+                Providing(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -886,7 +944,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ValueWithNaN(
                         ScalarSemanticValueKind.ProductChainOfTextureSamples)),
-                Providing(AllOpaqueChain()), 0);
+                Providing(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -900,7 +958,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(
                     ValueWithNaN(ScalarSemanticValueKind.Constant)),
-                Providing(AllOpaqueChain()), 0);
+                Providing(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -913,8 +971,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ClassifierUnknownForDegenerateGeometryPassesThrough()
         {
+            // The classifier itself must answer, so the footprint must not
+            // preempt it with its own Unknown.
             var resolution = ResolveSample(
-                Sample(), TextureChannel.Alpha, Providing(MixedField()));
+                Sample(), TextureChannel.Alpha, Providing(MixedField()),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var degenerate = TriangleAlphaInput.WithUv0(
                 Vector3.zero,
                 new Vector3(1f, 1f, 1f),
@@ -931,8 +992,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ClassifierUnknownForMissingUvPassesThrough()
         {
+            // The classifier itself must answer, so the footprint must not
+            // preempt it with its own Unknown.
             var resolution = ResolveSample(
-                Sample(), TextureChannel.Alpha, Providing(MixedField()));
+                Sample(), TextureChannel.Alpha, Providing(MixedField()),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             Assert.That(
                 resolution.Classify(TriangleAlphaInput.MissingUv0(
@@ -943,10 +1007,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ClassifierWorkloadRefusalPassesThroughAsUnknown()
         {
+            // The budget refusal is the classifier's own, so the footprint
+            // must not preempt it with its own Unknown.
             var resolution = ResolveSample(
                 Sample(TextureFilterMode.Point, TextureWrapMode.Repeat),
                 TextureChannel.Alpha,
-                Providing(MixedField()));
+                Providing(MixedField()),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var huge = TriangleAlphaInput.WithUv0(
                 Vector3.zero,
                 Vector3.right,
@@ -974,10 +1041,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void RepeatedClassificationIsDeterministic()
         {
+            // Bilinear classification determinism is the point, so the
+            // footprint must not answer first.
             var resolution = ResolveSample(
                 Sample(TextureFilterMode.Bilinear, TextureWrapMode.Repeat),
                 TextureChannel.Alpha,
-                Providing(MixedField()));
+                Providing(MixedField()),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             var first = resolution.Classify(TransparentCornerTriangle());
             for (var attempt = 0; attempt < 5; attempt++)
@@ -1012,7 +1082,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             {
                 AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Unknown(),
-                    ProvidingNothing(), 0),
+                    ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0),
                 ResolveConstant(1f),
                 ResolveConstant(0.25f),
                 ResolveConstant(3f),
@@ -1040,7 +1110,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             {
                 AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Unknown(),
-                    ProvidingNothing(), 0),
+                    ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0),
                 ResolveSample(Sample(), TextureChannel.Alpha, ProvidingNothing()),
                 ResolveMultiplied(2f, Providing(MixedField())),
                 ResolveSample(
@@ -1560,7 +1630,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void ProductChainWithMultiplierAboveOneRefuses()
         {
             var resolution = AlphaSemanticsResolver.Resolve(
-                ChainValue(1.5f, 3), ProvidingNothing(), 0);
+                ChainValue(1.5f, 3), ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -1575,7 +1645,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // factor is bounded in [0,1] by the field contract, so a leading
             // constant below one keeps the whole product below one.
             var resolution = AlphaSemanticsResolver.Resolve(
-                ChainValue(0.5f, 3), ProvidingNothing(), 0);
+                ChainValue(0.5f, 3), ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1593,7 +1663,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 ChainValue(1f, 3),
                 ProvidingChainSources(
-                    AllOpaqueChain(), AllOpaqueChain(), AllOpaqueChain()),
+                    AllOpaqueChain(), AllOpaqueChain(), AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -1613,7 +1683,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ProvidingChainSources(
                     AllOpaqueChain(),
                     OpaqueThenTransparentChain(),
-                    AllOpaqueChain()),
+                    AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(
@@ -1625,7 +1695,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void ProductChainWithMissingFactorEvidenceFailsClosed()
         {
             var resolution = AlphaSemanticsResolver.Resolve(
-                ChainValue(1f, 3), ProvidingNothing(), 0);
+                ChainValue(1f, 3), ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -1645,7 +1715,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     ScalarSemanticValue.SaturatingSum(
                         ScalarSemanticValue.Constant(0.6f),
                         ScalarSemanticValue.Constant(0.6f))),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1665,7 +1735,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     Sample(), TextureChannel.Alpha));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                Providing(MixedField()), 0);
+                Providing(MixedField()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1686,7 +1756,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     MaskSample(), TextureChannel.Red));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingTwo(Chain(MixedField()), Chain(MixedField())), 0);
+                ProvidingTwo(Chain(MixedField()), Chain(MixedField())),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1713,7 +1784,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     ScalarSemanticValue.SaturatingSum(
                         ScalarSemanticValue.Constant(0.25f),
                         ScalarSemanticValue.Constant(0.5f))),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1738,7 +1809,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
                 ProvidingTwo(
-                    OpaqueThenTransparentChain(), AllOpaqueChain()), 0);
+                    OpaqueThenTransparentChain(), AllOpaqueChain()),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1761,7 +1833,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
                 ProvidingTwo(
                     OpaqueThenTransparentChain(),
-                    OpaqueThenTransparentChain()), 0);
+                    OpaqueThenTransparentChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             // Both factors refute every triangle through their second mip.
             // The absorbing arm now returns Unknown, because the fold
@@ -1783,7 +1855,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ScalarSemanticValue.Texture(MaskSample(), TextureChannel.Red));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingTwo(Chain(fieldA), Chain(fieldB)), 0);
+                ProvidingTwo(Chain(fieldA), Chain(fieldB)), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             // The triangle must cover both zero texels with positive area,
             // so each factor holds a sub-one witness and neither factor
@@ -1805,7 +1877,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
                 ProvidingTwo(
-                    Chain(Field(1, 1, 255)), OpaqueThenTransparentChain()), 0);
+                    Chain(Field(1, 1, 255)), OpaqueThenTransparentChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
@@ -1877,7 +1949,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 TextureChannel.Alpha);
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingLayerField(AllOpaqueChain()), 0);
+                ProvidingLayerField(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1907,7 +1979,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.05f, 0.45f));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingLayerField(AllOpaqueChain()), 0);
+                ProvidingLayerField(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             // The mesh carries no uv1 set, so the sampled coordinate is
             // unknowable and the triangle stays unproven.
@@ -1961,7 +2033,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 TextureChannel.Alpha);
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                Providing(field), 0);
+                Providing(field), AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -1981,7 +2054,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     Sample(), TextureChannel.Alpha));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             // The constant-one side alone cannot prove the saturate without
             // the other side's range attestation, so a missing field must
@@ -2000,7 +2073,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ScalarSemanticValue.Constant(0f));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                Providing(AllOpaqueChain()), 0);
+                Providing(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -2020,7 +2093,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     MaskSample(), TextureChannel.Red));
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), 0);
+                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -2038,7 +2111,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     ScalarSemanticValue.SaturatingDifference(
                         ScalarSemanticValue.Constant(0.6f),
                         ScalarSemanticValue.Constant(0.6f))),
-                ProvidingNothing(), 0);
+                ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -2052,7 +2125,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void ProductWithMultiplierAboveOneRefuses()
         {
             var resolution = AlphaSemanticsResolver.Resolve(
-                ProductValue(1.5f), ProvidingNothing(), 0);
+                ProductValue(1.5f), ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -2067,7 +2140,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // factors are bounded in [0,1] by the field contract, so a
             // factor strictly below one keeps the product below one.
             var resolution = AlphaSemanticsResolver.Resolve(
-                ProductValue(0.5f), ProvidingNothing(), 0);
+                ProductValue(0.5f), ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -2083,7 +2156,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), 0);
+                ProvidingTwo(AllOpaqueChain(), AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
@@ -2101,7 +2174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
                 ProvidingTwo(
-                    AllOpaqueChain(), OpaqueThenTransparentChain()), 0);
+                    AllOpaqueChain(), OpaqueThenTransparentChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             // MustRemainTransparent is absorbing: the mask's transparent
             // mip vetoes the triangle even though the main field proves.
@@ -2113,10 +2186,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ProductWithAnUnknownSecondFactorIsUnknown()
         {
+            // The budget refusal is the classifier's own, so the footprint
+            // must not preempt it with its own Unknown before the fold.
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
                 ProvidingTwo(
-                    AllOpaqueChain(), Chain(BudgetExceedingLevel())), 0);
+                    AllOpaqueChain(), Chain(BudgetExceedingLevel())),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
 
             // Unknown must not exit early as ProvenOpaque: against the
             // spanning triangle the second factor's budget-exceeding level
@@ -2132,7 +2208,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(AllOpaqueChain(), null, provideMask: false), 0);
+                ProvidingTwo(AllOpaqueChain(), null, provideMask: false), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             Assert.That(resolution.IsResolved, Is.False);
             Assert.That(
@@ -2143,9 +2219,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ProductWithMixedFactorsClassifiesEachTriangleIndependently()
         {
+            // Both factors' per-triangle predicates are the point, so the
+            // footprint must not answer first.
             var resolution = AlphaSemanticsResolver.Resolve(
                 ProductValue(1f),
-                ProvidingTwo(Chain(MixedField()), Chain(MixedField())), 0);
+                ProvidingTwo(Chain(MixedField()), Chain(MixedField())),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
 
             // Both factors are opaque only over the bottom half: the
             // corner triangle proves, the spanning triangle does not.
@@ -2170,7 +2249,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // A chain whose sole level holds one erased texel beside
             // three opaque ones. The triangle covers the whole 2x2
             // region. Resolve with density 50 proves; Resolve with
-            // density 0 does not. Same evidence, same provider.
+            // density 0 does not. Same evidence, same provider. The
+            // density verdict is the classifier's own, so the footprint
+            // must not preempt either arm with its own Unknown.
             var flags = new byte[]
             {
                 255, 255,
@@ -2178,9 +2259,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
             var chain = Chain(new AlphaTextureData(2, 2, flags));
             var proven = AlphaSemanticsResolver.Resolve(
-                SampledAlpha(), Providing(chain), 50);
+                SampledAlpha(), Providing(chain),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 50);
             var refused = AlphaSemanticsResolver.Resolve(
-                SampledAlpha(), Providing(chain), 0);
+                SampledAlpha(), Providing(chain),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
 
             Assert.That(
                 proven.Classify(FlatTriangle()),
@@ -2194,11 +2277,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
         private static AlphaResolution ResolveComplete(
             ScalarSemanticValue value,
-            AlphaFieldProvider provider)
+            AlphaFieldProvider provider,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             return AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                provider, 0);
+                provider, samplingPolicy, 0);
         }
 
         [Test]
@@ -2298,7 +2383,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 TextureChannel.Alpha);
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                ProvidingLayerField(AllOpaqueChain()), 0);
+                ProvidingLayerField(AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
             var uv1Set = new Vector2[]
             {
@@ -2322,6 +2407,218 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 outcome,
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        // --- explicit policy propagation (2026-10-10 platform plan, task 2) --
+
+        /// <summary>
+        /// The policy and outcome enums are internal, so a public NUnit
+        /// TestCase cannot carry them as parameters (CS0051). Every paired
+        /// test below enumerates the two policies inside the test body,
+        /// exactly like <see cref="SelectedPolicyControlsMixedFieldProof"/>.
+        /// </summary>
+        private static (AlphaSamplingPolicy Policy,
+                        TriangleAlphaOutcome Expected)[]
+            PolicyPair(
+                TriangleAlphaOutcome conservative,
+                TriangleAlphaOutcome accepted)
+        {
+            return new[]
+            {
+                (AlphaSamplingPolicy.ConservativeDesktop, conservative),
+                (AlphaSamplingPolicy.AcceptedNonAnisotropic, accepted),
+            };
+        }
+
+        [Test]
+        public void MappedSample_SelectedPolicyControlsTheLocalCorner()
+        {
+            // The classified mapped arm projects its sampling like the plain
+            // arm: the conservative policy keeps the mixed field unproven,
+            // and the accepted policy proves the same corner. The identity
+            // pair cannot construct a map, so this fixture scales by two
+            // and shifts by minus one half: the map's endpoint image still
+            // crosses one, so the arm stays classified, and the corner's
+            // mapped footprint lands inside the clamp-clamped opaque half.
+            var map = AffineAlphaMap.FromBinary32(2f, -0.5f);
+            var value = ScalarSemanticValue.MappedTexture(
+                Sample(), TextureChannel.Alpha, map);
+
+            foreach (var (policy, expected) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SemanticOutput<ScalarSemanticValue>.Complete(value),
+                    Providing(MixedField()), policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void Product_MixedMaskFactorBlocksConservativeProof()
+        {
+            // The main factor is fully opaque, so the mask alone decides:
+            // the conservative proof is blocked, and acceptance must reach
+            // the second (mask) factor for the corner to prove.
+            foreach (var (policy, expected) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    ProductValue(1f),
+                    ProvidingTwo(AllOpaqueChain(), Chain(MixedField())),
+                    policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void Product_MixedMainFactorBlocksConservativeProof()
+        {
+            // The mask factor is fully opaque, so the main alone decides:
+            // the conservative proof is blocked, and acceptance must reach
+            // the first (main) factor for the corner to prove.
+            foreach (var (policy, expected) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    ProductValue(1f),
+                    ProvidingTwo(Chain(MixedField()), AllOpaqueChain()),
+                    policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void SaturatingSum_NestedSamplesRetainTheSelectedPolicy()
+        {
+            // A nested resolver that reverted to a default conservative
+            // policy would answer Unknown on the accepted arm.
+            var value = ScalarSemanticValue.SaturatingSum(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Texture(
+                    MaskSample(), TextureChannel.Red));
+
+            foreach (var (policy, expected) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SemanticOutput<ScalarSemanticValue>.Complete(value),
+                    ProvidingTwo(Chain(MixedField()), Chain(MixedField())),
+                    policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void ZeroSubtrahendDifference_NestedSampleRetainsThePolicy()
+        {
+            // saturate(m - 0) resolves the minuend through a nested call:
+            // that call must carry the selected policy, not a default.
+            var value = ScalarSemanticValue.SaturatingDifference(
+                ScalarSemanticValue.Texture(
+                    Sample(), TextureChannel.Alpha),
+                ScalarSemanticValue.Constant(0f));
+
+            foreach (var (policy, expected) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SemanticOutput<ScalarSemanticValue>.Complete(value),
+                    Providing(MixedField()), policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void FullyOpaqueChain_IsProvenOpaqueUnderBothPolicies()
+        {
+            // Anisotropy is provable exactly where the footprint stops
+            // mattering: a chain whose every level is fully opaque.
+            foreach (var (policy, _) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SampledAlpha(), Providing(AllOpaqueChain()), policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void UnknownFirstMipWithTransparentLaterMip_AbsorbsUnderBothPolicies()
+        {
+            // Mip 0 answers Unknown and the fully non-opaque later level is
+            // absorbing, so transparent outranks Unknown in both modes.
+            // Each level halves both axes, so the successor of the
+            // 512x256 budget level is 256x128. The spanning triangle is
+            // the one whose footprint exceeds the support budget, so mip 0
+            // answers Unknown in both modes and the later level decides.
+            var chain = Chain(BudgetExceedingLevel(), Field(256, 128, 0));
+            foreach (var (policy, _) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SampledAlpha(), Providing(chain), policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(SpanningTriangle()),
+                    Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
+                    policy.ToString());
+            }
+        }
+
+        [Test]
+        public void MissingMipProvenance_IsNotAuthorizedByAcceptance()
+        {
+            // The flagged level's grid is fully opaque on purpose: a fold
+            // that consulted the grid under the accepted policy would
+            // fabricate a proof the capture never attested.
+            var chain = ChainWithProvenance(
+                new[] { true, false },
+                Field(2, 2, 255), Field(1, 1, 255));
+            foreach (var (policy, _) in PolicyPair(
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.ProvenOpaque))
+            {
+                var resolution = AlphaSemanticsResolver.Resolve(
+                    SampledAlpha(), Providing(chain), policy, 0);
+                Assert.That(resolution.IsResolved, Is.True);
+                Assert.That(
+                    resolution.Classify(OpaqueCornerTriangle()),
+                    Is.EqualTo(TriangleAlphaOutcome.Unknown),
+                    policy.ToString());
+            }
         }
 
     }

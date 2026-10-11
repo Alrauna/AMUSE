@@ -239,8 +239,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// is the live <c>sharedMaterials</c> and nothing changes.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Caller-selected proof sampling, defaulting conservative. Only a
+        /// scenario whose own fixture footprint needs the accepted
+        /// non-anisotropic policy names it here; no default grants
+        /// acceptance, and the shared setup grants none.
+        /// </summary>
         private static RendererAlphaAnalysis AnalyzeVerified(
             Renderer renderer,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop,
             params Material[] verifiedSlots)
         {
             var effectiveSlots = EffectiveMaterialMaterialization.Materialize(
@@ -316,6 +324,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials);
                 return UnityRendererAlphaAnalysis.Analyze(
                     snapshot,
+                    samplingPolicy,
                     material => verified.Contains(material)
                         ? new CapturedAlphaSemantics(
                             new MaterialSemantics(
@@ -345,7 +354,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var renderer = NewRenderer(
                 BuildFixtureMesh(), unsupported, supported);
 
-            var result = AnalyzeVerified(renderer, null, supported);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                null, supported);
 
             Assert.That(
                 result.Refusal,
@@ -407,7 +419,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             block.SetFloat("_AlphaForceOpaque", 1f);
             renderer.SetPropertyBlock(block);
 
-            var result = AnalyzeVerified(renderer, supported);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                supported);
 
             Assert.That(
                 result.Refusal,
@@ -453,7 +468,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             mesh.uv = null;
             var renderer = NewRenderer(mesh, supported, supported);
 
-            var result = AnalyzeVerified(renderer, supported, supported);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                supported, supported);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -486,7 +504,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             mesh.uv = uv;
             var renderer = NewRenderer(mesh, supported, supported);
 
-            var result = AnalyzeVerified(renderer, supported, supported);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                supported, supported);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -518,7 +539,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var proven = NewSampledAlphaMaterial(readable);
             var renderer = NewRenderer(BuildFixtureMesh(), blocked, proven);
 
-            var result = AnalyzeVerified(renderer, blocked, proven);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                blocked, proven);
 
             // Where the refusal emerges, and its shape.
             Assert.That(
@@ -574,7 +598,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var material = NewSampledAlphaMaterial(nonReadable);
             var renderer = NewRenderer(BuildFixtureMesh(), material, material);
 
-            var result = AnalyzeVerified(renderer, material, material);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                material, material);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -680,7 +707,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var control = NewSampledAlphaMaterial(uniform);
             var renderer = NewRenderer(BuildLowerMipFixtureMesh(), blocked, control);
 
-            var result = AnalyzeVerified(renderer, blocked, control);
+            var result = AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                blocked, control);
 
             Assert.That(result.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
@@ -724,7 +754,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var beforeMainTex = supported.GetTexture("_MainTex");
             var beforeColor = supported.GetColor("_Color");
 
-            AnalyzeVerified(renderer, supported, supported);
+            AnalyzeVerified(
+                renderer,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                supported, supported);
 
             Assert.That(
                 AssetDatabase.GetAssetDependencyHash(texturePath),

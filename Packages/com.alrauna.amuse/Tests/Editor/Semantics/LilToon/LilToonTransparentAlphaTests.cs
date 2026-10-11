@@ -264,13 +264,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         private AlphaResolution ResolveThroughTransparentFrontend(
             Material material,
-            AlphaMipChain chain)
+            AlphaMipChain chain,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingFor(captured, chain), 0);
+                alpha, ProvidingFor(captured, chain), samplingPolicy, 0);
         }
 
         private Material NewGateOffMaterialWithOpaqueTexture(string textureName)
@@ -492,7 +494,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     ProvidingLayeredFor(
                         captured,
                         OpaqueThenTransparentChain(),
-                        AllOpaqueChain()),
+                        AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                     0);
 
                 Assert.That(resolution.IsResolved, Is.True);
@@ -524,7 +526,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
-                    captured, AllOpaqueChain(), AllOpaqueChain()),
+                    captured, AllOpaqueChain(), AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -554,7 +556,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ProvidingLayeredFor(
                     captured,
                     OpaqueThenTransparentChain(),
-                    AllOpaqueChain()),
+                    AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -581,7 +583,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
-                    captured, AllOpaqueChain(), AllOpaqueChain()),
+                    captured, AllOpaqueChain(), AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(
@@ -625,7 +627,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 ProvidingLayeredFor(
                     captured[0],
                     OpaqueThenTransparentChain(),
-                    AllOpaqueChain()),
+                    AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -682,7 +684,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     chain = null;
                     return false;
-                },
+                }, AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(alpha.IsComplete, Is.True);
@@ -952,9 +954,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var chain = Chain(OpaqueGridWithTransparentTexelAlpha(3, 0));
             var pointResolution =
-                ResolveThroughTransparentFrontend(pointMaterial, chain);
+                ResolveThroughTransparentFrontend(
+                    pointMaterial, chain,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic);
             var bilinearResolution =
-                ResolveThroughTransparentFrontend(bilinearMaterial, chain);
+                ResolveThroughTransparentFrontend(
+                    bilinearMaterial, chain,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             // Falsifies: hull-only classification without footprint dilation.
             Assert.That(
@@ -987,12 +993,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             // Falsifies: missing wrap normalization.
             Assert.That(
-                ResolveThroughTransparentFrontend(repeatMaterial, chain)
+                ResolveThroughTransparentFrontend(
+                    repeatMaterial, chain,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic)
                     .Classify(SeamCrossingTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
                 "Repeat wraps the hull into the transparent texel");
             Assert.That(
-                ResolveThroughTransparentFrontend(clampMaterial, chain)
+                ResolveThroughTransparentFrontend(
+                    clampMaterial, chain,
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic)
                     .Classify(SeamCrossingTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
                 "Clamp pins the same hull away from the transparent texel");
@@ -1189,7 +1199,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Chain(
                     OpaqueGridWithTransparentTexelAlpha(1, 1),
                     Field(2, 2, 255),
-                    Field(1, 1, 255)));
+                    Field(1, 1, 255)),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             // A mask texel at red zero bounds the term to [0.5, 1) on any
             // triangle whose footprint touches it: unknown, never opaque.
             Assert.That(
@@ -1393,13 +1404,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private AlphaResolution ResolveThroughTransparentFrontend(
             Material material,
             AlphaMipChain mainChain,
-            AlphaMipChain maskChain)
+            AlphaMipChain maskChain,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, ProvidingForMasked(captured, mainChain, maskChain), 0);
+                alpha, ProvidingForMasked(captured, mainChain, maskChain),
+                samplingPolicy, 0);
         }
 
         /// <summary>
@@ -1418,7 +1432,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 {
                     chain = null;
                     return false;
-                }, 0);
+                }, AlphaSamplingPolicy.ConservativeDesktop, 0);
         }
 
         /// <summary>
@@ -1484,7 +1498,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
                     result = null;
                     return false;
-                },
+                }, AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(
@@ -1679,7 +1693,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Chain(
                     OpaqueGridWithTransparentTexelAlpha(1, 1),
                     Field(2, 2, 255),
-                    Field(1, 1, 255)));
+                    Field(1, 1, 255)),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             // The corner triangle's domain covers texel (1, 1), whose mask
             // value is provably zero: the product is below one, so the
@@ -2223,7 +2238,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var alpha = LilToonTransparentMaterialSemantics
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
-                alpha, UnusedProvider(), 0);
+                alpha, UnusedProvider(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }
 
         private static AlphaFieldProvider UnusedProvider()

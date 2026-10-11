@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 
 namespace Alrauna.Amuse.Editor.Build
@@ -305,6 +306,18 @@ namespace Alrauna.Amuse.Editor.Build
                 "Update the listed packages to versions AMUSE has " +
                 "verified, or accept the warning on the next upload.",
 
+            // --- Sampling policy selection ---
+            ["amuse.sampling.UnsupportedBuildTarget"] =
+                "AMUSE keeps the alpha proof conservative on this " +
+                "build target.",
+            ["amuse.sampling.UnsupportedBuildTarget:description"] =
+                "AMUSE has no proof policy for the active build target " +
+                "({0}). The proof stays conservative. AMUSE does not " +
+                "use the acceptance settings on this target.",
+            ["amuse.sampling.UnsupportedBuildTarget:hint"] =
+                "Build for Windows, Android, or iOS to select a proof " +
+                "policy.",
+
             // --- Texture capture refusals ---
             ["amuse.texture.UnavailableCapture"] =
                 "AMUSE could not read a material texture on slot {0}.",
@@ -383,7 +396,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE finished this avatar.",
             ["amuse.summary.Title:description"] =
                 "AMUSE analyzed {0} renderers and moved {1} triangles to " +
-                "opaque materials. {2} renderers kept everything original.",
+                "opaque materials. {2} renderers kept everything " +
+                "original. {3}",
             ["amuse.summary.Title:hint"] =
                 "This status shows in every AMUSE Avatar Optimizer " +
                 "inspector in this editor session.",
@@ -391,6 +405,23 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE moved triangles while the alpha policy was " +
                 "active, so some moved triangles rest on your alpha " +
                 "settings rather than on exact proof.",
+
+            // --- Proof sampling disclosure. One key per closed policy
+            // value; {0} names the captured build target. The summary
+            // discloses the selected category even when zero triangles
+            // moved. The tolerance sentence above stays a separate
+            // disclosure: it describes the alpha tolerances and its text
+            // assumes moved triangles.
+            ["amuse.summary.SamplingAccepted:description"] =
+                "The selected proof policy is the accepted " +
+                "non-anisotropic policy on {0}. The avatar owner " +
+                "accepted possible sampling differences.",
+            ["amuse.summary.SamplingConservativeDesktop:description"] =
+                "The selected proof policy is the conservative desktop " +
+                "policy on {0}. The proof kept its anisotropic evidence.",
+            ["amuse.summary.SamplingConservativeMobile:description"] =
+                "The selected proof policy is the conservative mobile " +
+                "policy on {0}. The proof kept its anisotropic evidence.",
 
             // --- Slot-scoped analysis refusals. One key per vocabulary,
             // not per cause: the renderer-level report already carries the
@@ -547,6 +578,16 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.RendererChangedSincePreparation:hint"] =
                 "Another build step replaced the mesh or the slots. Run " +
                 "AMUSE last, or accept the slot stays unchanged.",
+            ["amuse.slotSeparation.SamplingPolicyChanged"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.SamplingPolicyChanged:description"] =
+                "AMUSE cannot reuse the prepared sampling proof for " +
+                "slot {0} of renderer '{2}'. The target or acceptance " +
+                "changed, or the target has no sampling policy. Reason: " +
+                "{1}. The slot keeps its original material.",
+            ["amuse.slotSeparation.SamplingPolicyChanged:hint"] =
+                "Use a supported target and run the build again. Keep " +
+                "the target and acceptance settings unchanged during the build.",
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch:description"] =
@@ -664,6 +705,31 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string SlotSeparationPremultiplyNormalizationKey
         {
             get { return Prefix + "slotSeparation.PremultiplyNormalization"; }
+        }
+
+        /// <summary>
+        /// The summary key that names one proof policy category. The
+        /// closed policy vocabulary maps one-to-one, so an unhandled
+        /// value throws instead of disclosing nothing. The key is the
+        /// base key; the consumer reads the disclosure sentence under
+        /// the same key with the <c>:description</c> suffix, the
+        /// convention every other summary sentence follows.
+        /// </summary>
+        internal static string SamplingSummaryKey(AlphaSamplingPolicy policy)
+        {
+            switch (policy)
+            {
+                case AlphaSamplingPolicy.AcceptedNonAnisotropic:
+                    return Prefix + "summary.SamplingAccepted";
+                case AlphaSamplingPolicy.ConservativeDesktop:
+                    return Prefix + "summary.SamplingConservativeDesktop";
+                case AlphaSamplingPolicy.ConservativeMobile:
+                    return Prefix + "summary.SamplingConservativeMobile";
+                default:
+                    throw new InvalidOperationException(
+                        "AlphaSamplingPolicy has an unhandled value. " +
+                        "Every value needs its own summary disclosure.");
+            }
         }
     }
 }

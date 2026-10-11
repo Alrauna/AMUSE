@@ -113,8 +113,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
 
             var evidence = new CapturedAlphaFieldBag(new Texture[] { texture });
+            // The milestone's stated precondition is the captured
+            // Point/Clamp chain classifying locally, so the footprint must
+            // not answer first.
             return AlphaSemanticsResolver.Resolve(
-                alpha, evidence.TryGetAlphaField, 0);
+                alpha, evidence.TryGetAlphaField,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
         }
 
         private static TriangleAlphaInput Triangle(Vector2 uv0, Vector2 uv1, Vector2 uv2)

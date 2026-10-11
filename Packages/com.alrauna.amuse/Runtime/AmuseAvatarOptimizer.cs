@@ -110,6 +110,28 @@ namespace Alrauna.Amuse.Runtime
         [SerializeField]
         private bool _allowDepthTestChange = true;
 
+        /// <summary>
+        /// True when the user accepts possible desktop anisotropy
+        /// filtering differences, so the opacity proof may drop
+        /// anisotropic footprints on the Windows target. The default of
+        /// false keeps the proof conservative: an avatar saved before
+        /// this field gains no silent acceptance. This field never
+        /// changes the mobile field.
+        /// </summary>
+        [SerializeField]
+        private bool _acceptDesktopAnisotropyDifferences;
+
+        /// <summary>
+        /// True when the user accepts possible mobile anisotropy
+        /// filtering differences, so the proof may drop anisotropic
+        /// footprints on the Android and iOS targets. The default of
+        /// false keeps the proof conservative, and the existing mobile
+        /// texture-capture and shader refusals keep their force. This
+        /// field never changes the desktop field.
+        /// </summary>
+        [SerializeField]
+        private bool _acceptMobileAnisotropyDifferences;
+
         [ToggleLeft]
         [SerializeField]
         private bool _ignoreOutOfRangeMaterialSlots = true;
@@ -201,5 +223,21 @@ namespace Alrauna.Amuse.Runtime
         /// refusal.
         /// </summary>
         public bool AllowDepthTestChange => _allowDepthTestChange;
+
+        /// <summary>
+        /// True when the user accepts possible desktop anisotropy
+        /// filtering differences. The build reads this only through the
+        /// per-build policy selection, never as a live global.
+        /// </summary>
+        public bool AcceptDesktopAnisotropyDifferences =>
+            _acceptDesktopAnisotropyDifferences;
+
+        /// <summary>
+        /// True when the user accepts possible mobile anisotropy
+        /// filtering differences. The build reads this only through the
+        /// per-build policy selection, never as a live global.
+        /// </summary>
+        public bool AcceptMobileAnisotropyDifferences =>
+            _acceptMobileAnisotropyDifferences;
     }
 }

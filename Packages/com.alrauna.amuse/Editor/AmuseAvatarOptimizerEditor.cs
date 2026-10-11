@@ -72,7 +72,8 @@ namespace Alrauna.Amuse.Editor
         /// <summary>
         /// The preset row. One button per shipped preset file, in the
         /// fixed order safe, normal, aggressive. A button presses only
-        /// while the component matches that preset on all nine fields,
+        /// while the component matches that preset on all eleven
+        /// fields,
         /// so the pressed state is always honest and never stored. A
         /// broken preset file turns the row off with a warning,
         /// because a row over a partial preset universe could claim a
@@ -224,19 +225,48 @@ namespace Alrauna.Amuse.Editor
                 "nearly opaque ones. A texel is one pixel of a " +
                 "texture." +
                 "\n\n" +
-                "Ignored strays render fully opaque after a " +
-                "move, so alpha gradients can lose their " +
+                "Ignored strays render fully opaque after a move, " +
+                "so alpha gradients can lose their " +
                 "transparency. The default of 100 admits nothing " +
                 "and is the safest choice. Lower this value " +
                 "together with the coverage slider when faint " +
                 "strays keep an intentional opaque face on the " +
                 "transparent material.");
 
+        private static readonly GUIContent AcceptDesktopRowContent =
+            new GUIContent(
+                "Accept Desktop Anisotropy Differences",
+                "Lets AMUSE prove opacity without anisotropic " +
+                "footprints when the build target is Windows. " +
+                "VRChat can filter textures anisotropically. " +
+                "Proven parts can lose transparency near texture " +
+                "edges or at oblique views. This setting does not " +
+                "change texture filtering. A shipped preset turns " +
+                "this setting off.");
+
+        private static readonly GUIContent AcceptMobileRowContent =
+            new GUIContent(
+                "Accept Mobile Anisotropy Differences",
+                "Lets AMUSE prove opacity without anisotropic " +
+                "footprints when the build target is Android or " +
+                "iOS. AMUSE texture capture does not support " +
+                "these targets. This setting alone enables no " +
+                "conversion. A shipped preset turns this setting " +
+                "off.");
+
+        private static readonly GUIContent ActiveSamplingProofRowContent =
+            new GUIContent(
+                "Active Sampling Proof",
+                "The proof mode the current build target reads. " +
+                "Changing the build target changes which " +
+                "acceptance setting the build reads. It never " +
+                "writes a value.");
+
         /// <summary>
-        /// The six Alpha Separator Settings row contents in draw order.
-        /// One source of truth feeds both the draw calls and the shared
-        /// label width, so a label change cannot drift away from its
-        /// measurement.
+        /// The Alpha Separator Settings row contents in draw order.
+        /// One source of truth feeds both the draw calls and the
+        /// shared label width, so a label change cannot drift away
+        /// from its measurement.
         /// </summary>
         private static readonly GUIContent[] RowContents =
         {
@@ -246,6 +276,9 @@ namespace Alrauna.Amuse.Editor
             TextureClampRowContent,
             PolygonCoverageRowContent,
             PolygonClampRowContent,
+            AcceptDesktopRowContent,
+            AcceptMobileRowContent,
+            ActiveSamplingProofRowContent,
         };
 
         /// <summary>
@@ -274,8 +307,84 @@ namespace Alrauna.Amuse.Editor
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
             DrawAlphaPolicyControls();
+            DrawAcceptanceControls();
             EditorGUIUtility.labelWidth = previousWidth;
             serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// The two persistent acceptance toggles and the proof mode
+        /// the active build target reads. The toggles store through
+        /// the serialized object, so Undo and Reset treat them like
+        /// every other control. The proof row calls TrySelect on each
+        /// repaint and persists nothing, so a target switch only
+        /// changes which setting the build reads and never writes a
+        /// value.
+        /// </summary>
+        private void DrawAcceptanceControls()
+        {
+            var desktop = serializedObject.FindProperty(
+                "_acceptDesktopAnisotropyDifferences");
+            var mobile = serializedObject.FindProperty(
+                "_acceptMobileAnisotropyDifferences");
+            EditorGUILayout.PropertyField(desktop, AcceptDesktopRowContent);
+            EditorGUILayout.PropertyField(mobile, AcceptMobileRowContent);
+
+            var target = EditorUserBuildSettings.activeBuildTarget;
+            var selected = PlatformAlphaSamplingPolicy.TrySelect(
+                target,
+                desktop.boolValue,
+                mobile.boolValue,
+                out var policy);
+            string proof;
+            if (!selected)
+            {
+                proof = "Unsupported build target";
+            }
+            else
+            {
+                // A successful selection leaves exactly two groups:
+                // the Windows target is Desktop, Android and iOS are
+                // Mobile.
+                var group = target == BuildTarget.StandaloneWindows64
+                    ? "Desktop"
+                    : "Mobile";
+                proof = group + ": " + (policy ==
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic
+                    ? "Accepted non-anisotropic proof"
+                    : "Conservative anisotropic proof");
+            }
+            EditorGUILayout.LabelField(
+                ActiveSamplingProofRowContent,
+                new GUIContent(proof));
+
+            if (!selected)
+            {
+                EditorGUILayout.HelpBox(
+                    "AMUSE does not support sampling-policy " +
+                    "selection for this build target.",
+                    MessageType.Warning);
+                return;
+            }
+            if (policy == AlphaSamplingPolicy.AcceptedNonAnisotropic)
+            {
+                EditorGUILayout.HelpBox(
+                    "AMUSE proves opacity without anisotropic " +
+                    "footprints. VRChat can use anisotropic " +
+                    "filtering. Converted parts can lose " +
+                    "transparency near texture edges or at oblique " +
+                    "views. This does not change texture filtering.",
+                    MessageType.Warning);
+            }
+            if (target == BuildTarget.Android || target == BuildTarget.iOS)
+            {
+                EditorGUILayout.HelpBox(
+                    "This target selects the mobile acceptance " +
+                    "setting. AMUSE texture capture does not " +
+                    "support this target. This setting does not " +
+                    "enable mobile conversion.",
+                    MessageType.Warning);
+            }
         }
 
         private void DrawMipCapPopup()

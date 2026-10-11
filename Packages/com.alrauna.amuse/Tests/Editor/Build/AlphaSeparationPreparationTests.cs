@@ -1529,6 +1529,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -2316,6 +2317,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 Material material = null;
                 Mesh mesh = null;
                 AmusePlatformFinishState amuse = null;
@@ -3460,6 +3462,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             Material material = null;
             Mesh mesh = null;
             AmusePlatformFinishState amuse = null;
@@ -3973,9 +3976,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             // The clamp erases the stray, and a density bound of 50
             // treats a sparse erased texel as opaque evidence, so the
-            // triangle proves and the barrier prepares the split.
+            // triangle proves and the barrier prepares the split. The
+            // arm stores desktop acceptance in its own fixture body: the
+            // stray-texel proof resolves against the narrow authored
+            // footprint, and only the accepted policy projects it.
             var converting = RunAlphaPolicyArm(
-                100, 2, 50, "gate on");
+                100, 2, 50, "gate on", acceptDesktopDifferences: true);
             Assert.That(
                 converting.SemanticallyRefusedRendererCount, Is.Zero,
                 "fixture precondition: the gated arm must resolve");
@@ -4234,7 +4240,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int polygonClampPercent,
             int polygonCoveragePercent,
             string armName,
-            byte? uniformAlpha = null)
+            byte? uniformAlpha = null,
+            bool acceptDesktopDifferences = false)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -4251,7 +4258,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 .intValue = polygonClampPercent;
             serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
                 .intValue = polygonCoveragePercent;
+            // These numeric writes must land before the acceptance helper
+            // runs. This SerializedObject caches the component as it was
+            // before that helper stores its acceptance, so applying it
+            // afterwards replays the stale cache and restores the stored
+            // acceptance to false.
             serialized.ApplyModifiedProperties();
+            if (acceptDesktopDifferences)
+            {
+                // The arm's local footprint proof resolves only under the
+                // accepted non-anisotropic policy; the caller states that
+                // per arm, and no default grants it.
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            }
 
             Material material = null;
             Mesh mesh = null;
@@ -5824,6 +5843,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     alphaRelevance,
                     new AlphaFieldSet(
                         new Dictionary<AlphaFieldKey, AlphaMipChain>()),
+                    AlphaSamplingPolicy.ConservativeDesktop,
                     0,
                     VerifiedLilToonTestSeams.VerifiedAlphaOnly);
 
@@ -5929,7 +5949,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            "AMUSE depth policy whole",
                            transparent => transparent.SetFloat("_ZTest", 2f),
                            null,
-                           allowDepthTestChange: true))
+                           allowDepthTestChange: true,
+                           acceptDesktopDifferences: true))
                 {
                     AmusePlatformFinishState amuse = null;
                     var reports = ErrorReport.CaptureErrors(
@@ -6019,7 +6040,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                mesh.SetTriangles(
                                    new[] { 0, 1, 2, 3, 4, 5 }, 0);
                            },
-                           allowDepthTestChange: true))
+                           allowDepthTestChange: true,
+                           acceptDesktopDifferences: true))
                 {
                     AmusePlatformFinishState mixedState = null;
                     var mixedReports = ErrorReport.CaptureErrors(
@@ -6079,7 +6101,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            "AMUSE depth policy off",
                            transparent => transparent.SetFloat("_ZTest", 2f),
                            null,
-                           allowDepthTestChange: false))
+                           allowDepthTestChange: false,
+                           acceptDesktopDifferences: true))
                 {
                     var amuse = arm.Run();
 
@@ -6131,7 +6154,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                            "AMUSE depth policy unflagged",
                            transparent => transparent.SetFloat("_ZTest", 4f),
                            null,
-                           allowDepthTestChange: true))
+                           allowDepthTestChange: true,
+                           acceptDesktopDifferences: true))
                 {
                     AmusePlatformFinishState unflagged = null;
                     var reports = ErrorReport.CaptureErrors(
@@ -6188,6 +6212,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     swapRoot.AddComponent<
                         Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                     FixtureProofScope.PinAllSizes(swapRoot);
+                    FixtureProofScope.AcceptDesktopAnisotropyDifferences(swapRoot);
                     swapMesh = new Mesh
                     {
                         vertices = new[]
@@ -6367,6 +6392,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 mesh = new Mesh
                 {
                     vertices = new[]
@@ -6886,7 +6912,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 string rootName,
                 Action<Material> configure,
                 Action<Mesh> configureMesh,
-                bool allowDepthTestChange)
+                bool allowDepthTestChange,
+                bool acceptDesktopDifferences = false)
             {
                 var fixture = new DepthTestPolicyArmFixture
                 {
@@ -6902,6 +6929,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     serialized.FindProperty("_allowDepthTestChange")
                         .boolValue = false;
                     serialized.ApplyModifiedProperties();
+                }
+
+                if (acceptDesktopDifferences)
+                {
+                    // The arm's local footprint proof resolves only under
+                    // the accepted non-anisotropic policy; the caller
+                    // states that per arm, and no default grants it.
+                    FixtureProofScope.AcceptDesktopAnisotropyDifferences(
+                        fixture.root);
                 }
 
                 FixtureProofScope.PinAllSizes(fixture.root);

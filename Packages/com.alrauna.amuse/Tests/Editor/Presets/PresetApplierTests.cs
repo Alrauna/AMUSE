@@ -1,3 +1,4 @@
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Runtime;
@@ -8,7 +9,57 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetApplierTests
     {
         [Test]
-        public void ApplyWritesAllNineFields()
+        public void ApplyingShippedSafeRevokesBothAcceptanceSettings()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // Grant both acceptance settings first, so the shipped
+                // Safe preset must actively revoke them. No preset may
+                // leave an earlier acceptance behind.
+                var serialized = new UnityEditor.SerializedObject(optimizer);
+                serialized.FindProperty(
+                        "_acceptDesktopAnisotropyDifferences")
+                    .boolValue = true;
+                serialized.FindProperty(
+                        "_acceptMobileAnisotropyDifferences")
+                    .boolValue = true;
+                serialized.ApplyModifiedProperties();
+
+                Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
+                    Is.True, "setup must grant desktop acceptance");
+                Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
+                    Is.True, "setup must grant mobile acceptance");
+
+                Assert.That(PresetFileStore.TryLoadAll(
+                        out var presets, out var failedFile,
+                        out var refusal),
+                    Is.True, failedFile + ": " + refusal);
+                var safe = presets.Single(
+                    preset => preset.Name == "Safe");
+
+                serialized.Update();
+                PresetApplier.Apply(safe, serialized);
+
+                Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
+                    Is.False,
+                    "the shipped Safe preset must revoke desktop " +
+                    "acceptance");
+                Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
+                    Is.False,
+                    "the shipped Safe preset must revoke mobile " +
+                    "acceptance");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ApplyWritesAllElevenFields()
         {
             var go = new GameObject("Root");
             try
@@ -37,6 +88,12 @@ namespace Alrauna.Amuse.Tests.Editor
                     .boolValue = false;
                 serialized.FindProperty("_ignoreOutOfRangeMaterialSlots")
                     .boolValue = false;
+                serialized.FindProperty(
+                        "_acceptDesktopAnisotropyDifferences")
+                    .boolValue = true;
+                serialized.FindProperty(
+                        "_acceptMobileAnisotropyDifferences")
+                    .boolValue = true;
                 serialized.ApplyModifiedProperties();
 
                 var preset = OptimizerPresetTests.ShippedDefaults();
@@ -59,6 +116,12 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(optimizer.AllowDepthTestChange, Is.True);
                 Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots,
                     Is.True);
+                Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
+                    Is.False,
+                    "the preset must revoke desktop acceptance");
+                Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
+                    Is.False,
+                    "the preset must revoke mobile acceptance");
                 Assert.That(optimizer.AmuseDisabled, Is.False,
                     "a preset never touches the master switch");
             }

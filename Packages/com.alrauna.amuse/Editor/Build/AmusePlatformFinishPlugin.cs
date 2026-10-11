@@ -37,6 +37,33 @@ namespace Alrauna.Amuse.Editor.Build
         /// avatar summary exactly once per analyzed build.</summary>
         internal bool AlphaPolicyActive { get; set; }
 
+        /// <summary>
+        /// The active build target the barrier captured once, before
+        /// per-renderer analysis. The apply pass compares its live
+        /// selection against this captured value to refuse stale
+        /// candidates, so this field must never be recomputed after the
+        /// capture. Default zero before the capture ran.
+        /// </summary>
+        internal BuildTarget SamplingTarget { get; set; }
+
+        /// <summary>
+        /// The proof policy the barrier selected from the captured
+        /// target and the build avatar's own acceptance fields. Every
+        /// runtime-state resolution in this build resolves under this
+        /// captured policy; no pass may substitute a constant. Holds the
+        /// conservative mobile value when selection refused.
+        /// </summary>
+        internal AlphaSamplingPolicy SamplingPolicy { get; set; }
+
+        /// <summary>
+        /// True when the policy selection admitted the captured target.
+        /// False means the target has no proof policy: the build keeps
+        /// the conservative output value and the named unsupported
+        /// report fired before analysis. No acceptance applies to such a
+        /// build.
+        /// </summary>
+        internal bool HasSamplingPolicy { get; set; }
+
         /// <summary>How many renderers received at least one applied
         /// alpha-separation write.</summary>
         internal int AppliedRendererCount { get; set; }
@@ -577,6 +604,29 @@ namespace Alrauna.Amuse.Editor.Build
             var allowDepthTestChange =
                 optimizer == null || optimizer.AllowDepthTestChange;
 
+            // The proof policy is a build-wide fact. Capture the active
+            // target and the selected policy exactly once, before any
+            // renderer analysis, from the build avatar's own optimizer
+            // component - never from inspector state or a static
+            // mutable. A target with no policy keeps the conservative
+            // output value and names the fact before the analysis runs;
+            // no acceptance applies to such a build.
+            var samplingTarget = EditorUserBuildSettings.activeBuildTarget;
+            state.SamplingTarget = samplingTarget;
+            state.HasSamplingPolicy = PlatformAlphaSamplingPolicy.TrySelect(
+                samplingTarget,
+                optimizer != null &&
+                    optimizer.AcceptDesktopAnisotropyDifferences,
+                optimizer != null &&
+                    optimizer.AcceptMobileAnisotropyDifferences,
+                out var samplingPolicy);
+            state.SamplingPolicy = samplingPolicy;
+            if (!state.HasSamplingPolicy)
+            {
+                AmuseReports.UnsupportedSamplingTarget(
+                    context.AvatarRootObject, samplingTarget);
+            }
+
 
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
@@ -691,7 +741,8 @@ namespace Alrauna.Amuse.Editor.Build
                 var blockState =
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
                 var resolved = ResolveRuntimeStates(
-                    rendererPath, evidence, effectiveResolver, maxMipLevel,
+                    rendererPath, evidence, samplingPolicy,
+                    effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
@@ -1146,7 +1197,10 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Exercises the PlatformFinish-owned runtime-state orchestration with
-        /// already-closed evidence. The optional resolver is the pre-existing
+        /// already-closed evidence. The proof resolves under the explicitly
+        /// stated sampling policy, exactly as the real pass resolves under
+        /// its captured policy; there is no policy default on this entry.
+        /// The optional resolver is the pre-existing
         /// verified-frontend seam used by public-package tests whose stand-in
         /// shader cannot carry vendor source attestation; production calls the
         /// same core with the real resolver.
@@ -1157,11 +1211,12 @@ namespace Alrauna.Amuse.Editor.Build
                 string rendererPath,
                 CapturedAnimationEvidence evidence,
                 UnityRendererAlphaSnapshot snapshot,
+                AlphaSamplingPolicy samplingPolicy,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var resolved = ResolveRuntimeStates(
-                rendererPath, evidence, resolveSemantics);
+                rendererPath, evidence, samplingPolicy, resolveSemantics);
             return resolved.Refusal == RendererAnalysisRefusal.None
                 ? (RendererAnalysisRefusal.None,
                     ClassifyRuntimeStates(
@@ -1206,6 +1261,7 @@ namespace Alrauna.Amuse.Editor.Build
         private static ResolvedRuntimeStates ResolveRuntimeStates(
                 string rendererPath,
                 CapturedAnimationEvidence evidence,
+                AlphaSamplingPolicy samplingPolicy,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
                 int maxMipLevel = int.MaxValue,
                 int minTextureSize = 1,
@@ -1332,6 +1388,7 @@ namespace Alrauna.Amuse.Editor.Build
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
                     fields,
+                    samplingPolicy,
                     densityCapPercent,
                     resolveSemantics,
                     slotEntries);

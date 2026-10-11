@@ -217,7 +217,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     ByteBetweenCutoffAndOne));
 
             // Production predicate: the plain-clip variant keeps the exact
-            // field, so the sub-one chain never proves.
+            // field, so the sub-one chain never proves. The exact-one rule
+            // is the classifier's own, so the footprint must not answer
+            // first with its own Unknown.
             var evidence = Capture(material, productionPredicate: true);
             var alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
                 evidence);
@@ -225,7 +227,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 alpha.IsComplete, Is.True,
                 "the fade material's chain equation stays provable");
             var resolution = AlphaSemanticsResolver.Resolve(
-                alpha, ProviderFor(evidence), 0);
+                alpha, ProviderFor(evidence),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
                 resolution.Classify(CornerTriangle()),
@@ -489,8 +492,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "the cutout equation completes. Diagnostics: " +
                 Describe(PoiyomiMaterialSemantics.InterpretVerifiedMaterial(
                     material, ColorSpace.Linear, evidence)));
+            // The split route's verdict is the binarized chain's local
+            // predicate, so the footprint must not answer first.
             var resolution = AlphaSemanticsResolver.Resolve(
-                alpha, ProviderFor(evidence), 0);
+                alpha, ProviderFor(evidence),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic, 0);
             Assert.That(resolution.IsResolved, Is.True);
             return resolution.Classify(CornerTriangle());
         }

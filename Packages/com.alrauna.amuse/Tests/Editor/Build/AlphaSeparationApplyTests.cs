@@ -95,6 +95,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             AlphaSeparationSplitTests.DeleteSplitFolder();
+            AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
             DestroyTracked();
             UnityEngine.QualitySettings.anisotropicFiltering =
                 _savedAnisotropicFiltering;
@@ -868,6 +869,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return mesh;
         }
 
+        /// <summary>
+        /// A single triangle carrying one constant UV inside a texel, so a
+        /// texture-backed proof can map the triangle into texel space.
+        /// <see cref="SingleTriangleMesh"/> alone has no UV channel and
+        /// can only back constant-material proofs.
+        /// </summary>
+        private static Mesh TexturedSingleTriangleMesh()
+        {
+            var mesh = SingleTriangleMesh();
+            mesh.uv = new[]
+            {
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.25f, 0.25f),
+            };
+            return mesh;
+        }
+
         private static Mesh TwoTriangleMesh()
         {
             var mesh = new Mesh
@@ -1065,6 +1084,420 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Falsifier: stale target or acceptance between passes ----------
+
+        /// <summary>
+        /// The barrier captured the desktop acceptance the proof ran
+        /// under. Revoking that acceptance between preparation and the
+        /// apply pass makes the live selection no longer re-select the
+        /// captured policy, so every prepared candidate is stale: the
+        /// renderer state apply would write was never proven under the
+        /// policy the build now selects. The apply pass must refuse the
+        /// stale candidates, destroy the now-unreferenced clones, and
+        /// leave the live mesh, the live materials and the committed
+        /// curves exactly as the build copy received them.
+        /// <para>
+        /// The fixture is the proven animated cutout shape: one fully
+        /// proven cutout slot whose swap set maps the cutout source to a
+        /// clone and the attested opaque stand-in to itself, so the
+        /// unguarded apply provably writes the material assignment and
+        /// rewrites the committed curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            DesktopAcceptanceRevokedBetweenPrepareAndApplyRefusesEveryPreparedSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE revoked acceptance apply");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // The selector admits desktop acceptance only for the
+                // Windows target. The dev editor builds for Windows, and
+                // this fixture must say so instead of guessing.
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "the dev editor must hold the Windows build target " +
+                    "for this desktop acceptance fixture to prove " +
+                    "anything");
+
+                // The fixture stores desktop acceptance on the optimizer
+                // through its serialized field, in this test body alone,
+                // so the barrier captures the accepted policy.
+                var optimizer = root.GetComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var serialized = new SerializedObject(optimizer);
+                serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                    .boolValue = true;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "revoked_acceptance");
+                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
+                var swap = Track(
+                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                var mesh = Track(SingleTriangleMesh());
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                var renderer = AddRenderer(root, "body", mesh, cutout);
+
+                var clip = Track(NewSwapClip(
+                    "AMUSE revoked acceptance swap", "body", 0,
+                    (0f, cutout), (1f, swap)));
+                controller = NewController(
+                    root, "AMUSE revoked acceptance graph", clip);
+
+                BuildContext context;
+                using (new ProbeScope(probeContext =>
+                {
+                    var buildOptimizer = probeContext.AvatarRootObject
+                        .GetComponent<
+                            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                    var buildSerialized = new SerializedObject(buildOptimizer);
+                    buildSerialized
+                        .FindProperty("_acceptDesktopAnisotropyDifferences")
+                        .boolValue = false;
+                    buildSerialized.ApplyModifiedPropertiesWithoutUndo();
+                }))
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
+
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(
+                    state.HasSamplingPolicy, Is.True,
+                    "fixture precondition: the barrier must capture a " +
+                    "sampling policy for the desktop target");
+                Assert.That(
+                    state.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "fixture precondition: the stored desktop acceptance " +
+                    "must capture the accepted policy");
+                Assert.That(
+                    state.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "fixture precondition: both admitted values must " +
+                    "prove the triangle opaque");
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RendererChangedSincePreparation),
+                    Is.Zero,
+                    "fixture precondition: the renderer must stay intact " +
+                    "across the passes");
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RuntimeMaterialValueNotMapped),
+                    Is.Zero,
+                    "fixture precondition: every admitted value must map " +
+                    "at the barrier");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation under the accepted policy");
+                Assert.That(
+                    state.Separation.Renderers[0].CandidateSlots,
+                    Has.Count.EqualTo(1),
+                    "fixture precondition: exactly one prepared candidate " +
+                    "slot must exist");
+                Assert.That(
+                    state.Separation.CreatedClones, Has.Count.EqualTo(1),
+                    "fixture precondition: the cutout source must clone, " +
+                    "or the stale-apply assertion proves nothing");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.SamplingPolicyChanged),
+                    Is.EqualTo(1),
+                    "The revoked acceptance must drop the fixture's " +
+                    "single prepared candidate.");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None ||
+                        reason == AlphaSeparationSlotRefusal
+                            .SamplingPolicyChanged)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        state.SlotRefusalCount(reason), Is.Zero,
+                        "a stale policy must refuse through no other " +
+                        "reason: " + reason);
+                }
+
+                Assert.That(
+                    renderer.sharedMaterials[0], Is.SameAs(cutout),
+                    "The revoked acceptance must not replace the " +
+                    "original material.");
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                    "No stale write may touch the mesh.");
+                Assert.That(mesh.subMeshCount, Is.EqualTo(1),
+                    "No stale write may change the submesh count.");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0),
+                    "A stale policy must not produce an applied write.");
+
+                var committed = CommittedClipWithObjectBinding(
+                    root, "body", "m_Materials.Array.data[0]");
+                Assert.That(committed, Is.Not.Null,
+                    "the committed clip must still carry the slot binding");
+                var committedCurve = AnimationUtility.GetObjectReferenceCurve(
+                    committed,
+                    EditorCurveBinding.PPtrCurve(
+                        "body",
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[0]"));
+                Assert.That(committedCurve, Has.Length.EqualTo(2));
+                Assert.That(
+                    new[]
+                    {
+                        committedCurve[0].time.ToString("R"),
+                        committedCurve[1].time.ToString("R"),
+                    },
+                    Is.EqualTo(new[]
+                    {
+                        0f.ToString("R"),
+                        1f.ToString("R"),
+                    }),
+                    "the keyframe times must be preserved exactly");
+                Assert.That(committedCurve[0].value, Is.SameAs(cutout),
+                    "The revoked acceptance must not rewrite the " +
+                    "committed curve values.");
+                Assert.That(committedCurve[1].value, Is.SameAs(swap),
+                    "The revoked acceptance must not rewrite the " +
+                    "committed curve values.");
+
+                Assert.That(
+                    state.Separation.CreatedClones[0] == null, Is.True,
+                    "the clone no surviving slot references must be " +
+                    "destroyed");
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The apply pass must compare the live build target against the
+        /// target the barrier captured, so a changed target refuses every
+        /// prepared candidate before any write. This falsifier seeds a
+        /// mismatched captured target into the build state inside the
+        /// existing between-pass probe: no platform module is installed
+        /// and the editor's global build target is never switched inside
+        /// the unit test.
+        /// <para>
+        /// The fixture is the proven animated cutout shape: one fully
+        /// proven cutout slot whose swap set maps the cutout source to a
+        /// clone and the attested opaque stand-in to itself, so the
+        /// unguarded apply provably writes the material assignment and
+        /// rewrites the committed curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            ACapturedTargetMismatchBetweenPrepareAndApplyRefusesEveryPreparedSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE mismatched captured target");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // The dev editor's captured target must be a real value
+                // the barrier itself writes, so the seeded mismatch is a
+                // pure state edit and not a fixture assumption.
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "the dev editor must hold the Windows build target " +
+                    "for this captured-target fixture to prove anything");
+
+                var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "mismatched_target");
+                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
+                var swap = Track(
+                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                var mesh = Track(SingleTriangleMesh());
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                var renderer = AddRenderer(root, "body", mesh, cutout);
+
+                var clip = Track(NewSwapClip(
+                    "AMUSE mismatched target swap", "body", 0,
+                    (0f, cutout), (1f, swap)));
+                controller = NewController(
+                    root, "AMUSE mismatched target graph", clip);
+
+                BuildContext context;
+                using (new ProbeScope(probeContext =>
+                {
+                    var probeState =
+                        probeContext.GetState<AmusePlatformFinishState>();
+                    probeState.SamplingTarget = BuildTarget.Android;
+                }))
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
+
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(
+                    state.HasSamplingPolicy, Is.True,
+                    "fixture precondition: the barrier must capture a " +
+                    "sampling policy for the desktop target");
+                Assert.That(
+                    state.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                    "fixture precondition: the fixture's default " +
+                    "acceptance must capture the conservative desktop " +
+                    "policy");
+                Assert.That(
+                    state.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                    "fixture precondition: both admitted values must " +
+                    "prove the triangle opaque");
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RendererChangedSincePreparation),
+                    Is.Zero,
+                    "fixture precondition: the renderer must stay intact " +
+                    "across the passes");
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .RuntimeMaterialValueNotMapped),
+                    Is.Zero,
+                    "fixture precondition: every admitted value must map " +
+                    "at the barrier");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation");
+                Assert.That(
+                    state.Separation.Renderers[0].CandidateSlots,
+                    Has.Count.EqualTo(1),
+                    "fixture precondition: exactly one prepared candidate " +
+                    "slot must exist");
+                Assert.That(
+                    state.Separation.CreatedClones, Has.Count.EqualTo(1),
+                    "fixture precondition: the cutout source must clone, " +
+                    "or the stale-apply assertion proves nothing");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.SamplingPolicyChanged),
+                    Is.EqualTo(1),
+                    "The mismatched captured target must drop the " +
+                    "fixture's single prepared candidate.");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None ||
+                        reason == AlphaSeparationSlotRefusal
+                            .SamplingPolicyChanged)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        state.SlotRefusalCount(reason), Is.Zero,
+                        "a mismatched captured target must refuse " +
+                        "through no other reason: " + reason);
+                }
+
+                Assert.That(
+                    renderer.sharedMaterials[0], Is.SameAs(cutout),
+                    "A mismatched captured target must not replace the " +
+                    "original material.");
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                    "No stale write may touch the mesh.");
+                Assert.That(mesh.subMeshCount, Is.EqualTo(1),
+                    "No stale write may change the submesh count.");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0),
+                    "A mismatched captured target must not produce an " +
+                    "applied write.");
+
+                var committed = CommittedClipWithObjectBinding(
+                    root, "body", "m_Materials.Array.data[0]");
+                Assert.That(committed, Is.Not.Null,
+                    "the committed clip must still carry the slot binding");
+                var committedCurve = AnimationUtility.GetObjectReferenceCurve(
+                    committed,
+                    EditorCurveBinding.PPtrCurve(
+                        "body",
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[0]"));
+                Assert.That(committedCurve, Has.Length.EqualTo(2));
+                Assert.That(
+                    new[]
+                    {
+                        committedCurve[0].time.ToString("R"),
+                        committedCurve[1].time.ToString("R"),
+                    },
+                    Is.EqualTo(new[]
+                    {
+                        0f.ToString("R"),
+                        1f.ToString("R"),
+                    }),
+                    "the keyframe times must be preserved exactly");
+                Assert.That(committedCurve[0].value, Is.SameAs(cutout),
+                    "A mismatched captured target must not rewrite the " +
+                    "committed curve values.");
+                Assert.That(committedCurve[1].value, Is.SameAs(swap),
+                    "A mismatched captured target must not rewrite the " +
+                    "committed curve values.");
+
+                Assert.That(
+                    state.Separation.CreatedClones[0] == null, Is.True,
+                    "the clone no surviving slot references must be " +
+                    "destroyed");
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
             }
         }
 
@@ -1576,6 +2009,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE late invalidated split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1663,6 +2097,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE in-place edited split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1741,6 +2176,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE selective sweep");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             try
             {
@@ -1970,6 +2406,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE identity split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2096,6 +2533,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE partial swap split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2222,6 +2660,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(optimizer);
             serialized.FindProperty("_ignoreOutOfRangeMaterialSlots").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2298,6 +2737,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             serialized.FindProperty("_ignoreOutOfRangeMaterialSlots")
                 .boolValue = false;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2397,6 +2837,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE closure sibling split");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             Material failedCurrent = null;
@@ -2518,6 +2959,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE incompatible binding ignore");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2645,6 +3087,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             serialized.FindProperty("_minimumOpaqueCoveragePercent")
                 .intValue = 60;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2720,6 +3163,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             serialized.FindProperty("_minimumOpaqueCoveragePercent")
                 .intValue = 50;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2790,6 +3234,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             serialized.FindProperty("_minimumOpaqueCoveragePercent")
                 .intValue = 100;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AlphaSeparationSeamProbe probe = null;
             AnimatorController controller = null;
             try
@@ -2881,6 +3326,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE cutout full artifact");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AmusePlatformFinishState state = null;
             var fixtures = new LilToonCutoutConversionFixtures();
             try
@@ -3102,6 +3548,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var root = new GameObject("AMUSE cutout appended slot");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             AmusePlatformFinishState state = null;
             AnimatorController controller = null;
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -3502,6 +3949,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root = CreateAvatarRoot("shared-material-avatar");
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
             var texture = Track(AlphaSeparationSplitTests.CreateSplitTexture());
             var split = Track(
                 AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
@@ -3519,6 +3967,578 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(probe.Decision.IsPrepared, Is.True);
             Assert.That(probe.Decision.HasMutation, Is.True);
             Assert.That(probe.Finalization.Writes, Has.Count.EqualTo(2));
+        }
+
+        // --- Task 6: mixed-half acceptance conversions -----------------------
+
+        /// <summary>
+        /// One built conversion fixture: the analyzed state beside the
+        /// source and built facts the acceptance contract reads. Every
+        /// build runs under Forced On quality, so the editor quality
+        /// mode never decides the proof, and the desktop acceptance is
+        /// stated per fixture body, never by a global setup. The caller
+        /// disposes the run; the mixed-half folder deletion stays in the
+        /// test's finally.
+        /// </summary>
+        private sealed class ConversionRun : IDisposable
+        {
+            internal GameObject Root { get; set; }
+            internal AmusePlatformFinishState State { get; set; }
+            internal SkinnedMeshRenderer Renderer { get; set; }
+            internal Mesh SourceMesh { get; set; }
+            internal Material SourceMaterial { get; set; }
+            internal bool BuildSucceeded { get; set; }
+
+            public void Dispose()
+            {
+                DestroyGenerated(State);
+                if (Root != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(Root);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Runs one real apply lifecycle build with the verified lilToon
+        /// seams over a caller-built source. The quality pin restores in
+        /// the runner's finally, and the fixture folder import happens
+        /// inside the same try, so a failed build cannot leak either.
+        /// Both acceptance states keep every other optimizer policy at
+        /// its default, so the two builds differ only in acceptance.
+        /// </summary>
+        private ConversionRun RunConversionBuild(
+            string rootName,
+            bool acceptDesktopDifferences,
+            Func<Texture2D> importTexture,
+            Func<Texture2D, Material> newSourceMaterial,
+            Func<Mesh> newMesh,
+            Action<Texture2D> assertTexturePreconditions = null)
+        {
+            var run = new ConversionRun();
+            run.Root = CreateAvatarRoot(rootName);
+            if (acceptDesktopDifferences)
+            {
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(run.Root);
+            }
+
+            var savedFiltering = UnityEngine.QualitySettings.anisotropicFiltering;
+            try
+            {
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    UnityEngine.AnisotropicFiltering.ForceEnable;
+                var texture = Track(importTexture());
+                assertTexturePreconditions?.Invoke(texture);
+                run.SourceMaterial = Track(newSourceMaterial(texture));
+                run.SourceMesh = Track(newMesh());
+                run.Renderer = AddRenderer(
+                    run.Root, "body", run.SourceMesh, run.SourceMaterial);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    run.Root, ApplyTestPlatform.Instance);
+                run.State = context.GetState<AmusePlatformFinishState>();
+                run.BuildSucceeded = context.Successful;
+            }
+            finally
+            {
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    savedFiltering;
+            }
+
+            return run;
+        }
+
+        /// <summary>
+        /// The shared build facts: the build completed, the renderer
+        /// analyzed, and no feature refused. The policy and outcome
+        /// assertions stay with each test.
+        /// </summary>
+        private static void AssertConversionBuildRan(ConversionRun run)
+        {
+            Assert.That(run.BuildSucceeded, Is.True,
+                "fixture precondition: the build must complete");
+            Assert.That(
+                run.State.AnalyzedRendererCount, Is.EqualTo(1),
+                "fixture precondition: the renderer must analyze");
+            AssertNoFeatureRefusals(run.State);
+        }
+
+        /// <summary>
+        /// The accepted mixed-half outcome: the opaque-half triangle
+        /// moved onto an actual appended opaque submesh behind an actual
+        /// appended material slot, and the transparent-half triangle kept
+        /// its original material and its place in the source submesh.
+        /// </summary>
+        private static void AssertMixedHalfSplitApplied(ConversionRun run)
+        {
+            Assert.That(run.State.Separation, Is.Not.Null,
+                "the accepted policy must prepare the mixed-half " +
+                "candidate");
+            Assert.That(
+                run.State.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                "exactly the opaque-half triangle may prove");
+            Assert.That(
+                run.State.Separation.TryGetOpaque(
+                    run.SourceMaterial, out var clone),
+                Is.True,
+                "the source material must convert to the canonical " +
+                "opaque clone");
+            AssertCanonicalOpaqueRecipe(clone);
+
+            var builtMesh = run.Renderer.sharedMesh;
+            Assert.That(builtMesh, Is.Not.SameAs(run.SourceMesh),
+                "the renderer must carry the finalized clone");
+            Assert.That(builtMesh.subMeshCount, Is.EqualTo(2),
+                "the split must append exactly one opaque submesh");
+            CollectionAssert.AreEqual(
+                new[] { 3, 4, 5 },
+                builtMesh.GetIndices(0),
+                "the source submesh must keep exactly the " +
+                "transparent-half triangle");
+            CollectionAssert.AreEqual(
+                new[] { 0, 1, 2 },
+                builtMesh.GetIndices(1),
+                "the appended submesh must carry exactly the " +
+                "opaque-half triangle");
+
+            var materials = run.Renderer.sharedMaterials;
+            Assert.That(materials, Has.Length.EqualTo(2),
+                "the split must append exactly one material slot");
+            Assert.That(materials[0], Is.SameAs(run.SourceMaterial),
+                "the transparent-half triangle must keep its original " +
+                "material");
+            Assert.That(materials[1], Is.SameAs(clone),
+                "the appended slot must carry the opaque clone");
+
+            Assert.That(run.State.AppliedRendererCount, Is.EqualTo(1));
+            Assert.That(
+                run.State.AppliedOpaqueTriangleCount, Is.EqualTo(1),
+                "exactly the opaque-half triangle may move to proven " +
+                "opaque rendering");
+        }
+
+        /// <summary>
+        /// The conservative mixed-half outcome: no triangle proves, so
+        /// nothing prepares and the source mesh, its single submesh, and
+        /// its material survive untouched.
+        /// </summary>
+        private static void AssertNothingConverted(ConversionRun run)
+        {
+            Assert.That(
+                run.State.OpaqueCandidateTriangleCount, Is.EqualTo(0),
+                "the conservative policy must refuse the mixed bilinear " +
+                "field");
+            Assert.That(run.State.Separation, Is.Null,
+                "no candidate may prepare without the accepted policy");
+            Assert.That(run.Renderer.sharedMesh, Is.SameAs(run.SourceMesh),
+                "the source mesh must survive untouched");
+            Assert.That(run.SourceMesh.subMeshCount, Is.EqualTo(1),
+                "the source mesh must keep its single submesh");
+            Assert.That(
+                run.Renderer.sharedMaterials,
+                Is.EquivalentTo(new[] { run.SourceMaterial }),
+                "the source material must survive untouched");
+            Assert.That(run.State.AppliedOpaqueTriangleCount, Is.EqualTo(0),
+                "no triangle may move without a conversion");
+        }
+
+        /// <summary>
+        /// A mixed-half source family under the conservative desktop
+        /// policy and Forced On quality: the conservative projection
+        /// keeps the anisotropic footprint that refuses the mixed
+        /// bilinear field, so the cutout slot keeps everything original.
+        /// </summary>
+        [Test]
+        public void ConservativePolicyKeepsTheCutoutMixedHalfSlotOriginal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var run = RunConversionBuild(
+                "AMUSE cutout mixed half conservative",
+                acceptDesktopDifferences: false,
+                importTexture: () => AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "cutout_mixed_conservative",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels()),
+                newSourceMaterial: NewCutoutSplitMaterial,
+                newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
+                assertTexturePreconditions:
+                    AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
+            try
+            {
+                AssertConversionBuildRan(run);
+                Assert.That(
+                    run.State.SamplingTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "fixture precondition: the dev editor must hold the " +
+                    "Windows build target for this desktop fixture");
+                Assert.That(
+                    run.State.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                    "without acceptance the desktop target must hold " +
+                    "the conservative policy");
+                AssertNothingConverted(run);
+            }
+            finally
+            {
+                run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// A mixed-half cutout source under stored desktop acceptance and
+        /// Forced On quality: the accepted policy projects the narrow
+        /// authored footprint, the opaque-half triangle proves, and the
+        /// apply appends a real opaque submesh and material slot while
+        /// the transparent-half triangle keeps its original material.
+        /// Every optimizer policy besides acceptance stays at its
+        /// default, and the default material coverage policy of 25
+        /// already admits the proven one-of-two split, so the accepted
+        /// and conservative builds take identical inputs.
+        /// </summary>
+        [Test]
+        public void
+            AcceptedPolicyAppendsTheOpaqueSubmeshForACutoutMixedHalfSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var run = RunConversionBuild(
+                "AMUSE cutout mixed half accepted",
+                acceptDesktopDifferences: true,
+                importTexture: () => AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "cutout_mixed_accepted",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels()),
+                newSourceMaterial: NewCutoutSplitMaterial,
+                newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
+                assertTexturePreconditions:
+                    AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
+            try
+            {
+                AssertConversionBuildRan(run);
+                Assert.That(
+                    run.State.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "stored desktop acceptance must select the accepted " +
+                    "policy");
+                AssertMixedHalfSplitApplied(run);
+            }
+            finally
+            {
+                run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// The same conservative refusal for the transparent source
+        /// family: the transparent stand-in keeps its mesh, its submesh,
+        /// and its material, so acceptance is what changes the proof
+        /// scope, not the family.
+        /// </summary>
+        [Test]
+        public void
+            ConservativePolicyKeepsTheTransparentMixedHalfSlotOriginal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var run = RunConversionBuild(
+                "AMUSE transparent mixed half conservative",
+                acceptDesktopDifferences: false,
+                importTexture: () => AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "transparent_mixed_conservative",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels()),
+                newSourceMaterial: NewTransparentConversionMaterial,
+                newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
+                assertTexturePreconditions:
+                    AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
+            try
+            {
+                AssertConversionBuildRan(run);
+                Assert.That(
+                    run.State.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                    "without acceptance the desktop target must hold " +
+                    "the conservative policy");
+                AssertNothingConverted(run);
+            }
+            finally
+            {
+                run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// The same accepted split for the transparent source family: the
+        /// appended opaque submesh and slot appear only under the
+        /// accepted policy, and the transparent-half triangle keeps its
+        /// original material beside them. Every optimizer policy besides
+        /// acceptance stays at its default, identical to the
+        /// conservative build.
+        /// </summary>
+        [Test]
+        public void
+            AcceptedPolicyAppendsTheOpaqueSubmeshForATransparentMixedHalfSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var run = RunConversionBuild(
+                "AMUSE transparent mixed half accepted",
+                acceptDesktopDifferences: true,
+                importTexture: () => AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "transparent_mixed_accepted",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels()),
+                newSourceMaterial: NewTransparentConversionMaterial,
+                newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
+                assertTexturePreconditions:
+                    AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
+            try
+            {
+                AssertConversionBuildRan(run);
+                Assert.That(
+                    run.State.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "stored desktop acceptance must select the accepted " +
+                    "policy");
+                AssertMixedHalfSplitApplied(run);
+            }
+            finally
+            {
+                run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// Fully opaque cutout evidence under both desktop policies: the
+        /// exact proof holds under the conservative projection and under
+        /// the accepted projection alike, so the slot converts without
+        /// any acceptance and acceptance changes nothing about it. This
+        /// is the boundary the acceptance contract guards: acceptance
+        /// widens the proof scope for the mixed field only.
+        /// </summary>
+        [Test]
+        public void FullyOpaqueCutoutEvidenceConvertsWithoutAcceptance()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var conservative = RunConversionBuild(
+                    "AMUSE fully opaque cutout conservative",
+                    acceptDesktopDifferences: false,
+                    importTexture: () => fixtures
+                        .ImportFullyOpaqueMipmap(
+                            "fully_opaque_cutout_conservative"),
+                    newSourceMaterial: NewCutoutConversionMaterial,
+                    newMesh: TexturedSingleTriangleMesh);
+                try
+                {
+                    AssertConversionBuildRan(conservative);
+                    Assert.That(
+                        conservative.State.SamplingPolicy,
+                        Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                        "fixture precondition: the conservative policy " +
+                        "must hold, or the conversion without acceptance " +
+                        "proves nothing");
+                    AssertWholeConversionApplied(conservative);
+                }
+                finally
+                {
+                    conservative.Dispose();
+                }
+
+                var accepted = RunConversionBuild(
+                    "AMUSE fully opaque cutout accepted",
+                    acceptDesktopDifferences: true,
+                    importTexture: () => fixtures
+                        .ImportFullyOpaqueMipmap(
+                            "fully_opaque_cutout_accepted"),
+                    newSourceMaterial: NewCutoutConversionMaterial,
+                    newMesh: TexturedSingleTriangleMesh);
+                try
+                {
+                    AssertConversionBuildRan(accepted);
+                    Assert.That(
+                        accepted.State.SamplingPolicy,
+                        Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                        "fixture precondition: the accepted policy must " +
+                        "hold, or the paired builds prove nothing about " +
+                        "policy independence");
+                    AssertWholeConversionApplied(accepted);
+                }
+                finally
+                {
+                    accepted.Dispose();
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The same fully opaque pair for the transparent source family:
+        /// both policies convert the whole slot in place, so no
+        /// acceptance is required and none is granted.
+        /// </summary>
+        [Test]
+        public void FullyOpaqueTransparentEvidenceConvertsWithoutAcceptance()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonCutoutConversionFixtures();
+            try
+            {
+                fixtures.BaseSetUp();
+                var conservative = RunConversionBuild(
+                    "AMUSE fully opaque transparent conservative",
+                    acceptDesktopDifferences: false,
+                    importTexture: () => fixtures
+                        .ImportFullyOpaqueMipmap(
+                            "fully_opaque_transparent_conservative"),
+                    newSourceMaterial: NewTransparentConversionMaterial,
+                    newMesh: TexturedSingleTriangleMesh);
+                try
+                {
+                    AssertConversionBuildRan(conservative);
+                    Assert.That(
+                        conservative.State.SamplingPolicy,
+                        Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                        "fixture precondition: the conservative policy " +
+                        "must hold, or the conversion without acceptance " +
+                        "proves nothing");
+                    AssertWholeConversionApplied(conservative);
+                }
+                finally
+                {
+                    conservative.Dispose();
+                }
+
+                var accepted = RunConversionBuild(
+                    "AMUSE fully opaque transparent accepted",
+                    acceptDesktopDifferences: true,
+                    importTexture: () => fixtures
+                        .ImportFullyOpaqueMipmap(
+                            "fully_opaque_transparent_accepted"),
+                    newSourceMaterial: NewTransparentConversionMaterial,
+                    newMesh: TexturedSingleTriangleMesh);
+                try
+                {
+                    AssertConversionBuildRan(accepted);
+                    Assert.That(
+                        accepted.State.SamplingPolicy,
+                        Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                        "fixture precondition: the accepted policy must " +
+                        "hold, or the paired builds prove nothing about " +
+                        "policy independence");
+                    AssertWholeConversionApplied(accepted);
+                }
+                finally
+                {
+                    accepted.Dispose();
+                }
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The accepted mixed-half case with a later transparent mip: the
+        /// same base level gains an importer-derived mip chain whose last
+        /// level averages the two halves below full opacity, so the
+        /// accepted proof must refuse the triangle the mip-0 field alone
+        /// would prove. Acceptance widens the anisotropic footprint
+        /// only; it never waives the mip conjunction.
+        /// </summary>
+        [Test]
+        public void LaterTransparentMipBlocksTheAcceptedMixedHalfProof()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var run = RunConversionBuild(
+                "AMUSE mixed half accepted later mip",
+                acceptDesktopDifferences: true,
+                importTexture: () => AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "cutout_mixed_accepted_mips",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels(),
+                        withMipmaps: true),
+                newSourceMaterial: NewCutoutSplitMaterial,
+                newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
+                assertTexturePreconditions: mixed =>
+                {
+                    AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions(mixed);
+                    Assert.That(
+                        mixed.mipmapCount, Is.GreaterThan(1),
+                        "fixture precondition: the mipmap variant must " +
+                        "carry a real mip chain");
+                });
+            try
+            {
+                AssertConversionBuildRan(run);
+                Assert.That(
+                    run.State.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "fixture precondition: the accepted policy must be " +
+                    "captured, so the block comes from the mip evidence");
+                AssertNothingConverted(run);
+            }
+            finally
+            {
+                run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// A wholly opaque outcome: the single triangle proves opaque, so
+        /// the slot converts in place behind the canonical clone and the
+        /// mesh keeps its single submesh. No submesh is appended, which
+        /// is exactly why the split assertions above read the appended
+        /// indices instead.
+        /// </summary>
+        private static void AssertWholeConversionApplied(
+            ConversionRun run)
+        {
+            Assert.That(run.State.Separation, Is.Not.Null,
+                "the fully opaque evidence must prepare a candidate");
+            Assert.That(
+                run.State.OpaqueCandidateTriangleCount, Is.EqualTo(1),
+                "exactly the single triangle may prove");
+            Assert.That(
+                run.State.Separation.TryGetOpaque(
+                    run.SourceMaterial, out var clone),
+                Is.True,
+                "the source material must convert to the canonical " +
+                "opaque clone");
+            AssertCanonicalOpaqueRecipe(clone);
+            Assert.That(
+                run.Renderer.sharedMesh, Is.SameAs(run.SourceMesh),
+                "a wholly opaque slot must not rewrite the mesh");
+            Assert.That(run.SourceMesh.subMeshCount, Is.EqualTo(1),
+                "a wholly opaque slot must not append a submesh");
+            Assert.That(
+                run.Renderer.sharedMaterials,
+                Is.EquivalentTo(new[] { clone }),
+                "the slot must carry the opaque clone in place");
+            Assert.That(run.State.AppliedRendererCount, Is.EqualTo(1));
+            Assert.That(
+                run.State.AppliedOpaqueTriangleCount, Is.EqualTo(1),
+                "exactly the single triangle may move to proven opaque " +
+                "rendering");
         }
 
         // --- Named texture-capture refusal, end to end -----------------------
@@ -3884,6 +4904,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     (withTransparentSibling ? "sibling" : "control"));
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
+                // Fixture precondition: the split alpha field proves only
+                // against the narrow authored footprint, so each build in
+                // this test stores desktop acceptance and both captures
+                // the accepted policy.
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 try
                 {
                     // The cutout + Poiyomi fixture: exactly the proven

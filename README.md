@@ -17,8 +17,14 @@ Then add the **AMUSE** package to your avatar project from the package manager. 
 
 Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usual.
 
-- The preset row under the header picks Safe, Normal, or Aggressive. All
-  three presets ship the same values for now, the shipped defaults.
+- The preset row under the header picks Safe, Normal, or Aggressive.
+  Safe leaves both anisotropy acceptance settings off. It also disables
+  **Ignore Out-of-Range Material Slots** and **Allow Depth Test Change
+  on Moved Triangles**. Normal and Aggressive enable all four settings.
+  The other preset values stay the same.
+- The two **Accept Anisotropy Differences** toggles and the preset files
+  that carry them live in the Alpha Separator Settings. See **Proof modes
+  and acceptance** below.
 - The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules; declining is a total no-op for that build.
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
@@ -31,6 +37,39 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted; unsupported means a named refusal with the renderer or material untouched - never a silent guess.
 
 Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.3.4 with their cutout, transparent, outline, and one-pass/two-pass variants.
+
+## Proof modes and acceptance
+
+Open **Settings**, turn on **Advanced Settings**, and open **Alpha
+Separator Settings**. You find two toggles there: **Accept Desktop
+Anisotropy Differences** and **Accept Mobile Anisotropy Differences**.
+The **Active Sampling Proof** row shows the proof mode the current build
+target reads. New components leave both toggles off. Safe keeps them off.
+Normal and Aggressive turn them on.
+
+With a toggle off, the proof is conservative. The proof keeps anisotropic
+evidence, so some triangles may not prove. With a toggle on, the proof is
+accepted. AMUSE proves opacity without anisotropic footprints. VRChat can
+filter textures anisotropically, so converted parts can lose transparency
+near texture edges or at oblique views.
+
+Acceptance changes the proof scope. It does not change how Unity filters
+your textures at runtime.
+
+The Android and iOS build targets select the mobile acceptance setting.
+AMUSE texture capture does not support these targets. The setting does
+not enable mobile conversion, and an Android build keeps its named
+refusal. Any other build target has no sampling-policy selection. The
+build reports the missing policy and keeps the conservative output.
+
+The last build status and the build report name the selected proof mode.
+They name it even when no triangle moves.
+
+Custom preset files use schema version 2. To migrate a version 1 file,
+set `"schemaVersion": 2`. Add
+`"acceptDesktopAnisotropyDifferences": false` and
+`"acceptMobileAnisotropyDifferences": false`.
+The parser refuses version 1 files instead of guessing values.
 
 ## Reading the console reports
 

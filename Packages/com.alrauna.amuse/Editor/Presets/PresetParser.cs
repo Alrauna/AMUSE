@@ -4,16 +4,18 @@ using Newtonsoft.Json.Linq;
 namespace Alrauna.Amuse.Editor.Presets
 {
     /// <summary>
-    /// Parses preset text against the closed version 1 schema. The
+    /// Parses preset text against the closed version 2 schema. The
     /// parser refuses instead of guessing: an unknown key, a missing
     /// key, a wrong type, or an out-of-range value answers a named
     /// refusal and no preset, because a file must never half-apply.
-    /// The tree walk is manual, so each cause maps to exactly one
-    /// refusal value.
+    /// The version is read before every version-specific key, so an
+    /// older file answers UnknownSchemaVersion instead of a key
+    /// refusal. The tree walk is manual, so each cause maps to
+    /// exactly one refusal value.
     /// </summary>
     internal static class PresetParser
     {
-        internal const int CurrentSchemaVersion = 1;
+        internal const int CurrentSchemaVersion = 2;
 
         private static readonly string[] FileKeys =
             { "schemaVersion", "name", "description", "features", "settings" };
@@ -30,6 +32,8 @@ namespace Alrauna.Amuse.Editor.Presets
             "polygonMinimumOpaqueCoveragePercent",
             "allowDepthTestChange",
             "ignoreOutOfRangeMaterialSlots",
+            "acceptDesktopAnisotropyDifferences",
+            "acceptMobileAnisotropyDifferences",
         };
 
         internal static bool TryParse(
@@ -57,6 +61,21 @@ namespace Alrauna.Amuse.Editor.Presets
                 return false;
             }
 
+            // The version gates every version-specific key. Read it
+            // first, so an older file refuses with UnknownSchemaVersion
+            // instead of a missing-key refusal against the new schema.
+            if (!TryRead<int>(
+                    file, "schemaVersion", JTokenType.Integer,
+                    ref refusal, out var version))
+            {
+                return false;
+            }
+            if (version != CurrentSchemaVersion)
+            {
+                refusal = PresetLoadRefusal.UnknownSchemaVersion;
+                return false;
+            }
+
             if (!TryRead<JObject>(
                     file, "features", JTokenType.Object,
                     ref refusal, out var features)
@@ -74,10 +93,7 @@ namespace Alrauna.Amuse.Editor.Presets
                 return false;
             }
 
-            if (!TryRead<int>(
-                    file, "schemaVersion", JTokenType.Integer,
-                    ref refusal, out var version)
-                || !TryReadNonEmptyString(file, "name", ref refusal, out var name)
+            if (!TryReadNonEmptyString(file, "name", ref refusal, out var name)
                 || !TryReadNonEmptyString(
                     file, "description", ref refusal, out var description)
                 || !TryRead<bool>(
@@ -102,7 +118,13 @@ namespace Alrauna.Amuse.Editor.Presets
                     JTokenType.Boolean, ref refusal, out var depthTest)
                 || !TryRead<bool>(
                     settings, "ignoreOutOfRangeMaterialSlots",
-                    JTokenType.Boolean, ref refusal, out var ignoreOutOfRange))
+                    JTokenType.Boolean, ref refusal, out var ignoreOutOfRange)
+                || !TryRead<bool>(
+                    settings, "acceptDesktopAnisotropyDifferences",
+                    JTokenType.Boolean, ref refusal, out var acceptDesktop)
+                || !TryRead<bool>(
+                    settings, "acceptMobileAnisotropyDifferences",
+                    JTokenType.Boolean, ref refusal, out var acceptMobile))
             {
                 return false;
             }
@@ -117,16 +139,10 @@ namespace Alrauna.Amuse.Editor.Presets
                 }
             }
 
-            if (version != CurrentSchemaVersion)
-            {
-                refusal = PresetLoadRefusal.UnknownSchemaVersion;
-                return false;
-            }
-
             preset = new OptimizerPreset(
                 name, description, alphaSeparator, mipCap, minSize,
                 coverage, alphaClamp, polygonClamp, polygonCoverage,
-                depthTest, ignoreOutOfRange);
+                depthTest, ignoreOutOfRange, acceptDesktop, acceptMobile);
             return true;
         }
 
