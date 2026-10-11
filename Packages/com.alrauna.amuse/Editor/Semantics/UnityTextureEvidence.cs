@@ -145,27 +145,18 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
 
-            var aniso = texture.anisoLevel > 1 ||
-                        (texture.anisoLevel == 1 && LevelOneSamplesAnisotropically())
+            // Authored facts only. The authored level decides both
+            // answers: above one samples anisotropically by itself, and
+            // any nonzero level is eligible for forced anisotropy. The
+            // editor quality mode is not a captured fact; a proof policy
+            // interprets eligibility later.
+            var aniso = texture.anisoLevel > 1
                 ? TextureAnisoMode.Anisotropic
                 : TextureAnisoMode.None;
 
-            sampling = new TextureSampling(filter, wrapU, aniso);
+            sampling = new TextureSampling(
+                filter, wrapU, aniso, texture.anisoLevel != 0);
             return true;
-        }
-
-        /// <summary>
-        /// Answers whether Unity samples an anisoLevel 1 texture
-        /// anisotropically under the current quality mode. Forced On maps
-        /// to ForceEnable and forces every level. Per Texture maps to
-        /// Enable and respects level 1 as off. Disable also respects
-        /// level 1 as off. This Unity version defines no Enable On Build
-        /// mode, so no other mode admits level 1.
-        /// </summary>
-        private static bool LevelOneSamplesAnisotropically()
-        {
-            var mode = QualitySettings.anisotropicFiltering;
-            return mode == AnisotropicFiltering.ForceEnable;
         }
 
         /// <summary>

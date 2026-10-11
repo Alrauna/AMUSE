@@ -11,7 +11,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             return new OptimizerPreset(
                 "Safe", "Shipped defaults.", true,
-                4, 128, 25, 100, 100, 100, true, true);
+                4, 128, 25, 100, 100, 100, true, true, false, false);
         }
 
         [Test]
@@ -44,6 +44,8 @@ namespace Alrauna.Amuse.Tests.Editor
                 ("_polygonMinimumOpaqueCoveragePercent", 70),
                 ("_allowDepthTestChange", false),
                 ("_ignoreOutOfRangeMaterialSlots", false),
+                ("_acceptDesktopAnisotropyDifferences", true),
+                ("_acceptMobileAnisotropyDifferences", true),
             };
 
             foreach (var field in fields)

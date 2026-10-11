@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf;
 using NUnit.Framework;
@@ -395,31 +396,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_DefaultImport_IsBilinearRepeat()
         {
-            // The default import carries aniso level 1. Its gate answer
-            // depends on the global quality mode. This pin reads level 1
-            // under Per Texture, where it stays off.
-            var original = QualitySettings.anisotropicFiltering;
-            try
-            {
-                QualitySettings.anisotropicFiltering =
-                    AnisotropicFiltering.Enable;
-                var texture = Import("sampler", sourceHasAlpha: true);
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+            // The default import carries aniso level 1. Capture records
+            // the authored facts: no anisotropic footprint yet, but
+            // eligibility for forced anisotropy. The quality mode plays
+            // no part in the captured answer.
+            var texture = Import("sampler", sourceHasAlpha: true);
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
 
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
-                    Is.True);
-                Assert.That(
-                    sampling,
-                    Is.EqualTo(new TextureSampling(
-                        TextureFilterMode.Bilinear,
-                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
-            }
-            finally
-            {
-                QualitySettings.anisotropicFiltering = original;
-            }
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                Is.True);
+            Assert.That(
+                sampling,
+                Is.EqualTo(new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+            Assert.That(sampling.Aniso, Is.EqualTo(TextureAnisoMode.None));
+            Assert.That(sampling.ForceAnisotropyEligible, Is.True);
         }
 
         /// <summary>
@@ -431,31 +425,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_MipmappedTexture_IsAdmitted()
         {
-            var original = QualitySettings.anisotropicFiltering;
-            try
-            {
-                QualitySettings.anisotropicFiltering =
-                    AnisotropicFiltering.Enable;
-                var texture = Import(
-                    "mipped",
-                    sourceHasAlpha: true,
-                    importer => importer.mipmapEnabled = true);
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
+            var texture = Import(
+                "mipped",
+                sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            texture.filterMode = FilterMode.Bilinear;
+            texture.wrapMode = UnityEngine.TextureWrapMode.Repeat;
 
-                Assert.That(texture.mipmapCount, Is.GreaterThan(1));
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(texture, out var sampling), Is.True);
-                Assert.That(
-                    sampling,
-                    Is.EqualTo(new TextureSampling(
-                        TextureFilterMode.Bilinear,
-                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
-            }
-            finally
-            {
-                QualitySettings.anisotropicFiltering = original;
-            }
+            Assert.That(texture.mipmapCount, Is.GreaterThan(1));
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(texture, out var sampling), Is.True);
+            Assert.That(
+                sampling,
+                Is.EqualTo(new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
         }
 
         /// <summary>
@@ -466,35 +450,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void TryGetSampling_MipmappedWithBias_IsAdmitted()
         {
-            var original = QualitySettings.anisotropicFiltering;
-            try
-            {
-                QualitySettings.anisotropicFiltering =
-                    AnisotropicFiltering.Enable;
-                var negative = Import(
-                    "mipped_biased_negative", sourceHasAlpha: true,
-                    importer => importer.mipmapEnabled = true);
-                negative.mipMapBias = -1f;
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(negative, out var first),
-                    Is.True);
-                Assert.That(
-                    first,
-                    Is.EqualTo(new TextureSampling(
-                        TextureFilterMode.Bilinear,
-                        Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
+            var negative = Import(
+                "mipped_biased_negative", sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            negative.mipMapBias = -1f;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(negative, out var first),
+                Is.True);
+            Assert.That(
+                first,
+                Is.EqualTo(new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    Alrauna.Amuse.Editor.Semantics.TextureWrapMode.Repeat)));
 
-                var positive = Import(
-                    "mipped_biased_positive", sourceHasAlpha: true,
-                    importer => importer.mipmapEnabled = true);
-                positive.mipMapBias = 2f;
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(positive, out _), Is.True);
-            }
-            finally
-            {
-                QualitySettings.anisotropicFiltering = original;
-            }
+            var positive = Import(
+                "mipped_biased_positive", sourceHasAlpha: true,
+                importer => importer.mipmapEnabled = true);
+            positive.mipMapBias = 2f;
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(positive, out _), Is.True);
         }
 
         /// <summary>
@@ -536,13 +510,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 sampling.Aniso,
                 Is.EqualTo(TextureAnisoMode.Anisotropic));
             Assert.That(sampling.Filter, Is.EqualTo(TextureFilterMode.Bilinear));
+            Assert.That(sampling.ForceAnisotropyEligible, Is.True);
 
             var maximum = Import(
                 "aniso_maximum", sourceHasAlpha: true,
                 importer => importer.mipmapEnabled = true);
             maximum.anisoLevel = 16;
             Assert.That(
-                UnityTextureEvidence.TryGetSampling(maximum, out _), Is.True);
+                UnityTextureEvidence.TryGetSampling(maximum, out var maxSampling),
+                Is.True);
+            Assert.That(
+                maxSampling.Aniso,
+                Is.EqualTo(TextureAnisoMode.Anisotropic));
+            Assert.That(maxSampling.ForceAnisotropyEligible, Is.True);
+
+            // Effective proof outcomes. An authored level above one owns
+            // its anisotropic footprint, so both conservative policies
+            // keep it, and the accepted policy drops even this footprint.
+            Assert.That(
+                AlphaSamplingPolicy.ConservativeDesktop.ForProof(sampling).Aniso,
+                Is.EqualTo(TextureAnisoMode.Anisotropic));
+            Assert.That(
+                AlphaSamplingPolicy.ConservativeMobile.ForProof(sampling).Aniso,
+                Is.EqualTo(TextureAnisoMode.Anisotropic));
+            Assert.That(
+                AlphaSamplingPolicy.AcceptedNonAnisotropic.ForProof(sampling).Aniso,
+                Is.EqualTo(TextureAnisoMode.None));
         }
 
         // Finding 31. The probe of 2026-10-09 confirmed the hardware
@@ -556,80 +549,80 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         // Enable.
 
         /// <summary>
-        /// Forced On forces anisotropic sampling for level 1 as well.
+        /// Authored level zero is forced off. Capture records no
+        /// anisotropic footprint and no eligibility. Even the trusting
+        /// desktop policy then keeps the level out of anisotropic
+        /// proofs, while mobile conservatism still assumes the
+        /// footprint for every texture.
         /// </summary>
         [Test]
-        public void TryGetSampling_LevelOneUnderForcedOn_IsAnisotropic()
+        public void TryGetSampling_LevelZeroCapture_IsIneligible()
         {
-            var original = QualitySettings.anisotropicFiltering;
-            try
-            {
-                QualitySettings.anisotropicFiltering =
-                    AnisotropicFiltering.ForceEnable;
-                var texture = Import("aniso_level1_forced", sourceHasAlpha: false);
-                texture.anisoLevel = 1;
+            var texture = Import(
+                "sampling_authored_level0", sourceHasAlpha: true);
+            texture.anisoLevel = 0;
 
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
-                    Is.True);
-                Assert.That(
-                    sampling.Aniso,
-                    Is.EqualTo(TextureAnisoMode.Anisotropic));
-            }
-            finally
-            {
-                QualitySettings.anisotropicFiltering = original;
-            }
+            Assert.That(
+                UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                Is.True);
+            Assert.That(sampling.Aniso, Is.EqualTo(TextureAnisoMode.None));
+            Assert.That(sampling.ForceAnisotropyEligible, Is.False);
+
+            Assert.That(
+                AlphaSamplingPolicy.ConservativeDesktop.ForProof(sampling).Aniso,
+                Is.EqualTo(TextureAnisoMode.None));
+            Assert.That(
+                AlphaSamplingPolicy.ConservativeMobile.ForProof(sampling).Aniso,
+                Is.EqualTo(TextureAnisoMode.Anisotropic));
         }
 
-        /// <summary>
-        /// Per Texture respects level 1 as off. The sample stays bilinear
-        /// within the selected level.
-        /// </summary>
+        // Authored-fact contract. Capture records authored import facts
+        // only. The global quality mode must never change the captured
+        // sampling of the same texture. Finding 31 above records the
+        // hardware behavior that motivates this pin.
         [Test]
-        public void TryGetSampling_LevelOneUnderPerTexture_IsNone()
+        public void TryGetSampling_LevelOneCapture_IsStableAcrossQualityModes()
         {
             var original = QualitySettings.anisotropicFiltering;
             try
             {
-                QualitySettings.anisotropicFiltering =
-                    AnisotropicFiltering.Enable;
-                var texture = Import("aniso_level1_per_texture", sourceHasAlpha: false);
+                var texture = Import("sampling_authored", sourceHasAlpha: true);
                 texture.anisoLevel = 1;
 
-                Assert.That(
-                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
-                    Is.True);
-                Assert.That(
-                    sampling.Aniso,
-                    Is.EqualTo(TextureAnisoMode.None));
-            }
-            finally
-            {
-                QualitySettings.anisotropicFiltering = original;
-            }
-        }
-
-        /// <summary>
-        /// Disable keeps level 1 off. The sample stays bilinear within
-        /// the selected level.
-        /// </summary>
-        [Test]
-        public void TryGetSampling_LevelOneUnderDisable_IsNone()
-        {
-            var original = QualitySettings.anisotropicFiltering;
-            try
-            {
                 QualitySettings.anisotropicFiltering =
                     AnisotropicFiltering.Disable;
-                var texture = Import("aniso_level1_disable", sourceHasAlpha: false);
-                texture.anisoLevel = 1;
-
                 Assert.That(
-                    UnityTextureEvidence.TryGetSampling(texture, out var sampling),
+                    UnityTextureEvidence.TryGetSampling(texture, out var disabled),
                     Is.True);
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.Enable;
                 Assert.That(
-                    sampling.Aniso,
+                    UnityTextureEvidence.TryGetSampling(texture, out var perTexture),
+                    Is.True);
+                QualitySettings.anisotropicFiltering =
+                    AnisotropicFiltering.ForceEnable;
+                Assert.That(
+                    UnityTextureEvidence.TryGetSampling(texture, out var forced),
+                    Is.True);
+
+                Assert.That(forced, Is.EqualTo(disabled));
+                Assert.That(forced, Is.EqualTo(perTexture));
+
+                // The authored facts themselves: level one owns no
+                // anisotropic footprint, but it is eligible for forced
+                // anisotropy under every quality mode.
+                Assert.That(forced.Aniso, Is.EqualTo(TextureAnisoMode.None));
+                Assert.That(forced.ForceAnisotropyEligible, Is.True);
+
+                // Effective proof outcomes, not field copies. The
+                // desktop policy trusts the documented level-one
+                // exception under every quality mode. The accepted
+                // policy drops the footprint under every quality mode.
+                Assert.That(
+                    AlphaSamplingPolicy.ConservativeDesktop.ForProof(forced).Aniso,
+                    Is.EqualTo(TextureAnisoMode.Anisotropic));
+                Assert.That(
+                    AlphaSamplingPolicy.AcceptedNonAnisotropic.ForProof(forced).Aniso,
                     Is.EqualTo(TextureAnisoMode.None));
             }
             finally

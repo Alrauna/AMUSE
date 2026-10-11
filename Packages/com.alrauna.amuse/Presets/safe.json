@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Safe",
-  "description": "Checks every tested texture size and keeps every tolerance at its safest value.",
+  "description": "Keeps anisotropy checks and does not allow slot or depth-test exceptions.",
   "features": {
     "alphaSeparator": true
   },
@@ -12,7 +12,9 @@
     "minimumOpaqueAlphaPercent": 100,
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,
-    "allowDepthTestChange": true,
-    "ignoreOutOfRangeMaterialSlots": true
+    "allowDepthTestChange": false,
+    "ignoreOutOfRangeMaterialSlots": false,
+    "acceptDesktopAnisotropyDifferences": false,
+    "acceptMobileAnisotropyDifferences": false
   }
 }

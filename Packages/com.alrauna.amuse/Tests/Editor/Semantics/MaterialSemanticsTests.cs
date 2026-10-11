@@ -51,6 +51,67 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void SamplingDefaultsToForceAnisotropyEligible()
+        {
+            var twoArgument = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp);
+            var threeArgument = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None);
+            var explicitEligible = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None,
+                forceAnisotropyEligible: true);
+
+            Assert.That(twoArgument.ForceAnisotropyEligible, Is.True);
+            Assert.That(threeArgument.ForceAnisotropyEligible, Is.True);
+            Assert.That(explicitEligible.ForceAnisotropyEligible, Is.True);
+        }
+
+        [Test]
+        public void SamplingDistinguishesForceAnisotropyEligibility()
+        {
+            // An authored level one and an authored level zero can share
+            // filter, wrap, and aniso mode. Only eligibility tells them
+            // apart, so equality and hashing must read it.
+            var eligible = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None,
+                forceAnisotropyEligible: true);
+            var ineligible = new TextureSampling(
+                TextureFilterMode.Point,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None,
+                forceAnisotropyEligible: false);
+
+            Assert.That(eligible, Is.Not.EqualTo(ineligible));
+            Assert.That(
+                eligible.GetHashCode(),
+                Is.Not.EqualTo(ineligible.GetHashCode()));
+        }
+
+        [Test]
+        public void AnisotropicSampleWithoutEligibilityIsAnInvariantError()
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                new TextureSampling(
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.Anisotropic,
+                    forceAnisotropyEligible: false));
+            Assert.DoesNotThrow(() =>
+                new TextureSampling(
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.Anisotropic,
+                    forceAnisotropyEligible: true));
+        }
+
+        [Test]
         public void PrimitiveMalformedInputsThrow()
         {
             Assert.Throws<ArgumentException>(() => new TextureSourceId(""));

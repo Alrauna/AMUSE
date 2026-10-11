@@ -431,6 +431,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 bindings,
                 Relevance,
                 NoAlphaFields,
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0,
                 VerifiedAlphaOnly);
         }
@@ -447,6 +448,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 bindings,
                 Relevance,
                 NoAlphaFields,
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0,
                 VerifiedAlphaOnly,
                 blockEntries);
@@ -701,6 +703,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new[] { (binding, reference) },
                 Relevance,
                 NoAlphaFields,
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0,
                 VerifiedAlphaOnly));
         }
@@ -725,6 +728,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new[] { Animated("_AlphaForceOpaque", 1f) },
                 Relevance,
                 NoAlphaFields,
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0,
                 material => ReferenceEquals(material.Evidence, withProperty.Evidence)
                     ? VerifiedAlphaOnly(material)
@@ -777,6 +781,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 System.Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                 Relevance,
                 NoAlphaFields,
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0,
                 material => ReferenceEquals(material, admitted[0])
                     ? VerifiedAlphaOnly(material)
@@ -1152,6 +1157,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),
                     Relevance,
                     fields,
+                    AlphaSamplingPolicy.ConservativeDesktop,
                     0,
                     VerifiedAlphaOnly);
 
@@ -1184,6 +1190,142 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 return ImportTexture(name);
             }
         }
+
+        // ---- explicit policy through the per-material rule ------------------
+
+        private static AlphaTextureData AdmissionMixedField()
+        {
+            return new AlphaTextureData(
+                2, 2, new byte[] { 255, 255, 0, 0 });
+        }
+
+        /// <summary>
+        /// Evidence whose only texture assignment names
+        /// <paramref name="source"/> with the given alpha chain captured
+        /// exact under the inert bounds, so the field gate's own lookup
+        /// answers with that field for exactly this evidence.
+        /// </summary>
+        private static CapturedMaterialEvidence
+            EvidenceNamingAlphaSource(
+                TextureSourceId source, AlphaMipChain chain)
+        {
+            var texture = new CapturedTextureEvidence(
+                true, source, 1f, AlphaPolicyBounds.Inert,
+                false, default(TextureSampling),
+                false, default(TextureColorInterpretation),
+                false, false,
+                false, true, chain,
+                TextureCaptureRefusalReason.None,
+                false, null,
+                TextureCaptureRefusalReason.None);
+            var assignment = new CapturedTextureAssignment(
+                true, TextureEvidenceKinds.AlphaChannel,
+                false, Vector2.one, Vector2.zero,
+                texture, Array.Empty<TextureCaptureRefusal>());
+            return new CapturedMaterialEvidence(
+                false, null, false, default(ColorSpace),
+                Array.Empty<CapturedMaterialEvidence.PresenceEntry>(),
+                Array.Empty<CapturedMaterialEvidence.ScalarEntry>(),
+                Array.Empty<CapturedMaterialEvidence.ColorEntry>(),
+                Array.Empty<CapturedMaterialEvidence.VectorEntry>(),
+                new[]
+                {
+                    new CapturedMaterialEvidence.TextureEntry(
+                        "_MainTex", true, assignment),
+                },
+                new[] { texture });
+        }
+
+        private static CapturedAlphaMaterial
+            SyntheticSampledMaterial(
+                TextureSourceId source, AlphaMipChain chain)
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                EvidenceNamingAlphaSource(source, chain),
+                default(PoiyomiSourceEvidence),
+                null);
+        }
+
+        private static CapturedAlphaSemantics
+            SampledAlphaSemantics(TextureSourceId source)
+        {
+            var sample = new TextureSample(
+                source,
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp));
+            return new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<ScalarSemanticValue>.Complete(
+                        ScalarSemanticValue.Texture(
+                            sample, TextureChannel.Alpha)),
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                null);
+        }
+
+        /// <summary>
+        /// Two admitted materials resolve under the same named policy, and
+        /// each consults only its own captured field: material A's own field
+        /// answers, so the selected policy decides its local corner proof,
+        /// while material B's own source has no field and refuses with
+        /// missing evidence under both policies.
+        /// </summary>
+        [Test]
+        public void DifferentAdmittedMaterialsUseTheirOwnFieldsUnderOnePolicy()
+        {
+            var field = AdmissionMixedField();
+            var chain = new AlphaMipChain(new[] { field });
+            var sourceA = new TextureSourceId(
+                "amuse-tests:admission-policy:a");
+            var sourceB = new TextureSourceId(
+                "amuse-tests:admission-policy:b");
+            var materialA = SyntheticSampledMaterial(sourceA, chain);
+            var materialB = SyntheticSampledMaterial(sourceB, chain);
+            var fields = AlphaFieldSet.WithField(
+                sourceA, TextureChannel.Alpha, 1f,
+                AlphaPolicyBounds.Inert, chain);
+            var corner = TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f));
+            var cases = new[]
+            {
+                (AlphaSamplingPolicy.ConservativeDesktop,
+                    TriangleAlphaOutcome.Unknown),
+                (AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                    TriangleAlphaOutcome.ProvenOpaque),
+            };
+
+            foreach (var (policy, expected) in cases)
+            {
+                var resolutionA =
+                    AdmittedMaterialStates.ResolveAdmittedMaterialSemantics(
+                        materialA, SampledAlphaSemantics(sourceA), fields,
+                        policy, 0);
+                Assert.That(resolutionA.IsResolved, Is.True);
+                Assert.That(
+                    resolutionA.Classify(corner),
+                    Is.EqualTo(expected),
+                    policy.ToString());
+
+                var resolutionB =
+                    AdmittedMaterialStates.ResolveAdmittedMaterialSemantics(
+                        materialB, SampledAlphaSemantics(sourceB), fields,
+                        policy, 0);
+                Assert.That(
+                    resolutionB.Failure,
+                    Is.EqualTo(AlphaResolutionFailure
+                        .MissingTextureEvidence),
+                    policy.ToString());
+            }
+        }
+
 
         // ---- DistinctResolutions -------------------------------------------
         //

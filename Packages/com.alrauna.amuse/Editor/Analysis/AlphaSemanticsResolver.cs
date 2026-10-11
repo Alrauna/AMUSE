@@ -456,7 +456,11 @@ namespace Alrauna.Amuse.Editor.Analysis
     /// Shader-independent bridge from one normalized Alpha semantic value to the
     /// existing exact triangle alpha classifier. It selects evidence and
     /// sampling, decides what can be concluded without evidence contents, and
-    /// refuses everything else. It performs no arithmetic on evidence, reads no
+    /// refuses everything else. The caller names one closed
+    /// <see cref="AlphaSamplingPolicy"/>; every sampled term is projected to
+    /// its effective proof sampling through that policy before
+    /// classification, and the same policy reaches every nested expression.
+    /// It performs no arithmetic on evidence, reads no
     /// asset, and knows no shader, property, mesh, or render state.
     /// </summary>
     internal static class AlphaSemanticsResolver
@@ -464,6 +468,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static AlphaResolution Resolve(
             SemanticOutput<ScalarSemanticValue> alpha,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             if (fieldProvider == null)
@@ -487,6 +492,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetTextureSample(),
                         value.GetChannel(),
                         fieldProvider,
+                        samplingPolicy,
                         maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.TextureSampleTimesConstant:
                     return ResolveScaledSample(
@@ -494,6 +500,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetChannel(),
                         value.GetMultiplier(),
                         fieldProvider,
+                        samplingPolicy,
                         maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.MappedTextureSample:
                     return ResolveMappedSample(
@@ -501,16 +508,20 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetChannel(),
                         value.GetMap(),
                         fieldProvider,
+                        samplingPolicy,
                         maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.ProductChainOfTextureSamples:
                     return ResolveProductChain(
-                        value, fieldProvider, maxNoiseTexelPercent);
+                        value, fieldProvider, samplingPolicy,
+                        maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.SaturatingSum:
                     return ResolveSaturatingSum(
-                        value, fieldProvider, maxNoiseTexelPercent);
+                        value, fieldProvider, samplingPolicy,
+                        maxNoiseTexelPercent);
                 case ScalarSemanticValueKind.SaturatingDifference:
                     return ResolveSaturatingDifference(
-                        value, fieldProvider, maxNoiseTexelPercent);
+                        value, fieldProvider, samplingPolicy,
+                        maxNoiseTexelPercent);
                 default:
                     // A semantic form added later must fail closed here rather
                     // than fall into a wrong proof path.
@@ -541,6 +552,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             TextureChannel channel,
             float multiplier,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             if (float.IsNaN(multiplier))
@@ -558,7 +570,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (multiplier == 1f)
             {
                 return ResolveSampled(
-                    sample, channel, fieldProvider, maxNoiseTexelPercent);
+                    sample, channel, fieldProvider, samplingPolicy,
+                    maxNoiseTexelPercent);
             }
 
             if (!fieldProvider(sample.Source, channel, out var chain) ||
@@ -585,6 +598,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             TextureChannel channel,
             AffineAlphaMap map,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             if (!fieldProvider(sample.Source, channel, out var chain) ||
@@ -619,7 +633,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             return AlphaResolution.Classified(
                 chain,
-                sample.Sampling,
+                samplingPolicy.ForProof(sample.Sampling),
                 sample.Coordinates,
                 maxNoiseTexelPercent,
                 map);
@@ -637,6 +651,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static AlphaResolution ResolveProductChain(
             ScalarSemanticValue value,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             var multiplier = value.GetProductMultiplier();
@@ -667,12 +682,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                         value.GetChainSample(index),
                         value.GetChainChannel(index),
                         fieldProvider,
+                        samplingPolicy,
                         maxNoiseTexelPercent)
                     : ResolveMappedSample(
                         value.GetChainSample(index),
                         value.GetChainChannel(index),
                         map.Value,
                         fieldProvider,
+                        samplingPolicy,
                         maxNoiseTexelPercent);
                 if (!factor.IsResolved)
                 {
@@ -715,6 +732,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static AlphaResolution ResolveSaturatingSum(
             ScalarSemanticValue value,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             var first = value.GetSumFirst();
@@ -728,7 +746,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             var firstResolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(first),
-                fieldProvider, maxNoiseTexelPercent);
+                fieldProvider, samplingPolicy, maxNoiseTexelPercent);
             if (!firstResolution.IsResolved)
             {
                 return firstResolution;
@@ -736,7 +754,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             var secondResolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(second),
-                fieldProvider, maxNoiseTexelPercent);
+                fieldProvider, samplingPolicy, maxNoiseTexelPercent);
             if (!secondResolution.IsResolved)
             {
                 return secondResolution;
@@ -782,6 +800,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static AlphaResolution ResolveSaturatingDifference(
             ScalarSemanticValue value,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             var minuend = value.GetMinuend();
@@ -802,12 +821,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 // in [0,1] and fl(0 * s) is zero for every finite s.
                 return AlphaSemanticsResolver.Resolve(
                     SemanticOutput<ScalarSemanticValue>.Complete(minuend),
-                    fieldProvider, maxNoiseTexelPercent);
+                    fieldProvider, samplingPolicy, maxNoiseTexelPercent);
             }
 
             var subtrahendResolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(subtrahend),
-                fieldProvider, maxNoiseTexelPercent);
+                fieldProvider, samplingPolicy, maxNoiseTexelPercent);
             if (!subtrahendResolution.IsResolved)
             {
                 return subtrahendResolution;
@@ -846,6 +865,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             TextureSample sample,
             TextureChannel channel,
             AlphaFieldProvider fieldProvider,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             if (!IsSupportedMapping(sample.Coordinates))
@@ -853,8 +873,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return AlphaResolution.Refused(
                     AlphaResolutionFailure.UnsupportedUvMapping);
             }
-
-            var sampling = sample.Sampling;
 
             if (!fieldProvider(sample.Source, channel, out var chain) ||
                 chain == null)
@@ -864,7 +882,10 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return AlphaResolution.Classified(
-                chain, sampling, sample.Coordinates, maxNoiseTexelPercent);
+                chain,
+                samplingPolicy.ForProof(sample.Sampling),
+                sample.Coordinates,
+                maxNoiseTexelPercent);
         }
 
         /// <summary>

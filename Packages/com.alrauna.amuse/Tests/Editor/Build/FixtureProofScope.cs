@@ -33,5 +33,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 .intValue = AllSizes;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
+
+        /// <summary>
+        /// Stores desktop acceptance on this root's own optimizer through
+        /// its serialized field, so the fixture's local footprint proof
+        /// resolves under the accepted non-anisotropic policy. The
+        /// precondition it states: the fixtures prove their opaque
+        /// candidates against the narrow authored footprint, and only
+        /// the accepted policy projects that footprint. The conservative
+        /// desktop projection keeps the anisotropic footprint that
+        /// refuses them. Each scenario callsite states its own
+        /// acceptance. No global setup grants acceptance.
+        /// </summary>
+        internal static void AcceptDesktopAnisotropyDifferences(
+            GameObject root)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                .boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
     }
 }

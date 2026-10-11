@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Aggressive",
-  "description": "The same safe checks for now. A place for faster checks later.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
   "features": {
     "alphaSeparator": true
   },
@@ -9,10 +9,12 @@
     "preserveTransparencyMaxMipLevel": 4,
     "preserveTransparencyMinTextureSize": 128,
     "minimumOpaqueCoveragePercent": 25,
-    "minimumOpaqueAlphaPercent": 100,
-    "polygonAlphaUpperClampPercent": 100,
-    "polygonMinimumOpaqueCoveragePercent": 100,
+    "minimumOpaqueAlphaPercent": 95,
+    "polygonAlphaUpperClampPercent": 94,
+    "polygonMinimumOpaqueCoveragePercent": 95,
     "allowDepthTestChange": true,
-    "ignoreOutOfRangeMaterialSlots": true
+    "ignoreOutOfRangeMaterialSlots": true,
+    "acceptDesktopAnisotropyDifferences": true,
+    "acceptMobileAnisotropyDifferences": true
   }
 }

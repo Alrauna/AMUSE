@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "name": "Normal",
-  "description": "The same safe checks for now. A place for the default balance later.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
   "features": {
     "alphaSeparator": true
   },
@@ -13,6 +13,8 @@
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,
     "allowDepthTestChange": true,
-    "ignoreOutOfRangeMaterialSlots": true
+    "ignoreOutOfRangeMaterialSlots": true,
+    "acceptDesktopAnisotropyDifferences": true,
+    "acceptMobileAnisotropyDifferences": true
   }
 }

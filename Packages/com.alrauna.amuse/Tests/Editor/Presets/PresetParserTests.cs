@@ -6,7 +6,7 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetParserTests
     {
         private const string ValidJson = @"{
-  ""schemaVersion"": 1,
+  ""schemaVersion"": 2,
   ""name"": ""Safe"",
   ""description"": ""Shipped defaults."",
   ""features"": { ""alphaSeparator"": true },
@@ -18,13 +18,28 @@ namespace Alrauna.Amuse.Tests.Editor
     ""polygonAlphaUpperClampPercent"": 100,
     ""polygonMinimumOpaqueCoveragePercent"": 100,
     ""allowDepthTestChange"": true,
-    ""ignoreOutOfRangeMaterialSlots"": true
+    ""ignoreOutOfRangeMaterialSlots"": true,
+    ""acceptDesktopAnisotropyDifferences"": false,
+    ""acceptMobileAnisotropyDifferences"": false
   }
 }";
 
         private static string WithSettings(string find, string replace)
         {
             return ValidJson.Replace(find, replace);
+        }
+
+        // A realistic version 1 body: version 1 and none of the
+        // version 2 acceptance keys.
+        private static string LegacyVersionOneBody()
+        {
+            return WithSettings(
+                    "\"schemaVersion\": 2", "\"schemaVersion\": 1")
+                .Replace(
+                    "    \"ignoreOutOfRangeMaterialSlots\": true,\n" +
+                    "    \"acceptDesktopAnisotropyDifferences\": false,\n" +
+                    "    \"acceptMobileAnisotropyDifferences\": false\n",
+                    "    \"ignoreOutOfRangeMaterialSlots\": true\n");
         }
 
         private static void Refuses(string json, PresetLoadRefusal expected)
@@ -35,7 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ValidSchemaParsesAllNineValues()
+        public void ValidSchemaParsesAllElevenValues()
         {
             var parsed = PresetParser.TryParse(
                 ValidJson, out var preset, out var refusal);
@@ -53,6 +68,21 @@ namespace Alrauna.Amuse.Tests.Editor
                 Is.EqualTo(100));
             Assert.That(preset.AllowDepthTestChange, Is.True);
             Assert.That(preset.IgnoreOutOfRangeMaterialSlots, Is.True);
+            Assert.That(preset.AcceptDesktopAnisotropyDifferences, Is.False);
+            Assert.That(preset.AcceptMobileAnisotropyDifferences, Is.False);
+        }
+
+        [Test]
+        public void AcceptedTrueValuesParseThrough()
+        {
+            var json = WithSettings(
+                "\"acceptDesktopAnisotropyDifferences\": false",
+                "\"acceptDesktopAnisotropyDifferences\": true");
+            Assert.That(PresetParser.TryParse(
+                json, out var preset, out var refusal),
+                Is.True, refusal.ToString());
+            Assert.That(preset.AcceptDesktopAnisotropyDifferences, Is.True);
+            Assert.That(preset.AcceptMobileAnisotropyDifferences, Is.False);
         }
 
         [Test]
@@ -71,15 +101,44 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 1", "\"schemaVersion\": 2");
+                "\"schemaVersion\": 2", "\"schemaVersion\": 3");
             Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
+        [Test]
+        public void SchemaVersionOneRefusesAsUnknown()
+        {
+            // A real version 1 file carries only the version 1 keys.
+            // It refuses with UnknownSchemaVersion, not with a
+            // missing-key refusal, and nothing invents its missing
+            // acceptance values.
+            var legacy = LegacyVersionOneBody();
+            Refuses(legacy, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
+        [Test]
+        public void MissingAcceptanceKeyRefuses()
+        {
+            var json = ValidJson.Replace(
+                "    \"acceptDesktopAnisotropyDifferences\": false,\n",
+                "");
+            Refuses(json, PresetLoadRefusal.MissingField);
+        }
+
+        [Test]
+        public void NonBooleanAcceptanceKeyRefuses()
+        {
+            var json = WithSettings(
+                "\"acceptMobileAnisotropyDifferences\": false",
+                "\"acceptMobileAnisotropyDifferences\": 1");
+            Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
         [Test]
         public void UnknownTopLevelFieldRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 1", "\"schemaVersion\": 1, \"extra\": 1");
+                "\"schemaVersion\": 2", "\"schemaVersion\": 2, \"extra\": 1");
             Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
@@ -113,7 +172,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongValueTypeForSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 1", "\"schemaVersion\": \"1\"");
+                "\"schemaVersion\": 2", "\"schemaVersion\": \"2\"");
             Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
@@ -201,7 +260,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondIntRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 1",
+                    "\"schemaVersion\": 2",
                     "\"schemaVersion\": 3000000000"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -210,7 +269,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondLongRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 1",
+                    "\"schemaVersion\": 2",
                     "\"schemaVersion\": 99999999999999999999"),
                 PresetLoadRefusal.ValueOutOfRange);
         }

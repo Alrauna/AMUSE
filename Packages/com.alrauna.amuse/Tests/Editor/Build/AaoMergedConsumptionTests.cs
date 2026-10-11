@@ -208,7 +208,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     channel,
                     out chain);
             var resolution = AlphaSemanticsResolver.Resolve(
-                semantics.Semantics.Alpha, provider, 0);
+                semantics.Semantics.Alpha, provider, AlphaSamplingPolicy.ConservativeDesktop, 0);
             Assert.That(
                 resolution.Failure,
                 Is.EqualTo(AlphaResolutionFailure.None),
@@ -241,6 +241,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "control");
                 var texture = Track(ImportBandedAlphaTexture("banded_control"));
                 var material = Track(
@@ -297,6 +298,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "mixed-" + (sharedTexture ? "s" : "d"));
 
                 var transparentTexture =
@@ -359,6 +361,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "alternative");
                 var texture = Track(ImportBandedAlphaTexture("banded_alternative"));
                 var transparent = Track(NewTransparentMaterial(
@@ -400,6 +403,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "shared-renderers");
                 var texture = Track(ImportBandedAlphaTexture("banded_shared"));
                 var transparent = Track(NewTransparentMaterial(
@@ -456,6 +460,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var traceAndOptimize =
                     root.AddComponent(traceAndOptimizeType);
                 ConfigureTraceAndOptimize(
@@ -532,6 +537,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var traceAndOptimize =
                     root.AddComponent(traceAndOptimizeType);
                 ConfigureTraceAndOptimize(
@@ -691,6 +697,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var traceAndOptimize =
                     root.AddComponent(traceAndOptimizeType);
                 ConfigureTraceAndOptimize(
@@ -916,6 +923,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "swap");
                 var texture = Track(ImportBandedAlphaTexture("banded_swap"));
                 var transparent = Track(NewTransparentMaterial(
@@ -1010,6 +1018,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "mask");
                 var texture = Track(ImportBandedAlphaTexture("banded_mask"));
                 var inert = Track(NewMaskedTransparentMaterial(
@@ -1049,10 +1058,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The streaming boundary: a material whose main texture imports
-        /// with streaming mipmaps can never hand the capture a resident
-        /// field, so the renderer must refuse conservatively - nothing
-        /// proven, nothing moved, every authored triangle including the
-        /// positive control on its original material.
+        /// with streaming mipmaps captures through the production
+        /// readable-clone route, because the texture's own GPU read is
+        /// measured untrustworthy. The oracle keeps both arms: a renderer
+        /// refused by name must move nothing, and an analyzed renderer
+        /// must keep the partial band on its original material while the
+        /// opaque control converts under the scenario's accepted desktop
+        /// policy. A missing-resident-data refusal is a capture-time gate
+        /// upstream of the proof policy, so acceptance never bypasses it.
         /// </summary>
         [Test]
         public void StreamingTextureRefusesItsRendererConservatively()
@@ -1065,6 +1078,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "streaming");
                 var texture = Track(
                     ImportBandedAlphaTexture("banded_streaming",
@@ -1112,6 +1126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var traceAndOptimize =
                     root.AddComponent(traceAndOptimizeType);
                 ConfigureTraceAndOptimize(
@@ -1196,6 +1211,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 AttachAnimationFixture(root, "cutout-presence");
                 var texture = Track(ImportBandedAlphaTexture("banded_cutout_presence"));
                 var transparent = Track(NewTransparentMaterial(
@@ -1245,6 +1261,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var traceAndOptimize =
                     root.AddComponent(traceAndOptimizeType);
                 ConfigureTraceAndOptimize(

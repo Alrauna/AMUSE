@@ -238,6 +238,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                            AnimatedPropertyRef Reference)> slotBindings,
             MaterialEvidenceRequest relevance,
             AlphaFieldSet alphaFields,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
             IReadOnlyList<BlockStateEntry> slotBlockEntries = null)
@@ -298,7 +299,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var resolution =
                     ResolveAdmittedMaterialSemantics(
                         admitted, capturedSemantics, alphaFields,
-                        maxNoiseTexelPercent);
+                        samplingPolicy, maxNoiseTexelPercent);
                 if (resolution.Failure == AlphaResolutionFailure.SemanticsUnknown)
                 {
                     // A recognized locked material refuses by its own name
@@ -333,7 +334,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// <summary>
         /// One per-material resolution rule: the family's own alpha request scopes
         /// the field lookup to the material's own evidence, and the resolver runs
-        /// at the caller's noise bound. The admitted-slot loop and the Host probe
+        /// at the caller's noise bound under the caller's named
+        /// <see cref="AlphaSamplingPolicy"/>. The admitted-slot loop and the Host probe
         /// both call this, so field scoping cannot drift between the proof path
         /// and the census calibration path.
         /// </summary>
@@ -341,6 +343,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             CapturedAlphaMaterial material,
             CapturedAlphaSemantics capturedSemantics,
             AlphaFieldSet alphaFields,
+            AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent)
         {
             var predicateRequest =
@@ -362,6 +365,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             return AlphaSemanticsResolver.Resolve(
                 capturedSemantics.Semantics.Alpha,
                 materialFields,
+                samplingPolicy,
                 maxNoiseTexelPercent);
         }
 

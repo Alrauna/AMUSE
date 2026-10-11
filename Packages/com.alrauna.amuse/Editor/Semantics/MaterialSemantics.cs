@@ -143,10 +143,19 @@ namespace Alrauna.Amuse.Editor.Semantics
     internal readonly struct TextureSampling : IEquatable<TextureSampling>
     {
         private const TextureAnisoMode DefaultAniso = TextureAnisoMode.None;
+        private const bool DefaultForceAnisotropyEligible = true;
 
         internal TextureFilterMode Filter { get; }
         internal TextureWrapMode Wrap { get; }
         internal TextureAnisoMode Aniso { get; }
+
+        /// <summary>
+        /// Whether the authored sampler could sample this texture
+        /// anisotropically at all. Authored level zero is never eligible,
+        /// and authored levels of one or above always are. Capture reads
+        /// this fact from the import state; a proof policy reads it later.
+        /// </summary>
+        internal bool ForceAnisotropyEligible { get; }
 
         /// <summary>
         /// The common sampling shape: no anisotropy.
@@ -161,7 +170,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal TextureSampling(
             TextureFilterMode filter,
             TextureWrapMode wrap,
-            TextureAnisoMode aniso)
+            TextureAnisoMode aniso,
+            bool forceAnisotropyEligible = DefaultForceAnisotropyEligible)
         {
             if (!Enum.IsDefined(typeof(TextureFilterMode), filter))
             {
@@ -175,16 +185,25 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 throw new ArgumentOutOfRangeException(nameof(aniso));
             }
+            if (aniso == TextureAnisoMode.Anisotropic &&
+                !forceAnisotropyEligible)
+            {
+                throw new InvalidOperationException(
+                    "An anisotropic sample must stay eligible for forced " +
+                    "anisotropy.");
+            }
 
             Filter = filter;
             Wrap = wrap;
             Aniso = aniso;
+            ForceAnisotropyEligible = forceAnisotropyEligible;
         }
 
         public bool Equals(TextureSampling other)
         {
             return Filter == other.Filter && Wrap == other.Wrap &&
-                   Aniso == other.Aniso;
+                   Aniso == other.Aniso &&
+                   ForceAnisotropyEligible == other.ForceAnisotropyEligible;
         }
 
         public override bool Equals(object obj)
@@ -194,7 +213,9 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         public override int GetHashCode()
         {
-            return (((int)Filter * 397) ^ (int)Wrap) * 397 ^ (int)Aniso;
+            var baseHash = (((int)Filter * 397) ^ (int)Wrap) * 397 ^
+                           (int)Aniso;
+            return baseHash * 397 ^ (ForceAnisotropyEligible ? 1 : 0);
         }
     }
 

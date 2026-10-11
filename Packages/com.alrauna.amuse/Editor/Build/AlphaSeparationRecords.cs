@@ -107,6 +107,20 @@ namespace Alrauna.Amuse.Editor.Build
         /// have replaced the mesh or the slot array.</summary>
         RendererChangedSincePreparation,
 
+        // --- Avatar-scoped members. Applied to every prepared candidate
+        // slot of the whole avatar and to nothing else. The bucket counts
+        // dropped slots, exactly as the renderer-scoped members do.
+
+        /// <summary>The live build target and acceptance settings no
+        /// longer re-select the policy the barrier captured: the target
+        /// changed, the acceptance changed, or the live target has no
+        /// proof policy at all. Every prepared candidate is stale, so
+        /// the whole prepared record refuses and nothing is written.
+        /// This is an ordinary refusal, not a defect: the user or a
+        /// foreign pass may legitimately have changed the target or the
+        /// acceptance between the capture and the apply pass.</summary>
+        SamplingPolicyChanged,
+
         // --- Transient-unlock window members, appended at the tail. The
         // window swap-in and the window close are their only writers, and
         // they name slot-scoped outcomes of the unlock window. The census

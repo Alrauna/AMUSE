@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.localization;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Build
@@ -517,20 +519,55 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One Information entry when the active build target has no
+        /// proof policy. The caller reports before analysis and keeps
+        /// the conservative policy, so the entry names the target and
+        /// the fact that the acceptance settings do nothing on it.
+        /// </summary>
+        internal static void UnsupportedSamplingTarget(
+            GameObject avatarRoot, BuildTarget target)
+        {
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    "amuse.sampling.UnsupportedBuildTarget",
+                    target.ToString());
+            }
+        }
+
         internal static void AvatarSummary(
             GameObject avatarRoot,
             int analyzedRenderers,
             int movedTriangles,
             int untouchedRenderers,
             AmuseBuildPath buildPath,
-            bool alphaPolicyActive)
+            bool alphaPolicyActive,
+            BuildTarget capturedTarget,
+            AlphaSamplingPolicy capturedPolicy)
         {
+            // The sampling disclosure names the captured target and the
+            // selected policy category exactly once per analyzed build,
+            // and it discloses even when zero triangles moved. It stays
+            // separate from the tolerance sentence: the tolerance text
+            // assumes moved triangles and describes the alpha
+            // tolerances, never the sampling proof. The key builder
+            // returns the base key; the disclosure reads the
+            // description string, like every other summary sentence.
+            var samplingSentence = string.Format(
+                AmuseReportStrings.Get(
+                    AmuseReportStrings.SamplingSummaryKey(capturedPolicy)
+                    + ":description"),
+                TargetGroupName(capturedTarget));
             var summary = string.Format(
                 AmuseReportStrings.Get(
                     "amuse.summary.Title:description"),
                 analyzedRenderers,
                 movedTriangles,
-                untouchedRenderers);
+                untouchedRenderers,
+                samplingSentence);
             var policySentence = alphaPolicyActive
                 ? " " + AmuseReportStrings.Get(
                     "amuse.summary.PolicyActive:description")
@@ -548,14 +585,15 @@ namespace Alrauna.Amuse.Editor.Build
                     analyzedRenderers,
                     movedTriangles,
                     untouchedRenderers,
+                    samplingSentence,
                 };
                 if (alphaPolicyActive)
                 {
-                    // The policy disclosure rides in the report arguments.
-                    // The description format keeps its three slots, so the
-                    // inert report composes exactly its previous text, and
-                    // the status store line above is where the sentence
-                    // surfaces.
+                    // The tolerance disclosure keeps its own trailing
+                    // argument, exactly as it previously followed the
+                    // summary counts. The description format holds no
+                    // slot for it, so the report itself stays inert and
+                    // the status line above is where it surfaces.
                     reportArguments.Add(AmuseReportStrings.Get(
                         "amuse.summary.PolicyActive:description"));
                 }
@@ -565,6 +603,27 @@ namespace Alrauna.Amuse.Editor.Build
                     ErrorSeverity.Information,
                     "amuse.summary.Title",
                     reportArguments.ToArray());
+            }
+        }
+
+        /// <summary>
+        /// The captured build target, named for the reader. Only the
+        /// targets with a proof policy get their own name; a target
+        /// without one keeps a plain name, because the selection refused
+        /// it before the analysis ran.
+        /// </summary>
+        private static string TargetGroupName(BuildTarget target)
+        {
+            switch (target)
+            {
+                case BuildTarget.StandaloneWindows64:
+                    return "the Windows target";
+                case BuildTarget.Android:
+                    return "the Android target";
+                case BuildTarget.iOS:
+                    return "the iOS target";
+                default:
+                    return "this build target";
             }
         }
     }

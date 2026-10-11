@@ -474,10 +474,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static AlphaResolution ResolveRed(
             ScalarSemanticValue value,
-            AlphaFieldProvider fields)
+            AlphaFieldProvider fields,
+            AlphaSamplingPolicy samplingPolicy =
+                AlphaSamplingPolicy.ConservativeDesktop)
         {
             return AlphaSemanticsResolver.Resolve(
-                SemanticOutput<ScalarSemanticValue>.Complete(value), fields, 0);
+                SemanticOutput<ScalarSemanticValue>.Complete(value), fields,
+                samplingPolicy, 0);
         }
 
         private static TriangleAlphaInput InteriorTriangle()
@@ -555,7 +558,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             // No-op guard: the solid field proves the interior triangle, so
             // the outcomes below come from the hole texels alone.
-            var solid = ResolveRed(value, SolidRedField());
+            var solid = ResolveRed(
+                value, SolidRedField(),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(solid.IsResolved, Is.True);
             Assert.That(
                 solid.Classify(InteriorTriangle()),
@@ -564,7 +569,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // A red hole inside the domain keeps the triangle unproven. It
             // must neither widen into a transparency claim over other
             // triangles nor prove opaque.
-            var holed = ResolveRed(value, RedFieldWithHole(1, 1));
+            var holed = ResolveRed(
+                value, RedFieldWithHole(1, 1),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(holed.IsResolved, Is.True);
             Assert.That(
                 holed.Classify(InteriorTriangle()),
@@ -575,7 +582,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // bilinear footprint blends the wrapped texels. The wrap-blend
             // rule keeps that triangle unproven, while the same field proves
             // the interior triangle that never touches the wrapped support.
-            var seam = ResolveRed(value, RedFieldWithHole(0, 3));
+            var seam = ResolveRed(
+                value, RedFieldWithHole(0, 3),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(seam.IsResolved, Is.True);
             Assert.That(
                 seam.Classify(InteriorTriangle()),
@@ -733,7 +742,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // consults a field.
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                RefusingFields,
+                RefusingFields, AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -913,7 +922,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             // A field that stores full red everywhere proves the triangle:
             // the term is exactly one at every reachable texel.
-            var solid = ResolveRed(value, SolidRedField());
+            var solid = ResolveRed(
+                value, SolidRedField(),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(solid.IsResolved, Is.True);
             Assert.That(
                 solid.Classify(InteriorTriangle()),
@@ -965,7 +976,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var resolution = AlphaSemanticsResolver.Resolve(
                 SemanticOutput<ScalarSemanticValue>.Complete(value),
-                SolidRedField(),
+                SolidRedField(), AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(resolution.IsResolved, Is.True);
@@ -1039,7 +1050,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     chain = new AlphaMipChain(
                         new[] { level0, level1 });
                     return true;
-                });
+                },
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
             Assert.That(mipped.IsResolved, Is.True);
             Assert.That(
@@ -1049,7 +1061,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: the single-level solid field proves the same
             // triangle, so the Unknown verdict comes from the witnessing
             // level alone.
-            var solid = ResolveRed(value, SolidRedField());
+            var solid = ResolveRed(
+                value, SolidRedField(),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(
                 solid.Classify(InteriorTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
@@ -1097,13 +1111,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // The full-red field proves the triangle through the mapped
             // chain, and a hole keeps it unproven, exactly like the
             // mapless (1, 0) multiply twin.
-            var solid = ResolveRed(value, SolidRedField());
+            var solid = ResolveRed(
+                value, SolidRedField(),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(solid.IsResolved, Is.True);
             Assert.That(
                 solid.Classify(InteriorTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
 
-            var holed = ResolveRed(value, RedFieldWithHole(1, 1));
+            var holed = ResolveRed(
+                value, RedFieldWithHole(1, 1),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(holed.IsResolved, Is.True);
             Assert.That(
                 holed.Classify(InteriorTriangle()),
@@ -1229,7 +1247,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             // No-op guard: the solid field proves the interior triangle, so
             // the outcomes below come from the hole texels alone.
-            var solid = ResolveRed(value, SolidRedField());
+            var solid = ResolveRed(
+                value, SolidRedField(),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(solid.IsResolved, Is.True);
             Assert.That(
                 solid.Classify(InteriorTriangle()),
@@ -1239,7 +1259,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // plan: its bilinear footprint blends the sub-one texel, so the
             // blended alpha dips below one inside the triangle and the
             // verdict must not claim it opaque.
-            var holed = ResolveRed(value, RedFieldWithHole(1, 1));
+            var holed = ResolveRed(
+                value, RedFieldWithHole(1, 1),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(holed.IsResolved, Is.True);
             Assert.That(
                 holed.Classify(InteriorTriangle()),
@@ -1252,7 +1274,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // the interior triangle that never touches the wrapped support.
             // A hole must therefore never widen into a transparency claim
             // over the triangles it does not touch.
-            var seam = ResolveRed(value, RedFieldWithHole(0, 3));
+            var seam = ResolveRed(
+                value, RedFieldWithHole(0, 3),
+                AlphaSamplingPolicy.AcceptedNonAnisotropic);
             Assert.That(seam.IsResolved, Is.True);
             Assert.That(
                 seam.Classify(InteriorTriangle()),

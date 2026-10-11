@@ -1306,8 +1306,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     TextureFilterMode.Point, TextureWrapMode.Clamp));
             var alpha = SemanticOutput<ScalarSemanticValue>.Complete(
                 ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
+
+            // The uv1 layer's local predicate is the point, so this probe
+            // states its footprint-free precondition explicitly.
             var result = UnityRendererAlphaAnalysis.Analyze(
                 extraction.Snapshot,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
                 material => new CapturedAlphaSemantics(
                     new MaterialSemantics(
                         SemanticOutput<ColorSemanticValue>.Unknown(),
@@ -1325,6 +1329,151 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "the uv1 coordinates name the opaque texels; reading uv0 " +
                 "instead would answer transparent, and dropping the extra " +
                 "sets would answer Unknown");
+        }
+
+        /// <summary>
+        /// The shared fixture of the default-versus-explicit policy pair:
+        /// one material whose alpha samples a mixed field through an
+        /// eligible Point/Clamp sampler, over one triangle in the field's
+        /// opaque corner. An instance helper because it tracks a Mesh and
+        /// builds a Material through the suite's owned-object seams.
+        /// </summary>
+        private (UnityRendererAlphaSnapshot Snapshot,
+                CapturedAlphaMaterial Material)
+            MixedCornerProbe(out SemanticOutput<ScalarSemanticValue> alpha)
+        {
+            var sourceId = new TextureSourceId("amuse-tests:policy-probe:1");
+            var chain = new AlphaMipChain(new[]
+            {
+                new AlphaTextureData(
+                    2, 2, new byte[] { 255, 255, 0, 0 }),
+            });
+            var texture = new CapturedTextureEvidence(
+                true, sourceId, 1f, AlphaPolicyBounds.Inert,
+                true, new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp),
+                false, default(TextureColorInterpretation),
+                false, false,
+                false, true, chain,
+                TextureCaptureRefusalReason.None,
+                false, null,
+                TextureCaptureRefusalReason.None);
+            var assignment = new CapturedTextureAssignment(
+                true, TextureEvidenceKinds.AlphaChannel,
+                false, Vector2.one, Vector2.zero,
+                texture, new TextureCaptureRefusal[0]);
+            var evidence = new CapturedMaterialEvidence(
+                false, null, false, default(ColorSpace),
+                new CapturedMaterialEvidence.PresenceEntry[0],
+                new CapturedMaterialEvidence.ScalarEntry[0],
+                new CapturedMaterialEvidence.ColorEntry[0],
+                new CapturedMaterialEvidence.VectorEntry[0],
+                new[]
+                {
+                    new CapturedMaterialEvidence.TextureEntry(
+                        "_MainTex", true, assignment),
+                },
+                new[] { texture });
+            var captured = new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                evidence,
+                default(Alrauna.Amuse.Editor.Semantics.Poiyomi
+                    .PoiyomiSourceEvidence),
+                null);
+
+            var mesh = Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                Vector3.zero, Vector3.right, Vector3.up,
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+            };
+            mesh.subMeshCount = 1;
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            var renderer = NewSkinned(mesh, NewMaterial());
+
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, new[] { captured });
+            Assert.That(
+                extraction.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+
+            var sample = new TextureSample(
+                sourceId,
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                new TextureSampling(
+                    TextureFilterMode.Point, TextureWrapMode.Clamp));
+            alpha = SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Texture(sample, TextureChannel.Alpha));
+            return (extraction.Snapshot, captured);
+        }
+
+        private static CapturedAlphaMaterialSemanticsResolver
+            SampledAlphaResolver(
+                SemanticOutput<ScalarSemanticValue> alpha)
+        {
+            return material => new CapturedAlphaSemantics(
+                new MaterialSemantics(
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    alpha,
+                    SemanticOutput<ColorSemanticValue>.Unknown(),
+                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                null);
+        }
+
+        /// <summary>
+        /// A direct probe that names no policy stays conservative: the
+        /// eligible sampler's documented level-one footprint keeps the mixed
+        /// field unproven. The submesh resolves — this is the classifier's
+        /// Unknown, not a refusal.
+        /// </summary>
+        [Test]
+        public void DirectProbeDefaultsToTheConservativeDesktopPolicy()
+        {
+            var (snapshot, _) = MixedCornerProbe(out var alpha);
+
+            var result = UnityRendererAlphaAnalysis.Analyze(
+                snapshot, SampledAlphaResolver(alpha));
+
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                result.Submeshes[0].Failure,
+                Is.EqualTo(AlphaResolutionFailure.None));
+            Assert.That(
+                result.Plan.OpaqueTriangleCount,
+                Is.EqualTo(0),
+                "the conservative desktop policy owns the authored " +
+                "level-one footprint, so the mixed corner stays unknown");
+        }
+
+        /// <summary>
+        /// The same probe with an explicit accepted policy authorizes the
+        /// local proof: the footprint drops and the corner triangle proves.
+        /// </summary>
+        [Test]
+        public void ExplicitPolicyOverloadAuthorizesTheAcceptedProbe()
+        {
+            var (snapshot, _) = MixedCornerProbe(out var alpha);
+
+            var result = UnityRendererAlphaAnalysis.Analyze(
+                snapshot,
+                AlphaSamplingPolicy.AcceptedNonAnisotropic,
+                SampledAlphaResolver(alpha));
+
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.None));
+            Assert.That(
+                result.Plan.OpaqueTriangleCount,
+                Is.EqualTo(1),
+                "the accepted policy drops the footprint, so the mixed " +
+                "corner proves");
         }
     }
 }

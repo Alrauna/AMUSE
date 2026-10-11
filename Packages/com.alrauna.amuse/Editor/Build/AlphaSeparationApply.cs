@@ -83,20 +83,31 @@ namespace Alrauna.Amuse.Editor.Build
             // and never gain a summary line.
             if (state.ReachedRendererAnalysis)
             {
+                // The summary discloses the target and the policy the
+                // barrier captured before analysis, so the report names
+                // the proof scope this run actually used, even when the
+                // run moved zero triangles.
                 AmuseReports.AvatarSummary(
                     context.AvatarRootObject,
                     state.AnalyzedRendererCount,
                     state.AppliedOpaqueTriangleCount,
                     state.UntouchedRendererCount,
                     lifecycle.BuildPath,
-                    state.AlphaPolicyActive);
+                    state.AlphaPolicyActive,
+                    state.SamplingTarget,
+                    state.SamplingPolicy);
             }
         }
 
         /// <summary>
         /// Validates every candidate slot, finalizes against the surviving
         /// set, and sweeps every transient no surviving slot references.
-        /// Reads and AMUSE-owned transient objects only: no renderer, no clip
+        /// Before any validation, the live build target and acceptance
+        /// settings must re-select the policy the barrier captured; a
+        /// stale target or acceptance refuses every prepared candidate,
+        /// sweeps with empty survivor lists, and returns a refused
+        /// decision. Reads and AMUSE-owned transient objects only: no
+        /// renderer, no clip
         /// and no source asset is written. <see cref="Execute"/> calls it
         /// directly under the lifecycle gate.
         /// </summary>
@@ -115,6 +126,67 @@ namespace Alrauna.Amuse.Editor.Build
             if (separation == null || separation.Renderers.Count == 0)
             {
                 return AmusePreparationDecision.NoMutation();
+            }
+
+            // --- Stale build-policy guard, before any survivor
+            // validation. The prepared proof rests on the build target
+            // and the acceptance settings the barrier captured once,
+            // before per-renderer analysis. Between that capture and
+            // this pass, the user or a foreign pass can change either,
+            // so the live values must re-select the captured state
+            // exactly. A live target with no proof policy refuses too:
+            // no policy means no proof, so nothing prepared under the
+            // captured policy may be applied. This is an ordinary
+            // refusal, not a defect — like the renderer-scope checks
+            // below it reads only live facts, writes nothing, and drops
+            // every prepared candidate of the whole avatar.
+            var optimizer = context.AvatarRootObject
+                .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var liveTarget = EditorUserBuildSettings.activeBuildTarget;
+            var livePolicyAdmitted = PlatformAlphaSamplingPolicy.TrySelect(
+                liveTarget,
+                optimizer != null &&
+                    optimizer.AcceptDesktopAnisotropyDifferences,
+                optimizer != null &&
+                    optimizer.AcceptMobileAnisotropyDifferences,
+                out var livePolicy);
+            if (!state.HasSamplingPolicy ||
+                !livePolicyAdmitted ||
+                liveTarget != state.SamplingTarget ||
+                livePolicy != state.SamplingPolicy)
+            {
+                // Every prepared candidate slot is stale, so every one
+                // is recorded and reported, exactly as the renderer-
+                // scoped refusals report one entry per dropped slot.
+                foreach (var prepared in separation.Renderers)
+                {
+                    foreach (var candidate in prepared.CandidateSlots)
+                    {
+                        state.RecordSlotRefusal(
+                            AlphaSeparationSlotRefusal
+                                .SamplingPolicyChanged);
+                        AmuseReports.SlotSeparationRefusal(
+                            prepared.Target.Renderer,
+                            candidate.Plan.SourceMaterialBindingIndex,
+                            AlphaSeparationSlotRefusal
+                                .SamplingPolicyChanged);
+                    }
+                }
+
+                // Empty survivor lists sweep every transient: no
+                // candidate survives, so the existing sweep destroys
+                // every created material clone and every mesh clone,
+                // and clears the generated-evidence caches exactly as
+                // the surviving-set sweep does.
+                SweepUnreferencedClones(
+                    separation,
+                    separation.Renderers
+                        .Select(_ => new List<PreparedSlotSeparation>())
+                        .ToList());
+
+                return AmusePreparationDecision.Refused(
+                    AlphaSeparationSlotRefusal
+                        .SamplingPolicyChanged.ToString());
             }
 
             // The reactivated extension owns the only live view of the
