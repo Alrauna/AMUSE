@@ -8880,6 +8880,106 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Falsifier: a preparation pass that leaves an unproven
+        // anisotropic slot silent records no refusal, so the console
+        // never names the acceptance hint that would widen the proof. ---
+
+        /// <summary>
+        /// A resolved slot whose proof sampling is anisotropic under the
+        /// conservative desktop policy proves no triangle, so its plan
+        /// stays unchanged and the opaque-candidate gate would return
+        /// before the candidate loop could report any cause. The
+        /// preparation pass must evaluate such unproven slots before that
+        /// gate and record the exact refusal once per slot.
+        /// </summary>
+        [Test]
+        public void UnchangedSlotWithAnisotropicSampling_RecordsAnisotropyDifferencesRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE anisotropy refusal candidate");
+            Mesh mesh = null;
+            Material material = null;
+            try
+            {
+                // The opt-in component on the avatar root is the pass's
+                // trigger: without it the barrier returns before any
+                // renderer is observed. No acceptance field is set, so
+                // the build holds the conservative desktop policy.
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+
+                // The mixed half field imports at authored level one, so
+                // the conservative desktop policy projects an anisotropic
+                // proof sampling and every triangle stays unproven.
+                AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+                var mixed = AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "aniso_refusal_tex",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels());
+                mesh = AmusePlatformFinishPluginTests.MixedHalfMesh();
+                material = SampledAlphaMaterial(mixed);
+
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                // Forced On quality: the refusal must ride the captured
+                // policy, never the editor's quality mode.
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    UnityEngine.AnisotropicFiltering.ForceEnable;
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, PreparationTestPlatform.Instance);
+                context.GetState<AmusePlatformFinishState>()
+                    .AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest,
+                    VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials,
+                    VerifiedPoiyomiTestSeams.VerifiedAlphaOnly);
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.AnisotropyDifferences),
+                    Is.EqualTo(1),
+                    "an unproven slot under conservative anisotropic " +
+                    "sampling must record the AnisotropyDifferences refusal");
+            }
+            finally
+            {
+                DestroyControllerGraph(root, null);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        /// <summary>
+        /// The verified Poiyomi stand-in material bound to one main
+        /// texture, with the force-opaque and mask-mode switches off, so
+        /// the proof reads the texture's own alpha field.
+        /// </summary>
+        private static Material SampledAlphaMaterial(Texture2D mainTex)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetTexture("_MainTex", mainTex);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            return material;
+        }
+
         private static Material NewMaterial(
             string fileName,
             string shaderName,

@@ -57,6 +57,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             return new AlphaMipChain(levels);
         }
 
+        /// <summary>One level of the named size and byte value.</summary>
+        private static AlphaMipChain SingleLevelChain(
+            int width, int height, byte value)
+        {
+            return Chain(Field(width, height, value));
+        }
+
         /// <summary>
         /// A level the classifier answers Unknown for, by the only mechanism that
         /// actually produces Unknown from grid contents: exceeding
@@ -1180,6 +1187,70 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.TryGetUniformOutcome(out var outcome), Is.False);
             Assert.That(outcome, Is.EqualTo(TriangleAlphaOutcome.Unknown));
+        }
+
+        // The two tests below pin `HasAnisotropicSampling` as an exact report
+        // of stored state, like the `TryGetUniformOutcome` pins above. A
+        // consumer must read the fact the resolution already holds, not
+        // infer anisotropy from a `Classify` answer, because the classifier
+        // returns Unknown for anisotropic samples of mixed fields, and
+        // fast paths answer fully opaque fields before the sampling check.
+
+        [Test]
+        public void ClassifiedResolution_ExposesAnisotropicSamplingStatus()
+        {
+            var chain = SingleLevelChain(8, 8, 255);
+            var identity = new UvMapping(0, Vector2.one, Vector2.zero);
+            var anisoSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.Anisotropic);
+            var nonAnisoSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None);
+
+            var anisoResolution = AlphaResolution.Classified(
+                chain, anisoSampling, identity, 0);
+            var nonAnisoResolution = AlphaResolution.Classified(
+                chain, nonAnisoSampling, identity, 0);
+            var uniformResolution = AlphaResolution.Uniform(
+                TriangleAlphaOutcome.ProvenOpaque);
+            var refusedResolution = AlphaResolution.Refused(
+                AlphaResolutionFailure.SemanticsUnknown);
+
+            Assert.That(anisoResolution.HasAnisotropicSampling, Is.True);
+            Assert.That(nonAnisoResolution.HasAnisotropicSampling, Is.False);
+            Assert.That(uniformResolution.HasAnisotropicSampling, Is.False);
+            Assert.That(refusedResolution.HasAnisotropicSampling, Is.False);
+        }
+
+        [Test]
+        public void CompositeResolutions_PropagateAnisotropicSampling()
+        {
+            var chain = SingleLevelChain(8, 8, 255);
+            var identity = new UvMapping(0, Vector2.one, Vector2.zero);
+            var anisoSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.Anisotropic);
+            var nonAnisoSampling = new TextureSampling(
+                TextureFilterMode.Bilinear,
+                TextureWrapMode.Clamp,
+                TextureAnisoMode.None);
+
+            var aniso = AlphaResolution.Classified(
+                chain, anisoSampling, identity, 0);
+            var nonAniso = AlphaResolution.Classified(
+                chain, nonAnisoSampling, identity, 0);
+
+            var product = AlphaResolution.Product(aniso, nonAniso);
+            var disjunction = AlphaResolution.Or(aniso, nonAniso);
+            var pureNonAnisoProduct = AlphaResolution.Product(nonAniso, nonAniso);
+
+            Assert.That(product.HasAnisotropicSampling, Is.True);
+            Assert.That(disjunction.HasAnisotropicSampling, Is.True);
+            Assert.That(pureNonAnisoProduct.HasAnisotropicSampling, Is.False);
         }
 
         // --- Channel invariant --------------------------------------------

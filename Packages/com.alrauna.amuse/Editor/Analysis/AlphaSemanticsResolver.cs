@@ -315,6 +315,34 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
 
         /// <summary>
+        /// Reports whether this resolution's proof sampling is anisotropic.
+        /// A classified resolution reads its own sampling. A product or a
+        /// disjunction is anisotropic when any factor is anisotropic. A
+        /// uniform resolution and a refused resolution answer false because
+        /// they consult no sampling.
+        /// </summary>
+        internal bool HasAnisotropicSampling
+        {
+            get
+            {
+                if (!IsResolved || _isUniform)
+                {
+                    return false;
+                }
+
+                if (_isProduct || _isDisjunction)
+                {
+                    return (_firstFactor != null &&
+                            _firstFactor.HasAnisotropicSampling) ||
+                           (_secondFactor != null &&
+                            _secondFactor.HasAnisotropicSampling);
+                }
+
+                return _sampling.Aniso == TextureAnisoMode.Anisotropic;
+            }
+        }
+
+        /// <summary>
         /// Classifies one triangle under this resolution. A uniform resolution is
         /// independent of geometry and UV data and ignores the triangle: a
         /// constant alpha cannot vary across the surface. A refused resolution

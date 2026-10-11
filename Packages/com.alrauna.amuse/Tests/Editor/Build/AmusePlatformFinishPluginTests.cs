@@ -3124,6 +3124,110 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Task 4 end-to-end regression. The fixture leaves desktop
+        /// acceptance false and runs the real barrier under Forced On
+        /// quality. The mixed-half slot cannot prove its transparent
+        /// half, so the build refuses the slot with the designed
+        /// AnisotropyDifferences cause. The NDMF console must carry
+        /// exactly one report. The report names the renderer, the slot
+        /// index, and the acceptance toggle, so a user can act on it.
+        /// </summary>
+        [Test]
+        public void AnisotropyDifferencesRefusalReportsToNdmfConsole()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var savedFiltering = UnityEngine.QualitySettings.anisotropicFiltering;
+            var root = new GameObject("AMUSE anisotropy reporting test");
+            Mesh mesh = null;
+            Material material = null;
+
+            try
+            {
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64));
+
+                var optimizer = root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+
+                // Acceptance stays false (the default):
+                var serialized = new SerializedObject(optimizer);
+                serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                    .boolValue = false;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                EnsureSamplingPolicyFolder();
+                var mixed = ImportMixedHalfTexture(
+                    "aniso_console_report", MixedHalfAlphaPixels());
+                mesh = MixedHalfMesh();
+                material = SampledAlphaMaterial(mixed);
+
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    UnityEngine.AnisotropicFiltering.ForceEnable;
+
+                var errors = ErrorReport.CaptureErrors(() =>
+                {
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, TestGenericPlatform.Instance);
+                    SeedRetainedHostBindings(context);
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly);
+                });
+
+                var anisoReports = new List<ErrorContext>();
+                foreach (var entry in errors)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.slotSeparation.AnisotropyDifferences")
+                    {
+                        anisoReports.Add(entry);
+                    }
+                }
+
+                Assert.That(
+                    anisoReports, Has.Count.EqualTo(1),
+                    "NDMF console must receive exactly one AnisotropyDifferences report");
+                var message = anisoReports[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(renderer.gameObject.name));
+                Assert.That(message, Does.Contain("slot 0"));
+                Assert.That(message, Does.Contain("anisotropic sampling"),
+                    "the console description must name the anisotropic " +
+                    "sampling cause");
+                // NDMF renders the hint outside ToMessage, so the
+                // actionable toggle guidance is checked through the
+                // formatted hint of the same report entry.
+                var hint = ((SimpleError)anisoReports[0].TheError)
+                    .FormatHint();
+                Assert.That(hint, Is.Not.Null);
+                Assert.That(hint, Does.Contain(
+                    "Accept Desktop Anisotropy Differences"));
+            }
+            finally
+            {
+                UnityEngine.QualitySettings.anisotropicFiltering = savedFiltering;
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (material != null) Object.DestroyImmediate(material);
+                if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+                }
+            }
+        }
+
+        /// <summary>
         /// The folder the mixed-half fixtures import their textures into.
         /// The importing test creates it and deletes it in its finally.
         /// </summary>

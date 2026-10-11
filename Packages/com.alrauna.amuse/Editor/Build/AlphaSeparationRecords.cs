@@ -82,6 +82,14 @@ namespace Alrauna.Amuse.Editor.Build
         /// setting would let the same proof split.</summary>
         OpaqueCoverageBelowMinimum,
 
+        /// <summary>The slot was left unchanged because its texture uses
+        /// anisotropic sampling under the active conservative proof policy.
+        /// The proof could not bound the elongated anisotropic footprint
+        /// on mixed alpha texels. Enabling desktop or mobile anisotropy
+        /// acceptance allows AMUSE to prove opacity without anisotropic
+        /// footprints.</summary>
+        AnisotropyDifferences,
+
         // --- Renderer-scoped members. Applied to all candidate slots of one
         // renderer and to nothing else: never to that renderer's alpha
         // analysis, never to another renderer.
