@@ -867,7 +867,8 @@ namespace Alrauna.Amuse.Editor.Build
                             minimumOpaqueCoveragePercent,
                             rendererTypeName,
                             allowDepthTestChange,
-                            grantedShaderNames);
+                            grantedShaderNames,
+                            resolved.SlotResults);
                     }
                 }
 
@@ -1547,7 +1548,8 @@ namespace Alrauna.Amuse.Editor.Build
             int minimumOpaqueCoveragePercent,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
-            IReadOnlyCollection<string> grantedShaderNames = null)
+            IReadOnlyCollection<string> grantedShaderNames = null,
+            IReadOnlyList<SlotResolutionResult> slotResults = null)
         {
             var prepared = AlphaSeparationPreparation.Prepare(
                 state,
@@ -1561,7 +1563,8 @@ namespace Alrauna.Amuse.Editor.Build
                 minimumOpaqueCoveragePercent,
                 rendererTypeName,
                 allowDepthTestChange,
-                grantedShaderNames);
+                grantedShaderNames,
+                slotResults);
             if (prepared == null)
             {
                 return;

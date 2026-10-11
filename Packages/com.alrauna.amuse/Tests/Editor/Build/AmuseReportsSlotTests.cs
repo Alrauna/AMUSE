@@ -233,6 +233,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AnisotropyDifferencesRefusalReportsInformationEntry()
+        {
+            var material = NewFixtureMaterial("AMUSE reported material");
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationRefusal(
+                    _renderer,
+                    0,
+                    AlphaSeparationSlotRefusal.AnisotropyDifferences,
+                    "TestRenderer",
+                    material));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo("amuse.slotSeparation.AnisotropyDifferences"));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("TestRenderer"));
+            Assert.That(message, Does.Contain("0"));
+            Assert.That(message, Does.Contain("anisotropic sampling"));
+        }
+
+        [Test]
         public void TextureCaptureRefusalReportsSlotPropertyAndChannel()
         {
             var refusal = new TextureCaptureRefusal(

@@ -785,12 +785,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private static void AssertNoFeatureRefusals(
-            AmusePlatformFinishState state)
+            AmusePlatformFinishState state,
+            AlphaSeparationSlotRefusal admittedReason =
+                AlphaSeparationSlotRefusal.None)
         {
             foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
                          typeof(AlphaSeparationSlotRefusal)))
             {
-                if (reason == AlphaSeparationSlotRefusal.None)
+                if (reason == AlphaSeparationSlotRefusal.None ||
+                    reason == admittedReason)
                 {
                     continue;
                 }
@@ -798,6 +801,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     state.SlotRefusalCount(reason), Is.Zero,
                     "unexpected feature refusal bucket " + reason);
+            }
+
+            if (admittedReason != AlphaSeparationSlotRefusal.None)
+            {
+                Assert.That(
+                    state.SlotRefusalCount(admittedReason), Is.EqualTo(1),
+                    "expected feature refusal bucket " + admittedReason);
             }
         }
 
@@ -4053,14 +4063,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// analyzed, and no feature refused. The policy and outcome
         /// assertions stay with each test.
         /// </summary>
-        private static void AssertConversionBuildRan(ConversionRun run)
+        private static void AssertConversionBuildRan(
+            ConversionRun run,
+            AlphaSeparationSlotRefusal admittedReason =
+                AlphaSeparationSlotRefusal.None)
         {
             Assert.That(run.BuildSucceeded, Is.True,
                 "fixture precondition: the build must complete");
             Assert.That(
                 run.State.AnalyzedRendererCount, Is.EqualTo(1),
                 "fixture precondition: the renderer must analyze");
-            AssertNoFeatureRefusals(run.State);
+            AssertNoFeatureRefusals(run.State, admittedReason);
         }
 
         /// <summary>
@@ -4167,7 +4180,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
             try
             {
-                AssertConversionBuildRan(run);
+                AssertConversionBuildRan(
+                    run, AlphaSeparationSlotRefusal.AnisotropyDifferences);
                 Assert.That(
                     run.State.SamplingTarget,
                     Is.EqualTo(BuildTarget.StandaloneWindows64),
@@ -4259,7 +4273,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
             try
             {
-                AssertConversionBuildRan(run);
+                AssertConversionBuildRan(
+                    run, AlphaSeparationSlotRefusal.AnisotropyDifferences);
                 Assert.That(
                     run.State.SamplingPolicy,
                     Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),

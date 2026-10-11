@@ -518,6 +518,15 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.OpaqueCoverageBelowMinimum:hint"] =
                 "Lower the minimum opaque coverage setting on the AMUSE " +
                 "component if you want this split.",
+            ["amuse.slotSeparation.AnisotropyDifferences"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.AnisotropyDifferences:description"] =
+                "AMUSE cannot prove opacity for slot {0} of renderer '{2}'. " +
+                "Its texture uses anisotropic sampling under the active conservative proof policy. " +
+                "Reason: {1}. The slot keeps its original material.",
+            ["amuse.slotSeparation.AnisotropyDifferences:hint"] =
+                "Enable 'Accept Desktop Anisotropy Differences' (or mobile) on the AMUSE component " +
+                "if you want AMUSE to prove opacity without anisotropic footprints.",
             ["amuse.slotSeparation.DepthTestDivergence"] =
                 "AMUSE separated material slot {0} of renderer '{1}'.",
             ["amuse.slotSeparation.DepthTestDivergence:description"] =

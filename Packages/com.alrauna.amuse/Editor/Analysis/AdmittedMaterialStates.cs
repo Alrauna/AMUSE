@@ -47,6 +47,32 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal IReadOnlyList<AlphaResolution> Resolutions { get; }
 
         /// <summary>
+        /// Reports whether any admitted material's resolution samples its
+        /// texture anisotropically. A refused slot holds no resolutions and
+        /// answers false.
+        /// </summary>
+        internal bool HasAnisotropicSampling
+        {
+            get
+            {
+                if (Resolutions == null || Resolutions.Count == 0)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < Resolutions.Count; i++)
+                {
+                    if (Resolutions[i].HasAnisotropicSampling)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
         /// The admitted material whose own fact refused the slot, or null
         /// when the refusal names no single material. Report evidence only:
         /// the classification outcome is the refusal itself, never the

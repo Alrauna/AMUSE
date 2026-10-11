@@ -104,7 +104,8 @@ namespace Alrauna.Amuse.Editor.Build
             int minimumOpaqueCoveragePercent,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
-            IReadOnlyCollection<string> grantedShaderNames = null)
+            IReadOnlyCollection<string> grantedShaderNames = null,
+            IReadOnlyList<SlotResolutionResult> slotResults = null)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             if (target == null) throw new ArgumentNullException(nameof(target));
@@ -114,6 +115,46 @@ namespace Alrauna.Amuse.Editor.Build
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
             if (admittedLiveMaterials == null)
                 throw new ArgumentNullException(nameof(admittedLiveMaterials));
+
+            // An unproven slot whose own resolution samples anisotropically
+            // refuses before the opaque-candidate gate: a renderer whose
+            // every slot stayed unproven retains nothing, so the candidate
+            // loop below never runs and the cause would go unreported. The
+            // set keeps one refusal per slot, because several submeshes can
+            // bind one material slot.
+            var reportedAnisotropySlots = new HashSet<int>();
+            if (slotResults != null)
+            {
+                foreach (var submesh in plan.Submeshes)
+                {
+                    if (submesh.Disposition ==
+                        SubmeshSeparationDisposition.Unchanged)
+                    {
+                        var slotIndex = submesh.SourceMaterialBindingIndex;
+                        if (slotIndex >= 0 &&
+                            slotIndex < slotResults.Count &&
+                            !reportedAnisotropySlots.Contains(slotIndex))
+                        {
+                            var slotResult = slotResults[slotIndex];
+                            if (slotResult.IsResolved &&
+                                slotResult.HasAnisotropicSampling &&
+                                HasAnyUnknownOutcome(
+                                    plan, submesh.SourceSubmeshIndex))
+                            {
+                                reportedAnisotropySlots.Add(slotIndex);
+                                state.RecordSlotRefusal(
+                                    AlphaSeparationSlotRefusal
+                                        .AnisotropyDifferences);
+                                AmuseReports.SlotSeparationRefusal(
+                                    target.Renderer,
+                                    slotIndex,
+                                    AlphaSeparationSlotRefusal
+                                        .AnisotropyDifferences);
+                            }
+                        }
+                    }
+                }
+            }
 
             if (!plan.HasAnyOpaqueCandidates)
             {
@@ -257,6 +298,10 @@ namespace Alrauna.Amuse.Editor.Build
                 if (submesh.Disposition ==
                     SubmeshSeparationDisposition.Unchanged)
                 {
+                    // An unchanged slot holds no candidate and carries no
+                    // refusal of its own. The pass above already reported
+                    // the anisotropy-caused ones, and the set keeps a slot
+                    // shared with a split submesh from reporting twice.
                     continue;
                 }
 
@@ -265,14 +310,49 @@ namespace Alrauna.Amuse.Editor.Build
                     OpaqueCoverageBelow(
                         minimumOpaqueCoveragePercent, submesh))
                 {
-                    state.RecordSlotRefusal(
-                        AlphaSeparationSlotRefusal
-                            .OpaqueCoverageBelowMinimum);
-                    AmuseReports.SlotSeparationRefusal(
-                        target.Renderer,
-                        submesh.SourceMaterialBindingIndex,
-                        AlphaSeparationSlotRefusal
-                            .OpaqueCoverageBelowMinimum);
+                    var coverageSlotIndex =
+                        submesh.SourceMaterialBindingIndex;
+                    var anisotropicCause =
+                        slotResults != null &&
+                        coverageSlotIndex >= 0 &&
+                        coverageSlotIndex < slotResults.Count &&
+                        slotResults[coverageSlotIndex].IsResolved &&
+                        slotResults[coverageSlotIndex]
+                            .HasAnisotropicSampling &&
+                        HasAnyUnknownOutcome(
+                            plan, submesh.SourceSubmeshIndex);
+                    if (anisotropicCause)
+                    {
+                        // The coverage shortfall follows the unproven
+                        // triangles, and the unproven triangles follow the
+                        // anisotropic proof sampling, so the report names
+                        // the acceptance hint instead of the coverage
+                        // minimum. One refusal per slot: the set folds the
+                        // submeshes that bind one slot.
+                        if (reportedAnisotropySlots.Add(coverageSlotIndex))
+                        {
+                            state.RecordSlotRefusal(
+                                AlphaSeparationSlotRefusal
+                                    .AnisotropyDifferences);
+                            AmuseReports.SlotSeparationRefusal(
+                                target.Renderer,
+                                coverageSlotIndex,
+                                AlphaSeparationSlotRefusal
+                                    .AnisotropyDifferences);
+                        }
+                    }
+                    else
+                    {
+                        state.RecordSlotRefusal(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum);
+                        AmuseReports.SlotSeparationRefusal(
+                            target.Renderer,
+                            coverageSlotIndex,
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum);
+                    }
+
                     continue;
                 }
 
@@ -542,6 +622,41 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return prepared;
+        }
+
+        /// <summary>
+        /// Whether the source submesh behind this plan entry holds at
+        /// least one triangle whose alpha outcome stayed unproven. The
+        /// source input and the plan keep one entry per source submesh in
+        /// the same order, so the plan's own submesh index addresses the
+        /// source outcomes directly.
+        /// </summary>
+        private static bool HasAnyUnknownOutcome(
+            MeshSeparationPlan plan,
+            int submeshIndex)
+        {
+            if (plan.Source?.Submeshes == null ||
+                submeshIndex < 0 ||
+                submeshIndex >= plan.Source.Submeshes.Count)
+            {
+                return false;
+            }
+
+            var outcomes = plan.Source.Submeshes[submeshIndex].Outcomes;
+            if (outcomes == null)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < outcomes.Count; i++)
+            {
+                if (outcomes[i] == TriangleAlphaOutcome.Unknown)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
