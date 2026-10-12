@@ -46,8 +46,10 @@ namespace Alrauna.Amuse.Editor.Build
     /// refusal for every slot of the pair. A slot-less pair has no slot
     /// or renderer scope to report against, so its disposition is
     /// silent by contract. In the refusal-driven case the close-time
-    /// avatar entry names the cause for the whole build. A build that
-    /// completes holds zero open pairs, and no pair ships unlocked.
+    /// avatar entry names the cause for the whole build. A close that
+    /// proves every curve inversion holds zero open pairs. An unproven
+    /// pair stays in the window, and its unlocked clone stays alive in
+    /// the shipped output.
     /// </para>
     /// </summary>
     internal static class TransientUnlockWindowClose
