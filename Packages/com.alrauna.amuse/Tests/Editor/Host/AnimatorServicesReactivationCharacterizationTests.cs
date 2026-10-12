@@ -475,22 +475,24 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         // --- The characterization -------------------------------------------
 
         [Test]
-        public void ReactivationPluginIsConfinedToItsDedicatedPlatform()
+        public void ProbePluginStaysIdleOnTheDefaultPlatform()
         {
-            var attribute = System.Reflection.CustomAttributeData
-                .GetCustomAttributes(typeof(ReactivationCharacterizationPlugin))
-                .Single(value => value.AttributeType == typeof(RunsOnPlatforms));
-            var platforms = attribute.ConstructorArguments
-                .SelectMany(argument => argument.Value is
-                    IReadOnlyCollection<
-                        System.Reflection.CustomAttributeTypedArgument> values
-                    ? values
-                    : new[] { argument })
-                .Select(argument => argument.Value as string)
-                .ToArray();
+            using var armed = AmusePlatformFinishPluginTests.SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            using var fixture = Fixture.Create();
 
-            CollectionAssert.AreEqual(
-                new[] { ReactivationPlatformName }, platforms);
+            // The run flags live in per-build probe state, so every fresh
+            // BuildContext starts this counter at zero; the control run below
+            // must leave it there.
+            var context = AvatarProcessor.ProcessAvatar(
+                fixture.Root, AmbientPlatform.DefaultPlatform);
+            var probe = context.GetState<ReactivationProbe>();
+
+            Assert.That(
+                probe.FirstWindowRan || probe.BarrierRan || probe.SecondWindowRan,
+                Is.False,
+                "the probe plugin declared for the dedicated platform " +
+                "must never run on the default platform");
         }
 
         [Test]

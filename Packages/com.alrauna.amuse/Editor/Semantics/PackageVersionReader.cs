@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 
@@ -45,7 +46,19 @@ namespace Alrauna.Amuse.Editor.Semantics
             {
                 return null;
             }
-            foreach (var package in request.Result)
+            return VersionFor(request.Result, packageName);
+        }
+
+        /// <summary>
+        /// Finds one package's version by exact name in a successful
+        /// listing. A name that is not in the listing reads as null,
+        /// so every caller refuses instead of guessing a version.
+        /// </summary>
+        internal static string VersionFor(
+            IEnumerable<PackageInfo> packages,
+            string packageName)
+        {
+            foreach (var package in packages)
             {
                 if (package.name == packageName)
                 {

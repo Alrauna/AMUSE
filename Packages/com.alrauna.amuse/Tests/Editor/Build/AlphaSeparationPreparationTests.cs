@@ -471,6 +471,266 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Coverage Task 3: renderer-scoped conversion invalidation --------
+        //
+        // The conversion scope re-resolves the captured bindings a second
+        // time, against the union of the conversion-capable families' own
+        // requests. Three renderer-wide facts refuse every candidate slot
+        // of the renderer there, through RefuseEveryCandidateSlot: a
+        // binding the union cannot recognize, conversion-relevant state
+        // under an additive layer, and conversion-relevant state under an
+        // unnormalized Direct blend tree. Each test below drives one arm
+        // and asserts the renderer-wide refusal count directly, plus a
+        // zero on the per-slot admission bucket, so the refusal cannot
+        // pass through per-slot conversion admission instead.
+
+        /// <summary>
+        /// A conversion-relevant scalar animated through the indexed
+        /// material prefix stays outside the alpha request, so the
+        /// renderer reaches preparation with its alpha proof untouched.
+        /// The conversion union cannot map the indexed binding, so every
+        /// candidate slot is refused once and nothing is retained.
+        /// </summary>
+        [Test]
+        public void UnrecognizedConversionBinding_RefusesEveryCandidateSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE unrecognized conversion binding");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = VerifiedOpaqueZWriteDefaultMaterial();
+                AddSingleTriangleRenderer(root, material, out mesh);
+                clip = NewFloatClip(
+                    "AMUSE zwrite indexed prefix", string.Empty,
+                    "material[0]._ZWrite", 0f);
+                controller = NewController(
+                    root, "AMUSE unrecognized binding graph", clip);
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "the indexed material prefix must stay outside the " +
+                    "alpha request, so the analysis cannot refuse the " +
+                    "renderer");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the single slot must hold " +
+                    "exactly one opaque candidate triangle");
+                Assert.That(amuse.Separation, Is.Null,
+                    "the only candidate slot was refused, so nothing is " +
+                    "retained");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .ConversionBindingUnrecognized),
+                    Is.EqualTo(1),
+                    "a renderer-wide unrecognized conversion binding must " +
+                    "refuse every candidate slot exactly once");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.ConversionStateNotAdmitted),
+                    Is.Zero,
+                    "the renderer-wide refusal must fire before per-slot " +
+                    "conversion admission runs");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null)
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                    UnityEngine.Object.DestroyImmediate(material);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (controller != null)
+                    DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// Conversion-relevant animated state under an additive layer
+        /// invalidates every candidate slot of the renderer. The additive
+        /// flag alone stays outside the alpha request, so the renderer
+        /// reaches preparation and the conversion scope refuses it there.
+        /// </summary>
+        [Test]
+        public void ConversionStateUnderAdditiveLayer_RefusesEveryCandidateSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE additive conversion state");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = VerifiedOpaqueZWriteDefaultMaterial();
+                AddSingleTriangleRenderer(root, material, out mesh);
+                clip = NewFloatClip(
+                    "AMUSE zwrite under additive layer", string.Empty,
+                    "material._ZWrite", 0f);
+                controller = NewController(
+                    root, "AMUSE additive conversion graph", clip);
+                var layers = controller.layers;
+                layers[0].blendingMode =
+                    AnimatorLayerBlendingMode.Additive;
+                controller.layers = layers;
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "the conversion-only binding must stay outside the " +
+                    "alpha request, so the analysis cannot refuse the " +
+                    "renderer for the additive layer");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the single slot must hold " +
+                    "exactly one opaque candidate triangle");
+                Assert.That(amuse.Separation, Is.Null,
+                    "the only candidate slot was refused, so nothing is " +
+                    "retained");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .ConversionStateUnderAdditiveLayer),
+                    Is.EqualTo(1),
+                    "conversion-relevant state under an additive layer " +
+                    "must refuse every candidate slot exactly once");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.ConversionStateNotAdmitted),
+                    Is.Zero,
+                    "the renderer-wide refusal must fire before per-slot " +
+                    "conversion admission runs");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null)
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                    UnityEngine.Object.DestroyImmediate(material);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (controller != null)
+                    DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// Conversion-relevant animated state under an unnormalized Direct
+        /// blend tree invalidates every candidate slot of the renderer.
+        /// The unnormalized tree alone stays outside the alpha request, so
+        /// the renderer reaches preparation and the conversion scope
+        /// refuses it there.
+        /// </summary>
+        [Test]
+        public void
+            ConversionStateUnderUnnormalizedDirectBlendTree_RefusesEveryCandidateSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE direct blend tree conversion state");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            BlendTree tree = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = VerifiedOpaqueZWriteDefaultMaterial();
+                AddSingleTriangleRenderer(root, material, out mesh);
+                clip = NewFloatClip(
+                    "AMUSE zwrite under direct tree", string.Empty,
+                    "material._ZWrite", 0f);
+                controller = NewController(
+                    root, "AMUSE direct conversion graph", clip);
+                controller.AddParameter(
+                    "Blend", AnimatorControllerParameterType.Float);
+                tree = new BlendTree
+                {
+                    name = "AMUSE unnormalized Direct",
+                    blendType = BlendTreeType.Direct,
+                };
+                tree.AddChild(clip);
+                var serialized = new SerializedObject(tree);
+                serialized.Update();
+                var normalized = serialized.FindProperty(
+                    "m_NormalizedBlendValues");
+                Assert.That(normalized, Is.Not.Null,
+                    "fixture precondition: Unity did not expose Direct " +
+                    "normalization");
+                normalized.boolValue = false;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                controller.layers[0].stateMachine.states[0].state.motion =
+                    tree;
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "the conversion-only binding must stay outside the " +
+                    "alpha request, so the analysis cannot refuse the " +
+                    "renderer for the unnormalized tree");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the single slot must hold " +
+                    "exactly one opaque candidate triangle");
+                Assert.That(amuse.Separation, Is.Null,
+                    "the only candidate slot was refused, so nothing is " +
+                    "retained");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .ConversionStateUnderUnnormalizedDirectBlendTree),
+                    Is.EqualTo(1),
+                    "conversion-relevant state under an unnormalized " +
+                    "Direct blend tree must refuse every candidate slot " +
+                    "exactly once");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.ConversionStateNotAdmitted),
+                    Is.Zero,
+                    "the renderer-wide refusal must fire before per-slot " +
+                    "conversion admission runs");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null)
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                    UnityEngine.Object.DestroyImmediate(material);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (tree != null) UnityEngine.Object.DestroyImmediate(tree);
+                if (controller != null)
+                    DestroyControllerGraph(controller);
+            }
+        }
+
         // --- Falsifier 9: mixed Poiyomi + lilToon slot -----------------------
 
         [Test]

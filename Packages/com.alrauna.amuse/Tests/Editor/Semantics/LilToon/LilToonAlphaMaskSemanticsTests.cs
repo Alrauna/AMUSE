@@ -15,7 +15,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     public sealed class LilToonAlphaMaskSemanticsTests
     {
         [Test]
-        public void AlphaMask_WithNaNScale_RefusesWithoutException()
+        public void AlphaMask_WithNonFiniteTilingScale_RefusesWithoutException()
         {
             var nonFiniteScales = new[]
             {
@@ -85,7 +85,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void AlphaMaskWithNonFiniteScaleOrOffsetRefusesWithoutException()
+        public void AlphaMaskWithNonFiniteTilingScaleOrOffset_RefusesWithoutException()
         {
             var nonFinitePairs = new (Vector2 scale, Vector2 offset)[]
             {
@@ -158,6 +158,88 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(diagnostics, Is.Empty);
         }
 
+        [Test]
+        public void AlphaMask_WithNonFiniteScalarScale_RefusesNamingTheScalar()
+        {
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonAlphaMaskTerm.Interpret(
+                CreateMaskEvidenceWithoutSourceIdentity(1f, float.NaN, 0f),
+                diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonAlphaMaskTermKind.Refused));
+            Assert.That(term.RefusalDetail, Is.EqualTo("_AlphaMaskScale"));
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMaskScale"));
+        }
+
+        [Test]
+        public void AlphaMask_WithNonFiniteScalarValue_RefusesNamingTheValue()
+        {
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonAlphaMaskTerm.Interpret(
+                CreateMaskEvidenceWithoutSourceIdentity(
+                    1f, 1f, float.PositiveInfinity),
+                diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonAlphaMaskTermKind.Refused));
+            Assert.That(term.RefusalDetail, Is.EqualTo("_AlphaMaskValue"));
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMaskValue"));
+        }
+
+        [Test]
+        public void AlphaMask_SampledShapeWithoutSourceIdentity_RefusesAsUnstableIdentity()
+        {
+            // Scale one and value zero sample the mask, so the sampled
+            // shape demands the mask's own source identity. Without it the
+            // term refuses as unstable identity instead of proving through
+            // an unattributed texture.
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonAlphaMaskTerm.Interpret(
+                CreateMaskEvidenceWithoutSourceIdentity(1f, 1f, 0f),
+                diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonAlphaMaskTermKind.Refused));
+            Assert.That(
+                term.RefusalCode,
+                Is.EqualTo(LilToonSemanticDiagnosticCode
+                    .UnstableTextureIdentity));
+            Assert.That(term.RefusalDetail, Is.EqualTo("_AlphaMask"));
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(
+                diagnostics[0].Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode
+                    .UnstableTextureIdentity));
+            Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMask"));
+        }
+
+        [Test]
+        public void AlphaMask_RequestedButAbsentFromEvidence_RefusesNamingTheMask()
+        {
+            // The mask slot stays requested but holds no value, exactly as
+            // capture records a requested texture slot the material does
+            // not carry. The term must refuse by name instead of treating
+            // the absent entry as the declared default mask.
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonAlphaMaskTerm.Interpret(
+                CreateMaskEvidence(
+                    Vector2.one, Vector2.zero,
+                    mode: 2f, maskScale: 1f, maskValue: 0f,
+                    entryHasValue: false),
+                diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonAlphaMaskTermKind.Refused));
+            Assert.That(
+                term.RefusalCode,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedFeature));
+            Assert.That(term.RefusalDetail, Is.EqualTo("_AlphaMask"));
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(
+                diagnostics[0].Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedFeature));
+            Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMask"));
+        }
+
         private static CapturedMaterialEvidence CreateMaskEvidence(
             Vector2 scale,
             Vector2 offset,
@@ -165,7 +247,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float maskScale = 1f,
             float maskValue = 0f,
             bool isAssigned = true,
-            bool hasSourceIdentity = true)
+            bool hasSourceIdentity = true,
+            bool entryHasValue = true)
         {
             var textureEvidence = new CapturedTextureEvidence(
                 hasSourceIdentity: hasSourceIdentity,
@@ -211,7 +294,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 vectors: Array.Empty<CapturedMaterialEvidence.VectorEntry>(),
                 textureAssignments: new[]
                 {
-                    new CapturedMaterialEvidence.TextureEntry("_AlphaMask", true, maskAssignment),
+                    new CapturedMaterialEvidence.TextureEntry(
+                        "_AlphaMask",
+                        entryHasValue,
+                        entryHasValue ? maskAssignment : default),
                 },
                 textures: new[] { textureEvidence });
         }

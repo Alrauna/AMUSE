@@ -1813,6 +1813,124 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "expected UnsupportedSampling naming _MainTex");
         }
 
+        // --- fold interactions ----------------------------------------------
+
+        /// <summary>
+        /// The saturating-chain fixture: a second layer with writer mode
+        /// three builds a saturating sum over the main chain, with every
+        /// other gate at its exact-off value.
+        /// </summary>
+        private Material NewSaturatingLayerMaterial(string textureName)
+        {
+            var material = NewCutoutFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty,
+                ImportMipmapTexture(
+                    textureName + "_main", 4, 4, SolidGrid(4, 4, 255)));
+            material.SetTexture(
+                "_Main2ndTex",
+                ImportTexture(textureName + "_layer"));
+            material.SetFloat("_UseMain2ndTex", 1f);
+            material.SetFloat("_Main2ndTexAlphaMode", 3f);
+            return material;
+        }
+
+        [Test]
+        public void SaturatingLayerChain_WithMultiplyMask_FoldRefusesNamingMaskMode()
+        {
+            // Mode 3 writes saturate(base + layer), and the multiply-mode
+            // mask must fold over the result. A product with a sum changes
+            // the evaluated rounding chain, so the fold must refuse with
+            // the mask-mode property instead of producing an unprovable
+            // shape.
+            var material = NewSaturatingLayerMaterial("fold_sat");
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetTexture("_AlphaMask", ImportTexture("fold_sat_mask"));
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            AssertSingleDiagnostic(
+                result,
+                LilToonSemanticOutput.Alpha,
+                LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                "_AlphaMaskMode");
+        }
+
+        [Test]
+        public void SaturatingLayerChain_WithSampledMaskAndUnassignedMain_RefusesSamplingAtTheBorrowGate()
+        {
+            // The same saturating shape, but with no assigned main: the
+            // sampled mask borrows _MainTex's sampler, and the borrow gate
+            // sits before every layer composition, so the refusal is the
+            // sampling one and no fold diagnostic may appear.
+            var material = NewSaturatingLayerMaterial("fold_unassigned");
+            material.SetTexture(MainTextureProperty, null);
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetTexture("_AlphaMask", ImportTexture(
+                "fold_unassigned_mask"));
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            AssertSingleDiagnostic(
+                result,
+                LilToonSemanticOutput.Alpha,
+                LilToonSemanticDiagnosticCode.UnsupportedSampling,
+                "_MainTex");
+        }
+
+        // --- unstable texture identity on the alpha path --------------------
+
+        [Test]
+        public void AlphaPath_SceneOnlyMainTex_IsUnstableIdentity()
+        {
+            // The alpha-path twin of the base-color scene-only row: an
+            // assigned main texture with no stable source identity cannot
+            // back a sampled alpha term, so the main chain refuses with
+            // the unstable-identity code naming _MainTex.
+            var material = NewCutoutFixtureMaterial();
+            material.SetTexture(
+                MainTextureProperty, Track(new Texture2D(2, 2)));
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            AssertSingleDiagnostic(
+                result,
+                LilToonSemanticOutput.Alpha,
+                LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
+                "_MainTex");
+        }
+
+        [Test]
+        public void AlphaPath_SceneOnlyAlphaMask_IsUnstableIdentity()
+        {
+            // A multiply-mode mask whose texture has no stable source
+            // identity refuses the mask term itself, before any other
+            // gate, with the unstable-identity code naming _AlphaMask.
+            var material = NewCutoutFixtureMaterial();
+            material.SetFloat("_AlphaMaskMode", 2f);
+            material.SetTexture("_AlphaMask", Track(new Texture2D(2, 2)));
+
+            var result =
+                LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutMaterial(
+                    material, ColorSpace.Linear, AllFeatures);
+
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            AssertSingleDiagnostic(
+                result,
+                LilToonSemanticOutput.Alpha,
+                LilToonSemanticDiagnosticCode.UnstableTextureIdentity,
+                "_AlphaMask");
+        }
+
         private AlphaResolution ResolveThroughUnassignedCutout(
             Material material)
         {

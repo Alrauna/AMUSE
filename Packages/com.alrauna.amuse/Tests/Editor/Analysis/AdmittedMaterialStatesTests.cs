@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
@@ -1620,6 +1621,120 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(result.IsResolved, Is.False);
             Assert.That(result.Refusal,
                 Is.EqualTo(RendererAnalysisRefusal.AnimatedMaterialPropertyNotSingleton));
+        }
+
+        // ---- SlotResolutionResult reporting rows ----------------------------
+        //
+        // The slot result is the analysis pass's only contract with the
+        // reporting and preparation consumers below it, so these rows pin
+        // what it records: the anisotropy fact it derives from its
+        // resolutions, and the closure-failure way it carries beside the
+        // refusal.
+
+        /// <summary>
+        /// A resolved slot's anisotropy answer is exactly its resolutions'
+        /// disjunction: any anisotropic resolution makes the slot
+        /// anisotropic, all-non-anisotropic resolutions keep it false, and a
+        /// refused slot holds no resolutions and answers false.
+        /// </summary>
+        [Test]
+        public void SlotAnisotropicSamplingPropagatesFromItsResolutions()
+        {
+            var chain = new AlphaMipChain(
+                new[] { new AlphaTextureData(1, 1, new[] { (byte)255 }) });
+            var identity = new UvMapping(0, Vector2.one, Vector2.zero);
+            var aniso = AlphaResolution.Classified(
+                chain,
+                new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.Anisotropic),
+                identity, 0);
+            var nonAniso = AlphaResolution.Classified(
+                chain,
+                new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    TextureWrapMode.Clamp,
+                    TextureAnisoMode.None),
+                identity, 0);
+
+            Assert.That(
+                SlotResolutionResult.Resolved(new[] { aniso })
+                    .HasAnisotropicSampling,
+                Is.True);
+            Assert.That(
+                SlotResolutionResult.Resolved(new[] { nonAniso, aniso })
+                    .HasAnisotropicSampling,
+                Is.True,
+                "one anisotropic resolution is enough for the slot");
+            Assert.That(
+                SlotResolutionResult.Resolved(new[] { nonAniso })
+                    .HasAnisotropicSampling,
+                Is.False);
+            Assert.That(
+                SlotResolutionResult.Refused(
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed)
+                    .HasAnisotropicSampling,
+                Is.False,
+                "a refused slot holds no resolutions and answers false");
+        }
+
+        /// <summary>
+        /// The way rides beside the refusal as report evidence: every closure
+        /// failure way is recorded verbatim on a slot refused as a closure
+        /// failure, a refusal without a named way records None, and a
+        /// resolved slot never carries a way.
+        /// </summary>
+        [Test]
+        public void ClosureWayRecordsEveryFailureWayBesideTheRefusal()
+        {
+            foreach (MaterialDependencyClosureFailure way in Enum.GetValues(
+                         typeof(MaterialDependencyClosureFailure)))
+            {
+                if (way == MaterialDependencyClosureFailure.None)
+                {
+                    continue;
+                }
+
+                var result = SlotResolutionResult.Refused(
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed,
+                    closureWay: way);
+
+                Assert.That(result.IsResolved, Is.False);
+                Assert.That(
+                    result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .MaterialDependencyClosureFailed));
+                Assert.That(
+                    result.ClosureWay, Is.EqualTo(way), way.ToString());
+            }
+
+            Assert.That(
+                SlotResolutionResult.Refused(
+                    RendererAnalysisRefusal.MaterialDependencyClosureFailed)
+                    .ClosureWay,
+                Is.EqualTo(MaterialDependencyClosureFailure.None),
+                "a refusal without a named way records None");
+            Assert.That(
+                SlotResolutionResult.Resolved(Array.Empty<AlphaResolution>())
+                    .ClosureWay,
+                Is.EqualTo(MaterialDependencyClosureFailure.None),
+                "a resolved slot never carries a closure way");
+        }
+
+        /// <summary>
+        /// None is the zero value, never a closure failure way, so the
+        /// closure-sentence report method must refuse it by throwing instead
+        /// of inventing a sentence - the same fail-closed contract the report
+        /// sentence tests pin for every other consumer of the way.
+        /// </summary>
+        [Test]
+        public void ClosureSentenceReportFailsClosedForNone()
+        {
+            Assert.That(
+                () => AmuseReports.ClosureFailureSentence(
+                    MaterialDependencyClosureFailure.None),
+                Throws.InvalidOperationException);
         }
     }
 }

@@ -27,6 +27,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string FlaglessStandInShaderName =
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
 
+        // The schema-only stand-in whose declared table carries the color
+        // and vector plain names the renamed-move rows restore onto.
+        private const string RichOriginalStandInShaderName =
+            "Hidden/Alrauna/AmuseTests/LockedStandInOriginalRich";
+        private const string SuffixedColorName = "_Tint_ReconCape2D7";
+        private const string SuffixedVectorName = "_Shear_ReconCape2D7";
+
         // The hyphen exercises the vendor rename-suffix cleaning rule: the
         // suffix of this name is "ReconCape2D7".
         private const string LockedMaterialName = "ReconCape-7";
@@ -271,6 +278,67 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Appends one saved color entry through the serialization, the
+        /// way the lock persists renamed color properties. Renamed vector
+        /// values ride the same colors storage on the serialization shapes
+        /// without a separate vectors container, so the vector row writes
+        /// through this helper too.
+        /// </summary>
+        private static void WriteSavedColor(
+            Material material, string propertyName, Color value)
+        {
+            using var serialized = new SerializedObject(material);
+            var colors = serialized.FindProperty(
+                "m_SavedProperties.m_Colors");
+            Assert.That(colors, Is.Not.Null,
+                "m_Colors must exist on a material.");
+            colors.InsertArrayElementAtIndex(colors.arraySize);
+            var element = colors.GetArrayElementAtIndex(
+                colors.arraySize - 1);
+            SetElementKey(element, propertyName);
+            var second = element.FindPropertyRelative("second");
+            Assert.That(second, Is.Not.Null,
+                "the color element must expose its value.");
+            second.colorValue = value;
+            serialized.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// Appends one saved vector entry through the serialization, the
+        /// way the lock persists renamed vector properties. The entry is
+        /// written through the colors container, which every serialization
+        /// shape carries, and additionally through the vectors container
+        /// on the shapes that separate Vector4 storage, so the fixture
+        /// never depends on which shape this Unity exposes. Both entries
+        /// hold the same value, so whichever loop of the reconstruction
+        /// moves it, the plain name receives the same four components.
+        /// </summary>
+        private static void WriteSavedVector(
+            Material material, string propertyName, Vector4 value)
+        {
+            WriteSavedColor(material, propertyName,
+                new Color(value.x, value.y, value.z, value.w));
+
+            using var serialized = new SerializedObject(material);
+            var vectors = serialized.FindProperty(
+                "m_SavedProperties.m_Vectors");
+            if (vectors == null)
+            {
+                return;
+            }
+
+            vectors.InsertArrayElementAtIndex(vectors.arraySize);
+            var element = vectors.GetArrayElementAtIndex(
+                vectors.arraySize - 1);
+            SetElementKey(element, propertyName);
+            var second = element.FindPropertyRelative("second");
+            Assert.That(second, Is.Not.Null,
+                "the vector element must expose its value.");
+            second.vector4Value = value;
+            serialized.ApplyModifiedProperties();
+        }
+
+        /// <summary>
         /// Writes the key of one saved-property element. The current
         /// material serialization keeps the key string directly in
         /// "first"; the older one kept it inside a "first" struct under
@@ -372,6 +440,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The color of one saved colors entry, read through the same
+        /// serialization the fixture writers use, so the no-op guards
+        /// below cannot be fooled by the typed getter's view of names the
+        /// locked shader does not declare.
+        /// </summary>
+        private static Color? SavedColor(
+            Material material, string propertyName)
+        {
+            using var serialized = new SerializedObject(material);
+            var colors = serialized.FindProperty(
+                "m_SavedProperties.m_Colors");
+            if (colors == null)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < colors.arraySize; index++)
+            {
+                var element = colors.GetArrayElementAtIndex(index);
+                if (ElementKey(element) == propertyName)
+                {
+                    var second = element.FindPropertyRelative("second");
+                    return second != null ? second.colorValue : null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// The texture of one saved texenv entry, read through the same
         /// serialization the fixture writes, so a guard on it cannot be
         /// fooled by the typed getter's view of undeclared names.
@@ -457,6 +555,100 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(locked.GetFloat(
                     LockedMaterialIdentity.OptimizerEnabledPropertyName),
                 Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void ReconstructionMovesRenamedColorOntoTheDeclaredPlainName()
+        {
+            // Follows the float and texture move rows: the renamed color
+            // persists in the saved colors serialization under the
+            // suffixed name, and the move must land it on the plain name
+            // the resolved original shader declares as a color. The
+            // material color set/get path converts between color spaces
+            // on this project, so the typed expectation is derived through
+            // the same set/get round trip on a reference material of the
+            // same shader, fed with the exact value the reconstruction
+            // reads from the serialization. This keeps the equality exact
+            // instead of loosening it to a tolerance.
+            var originalShader = StandInShader(RichOriginalStandInShaderName);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                originalShader, out var guid, out long _);
+
+            var authoredColor = new Color(0.25f, 0.5f, 0.75f, 0.125f);
+            var locked = LockedFixture(originalShader, guid);
+            WriteSavedColor(locked, SuffixedColorName, authoredColor);
+            locked.SetOverrideTag("_Tint" + "Animated", "2");
+
+            // No-op guard: the suffixed entry must hold a value in the
+            // serialization pre-call. The typed getter of the locked
+            // stand-in cannot see the undeclared plain name, so only the
+            // serialization proves the fixture shape. The reader is the
+            // same serialized colors entry the reconstruction reads.
+            var savedValue = SavedColor(locked, SuffixedColorName);
+            Assert.That(savedValue, Is.Not.Null,
+                "the suffixed color entry must exist pre-call");
+
+            // The typed expectation: what the declared plain name reads
+            // after the same saved value goes through the same set/get
+            // path on a reference material of the same shader.
+            var reference = Track(new Material(originalShader));
+            reference.SetColor("_Tint", savedValue.Value);
+            var expectedThroughTypedGetter = reference.GetColor("_Tint");
+
+            var applied = Apply(locked, true, out var refusalDetail);
+
+            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
+            Assert.That(refusalDetail, Is.Null);
+            Assert.That(locked.shader, Is.SameAs(originalShader));
+            Assert.That(locked.GetColor("_Tint"),
+                Is.EqualTo(expectedThroughTypedGetter),
+                "the typed getter must read the moved saved color on " +
+                "the plain name");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(0f),
+                "every other step must still have held");
+        }
+
+        [Test]
+        public void ReconstructionMovesRenamedVectorOntoTheDeclaredPlainName()
+        {
+            // The renamed vector rides the saved colors storage on the
+            // serialization shapes without a separate vectors container,
+            // and the move must route a colors entry onto a vector
+            // declared plain name exactly as the vendor restore puts it
+            // back.
+            var originalShader = StandInShader(RichOriginalStandInShaderName);
+            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                originalShader, out var guid, out long _);
+
+            var expectedVector = new Vector4(0.125f, 0.25f, 0.5f, 0.75f);
+            var locked = LockedFixture(originalShader, guid);
+            WriteSavedVector(locked, SuffixedVectorName, expectedVector);
+            locked.SetOverrideTag("_Shear" + "Animated", "2");
+
+            // No-op guard: the suffixed entry must hold the value in the
+            // colors serialization pre-call; the locked stand-in declares
+            // no plain vector name, so the serialization is the only view.
+            Assert.That(SavedColor(locked, SuffixedVectorName),
+                Is.EqualTo(new Color(
+                    expectedVector.x, expectedVector.y,
+                    expectedVector.z, expectedVector.w)),
+                "the suffixed vector entry must exist pre-call");
+
+            var applied = Apply(locked, true, out var refusalDetail);
+
+            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
+            Assert.That(refusalDetail, Is.Null);
+            Assert.That(locked.shader, Is.SameAs(originalShader));
+            Assert.That(locked.GetVector("_Shear"),
+                Is.EqualTo(expectedVector),
+                "the typed getter must read the suffixed vector on the " +
+                "plain name");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(0f),
+                "every other step must still have held");
         }
 
         [Test]

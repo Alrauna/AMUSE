@@ -84,6 +84,59 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.True);
         }
 
+        // The four rows below copy the exact allowlist entries from the
+        // production table in Editor/Host/BehaviourIdentity.cs; a renamed
+        // or dropped entry must fail its row loudly.
+        [Test]
+        public void VrchatLocomotionControlIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorLocomotionControl"),
+                Is.True);
+        }
+
+        [Test]
+        public void VrchatTemporaryPoseSpaceIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorTemporaryPoseSpace"),
+                Is.True);
+        }
+
+        [Test]
+        public void VrchatJumpAndGravityIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorJumpAndGravity"),
+                Is.True);
+        }
+
+        [Test]
+        public void VrchatPlayAudioIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.avatars@3.10.4|VRCSDK3A|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorPlayAudio"),
+                Is.True);
+        }
+
+        /// <summary>
+        /// The prefix arm admits either VRChat SDK package, never only the
+        /// avatars package: a base-package-owned behaviour passes the same
+        /// allowlist on its full type name, with the version ignored.
+        /// </summary>
+        [Test]
+        public void VrchatBasePackageBehaviourIsAllowlisted()
+        {
+            Assert.That(BehaviourIdentity.IsAllowed(
+                "com.vrchat.base@3.10.4|VRCSDK3B|" +
+                "VRC.SDK3.Avatars.Components.VRCAnimatorTrackingControl"),
+                Is.True);
+        }
+
         [Test]
         public void MimicTypeOutsideTheVrchatPackageIsNotAllowed()
         {

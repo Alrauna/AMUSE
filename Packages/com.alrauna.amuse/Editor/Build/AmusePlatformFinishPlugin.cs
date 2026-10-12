@@ -271,6 +271,28 @@ namespace Alrauna.Amuse.Editor.Build
                 TransientUnlockWindowClose.PassName,
                 ctx => TransientUnlockWindowClose.Execute(ctx));
         }
+
+        /// <summary>
+        /// Test-only override for the disclosure path's build-target
+        /// read. Null in production. The sampling disclosure is the
+        /// only consumer; the apply and editor read sites keep the
+        /// real setting.
+        /// </summary>
+        internal static Func<BuildTarget> ActiveBuildTargetForTests = null;
+
+        /// <summary>
+        /// Resolves the target the sampling policy captures: the armed
+        /// test override when present, otherwise the real active build
+        /// target. Tests set and restore the override so EditMode runs
+        /// never switch the editor's own build target. Internal because
+        /// the barrier pass reads it across the class boundary.
+        /// </summary>
+        internal static BuildTarget ActiveBuildTarget()
+        {
+            return ActiveBuildTargetForTests != null
+                ? ActiveBuildTargetForTests()
+                : EditorUserBuildSettings.activeBuildTarget;
+        }
     }
 
     internal static class AmusePlatformFinishPass
@@ -611,7 +633,7 @@ namespace Alrauna.Amuse.Editor.Build
             // mutable. A target with no policy keeps the conservative
             // output value and names the fact before the analysis runs;
             // no acceptance applies to such a build.
-            var samplingTarget = EditorUserBuildSettings.activeBuildTarget;
+            var samplingTarget = AmusePlatformFinishPlugin.ActiveBuildTarget();
             state.SamplingTarget = samplingTarget;
             state.HasSamplingPolicy = PlatformAlphaSamplingPolicy.TrySelect(
                 samplingTarget,

@@ -64,12 +64,14 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         [Test]
         public void AnInstalledFamilyMatchesTheVersionAmuseAttests()
         {
+            var provenFamilies = 0;
             foreach (var presence in CensusVendorProbe.ProbeAll())
             {
                 if (!presence.IsInstalled)
                 {
                     continue;
                 }
+                provenFamilies++;
 
                 Assert.That(
                     presence.InstalledPackageVersion,
@@ -78,6 +80,14 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     + " is installed at a version AMUSE does not attest. "
                     + "Every material of this family will be unattested, and a "
                     + "census run would measure the mismatch rather than AMUSE.");
+            }
+
+            if (provenFamilies == 0)
+            {
+                Assert.Ignore(
+                    "No attested vendor family is installed in this " +
+                    "project. The version match needs an installed " +
+                    "family; install one to prove this reach.");
             }
         }
 
@@ -140,7 +150,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         /// <summary>
         /// The shared absence preamble: a family that reports absent must
         /// carry a null shader, and the caller decides how to discharge the
-        /// absent case - the Poiyomi gates return, the lilToon gate ignores.
+        /// absent case. Every gate in this file discharges absence with an
+        /// Assert.Ignore whose message names the missing family.
         /// </summary>
         private static CensusVendorPresence ProbeInstalled(
             CensusVendorFamily family)
@@ -168,7 +179,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-                return;
+            {
+                Assert.Ignore(
+                    presence.ExpectedPackageName
+                    + " is not installed in this project. The Poiyomi " +
+                    "reachability gate needs the attested vendor package; " +
+                    "install it to prove this reach.");
+            }
 
             var forced = _scene.NewMaterial(presence.Shader, "GateForcedOpaque");
             var forcedSubmesh = ObserveSingleSubmesh(forced);
@@ -212,7 +229,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-                return;
+            {
+                Assert.Ignore(
+                    presence.ExpectedPackageName
+                    + " is not installed in this project. The Poiyomi " +
+                    "reachability gate needs the attested vendor package; " +
+                    "install it to prove this reach.");
+            }
 
             var material = NewUnforcedPoiyomiMaterial(
                 presence.Shader, "GateTransparent");
@@ -260,7 +283,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-                return;
+            {
+                Assert.Ignore(
+                    presence.ExpectedPackageName
+                    + " is not installed in this project. The Poiyomi " +
+                    "reachability gate needs the attested vendor package; " +
+                    "install it to prove this reach.");
+            }
 
             var texture = new Texture2D(4, 4) { name = "GateRuntimeTexture" };
             try
@@ -314,7 +343,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var presence = ProbeInstalled(CensusVendorFamily.Poiyomi);
             if (!presence.IsInstalled)
-                return;
+            {
+                Assert.Ignore(
+                    presence.ExpectedPackageName
+                    + " is not installed in this project. The Poiyomi " +
+                    "reachability gate needs the attested vendor package; " +
+                    "install it to prove this reach.");
+            }
 
             var material = _scene.NewMaterial(presence.Shader, "GateLocked");
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -393,10 +428,11 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         /// visible, and a reader scanning names must not be able to miss it.
         /// </para>
         /// <para>
-        /// This test itself stays pass-shaped by design. The one
-        /// Assert.Ignore in this file, in the lilToon gate, names the
-        /// missing vendor package loudly instead of reporting a silent
-        /// vacuous pass; an ignored run still needs a human look before a
+        /// This test itself stays pass-shaped by design. Every gate in
+        /// this file discharges absence with a named Assert.Ignore that
+        /// names the missing vendor package loudly. A vendor-free
+        /// checkout reports six ignored outcomes, not silent vacuous
+        /// passes. An ignored run still needs a human look before a
         /// census.
         /// </para>
         /// </summary>
@@ -414,8 +450,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     "VENDOR REACHABILITY NOT PROVEN - no attested vendor family "
                     + "is installed. This is the EXPECTED state in the public "
                     + "development project, which installs no vendor shader. "
-                    + "Every vendor case in this file asserted nothing. A green "
-                    + "run here says only that the gate compiles; it does not "
+                    + "On a vendor-free checkout this run ends with six named "
+                    + "ignores, so a green pass here means every gate is loud "
+                    + "and none passed vacuously; it does not "
                     + "establish that AMUSE reaches ProvenOpaque. A census run "
                     + "in this environment must abort rather than report.");
             }

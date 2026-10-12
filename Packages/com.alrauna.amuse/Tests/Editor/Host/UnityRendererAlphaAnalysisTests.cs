@@ -397,6 +397,58 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result.Plan, Is.Null);
         }
 
+        /// <summary>
+        /// A one-triangle, one-submesh mesh whose index buffer genuinely
+        /// references vertex 99 over 3 vertices. The other MalformedMeshData
+        /// arms are seam-limited: Unity 2022.3's managed setters normalize
+        /// short vertex buffers, partial UV channels, and non-multiple-of-3
+        /// triangle arrays, so no managed construction reaches the
+        /// production guards that exist for imported data. Those arms stay
+        /// recorded as seam-limited in the coverage execution report; this
+        /// out-of-range arm is the proven one.
+        /// </summary>
+        private Mesh MeshWithOutOfRangeIndex()
+        {
+            var mesh = Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                Vector3.zero, Vector3.right, Vector3.up,
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f),
+            };
+            mesh.triangles = new[] { 0, 1, 2 };
+
+            // The simple setters validate and reject an out-of-range index
+            // with an error log; the advanced route writes the raw entry the
+            // way a corrupted import arrives, silently.
+            mesh.SetIndexBufferData(
+                new ushort[] { 0, 1, 99 },
+                0,
+                0,
+                3,
+                UnityEngine.Rendering.MeshUpdateFlags.DontValidateIndices);
+
+            return mesh;
+        }
+
+        [Test]
+        public void AnOutOfRangeIndexRefusesAsMalformedMeshData()
+        {
+            var renderer = NewSkinned(
+                MeshWithOutOfRangeIndex(), NewMaterial());
+
+            var result = UnityRendererAlphaAnalysis.Analyze(renderer);
+
+            Assert.That(
+                result.Refusal,
+                Is.EqualTo(RendererAnalysisRefusal.MalformedMeshData));
+            Assert.That(result.Plan, Is.Null);
+        }
+
         [Test]
         public void NullRendererThrowsBecauseItIsACallerDefect()
         {
@@ -666,6 +718,41 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(3),
                 "Every triangle stays provable: none of them needed UV0.");
             Assert.That(result.Plan.TransparentTriangleCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// The one asymmetry the classifier documents: a non-finite position
+        /// makes its triangle Unknown even under a resolution that never looks
+        /// at geometry, where a non-finite UV only blocks UV-dependent proofs.
+        /// </summary>
+        [Test]
+        public void ANonFinitePositionRefusesItsTriangleUnderAUvIndependentProof()
+        {
+            var indices = new[] { 0, 1, 2 };
+            var positions = new Vector3[]
+            {
+                new Vector3(float.NaN, 0f, 0f), Vector3.right, Vector3.up,
+            };
+            var uv0 = new Vector2[]
+            {
+                new Vector2(0.25f, 0.25f),
+                new Vector2(0.75f, 0.25f),
+                new Vector2(0.25f, 0.75f),
+            };
+
+            var outcomes = UnityRendererAlphaAnalysis.Classify(
+                indices,
+                positions,
+                uv0,
+                AlphaResolution.Uniform(TriangleAlphaOutcome.ProvenOpaque),
+                System.Array.Empty<IReadOnlyList<Vector2>>());
+
+            Assert.That(
+                outcomes[0],
+                Is.EqualTo(TriangleAlphaOutcome.Unknown),
+                "a non-finite position is the one malformed input the " +
+                "classifier refuses even when the resolution would never " +
+                "have sampled UV0");
         }
 
         /// <summary>

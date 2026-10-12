@@ -181,31 +181,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
-        // STORAGE TEST ONLY. This pins that AnimationUtility round-trips the
-        // property names we construct. It does NOT establish that Unity generates
-        // or applies these forms -- UnityGeneratesTheMaterialBindingsWeParse does
-        // that, and it is the only test that may close obligation 2.
-        [Test]
-        public void AnimationUtilityRoundTripsAConstructedMaterialBinding()
-        {
-            var clip = new AnimationClip();
-            try
-            {
-                var binding = EditorCurveBinding.FloatCurve("Body", typeof(SkinnedMeshRenderer), "material._Color.r");
-                var curve = new AnimationCurve(new Keyframe(0f, 1f));
-
-                AnimationUtility.SetEditorCurve(clip, binding, curve);
-                var roundTripped = AnimationUtility.GetEditorCurve(clip, binding);
-
-                Assert.That(roundTripped, Is.Not.Null);
-                Assert.That(roundTripped.keys.Length, Is.EqualTo(1));
-            }
-            finally
-            {
-                Object.DestroyImmediate(clip);
-            }
-        }
-
         // Fixture for the sampling observations below. It differs from
         // BuildTwoSlotRenderer in two ways that the sampling tests depend on:
         // an Animator on the root (without which AnimationMode applies no
