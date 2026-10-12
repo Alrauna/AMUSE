@@ -160,23 +160,31 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void LifetimePluginIsConfinedToItsDedicatedPlatform()
+        public void ProbePluginStaysIdleOnTheDefaultPlatform()
         {
-            var attribute = System.Reflection.CustomAttributeData
-                .GetCustomAttributes(typeof(BindingsLifetimeGatePlugin))
-                .Single(value =>
-                    value.AttributeType == typeof(RunsOnPlatforms));
-            var platforms = attribute.ConstructorArguments
-                .SelectMany(argument => argument.Value is
-                    IReadOnlyCollection<System.Reflection.CustomAttributeTypedArgument>
-                        values
-                        ? values
-                        : new[] { argument })
-                .Select(argument => argument.Value as string)
-                .ToArray();
+            using var armed = AmusePlatformFinishPluginTests.SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE bindings lifetime gate");
 
-            CollectionAssert.AreEqual(
-                new[] { BindingsLifetimeGatePlatformName }, platforms);
+            try
+            {
+                // The run flags live in per-build probe state, so every fresh
+                // BuildContext starts this counter at zero; the control run
+                // below must leave it there.
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                var probe = context.GetState<GateProbe>();
+
+                Assert.That(
+                    probe.CaptureRan || probe.ObserveRan,
+                    Is.False,
+                    "the probe plugin declared for the dedicated platform " +
+                    "must never run on the default platform");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
         }
 
         [Test]

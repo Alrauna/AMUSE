@@ -308,5 +308,56 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(PresetParser.TryParse(
                 body, out _, out var refusal), Is.True, refusal.ToString());
         }
+
+        [Test]
+        public void NullBodyRefusesMalformed()
+        {
+            Refuses(null, PresetLoadRefusal.MalformedJson);
+        }
+
+        [Test]
+        public void CoveragePercentBelowZeroRefuses()
+        {
+            Refuses(WithSettings(
+                    "\"minimumOpaqueCoveragePercent\": 25",
+                    "\"minimumOpaqueCoveragePercent\": -1"),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void MissingFeaturesObjectRefuses()
+        {
+            var json = WithSettings(
+                "  \"features\": { \"alphaSeparator\": true },\n", "");
+            Refuses(json, PresetLoadRefusal.MissingField);
+        }
+
+        [Test]
+        public void NonObjectFeaturesRefusesWrongValueType()
+        {
+            Refuses(WithSettings(
+                    "\"features\": { \"alphaSeparator\": true }",
+                    "\"features\": []"),
+                PresetLoadRefusal.WrongValueType);
+        }
+
+        [Test]
+        public void SubSentinelClampWithZeroOpaqueParses()
+        {
+            // A clamp below the sentinel 100 takes the comparison
+            // branch, but an opaque percent of 0 reads as effective
+            // 100, so a clamp of 59 stays inside the bound.
+            var body = WithSettings(
+                    "\"minimumOpaqueAlphaPercent\": 100",
+                    "\"minimumOpaqueAlphaPercent\": 0")
+                .Replace("\"polygonAlphaUpperClampPercent\": 100",
+                    "\"polygonAlphaUpperClampPercent\": 59");
+            Assert.That(PresetParser.TryParse(
+                body, out var preset, out var refusal),
+                Is.True, refusal.ToString());
+            Assert.That(preset.MinimumOpaqueAlphaPercent, Is.EqualTo(0));
+            Assert.That(
+                preset.PolygonAlphaUpperClampPercent, Is.EqualTo(59));
+        }
     }
 }

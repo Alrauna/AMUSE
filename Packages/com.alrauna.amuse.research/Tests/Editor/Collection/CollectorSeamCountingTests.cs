@@ -82,6 +82,24 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                     .Unknown());
         }
 
+        /// <summary>
+        /// Alpha pinned to a constant below one. The resolver proves every
+        /// triangle can never reach opacity, so nothing is unknown and nothing
+        /// is opaque; the answer is the mirror image of ConstantOpaque.
+        /// </summary>
+        private static Semantics.MaterialSemantics ConstantSubUnitAlpha()
+        {
+            return new Semantics.MaterialSemantics(
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
+                    .Complete(Semantics.ScalarSemanticValue.Constant(0.4f)),
+                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
+                    .Unknown(),
+                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
+                    .Unknown());
+        }
+
         private ObservedRenderer Observe(
             Renderer renderer, Semantics.MaterialSemantics semantics)
         {
@@ -115,6 +133,38 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                 Assert.That(
                     submesh.Disposition,
                     Is.EqualTo(SeparationDisposition.WhollyOpaqueCandidate));
+            }
+        }
+
+        [Test]
+        public void ConstantSubUnitAlphaCountsEveryTriangleAsTransparent()
+        {
+            // A constant below one can never reach opacity on any triangle,
+            // so the whole submesh must remain transparent, nothing is
+            // unknown, and the disposition stays Unchanged.
+            var root = _scene.NewRoot("Avatar");
+            var go = _scene.NewMeshRenderer(
+                root, "Mesh", _scene.NewTriangleMesh(2),
+                _scene.NewStandardMaterial(), _scene.NewStandardMaterial());
+
+            var observed = Observe(
+                go.GetComponent<MeshRenderer>(), ConstantSubUnitAlpha());
+
+            Assert.That(observed.Refusal, Is.EqualTo(RendererRefusal.None));
+            Assert.That(observed.TriangleCount, Is.EqualTo(2));
+            foreach (var submesh in observed.Submeshes)
+            {
+                Assert.That(
+                    submesh.AlphaFailure,
+                    Is.EqualTo(AlphaResolutionFailure.None));
+                Assert.That(
+                    submesh.MustRemainTransparentTriangleCount,
+                    Is.EqualTo(submesh.TriangleCount));
+                Assert.That(submesh.ProvenOpaqueTriangleCount, Is.EqualTo(0));
+                Assert.That(submesh.UnknownTriangleCount, Is.EqualTo(0));
+                Assert.That(
+                    submesh.Disposition,
+                    Is.EqualTo(SeparationDisposition.Unchanged));
             }
         }
 

@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Alrauna.Amuse.Editor.Analysis;
+using Alrauna.Amuse.Editor.Host;
 
 namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
@@ -67,42 +68,38 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
         // From takes percents. The pair (99, 2) maps to the byte
         // bounds O = 253 and n = 6.
-        [TestCase(100, 0, 254, 0)]
-        [TestCase(100, 0, 255, 255)]
-        [TestCase(99, 2, 252, 0)]
-        [TestCase(99, 2, 3, 1)]
-        [TestCase(99, 2, 253, 255)]
-        public void PublishedFlagRuleResolvesTheThreeBands(
-            int opaquePercent,
-            int noisePercent,
-            int sample,
-            int expected)
+        [TestCase(252, 0)]                      // witness band
+        [TestCase(253, 255)]                    // opaque band
+        public void PublishedChainRoute_ResolvesWitnessAndOpaqueBands(
+            int sampleByte, byte expectedFlag)
+        {
+            Assert.That(
+                RunPublishedChainOnOneByte(99, 2, sampleByte),
+                Is.EqualTo(expectedFlag));
+        }
+
+        [Test]
+        public void PublishedChainRoute_ErasesBelowTheNoiseBound()
+        {
+            Assert.That(
+                RunPublishedChainOnOneByte(99, 2, 3),
+                Is.EqualTo(AlphaTextureData.ErasedFlag),
+                "sample 3 sits below the noise bound 6, so the byte " +
+                "erases");
+        }
+
+        // The smallest real route that consumes one byte under bounds:
+        // a 1x1 source with a single mip level, the route
+        // SourceImageMaskedChainTests.OddWidthPartitionPlacesEachTexelInItsBlock
+        // drives, so the verdict comes from the published chain and not
+        // from a mirrored rule.
+        private static byte RunPublishedChainOnOneByte(
+            int opaquePercent, int noisePercent, int sampleByte)
         {
             var bounds = AlphaPolicyBounds.From(opaquePercent, noisePercent);
-            var resolved = expected == 255
-                ? byte.MaxValue
-                : (byte)expected;
-            Assert.That(
-                SourceImageMaskedChainTestsHelpers.PublishedFlag(
-                    (byte)sample, bounds),
-                Is.EqualTo(resolved));
-        }
-    }
-
-    internal static class SourceImageMaskedChainTestsHelpers
-    {
-        // Mirrors the inline rule both published-chain routes use. Kept
-        // next to the tests so the table above pins the exact rule the
-        // two routes must implement.
-        internal static byte PublishedFlag(byte sample, AlphaPolicyBounds bounds)
-        {
-            if (sample >= bounds.OpaqueBound)
-            {
-                return byte.MaxValue;
-            }
-            return bounds.NoiseBound > 0 && sample < bounds.NoiseBound
-                ? AlphaTextureData.ErasedFlag
-                : (byte)0;
+            var levels = SourceImageMaskedChain.Build(
+                new byte[] { (byte)sampleByte }, 1, 1, 1, bounds);
+            return levels[0].GetAlpha(0, 0);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Linq;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -153,6 +154,56 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // The mapped term is complete as a term: the per-triangle verdict
             // happens in the classifier over this value.
             AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
+        }
+
+        /// <summary>
+        /// The chain-admitted row above only asserts completeness, which a
+        /// collapse of the outline factor to the constant one would also
+        /// satisfy. This row closes that under-assertion: the unproven
+        /// outline texture carries an asymmetric alpha field no constant
+        /// can represent (one non-opaque texel among opaque ones), so the
+        /// admitted alpha must still carry the outline texture as a mapped
+        /// sample in its product chain. A collapse drops the sample,
+        /// shrinking the chain to the base factor alone, and fails both
+        /// chain assertions.
+        /// </summary>
+        [Test]
+        public void OutlinesEnabled_UnprovenTexture_HoleField_KeepsTheMappedOutlineFactor()
+        {
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(255, 255, 255, 255);
+            }
+
+            pixels[0] = new Color32(255, 255, 255, 128);
+            var outlineTexture = TestTextureImport.WritePng(
+                TempFolder + "/outline_hole_field.png",
+                4,
+                4,
+                pixels,
+                importer => importer.mipmapEnabled = false);
+
+            var material = OutlineEnabled();
+            material.SetTexture("_OutlineTexture", outlineTexture);
+
+            var result = Interpret(material);
+
+            AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
+
+            var value = result.Semantics.Alpha.GetCompleteValue();
+            Assert.That(
+                value.Kind,
+                Is.EqualTo(
+                    ScalarSemanticValueKind.ProductChainOfTextureSamples));
+            Assert.That(value.GetChainFactorCount(), Is.EqualTo(2));
+
+            var outlineToken = ExpectedToken(outlineTexture);
+            Assert.That(
+                Enumerable.Range(0, value.GetChainFactorCount())
+                    .Select(index => value.GetChainSample(index).Source.Value),
+                Has.Member(outlineToken),
+                "the outline contribution must survive as a mapped sample");
         }
 
         [Test]

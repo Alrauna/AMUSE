@@ -432,6 +432,75 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A build target with no proof policy must name the fact before
+        /// analysis runs. Arming the test-only target override keeps the
+        /// editor's own build target untouched while the barrier runs on
+        /// StandaloneLinux64, a target no admission table carries. The
+        /// run records the unsupported-target entry exactly once and
+        /// holds the conservative fallback: no admitted policy, so the
+        /// run records no positive-mutation outcome.
+        /// </summary>
+        [Test]
+        public void UnsupportedBuildTarget_ReportsTheUnsupportedSamplingGate()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE unsupported target disclosure fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+
+            var original = AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                () => BuildTarget.StandaloneLinux64;
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(unityVersion: "2022.3.23f1"),
+                        subjects => true));
+
+                var unsupportedEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey ==
+                            "amuse.sampling.UnsupportedBuildTarget")
+                    {
+                        unsupportedEntries++;
+                    }
+                }
+
+                Assert.That(unsupportedEntries, Is.EqualTo(1),
+                    "an unsupported build target is one named console " +
+                    "entry before analysis, never two and never silent");
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.SamplingTarget,
+                    Is.EqualTo(BuildTarget.StandaloneLinux64));
+                Assert.That(amuse.HasSamplingPolicy, Is.False,
+                    "a target with no proof policy admits no sampling " +
+                    "policy, so the run records no positive-mutation " +
+                    "outcome");
+                Assert.That(amuse.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.ConservativeMobile),
+                    "the refused selection keeps the conservative " +
+                    "mobile value");
+            }
+            finally
+            {
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests = original;
+                Object.DestroyImmediate(root);
+            }
+        }
+
         // --- Falsifier 3: an implementation that grants by material reference
         // instead of shader name must fail the distinct-materials-same-shader
         // case: two materials, one shader, one grant covers both. ---

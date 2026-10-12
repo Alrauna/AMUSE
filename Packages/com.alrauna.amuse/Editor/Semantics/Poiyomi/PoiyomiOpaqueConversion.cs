@@ -33,9 +33,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     {
         None,
 
-        // Identity
-        UnattestedMaterial,
-
         // Schema / readability
         ConversionPropertyAbsent,
         ConversionPropertyNotFinite,
@@ -263,6 +260,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// evidence plus the two effective non-property facts. It performs no
         /// capture and touches no live material, so it cannot read mutable
         /// state after the evidence a decision depends on.
+        /// <para>
+        /// Call only with evidence that passed
+        /// <see cref="PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity"/>:
+        /// attestation lives in the verified-entry caller
+        /// (<c>AlphaSeparationPreparation</c> refuses with a
+        /// <c>SourceIdentity</c> detail before eligibility), so the refusal
+        /// enum carries no unattested-source member.
+        /// </para>
         /// <para>
         /// Order is load-bearing: the finiteness sweep is a data-validity
         /// refusal, so it precedes the no-op classification. Every gate whose

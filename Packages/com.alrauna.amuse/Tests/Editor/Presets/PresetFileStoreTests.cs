@@ -84,5 +84,79 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(refusal,
                 Is.EqualTo(PresetLoadRefusal.MalformedJson));
         }
+
+        [Test]
+        public void MissingShippedFile_RefusesWithFileMissing()
+        {
+            // Only safe.json exists. The fixed file walk reaches
+            // normal.json, finds no imported text asset and no disk
+            // file, and refuses by name.
+            File.WriteAllText(TempFolder + "/safe.json", ValidBody);
+            AssetDatabase.ImportAsset(TempFolder + "/safe.json");
+
+            var result = PresetFileStore.TryLoadAllFor(
+                TempFolder, out var presets, out var failedFile,
+                out var refusal);
+
+            Assert.That(result, Is.False);
+            Assert.That(presets, Is.Empty);
+            Assert.That(failedFile, Is.EqualTo("normal.json"));
+            Assert.That(refusal,
+                Is.EqualTo(PresetLoadRefusal.FileMissing));
+        }
+
+        [Test]
+        public void NullFolder_RefusesWithFileMissing()
+        {
+            var result = PresetFileStore.TryLoadAllFor(
+                null, out var presets, out var failedFile,
+                out var refusal);
+
+            Assert.That(result, Is.False);
+            Assert.That(presets, Is.Empty);
+            Assert.That(failedFile, Is.EqualTo("Presets"));
+            Assert.That(refusal,
+                Is.EqualTo(PresetLoadRefusal.FileMissing));
+        }
+
+        [Test]
+        public void RootedFolderOutsideAssets_FallsBackToDirectDiskRead()
+        {
+            // A folder outside Assets can hold no imported text
+            // asset, so the store must take its direct-disk fallback
+            // branch for every file.
+            var folder = Path.Combine(
+                Path.GetTempPath(), "AmuseTests_PresetFileStoreOutside");
+            WriteOutsidePreset(folder, "safe.json", "Safe");
+            WriteOutsidePreset(folder, "normal.json", "Normal");
+            WriteOutsidePreset(folder, "aggressive.json", "Aggressive");
+            try
+            {
+                var result = PresetFileStore.TryLoadAllFor(
+                    folder, out var presets, out var failedFile,
+                    out var refusal);
+
+                Assert.That(result, Is.True, failedFile + ": " + refusal);
+                Assert.That(presets, Has.Count.EqualTo(3));
+                Assert.That(presets[0].Name, Is.EqualTo("Safe"));
+                Assert.That(presets[1].Name, Is.EqualTo("Normal"));
+                Assert.That(presets[2].Name, Is.EqualTo("Aggressive"));
+                Assert.That(refusal, Is.EqualTo(PresetLoadRefusal.None));
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        private static void WriteOutsidePreset(
+            string folder, string fileName, string presetName)
+        {
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(
+                Path.Combine(folder, fileName),
+                ValidBody.Replace("\"name\": \"Safe\"", "\"name\": \""
+                    + presetName + "\""));
+        }
     }
 }

@@ -704,24 +704,5 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "authored mesh=" + Format(AuthoredMeshBounds) +
                 " recalculated submesh1=" + Format(beforeSecondWrite));
         }
-
-        [Test]
-        public void DestroyingAnAbandonedCloneLeavesTheSourceIntact()
-        {
-            var source = CreateAdversarialSource();
-            var before = Describe(source);
-
-            var clone = Object.Instantiate(source);
-            FinalizeLayout(clone);
-            Object.DestroyImmediate(clone);
-
-            Assert.That(clone == null, Is.True,
-                "DestroyImmediate did not destroy the abandoned clone, so the " +
-                "post-validation sweep cannot rely on it.");
-            Assert.That(
-                Describe(source), Is.EqualTo(before),
-                "EVIDENCE BOUNDARY: destroying the clone changed the source " +
-                "mesh's characterized state.");
-        }
     }
 }

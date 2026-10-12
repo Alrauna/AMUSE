@@ -205,5 +205,108 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 chain[0].GetAlpha(56, 32), Is.EqualTo(byte.MaxValue));
         }
+
+        /// <summary>
+        /// The first fail-closed arm: a texture with no asset path has no
+        /// source the route could clone or read, so the capture refuses
+        /// before any file work. The call shape follows the two happy-path
+        /// tests above.
+        /// </summary>
+        [Test]
+        public void TryCapture_TextureWithNoAssetPath_RefusesFailClosed()
+        {
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, true);
+
+            var ok = false;
+            AlphaMipChain chain = null;
+            try
+            {
+                ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    1.0f,
+                    AlphaPolicyBounds.Inert,
+                    out chain);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+
+            Assert.That(ok, Is.False, "no asset path must refuse");
+            Assert.That(chain, Is.Null);
+        }
+
+        /// <summary>
+        /// A fail-closed refusal for a texture that sits on an asset path
+        /// but is not its file's main asset. The capture seam is silent on
+        /// this extension: the source-image reader's extension gate
+        /// refuses before the main-asset check, and TryCapture exposes no
+        /// diagnostic, so the row proves the fail-closed refusal without
+        /// arm attribution. The arm-level attribution (the non-main-asset
+        /// check) lives in the execution report, alongside the fixture's
+        /// own main-asset preconditions below.
+        /// </summary>
+        [Test]
+        public void TryCapture_SubAssetTextureOnAnExistingPath_RefusesFailClosed()
+        {
+            var container =
+                ScriptableObject.CreateInstance
+                    <nadena.dev.ndmf.runtime.SubAssetContainer>();
+            var containerPath = TempFolder +
+                "/streaming_evidence_subasset_container.asset";
+            AssetDatabase.CreateAsset(container, containerPath);
+
+            var subTexture = new Texture2D(4, 4, TextureFormat.RGBA32, true);
+            AssetDatabase.AddObjectToAsset(subTexture, containerPath);
+            AssetDatabase.SaveAssets();
+
+            var ok = false;
+            AlphaMipChain chain = null;
+            try
+            {
+                // No-op guards: the row proves the fail-closed refusal,
+                // and which arm returned it is not observable through
+                // this silent seam. The fixture must sit on a real path
+                // whose main asset is someone else, so the non-main-asset
+                // precondition holds regardless of which internal gate
+                // refused, or the assertion below proves nothing.
+                Assert.That(
+                    AssetDatabase.GetAssetPath(subTexture),
+                    Is.EqualTo(containerPath),
+                    "fixture precondition: the sub-asset must sit on the " +
+                    "container path");
+                Assert.That(
+                    ReferenceEquals(
+                        AssetDatabase.LoadMainAssetAtPath(containerPath),
+                        subTexture),
+                    Is.False,
+                    "fixture precondition: the main asset must not be the " +
+                    "sub-asset");
+
+                ok = UnityStreamingTextureEvidence.TryCapture(
+                    subTexture,
+                    TextureChannel.Alpha,
+                    1.0f,
+                    AlphaPolicyBounds.Inert,
+                    out chain);
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(
+                        containerPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(containerPath);
+                }
+
+                if (subTexture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(subTexture);
+                }
+            }
+
+            Assert.That(ok, Is.False, "a non-main-asset must refuse");
+            Assert.That(chain, Is.Null);
+        }
     }
 }

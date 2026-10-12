@@ -176,25 +176,25 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             }
         }
 
-        [TestCase(0, -140)]
-        [TestCase(1, -20)]
-        [TestCase(-3, -20)]
-        [TestCase(7, 0)]
-        [TestCase(12345, 20)]
-        public void SharedDyadicToRationalMatchesDirectConstruction(
-            int significand, int exponent)
+        [TestCase(0, -140, 0L, 1L)]
+        [TestCase(1, -20, 1L, 1048576L)]
+        [TestCase(-3, -20, -3L, 1048576L)]
+        [TestCase(7, 0, 7L, 1L)]
+        [TestCase(12345, 20, 12944670720L, 1L)]
+        public void SharedDyadicToRationalMatchesIndependentRationals(
+            int significand, int exponent, long expectedNumerator,
+            long expectedDenominator)
         {
             var dyadic = new ExactDyadic(significand, exponent);
-            var shared = ExactUvGeometry.ToRational(dyadic);
-            var direct = exponent >= 0
-                ? new ExactRational((BigInteger)significand << exponent)
-                : new ExactRational(
-                    (BigInteger)significand, BigInteger.One << -exponent);
+            // The same ExactDyadic construction the replaced test used,
+            // kept as-is.
+            var actual = ExactUvGeometry.ToRational(dyadic);
 
             Assert.That(
-                shared.Numerator, Is.EqualTo(direct.Numerator));
-            Assert.That(
-                shared.Denominator, Is.EqualTo(direct.Denominator));
+                actual,
+                Is.EqualTo(new ExactRational(
+                    new BigInteger(expectedNumerator),
+                    new BigInteger(expectedDenominator))));
         }
     }
 }

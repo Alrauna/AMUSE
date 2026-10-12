@@ -4,6 +4,7 @@ using System.Reflection;
 using Alrauna.Amuse.Research.Census;
 using Alrauna.Amuse.Research.Collection;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Research.Tests.Editor.Collection
@@ -132,6 +133,52 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
             Assert.That(submesh.MaterialAssetPath, Is.Null);
             Assert.That(submesh.MaterialAssetGuid, Is.Null);
             Assert.That(submesh.ShaderName, Is.EqualTo("Standard"));
+        }
+
+        [Test]
+        public void ImportedMaterialAssetCarriesAssetIdentity()
+        {
+            // A material saved into the project is a real asset. The census
+            // records its asset path and GUID so downstream stages can group
+            // by shared asset without ever seeing the material itself.
+            const string folder = "Assets/AmuseResearchTests_CensusIdentity";
+            const string assetPath =
+                folder + "/CensusTestStandard.mat";
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseResearchTests_CensusIdentity");
+            }
+            var material = _scene.NewStandardMaterial();
+            AssetDatabase.CreateAsset(material, assetPath);
+            AssetDatabase.ImportAsset(assetPath);
+
+            try
+            {
+                var root = _scene.NewRoot("Avatar");
+                _scene.NewMeshRenderer(
+                    root, "Mesh", _scene.NewTriangleMesh(1), material);
+
+                var submesh = AvatarCensusCollector
+                    .Collect(root, null).Renderers[0].Submeshes[0];
+
+                Assert.That(
+                    submesh.MaterialName, Is.EqualTo("CensusTestStandard"));
+                Assert.That(submesh.MaterialAssetPath, Is.EqualTo(assetPath));
+                Assert.That(
+                    submesh.MaterialAssetGuid,
+                    Is.Not.Null.And.Not.Empty);
+                Assert.That(
+                    submesh.MaterialAssetGuid, Has.Length.EqualTo(32));
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(assetPath);
+                if (AssetDatabase.IsValidFolder(folder))
+                {
+                    AssetDatabase.DeleteAsset(folder);
+                }
+            }
         }
 
         [Test]

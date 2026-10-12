@@ -458,6 +458,58 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(HostLifecycleRefusal.UnsupportedVrchatSdkAvatarsVersion));
         }
 
+        /// <summary>
+        /// Grammar edges, pinned against the answers recorded from the
+        /// production parser on the branch under test: each string runs
+        /// through both version slots. The Unity grammar is
+        /// <c>M.m.p&lt;type&gt;&lt;n&gt;</c> with nothing after the
+        /// revision digits; the package grammar is exactly three
+        /// dot-separated digit runs with nothing after, so a prerelease or
+        /// build-metadata suffix parses as unparseable input and refuses.
+        /// Any grammar change must fail loudly here.
+        /// </summary>
+        // The refusal member is internal, so a public NUnit test method
+        // cannot take it as a parameter; the recorded answer travels as an
+        // admission flag and the body asserts the exact member.
+        // Recorded answers, Unity slot first, NDMF slot second:
+        // "2022.3.22f1": admitted; unparseable on the package grammar
+        // (the release-type suffix is a foreign character there).
+        [TestCase("2022.3.22f1", true)]
+        // "2022.3.22f1 junk": nothing may follow the revision digits.
+        [TestCase("2022.3.22f1 junk", false)]
+        // "1.14.4-pre.2+build.meta": '-' and '+' are foreign characters
+        // to the package grammar; a prerelease suffix refuses the same
+        // way as any other unparseable input.
+        [TestCase("1.14.4-pre.2+build.meta", false)]
+        // "2022.3": the Unity grammar requires a third digit run; the
+        // package grammar requires exactly three components.
+        [TestCase("2022.3", false)]
+        // "1.14.4.1": a fourth component is a foreign character to the
+        // package grammar.
+        [TestCase("1.14.4.1", false)]
+        // "1..4": an empty component fails the digit run.
+        [TestCase("1..4", false)]
+        public void VersionGrammarEdge_ResolvesToTheRecordedAnswers(
+            string version, bool unityAdmits)
+        {
+            var asUnity = HostLifecycleCapability.Evaluate(
+                SupportedFacts(unityVersion: version));
+            var asNdmf = HostLifecycleCapability.Evaluate(
+                SupportedFacts(ndmfVersion: version));
+
+            Assert.That(
+                asUnity.Refusal,
+                Is.EqualTo(unityAdmits
+                    ? HostLifecycleRefusal.None
+                    : HostLifecycleRefusal.UnsupportedUnityVersion));
+            Assert.That(
+                asUnity.MayUsePositiveMutation, Is.EqualTo(unityAdmits));
+            Assert.That(
+                asNdmf.Refusal,
+                Is.EqualTo(HostLifecycleRefusal.UnsupportedNdmfVersion));
+            Assert.That(asNdmf.MayUsePositiveMutation, Is.False);
+        }
+
         [Test]
         public void GenericPlatformRefusesWithPlatformReason()
         {

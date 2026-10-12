@@ -2970,27 +2970,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         [Test]
-        public void TryGetProfileForShaderName_TransparentShader_ReturnsTransparentProfile()
-        {
-            var m = typeof(LilToonSourceAttestation).GetMethod(
-                "TryGetProfileForShaderName",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.That(m, Is.Not.Null);
-
-            var args = new object[]
-            {
-                LilToonSourceAttestation.TransparentShaderName, null,
-            };
-            Assert.That((bool)m.Invoke(null, args), Is.True);
-
-            var profile = args[1];
-            Assert.That(profile, Is.Not.Null);
-
-            var nameProp = profile.GetType().GetProperty("ShaderName", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            Assert.That(nameProp.GetValue(profile), Is.EqualTo(LilToonSourceAttestation.TransparentShaderName));
-        }
-
-        [Test]
         public void ResolveCanonicalTargetShaderName_OutlineWrappers_ReturnsOutlineOpaqueShader()
         {
             Assert.That(

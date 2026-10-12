@@ -126,7 +126,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                 "the serialized default of 0.5.");
         }
 
-            [Test]
+        [Test]
         public void UnprovenSlotMappingStillCountsTheMesh()
         {
             var root = _scene.NewRoot("Slots");

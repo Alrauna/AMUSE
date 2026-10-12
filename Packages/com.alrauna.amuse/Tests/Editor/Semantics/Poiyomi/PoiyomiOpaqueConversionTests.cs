@@ -74,12 +74,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         };
 
         [Test]
-        public void ExpectedCanonicalTuple_HasTwentyThreeProperties()
-        {
-            Assert.That(ExpectedCanonicalTuple.Length, Is.EqualTo(23));
-        }
-
-        [Test]
         public void CanonicalOpaqueProperties_MatchTheIndependentlyStatedTuple()
         {
             var actual = PoiyomiOpaqueConversion.CanonicalOpaqueProperties;
@@ -553,6 +547,72 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "divergence flag");
         }
 
+        /// <summary>
+        /// The normalization flag is part of the convertible verdict: a
+        /// caller that prepares the material must learn that the clone
+        /// writes <c>_AlphaPremultiply</c> 0 over the source's 1. The
+        /// depth divergence stays unset, so the disclosure is
+        /// premultiply-only.
+        /// </summary>
+        [Test]
+        public void PremultiplyNormalization_IsReportedOnTheConvertibleRow()
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_AlphaPremultiply", 1f);
+
+            var eligibility = EvaluateFor(material);
+
+            AssertConvertible(eligibility);
+            Assert.That(
+                eligibility.PremultiplyNormalization, Is.True,
+                "the premultiply admission must report the normalization");
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
+        }
+
+        /// <summary>
+        /// The flag is false on every refusal: a refused material moves
+        /// nowhere, so there is nothing to normalize and nothing to
+        /// disclose. The premultiply read runs before the refusing gate,
+        /// so the verdict must clear the computed flag rather than leak
+        /// it.
+        /// </summary>
+        [Test]
+        public void PremultiplyNormalization_IsClearOnTheRefusedRow()
+        {
+            var material = ConvertibleFade();
+            material.SetFloat("_AlphaPremultiply", 1f);
+            material.SetFloat("_AlphaToCoverage", 1f);
+
+            var eligibility = EvaluateFor(material);
+
+            AssertRefusal(
+                eligibility,
+                PoiyomiOpaqueConversionRefusal.AlphaToCoverageEnabled);
+            Assert.That(eligibility.PremultiplyNormalization, Is.False);
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
+        }
+
+        /// <summary>
+        /// The flag is false on AlreadyOpaque too: the no-op outcome never
+        /// moves the material, so the recipe's own canonical
+        /// <c>_AlphaPremultiply</c> 0 stays in place and no normalization
+        /// is reported.
+        /// </summary>
+        [Test]
+        public void PremultiplyNormalization_IsClearOnTheAlreadyOpaqueRow()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+
+            var eligibility = EvaluateFor(material);
+
+            Assert.That(
+                eligibility.Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+            Assert.That(eligibility.PremultiplyNormalization, Is.False);
+            Assert.That(eligibility.DepthTestDivergence, Is.False);
+        }
+
         // --- Falsifier 2: additive blend coverage ---------------------------
         //
         // The conversion blend gates still cover the additive factors. The
@@ -767,6 +827,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void AddBlendOp_DoesNotAffectEligibility(float addBlendOp)
         {
             var material = ConvertibleFade();
+
+            // Fixture precondition: this shader declares _AddBlendOp so the
+            // variation below is real, and the schema deliberately omits it.
+            Assert.That(material.HasProperty("_AddBlendOp"), Is.True);
+            Assert.That(ExpectedConversionSchema, Has.No.Member("_AddBlendOp"));
+
             material.SetFloat("_AddBlendOp", addBlendOp);
 
             AssertConvertible(EvaluateFor(material));
@@ -807,6 +873,46 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             AssertRefusal(
                 EvaluateWith(ConvertibleFade(), "_Cutoff", 2f),
+                PoiyomiOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
+        }
+
+        /// <summary>
+        /// The clip gate inside the already-opaque classification must
+        /// fire on both of its routes. Plain path: opacity comes from
+        /// <c>_Mode</c> 0 alone with the force-opaque flag off, and a
+        /// cutoff above 1 must still block the fast path and land on the
+        /// named clip refusal instead of <c>AlreadyOpaque</c>.
+        /// </summary>
+        [Test]
+        public void CutoffAboveOne_PlainOpaquePath_RefusesOnTheClipGate()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_Cutoff", 1.001f);
+
+            AssertRefusal(
+                EvaluateFor(material),
+                PoiyomiOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
+        }
+
+        /// <summary>
+        /// Forced-opaque path: opacity comes from
+        /// <c>_AlphaForceOpaque</c> 1 under a non-zero <c>_Mode</c>, the
+        /// route the authored forced-alpha row classifies as
+        /// <c>AlreadyOpaque</c>. The same cutoff above 1 must block that
+        /// route too and refuse by name.
+        /// </summary>
+        [Test]
+        public void CutoffAboveOne_ForcedOpaquePath_RefusesOnTheClipGate()
+        {
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 1f);
+            material.SetFloat("_Cutoff", 1.001f);
+
+            AssertRefusal(
+                EvaluateFor(material),
                 PoiyomiOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
         }
 
@@ -1096,6 +1202,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 result.Outcome,
                 Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque));
+        }
+
+        /// <summary>
+        /// No refusal member names a non-binary <c>_AlphaForceOpaque</c>
+        /// value. The value's only power is failing the already-opaque
+        /// fast path's first family (non-zero mode with a force-opaque
+        /// flag other than exactly 1), which drops the material into the
+        /// ordinary gates. The contrast below holds everything but the
+        /// flag fixed: with the flag exactly 1 the fast path classifies
+        /// <c>AlreadyOpaque</c> and the outline blend pair is never read;
+        /// with the flag 0.5 the fast path is denied and the first gate
+        /// with an opinion refuses by name. A classification that accepted
+        /// the non-binary value as forced-opaque would report
+        /// <c>AlreadyOpaque</c> and fail the refusal assertion.
+        /// </summary>
+        [Test]
+        public void NonBinaryForceOpaque_FallsThroughToTheOrdinaryGates()
+        {
+            var sibling = MakeCanonical(NewFixtureMaterial());
+            sibling.SetFloat("_EnableOutlines", 0f);
+            sibling.SetFloat("_Mode", 1f);
+            sibling.SetFloat("_OutlineDstBlendAlpha", 2f);
+
+            Assert.That(
+                EvaluateFor(sibling).Outcome,
+                Is.EqualTo(PoiyomiOpaqueConversionOutcome.AlreadyOpaque),
+                "the binary forced-alpha sibling must fast-path");
+
+            var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_EnableOutlines", 0f);
+            material.SetFloat("_Mode", 1f);
+            material.SetFloat("_AlphaForceOpaque", 0.5f);
+            material.SetFloat("_OutlineDstBlendAlpha", 2f);
+
+            AssertRefusal(
+                EvaluateFor(material),
+                PoiyomiOpaqueConversionRefusal.UnsupportedOutlineBlendEquation);
         }
 
         private static readonly (string Property, float PerturbedValue)[] EssentialOpaquePropertyPerturbations =
@@ -1427,37 +1570,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(diagnostic, Is.Not.Null);
         }
 
-        [Test]
-        public void ExpectedConversionSchema_HasTwentyThreeProperties()
-        {
-            Assert.That(ExpectedConversionSchema.Length, Is.EqualTo(23));
-        }
-
-        [Test]
-        public void FixtureShader_DeclaresEveryConversionReadProperty()
-        {
-            var material = NewFixtureMaterial();
-
-            foreach (var property in ExpectedConversionSchema)
-            {
-                Assert.That(
-                    material.HasProperty(property),
-                    Is.True,
-                    $"Fixture shader must declare '{property}'.");
-            }
-        }
-
         /// <summary>
-        /// Declared only so the conversion tests can vary it and prove it
-        /// changes nothing. It is not a conversion-read property.
+        /// Guards the fixture itself through production: the shader behind
+        /// every behavioral row must survive the real capture and eligibility
+        /// route without a missing conversion-read property.
         /// </summary>
         [Test]
-        public void FixtureShader_DeclaresAddBlendOpForNonDependencyTests()
+        public void FixtureMaterial_ConvertsThroughProductionWithoutAMissingPropertyRefusal()
         {
             var material = NewFixtureMaterial();
 
-            Assert.That(material.HasProperty("_AddBlendOp"), Is.True);
-            Assert.That(ExpectedConversionSchema, Has.No.Member("_AddBlendOp"));
+            // Drive the same verified conversion route the behavioral rows
+            // use, on a pristine fixture material with no perturbations.
+            var outcome = EvaluateFor(material);
+
+            // A fixture shader that lost a conversion-read declaration
+            // refuses right here with ConversionPropertyAbsent. The refusal
+            // is kind-only: to identify the property, loop the schema in
+            // the failure message if wanted.
+            Assert.That(
+                outcome.Refusal,
+                Is.Not.EqualTo(PoiyomiOpaqueConversionRefusal
+                    .ConversionPropertyAbsent),
+                "the fixture shader must declare every conversion-read " +
+                "property, or the behavioral rows cannot trust their " +
+                "preconditions");
         }
     }
 }

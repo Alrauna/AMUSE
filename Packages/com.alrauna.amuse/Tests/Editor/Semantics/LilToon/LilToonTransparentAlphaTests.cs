@@ -484,28 +484,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var material = NewLayerMaterial(
                 "falsifier_replace", 255, 1f, 1f);
 
-            try
-            {
-                var captured = CaptureTransparentEvidence(material);
-                var alpha = LilToonTransparentMaterialSemantics
-                    .InterpretVerifiedTransparentAlpha(captured);
-                var resolution = AlphaSemanticsResolver.Resolve(
-                    alpha,
-                    ProvidingLayeredFor(
-                        captured,
-                        OpaqueThenTransparentChain(),
-                        AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
-                    0);
+            var captured = CaptureTransparentEvidence(material);
+            var alpha = LilToonTransparentMaterialSemantics
+                .InterpretVerifiedTransparentAlpha(captured);
+            var resolution = AlphaSemanticsResolver.Resolve(
+                alpha,
+                ProvidingLayeredFor(
+                    captured,
+                    OpaqueThenTransparentChain(),
+                    AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop,
+                0);
 
-                Assert.That(resolution.IsResolved, Is.True);
-                Assert.That(
-                    resolution.Classify(CornerTriangle()),
-                    Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
-            }
-            catch (Exception e)
-            {
-                Assert.Fail(e.ToString());
-            }
+            Assert.That(resolution.IsResolved, Is.True);
+            Assert.That(
+                resolution.Classify(CornerTriangle()),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
         /// <summary>

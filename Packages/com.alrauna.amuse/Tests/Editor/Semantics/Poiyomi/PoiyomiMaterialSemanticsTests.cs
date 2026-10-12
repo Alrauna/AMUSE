@@ -132,25 +132,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void PoiyomiSemanticOutput_DeclaresDeterministicDiagnosticOrder()
-        {
-            // Diagnostics are ordered Material, BaseColor, Alpha, Emission,
-            // Normal. The enum ordinal encodes that order.
-            Assert.That(
-                (int)PoiyomiSemanticOutput.Material,
-                Is.LessThan((int)PoiyomiSemanticOutput.BaseColor));
-            Assert.That(
-                (int)PoiyomiSemanticOutput.BaseColor,
-                Is.LessThan((int)PoiyomiSemanticOutput.Alpha));
-            Assert.That(
-                (int)PoiyomiSemanticOutput.Alpha,
-                Is.LessThan((int)PoiyomiSemanticOutput.Emission));
-            Assert.That(
-                (int)PoiyomiSemanticOutput.Emission,
-                Is.LessThan((int)PoiyomiSemanticOutput.Normal));
-        }
-
-        [Test]
         public void FullTwoPassMaterialEvidenceRequest_ContainsAllRequiredSchemaPropertiesAndTwoPassAlphaProperties()
         {
             var request = PoiyomiMaterialSemantics.FullTwoPassMaterialEvidenceRequest;

@@ -179,6 +179,257 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.True);
         }
 
+        // --- third layer: the same equation under the 3rd spellings --------
+
+        /// <summary>
+        /// The standard third-layer evidence: main, third texture, and
+        /// third blend mask assignments on the admitted shape, every gate
+        /// at its exact-off value.
+        /// </summary>
+        private static CapturedMaterialEvidence
+            CreateStandardThirdLayerEvidence()
+        {
+            return CreateLayerEvidence(
+                mainAssignment: CreateTextureAssignment(
+                    "test:main_tex",
+                    hasSampling: true,
+                    sampling: new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        TextureWrapMode.Clamp),
+                    hasAlpha: false,
+                    hasRed: false),
+                layerAssignment: CreateTextureAssignment(
+                    "test:main_3rd_tex",
+                    hasSampling: true,
+                    sampling: new TextureSampling(
+                        TextureFilterMode.Bilinear,
+                        TextureWrapMode.Repeat),
+                    hasAlpha: true,
+                    hasRed: false),
+                blendMaskAssignment: CreateTextureAssignment(
+                    "test:main_3rd_blend_mask",
+                    hasSampling: false,
+                    sampling: default,
+                    hasAlpha: false,
+                    hasRed: true),
+                third: true);
+        }
+
+        private static void AssertThirdLayerRefusal(
+            CapturedMaterialEvidence evidence,
+            string expectedDetail)
+        {
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            var term = LilToonLayerAlphaTerm.Interpret(
+                evidence, third: true, diagnostics);
+
+            Assert.That(
+                term.Kind,
+                Is.EqualTo(LilToonLayerAlphaTermKind.Refused));
+            Assert.That(
+                diagnostics.Any(d =>
+                    d.Code == LilToonSemanticDiagnosticCode.UnsupportedFeature &&
+                    d.Detail == expectedDetail),
+                Is.True,
+                $"expected a refusal naming {expectedDetail}");
+        }
+
+        [Test]
+        public void ThirdLayer_ComposesTheChainUnderTheThirdSpellings()
+        {
+            var evidence = CreateStandardThirdLayerEvidence();
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            var term = LilToonLayerAlphaTerm.Interpret(
+                evidence, third: true, diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonLayerAlphaTermKind.Field));
+            Assert.That(
+                term.Value.Kind,
+                Is.EqualTo(ScalarSemanticValueKind.ProductChainOfTextureSamples));
+            Assert.That(term.Value.GetChainFactorCount(), Is.EqualTo(2));
+
+            var layerSample = term.Value.GetChainSample(0);
+            Assert.That(
+                layerSample.Sampling.Wrap,
+                Is.EqualTo(TextureWrapMode.Repeat));
+
+            var blendMaskSample = term.Value.GetChainSample(1);
+            Assert.That(
+                blendMaskSample.Sampling.Wrap,
+                Is.EqualTo(TextureWrapMode.Clamp));
+            Assert.That(diagnostics, Is.Empty);
+        }
+
+        [Test]
+        public void ThirdLayer_DecalFlags_RefuseFailClosed()
+        {
+            var decalFlags = new[]
+            {
+                "_Main3rdTexIsDecal",
+                "_Main3rdTexIsLeftOnly",
+                "_Main3rdTexIsRightOnly",
+                "_Main3rdTexShouldCopy",
+                "_Main3rdTexShouldFlipMirror",
+                "_Main3rdTexShouldFlipCopy",
+            };
+
+            foreach (var flag in decalFlags)
+            {
+                AssertThirdLayerRefusal(
+                    CreateStandardThirdLayerEvidence().WithScalar(flag, 1f),
+                    flag);
+            }
+        }
+
+        [Test]
+        public void ThirdLayer_MsdfFlag_RefusesFailClosed()
+        {
+            AssertThirdLayerRefusal(
+                CreateStandardThirdLayerEvidence()
+                    .WithScalar("_Main3rdTexIsMSDF", 1f),
+                "_Main3rdTexIsMSDF");
+        }
+
+        [Test]
+        public void ThirdLayer_AudioLinkToggle_RefusesFailClosed()
+        {
+            AssertThirdLayerRefusal(
+                CreateStandardThirdLayerEvidence()
+                    .WithScalar("_AudioLink2Main3rd", 1f),
+                "_AudioLink2Main3rd");
+        }
+
+        [Test]
+        public void ThirdLayer_Cull_RefusesFailClosed()
+        {
+            AssertThirdLayerRefusal(
+                CreateStandardThirdLayerEvidence()
+                    .WithScalar("_Main3rdTex_Cull", 1f),
+                "_Main3rdTex_Cull");
+        }
+
+        [Test]
+        public void ThirdLayer_DissolveModeOn_RefusesFailClosed()
+        {
+            // A rounded mode of exactly one turns the masked threshold on.
+            AssertThirdLayerRefusal(
+                CreateStandardThirdLayerEvidence()
+                    .WithVector("_Main3rdDissolveParams",
+                        new Vector4(1f, 0f, 0.5f, 0.1f)),
+                "_Main3rdDissolveParams");
+
+            // The rounding boundary: half rounds to even, which the shader
+            // leaves off, so the gate must admit it rather than refuse.
+            var admitted = CreateStandardThirdLayerEvidence()
+                .WithVector("_Main3rdDissolveParams",
+                    new Vector4(0.5f, 0f, 0.5f, 0.1f));
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonLayerAlphaTerm.Interpret(
+                admitted, third: true, diagnostics);
+
+            Assert.That(
+                term.Kind,
+                Is.EqualTo(LilToonLayerAlphaTermKind.Field),
+                "half rounds to even, which stays off");
+            Assert.That(diagnostics, Is.Empty);
+        }
+
+        [Test]
+        public void ThirdLayer_DistanceFadeStrength_RefusesFailClosed()
+        {
+            AssertThirdLayerRefusal(
+                CreateStandardThirdLayerEvidence()
+                    .WithVector("_Main3rdDistanceFade",
+                        new Vector4(0.1f, 0.01f, 0.5f, 0f)),
+                "_Main3rdDistanceFade");
+        }
+
+        [Test]
+        public void ThirdLayer_AlphaMode_OutOfRangeStaysInertAndBrokenValuesRefuse()
+        {
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+
+            // Modes above four write nothing, exactly like mode zero.
+            foreach (var outOfRange in new[] { 5f, 6f })
+            {
+                var inert = CreateStandardThirdLayerEvidence()
+                    .WithScalar("_Main3rdTexAlphaMode", outOfRange);
+                var inertTerm = LilToonLayerAlphaTerm.Interpret(
+                    inert, third: true, diagnostics);
+
+                Assert.That(
+                    inertTerm.Kind,
+                    Is.EqualTo(LilToonLayerAlphaTermKind.Inert),
+                    $"alpha mode {outOfRange} writes no alpha");
+            }
+
+            Assert.That(diagnostics, Is.Empty);
+
+            // Negative and fractional modes are captures the proof cannot
+            // pin to a writer, so they refuse instead of dropping in.
+            foreach (var broken in new[] { -1f, 0.5f, float.NaN })
+            {
+                AssertThirdLayerRefusal(
+                    CreateStandardThirdLayerEvidence()
+                        .WithScalar("_Main3rdTexAlphaMode", broken),
+                    "_Main3rdTexAlphaMode");
+            }
+        }
+
+        [Test]
+        public void ThirdLayer_NonFiniteColorAlpha_RefusesFailClosed()
+        {
+            foreach (var alpha in new[] { float.NaN, float.PositiveInfinity })
+            {
+                AssertThirdLayerRefusal(
+                    CreateStandardThirdLayerEvidence()
+                        .WithColor("_Color3rd", new Color(1f, 1f, 1f, alpha)),
+                    "_Color3rd");
+            }
+        }
+
+        [Test]
+        public void ThirdLayer_SampledBlendMask_WithUnassignedMain_RefusesNamingMainTex()
+        {
+            // The blend mask borrows _MainTex's sampling, so an unassigned
+            // main must refuse by name instead of proving through facts
+            // nobody captured.
+            var layerAssignment = CreateTextureAssignment(
+                "test:main_3rd_tex",
+                hasSampling: true,
+                sampling: new TextureSampling(
+                    TextureFilterMode.Bilinear,
+                    TextureWrapMode.Repeat),
+                hasAlpha: true,
+                hasRed: false);
+            var blendMaskAssignment = CreateTextureAssignment(
+                "test:main_3rd_blend_mask",
+                hasSampling: false,
+                sampling: default,
+                hasAlpha: false,
+                hasRed: true);
+            var unassignedMain = new CapturedTextureAssignment(
+                isAssigned: false,
+                requestedEvidence:
+                    TextureEvidenceKinds.SourceIdentity |
+                    TextureEvidenceKinds.Sampling,
+                hasScaleOffset: true,
+                scale: Vector2.one,
+                offset: Vector2.zero,
+                texture: null,
+                captureRefusals: Array.Empty<TextureCaptureRefusal>());
+
+            var evidence = CreateLayerEvidence(
+                mainAssignment: unassignedMain,
+                layerAssignment: layerAssignment,
+                blendMaskAssignment: blendMaskAssignment,
+                third: true);
+
+            AssertThirdLayerRefusal(evidence, "_MainTex");
+        }
+
         /// <summary>
         /// Builds the standard layer evidence with one change: the
         /// _Main2ndBlendMask entry stays requested but holds no value,
@@ -257,8 +508,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             CapturedTextureAssignment? mainAssignment,
             CapturedTextureAssignment layerAssignment,
             CapturedTextureAssignment? blendMaskAssignment,
-            bool blendMaskEntryHasValue = true)
+            bool blendMaskEntryHasValue = true,
+            bool third = false)
         {
+            var token = third ? "3rd" : "2nd";
             var textureEntries = new List<CapturedMaterialEvidence.TextureEntry>();
             var textures = new List<CapturedTextureEvidence>();
 
@@ -277,7 +530,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             textureEntries.Add(
                 new CapturedMaterialEvidence.TextureEntry(
-                    "_Main2ndTex",
+                    "_Main" + token + "Tex",
                     true,
                     layerAssignment));
             if (layerAssignment.Texture != null)
@@ -289,7 +542,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             {
                 textureEntries.Add(
                     new CapturedMaterialEvidence.TextureEntry(
-                        "_Main2ndBlendMask",
+                        "_Main" + token + "BlendMask",
                         blendMaskEntryHasValue,
                         blendMaskEntryHasValue
                             ? blendMaskAssignment.Value
@@ -303,31 +556,49 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var scalars = new[]
             {
-                new CapturedMaterialEvidence.ScalarEntry("_UseMain2ndTex", true, 1f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexAlphaMode", true, 1f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTex_UVMode", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexAngle", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTex_Cull", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexIsDecal", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexIsLeftOnly", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexIsRightOnly", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexShouldCopy", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexShouldFlipMirror", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexShouldFlipCopy", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_Main2ndTexIsMSDF", true, 0f),
-                new CapturedMaterialEvidence.ScalarEntry("_AudioLink2Main2nd", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_UseMain" + token + "Tex", true, 1f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexAlphaMode", true, 1f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "Tex_UVMode", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexAngle", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "Tex_Cull", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexIsDecal", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexIsLeftOnly", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexIsRightOnly", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexShouldCopy", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexShouldFlipMirror", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexShouldFlipCopy", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_Main" + token + "TexIsMSDF", true, 0f),
+                new CapturedMaterialEvidence.ScalarEntry(
+                    "_AudioLink2Main" + token, true, 0f),
             };
 
             var vectors = new[]
             {
-                new CapturedMaterialEvidence.VectorEntry("_Main2ndTex_ScrollRotate", true, Vector4.zero),
-                new CapturedMaterialEvidence.VectorEntry("_Main2ndDistanceFade", true, Vector4.zero),
-                new CapturedMaterialEvidence.VectorEntry("_Main2ndDissolveParams", true, Vector4.zero),
+                new CapturedMaterialEvidence.VectorEntry(
+                    "_Main" + token + "Tex_ScrollRotate",
+                    true, Vector4.zero),
+                new CapturedMaterialEvidence.VectorEntry(
+                    "_Main" + token + "DistanceFade", true, Vector4.zero),
+                new CapturedMaterialEvidence.VectorEntry(
+                    "_Main" + token + "DissolveParams", true, Vector4.zero),
             };
 
             var colors = new[]
             {
-                new CapturedMaterialEvidence.ColorEntry("_Color2nd", true, Color.white),
+                new CapturedMaterialEvidence.ColorEntry(
+                    "_Color" + token, true, Color.white),
             };
 
             return new CapturedMaterialEvidence(

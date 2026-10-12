@@ -123,10 +123,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
         [Test]
         public void AReportCopiesItsCategoryDictionariesDefensively()
         {
-            var refusals = new Dictionary<RendererRefusal, int>
-            {
-                { RendererRefusal.None, 1 },
-            };
             var report = CensusAggregator.Aggregate(
                 new AnonymizedCensus(new AnonymizedAvatar[0]));
 
@@ -135,7 +131,81 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Census
             Assert.Throws<NotSupportedException>(
                 () => ((IDictionary<RendererRefusal, int>)report.RendererCountByRefusal)
                     .Add(RendererRefusal.MissingMesh, 5));
-            Assert.AreEqual(1, refusals.Count);
+        }
+
+        [Test]
+        public void ARendererRefusesANullSubmeshElement()
+        {
+            // Every census record stores a private copy of the list it was
+            // given, and every null element must fail with the same exception
+            // named after the parameter.
+            var withNullElement = new List<AnonymizedSubmesh> { null };
+
+            var thrown = Assert.Throws<ArgumentNullException>(
+                () => new AnonymizedRenderer(
+                    "Renderer-01-001",
+                    RendererKind.MeshRenderer,
+                    RendererRefusal.None,
+                    1,
+                    0,
+                    withNullElement));
+
+            Assert.AreEqual("submeshes", thrown.ParamName);
+        }
+
+        [Test]
+        public void ASubmeshCountsMustSumToTheTriangleCount()
+        {
+            // One classified triangle against a submesh of two would corrupt
+            // every aggregate derived from the triangle counts.
+            Assert.Throws<ArgumentException>(() => new AnonymizedSubmesh(
+                0,
+                0,
+                false,
+                null,
+                null,
+                AlphaResolutionFailure.None,
+                SeparationDisposition.Unchanged,
+                2,
+                1,
+                0,
+                0));
+        }
+
+        [Test]
+        public void ASubmeshRefusesANegativeTriangleCount()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new AnonymizedSubmesh(
+                    0,
+                    0,
+                    false,
+                    null,
+                    null,
+                    AlphaResolutionFailure.None,
+                    SeparationDisposition.Unchanged,
+                    -1,
+                    0,
+                    0,
+                    0));
+        }
+
+        [Test]
+        public void ASubmeshRefusesAnUndefinedEnumValue()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new AnonymizedSubmesh(
+                    0,
+                    0,
+                    false,
+                    null,
+                    null,
+                    (AlphaResolutionFailure)999,
+                    SeparationDisposition.Unchanged,
+                    0,
+                    0,
+                    0,
+                    0));
         }
     }
 }

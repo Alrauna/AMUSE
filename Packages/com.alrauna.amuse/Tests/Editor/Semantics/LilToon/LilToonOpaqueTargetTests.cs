@@ -80,12 +80,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         // --- Tuple and request shape ----------------------------------------
 
         [Test]
-        public void ExpectedCanonicalTuple_HasEighteenProperties()
-        {
-            Assert.That(ExpectedCanonicalTuple.Length, Is.EqualTo(18));
-        }
-
-        [Test]
         public void CanonicalOpaqueProperties_MatchTheIndependentlyStatedTuple()
         {
             var actual = LilToonOpaqueTarget.CanonicalOpaqueProperties;

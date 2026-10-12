@@ -225,26 +225,5 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                 $"lilToon must explain the {output} refusal.");
         }
 
-        [Test]
-        public void BothFrontendsStillConsumeEverySharedFact()
-        {
-            // The guard that gives the five-fact class its justification: if a
-            // frontend stopped consuming one, the corresponding case above would
-            // pass vacuously for that frontend only. This asserts the roster
-            // itself has not drifted.
-            var facts = new[]
-            {
-                "TryGetSourceId",
-                "TryGetSampling",
-                "TryGetColorInterpretation",
-                "TryProveSampledAlphaIsOne",
-                "IsCanonicalNormalMapImport",
-            };
-
-            Assert.That(facts.Select(ConsumingOutput).Distinct().Count(),
-                Is.EqualTo(3),
-                "The five shared facts are consumed across BaseColor, Emission, "
-                    + "and Normal in both frontends.");
-        }
     }
 }

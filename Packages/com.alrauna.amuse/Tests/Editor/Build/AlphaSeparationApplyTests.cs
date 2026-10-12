@@ -2609,7 +2609,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             }
 
                             opaque = null;
-                            refusal = PoiyomiOpaqueConversionRefusal.UnattestedMaterial;
+                            refusal = PoiyomiOpaqueConversionRefusal.ConversionPropertyAbsent;
                             depthTestDivergence = false;
                             premultiplyNormalization = false;
                             return false;
@@ -4328,6 +4328,102 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 run.Dispose();
+                AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
+            }
+        }
+
+        // --- Coverage Task 4: non-skinned mesh mutation ---------------------
+
+        /// <summary>
+        /// The accepted mixed-half split through the non-skinned write
+        /// path. The fixture is the file's proven mixed-half apply
+        /// fixture with one change: the renderer is a MeshRenderer over
+        /// a MeshFilter instead of a SkinnedMeshRenderer. A MeshRenderer
+        /// carries no sharedMesh, so the split clone can only reach the
+        /// build through the MeshFilter write, and the appended slot
+        /// must carry the canonical opaque clone.
+        /// </summary>
+        [Test]
+        public void MeshRendererCandidate_AppendsSubmeshAndSwapsFilterMesh()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            AmusePlatformFinishPluginTests.EnsureSamplingPolicyFolder();
+            var savedFiltering =
+                UnityEngine.QualitySettings.anisotropicFiltering;
+            GameObject root = null;
+            AmusePlatformFinishState state = null;
+            try
+            {
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    UnityEngine.AnisotropicFiltering.ForceEnable;
+                root = CreateAvatarRoot("AMUSE mesh renderer split");
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+                var texture = Track(AmusePlatformFinishPluginTests
+                    .ImportMixedHalfTexture(
+                        "mesh_renderer_mixed_accepted",
+                        AmusePlatformFinishPluginTests
+                            .MixedHalfAlphaPixels()));
+                AmusePlatformFinishPluginTests
+                    .AssertMixedHalfTexturePreconditions(texture);
+                var sourceMaterial = Track(
+                    NewTransparentConversionMaterial(texture));
+                var originalMesh = Track(
+                    AmusePlatformFinishPluginTests.MixedHalfMesh());
+                var body = new GameObject("body");
+                body.transform.SetParent(root.transform, false);
+                var filter = body.AddComponent<MeshFilter>();
+                filter.sharedMesh = originalMesh;
+                var renderer = body.AddComponent<MeshRenderer>();
+                renderer.sharedMaterials = new[] { sourceMaterial };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ApplyTestPlatform.Instance);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(
+                    state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                AssertNoFeatureRefusals(state);
+                Assert.That(
+                    state.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "stored desktop acceptance must select the accepted " +
+                    "policy");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "the accepted policy must prepare the mixed-half " +
+                    "candidate");
+                Assert.That(
+                    state.Separation.TryGetOpaque(
+                        sourceMaterial, out var clone),
+                    Is.True,
+                    "the source material must convert to the canonical " +
+                    "opaque clone");
+
+                Assert.That(
+                    filter.sharedMesh, Is.Not.SameAs(originalMesh),
+                    "the filter's mesh must be the split clone");
+                Assert.That(
+                    filter.sharedMesh.subMeshCount,
+                    Is.EqualTo(originalMesh.subMeshCount + 1),
+                    "the split must append exactly one submesh");
+                Assert.That(
+                    renderer.sharedMaterials[^1],
+                    Is.SameAs(clone),
+                    "the appended slot must carry the canonical opaque " +
+                    "clone");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                if (root != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+
+                UnityEngine.QualitySettings.anisotropicFiltering =
+                    savedFiltering;
                 AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
             }
         }
