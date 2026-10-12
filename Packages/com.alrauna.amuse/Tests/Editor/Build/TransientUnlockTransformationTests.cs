@@ -502,6 +502,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The restore-mismatch refusal reaches the NDMF console as the
+        /// broken fact, not the bare cause name: the entry for a member
+        /// that failed verification through an unresolvable recorded GUID
+        /// renders the first broken fact from the restore verification
+        /// contract. The unresolvable GUID leaves the locked shader
+        /// bound, so the name fact precedes the GUID fact for this
+        /// shape.
+        /// </summary>
+        [Test]
+        public void
+            TransientUnlockRestoreMismatchEntryCarriesTheMismatchFact()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE mismatch report fixture");
+            var failing = Track(
+                TransientUnlockTestLifecycle.LockedMaterial("ReportCape"));
+            // The member fails verification for real: the recorded
+            // original shader GUID resolves to no asset.
+            failing.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
+            var sibling = Track(VerifiedOpaqueFixtureMaterial());
+            var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, failing, sibling));
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // The scenario held: the restore failed and the named slot
+            // refusal was recorded.
+            Assert.That(state, Is.Not.Null,
+                "the build must complete with the refused slot");
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockRestoreMismatch),
+                Is.EqualTo(1),
+                "the failing member must take the named slot refusal");
+
+            var mismatchReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey ==
+                    "amuse.slotSeparation" +
+                    ".TransientUnlockRestoreMismatch")
+                {
+                    mismatchReports.Add(entry);
+                }
+            }
+
+            Assert.That(
+                mismatchReports, Has.Count.EqualTo(1),
+                "NDMF console must receive exactly one " +
+                "restore-mismatch report");
+            var message = mismatchReports[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain(renderer.gameObject.name));
+            Assert.That(message, Does.Contain("slot 0"));
+            Assert.That(message, Does.Contain(
+                    "the clone shader name does not match the " +
+                    "recorded original shader name"),
+                "the console description must carry the broken fact, " +
+                "not the bare cause name");
+        }
+
+        /// <summary>
         /// F5. Suffixed clip bindings survive swap-in, transformation, and
         /// the reversion as live. The named wrong implementation renames
         /// a build copy for diagnostics, which orphans every suffixed

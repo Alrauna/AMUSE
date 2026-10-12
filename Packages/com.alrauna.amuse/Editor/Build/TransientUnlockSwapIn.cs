@@ -241,7 +241,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 finishState, renderer: slot.Renderer,
                                 slot.SlotIndex,
                                 AlphaSeparationSlotRefusal
-                                    .TransientUnlockRestoreMismatch);
+                                    .TransientUnlockRestoreMismatch,
+                                mismatchReason);
                             summary.RestoreMismatchSlots++;
                         }
 
@@ -541,12 +542,14 @@ namespace Alrauna.Amuse.Editor.Build
             AmusePlatformFinishState finishState,
             Renderer renderer,
             int slotIndex,
-            AlphaSeparationSlotRefusal cause)
+            AlphaSeparationSlotRefusal cause,
+            string detail = null)
         {
             finishState.RecordSlotRefusal(cause);
             AmuseReports.SlotSeparationRefusal(
                 renderer, slotIndex, cause,
-                renderer != null ? renderer.gameObject.name : null);
+                renderer != null ? renderer.gameObject.name : null,
+                detail: detail);
         }
 
         /// <summary>
