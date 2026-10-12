@@ -38,13 +38,16 @@ namespace Alrauna.Amuse.Editor.Build
     /// by a rewritten curve would serialize as a missing reference. Only
     /// the close destroys copies, and it destroys only AMUSE-owned ones:
     /// the locked originals and every output AMUSE did not create are
-    /// never destroyed by anything. When the close cannot prove the
-    /// committed-curve inversion complete, it keeps the unlocked copies
-    /// alive and records the named
+    /// never destroyed by anything. The retention promise covers pairs
+    /// with recorded slots. When the close cannot prove the
+    /// committed-curve inversion complete for such a pair, it keeps the
+    /// unlocked copies alive and records the named
     /// <see cref="AlphaSeparationSlotRefusal.TransientUnlockCloneRetained"/>
-    /// refusal for every slot of the pair, so the retention never passes
-    /// silently. A build that completes holds zero open pairs, and no
-    /// pair ships unlocked.
+    /// refusal for every slot of the pair. A slot-less pair has no slot
+    /// or renderer scope to report against, so its disposition is
+    /// silent by contract. In the refusal-driven case the close-time
+    /// avatar entry names the cause for the whole build. A build that
+    /// completes holds zero open pairs, and no pair ships unlocked.
     /// </para>
     /// </summary>
     internal static class TransientUnlockWindowClose

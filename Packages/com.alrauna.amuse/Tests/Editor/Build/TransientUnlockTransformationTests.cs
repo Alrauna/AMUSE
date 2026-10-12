@@ -1190,6 +1190,196 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The slot-less pair disposition, pinned on both close paths. A
+        /// pair whose every swap failed records no slots, so the
+        /// retention has no slot or renderer scope to name. On the
+        /// refusal-driven path the close emits exactly the one
+        /// avatar-scoped entry for the unproven graph, zero
+        /// slot-separation retention entries, and keeps the pair open.
+        /// On the proven path the clone is destroyed and the pair
+        /// leaves the window with zero close entries. The build's
+        /// informational summary is the only other report on both
+        /// paths. Spec D6 decided doc-only.
+        /// </summary>
+        [Test]
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SlotLessPairDispositionIsPinned(bool retentionPath)
+        {
+            // Characterization: pins today's slot-less pair disposition. Spec D6 decided doc-only.
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE slot-less pair fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterial(
+                    "SlotLessCape"));
+            var opaque = Track(VerifiedOpaqueFixtureMaterial());
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, opaque));
+            // The swap clip names the material the slot already holds,
+            // so the pipeline runs its real capture and apply while the
+            // swap-in recognizes no locked identity and opens no pair.
+            // The test then opens the pair through the window's own
+            // OpenPair factory and performs no slot swaps, the direct
+            // form of the swap-in's SwapSlot false path.
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, opaque);
+
+            var pairAtClose =
+                default(TransientUnlockWindowState.SwappedPair);
+            var cloneAtClose = default(Material);
+            var slotCountAtClose = -1;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var window = context
+                    .GetState<TransientUnlockWindowState>();
+                pairAtClose = window.OpenPair(locked);
+                pairAtClose.UnlockedClone = Track(
+                    UnityEngine.Object.Instantiate(locked));
+                cloneAtClose = pairAtClose.UnlockedClone;
+                slotCountAtClose = pairAtClose.Slots.Count;
+                if (retentionPath)
+                {
+                    // The committed graph is unavailable to the close
+                    // pass: no host bindings were retained, so the close
+                    // hits its null-bindings sentinel.
+                    context.GetState<AmusePlatformFinishState>()
+                        .AnimatorBindings = null;
+                }
+            };
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // The observed report keys, so a failure names the entries
+            // the build carried instead of a bare count, and the
+            // scope-split the assertions read. The plugin reports one
+            // informational build summary on every analyzed build, so
+            // the close-path counts read against that baseline.
+            var observedKeys = new List<string>();
+            var summaryReports = new List<ErrorContext>();
+            var avatarReports = new List<ErrorContext>();
+            var slotRetentionReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                observedKeys.Add(
+                    entry.TheError is SimpleError simple
+                        ? simple.TitleKey
+                        : entry.TheError?.GetType().Name ?? "null error");
+                if (!(entry.TheError is SimpleError keyed))
+                {
+                    continue;
+                }
+
+                if (keyed.TitleKey == "amuse.summary.Title")
+                {
+                    summaryReports.Add(entry);
+                }
+
+                if (keyed.TitleKey.StartsWith("amuse.avatar."))
+                {
+                    avatarReports.Add(entry);
+                }
+
+                if (keyed.TitleKey.StartsWith("amuse.slotSeparation."))
+                {
+                    slotRetentionReports.Add(entry);
+                }
+            }
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier and the real close, and the pair the close saw
+            // must have recorded no slots, or the assertions below
+            // prove nothing.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(pairAtClose, Is.Not.Null,
+                "the fixture must arm one open pair before the close");
+            Assert.That(slotCountAtClose, Is.EqualTo(0),
+                "the fixture's pair must record no slots");
+
+            if (!retentionPath)
+            {
+                // The proven path: nothing names the clone, so the close
+                // destroys it and drains the window without naming
+                // anything. The build's informational summary is the
+                // only captured entry.
+                Assert.That(summaryReports, Has.Count.EqualTo(1),
+                    "the build's informational summary is the " +
+                    "baseline entry");
+                Assert.That(avatarReports, Is.Empty,
+                    "the proven close emits zero avatar entries");
+                Assert.That(slotRetentionReports, Is.Empty,
+                    "the proven close emits zero slot-separation " +
+                    "entries");
+                Assert.That(errors, Has.Count.EqualTo(1),
+                    "the close emits zero entries: the build carried " +
+                    string.Join(", ", observedKeys));
+                Assert.That(cloneAtClose == null, Is.True,
+                    "the close destroyed the unlocked clone of the " +
+                    "slot-less pair");
+                Assert.That(
+                    TransientUnlockTestKnobs.Window.OpenPairs,
+                    Is.Empty,
+                    "the destroyed pair left the window");
+                return;
+            }
+
+            // The retention path: the close cannot prove the inversion,
+            // the pair records no slots, so no slot-separation retention
+            // entry is emitted and the avatar entry alone names the
+            // cause for the whole build.
+            Assert.That(
+                summaryReports, Has.Count.EqualTo(1),
+                "the build's informational summary is the " +
+                "baseline entry");
+            Assert.That(
+                avatarReports, Has.Count.EqualTo(1),
+                "the refusal-driven close names the cause for the " +
+                "whole build in exactly one avatar-scoped entry");
+            Assert.That(
+                slotRetentionReports, Is.Empty,
+                "a slot-less pair has no slot scope to report " +
+                "against, so the retention emits zero " +
+                "slot-separation entries");
+            Assert.That(errors, Has.Count.EqualTo(2),
+                "the avatar entry is the close's whole report over " +
+                "the build summary, but the build carried: " +
+                string.Join(", ", observedKeys));
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(0),
+                "a pair with no slots records no slot refusal");
+            Assert.That(cloneAtClose == null, Is.False,
+                "the close keeps the clone alive when it cannot " +
+                "prove the inversion");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the slot-less pair stays in the window: its " +
+                "retention is silent by contract");
+        }
+
+        /// <summary>
         /// --- Falsifier 5: reporting the avatar refusal in both the
         /// barrier and the close pass. ---
         /// A barrier avatar refusal returns before the swap-in opens
