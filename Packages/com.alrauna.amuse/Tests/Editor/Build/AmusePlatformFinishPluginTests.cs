@@ -5452,6 +5452,320 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A verified Poiyomi fixture material whose alpha equation
+        /// multiplies the sampled alpha by a constant above one. The
+        /// resolver refuses an above-one multiplier before every other
+        /// gate, including the texture-evidence lookup, so the material
+        /// needs no texture asset. Distinct RGB tints keep two such
+        /// materials distinct.
+        /// </summary>
+        private static Material VerifiedRefusedMultiplierMaterial(
+            string name,
+            float red,
+            float green,
+            float blue)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(red, green, blue, 1.5f));
+            material.name = name;
+            return material;
+        }
+
+        private static AnimatorController AddAnimatedMaterialSwap(
+            GameObject root,
+            Material first,
+            Material second,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE material swap" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe { time = 0f, value = first },
+                    new ObjectReferenceKeyframe { time = 1f, value = second },
+                });
+
+            var controller =
+                new AnimatorController { name = "AMUSE material swap graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static List<string> SlotResolutionEntryMessages(
+            List<ErrorContext> reports)
+        {
+            var messages = new List<string>();
+            foreach (var entry in reports)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey != null &&
+                    simple.TitleKey.StartsWith(
+                        "amuse.slotResolution.", System.StringComparison.Ordinal))
+                {
+                    messages.Add(simple.ToMessage());
+                }
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// A resolved slot whose admitted material's alpha proof refused
+        /// with UnsupportedMultiplier stays resolved: no
+        /// amuse.slotAnalysis.Refusal entry appears, and exactly one
+        /// amuse.slotResolution.UnsupportedMultiplier entry names the
+        /// lost proof reason. The summary is a census record, so its
+        /// analyzed-renderer count equals the unmodified fixture
+        /// baseline.
+        /// </summary>
+        [Test]
+        public void ResolutionRefusedSlotReportsOneDiagnosticEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE slot resolution refused");
+            var fixture = default(AnalyzableRendererFixture);
+            Material refused = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                refused = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refused multiplier", 1f, 1f, 1f);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = refused;
+                fixture.Renderer.sharedMaterials = new[] { refused };
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+                var slotRefusalEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                    {
+                        slotRefusalEntries++;
+                    }
+                }
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(1),
+                    "one refused material resolution is exactly one " +
+                    "diagnostic entry");
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE refused multiplier"),
+                    "the entry must name the offender material");
+
+                Assert.That(slotRefusalEntries, Is.Zero,
+                    "the slot stays resolved, so no slot-refusal entry " +
+                    "may appear for it");
+
+                // The summary line is the apply pass's census record,
+                // built from the counts the finish pass recorded. Report
+                // it from those recorded counts, exactly as the apply
+                // pass does, so the assertion reads the same line a
+                // build prints.
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.ReachedRendererAnalysis, Is.True,
+                    "fixture precondition: the run reached renderer " +
+                    "analysis, so a build would print a summary");
+                var summaryReports = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.AvatarSummary(
+                        root,
+                        amuse.AnalyzedRendererCount,
+                        amuse.AppliedOpaqueTriangleCount,
+                        amuse.UntouchedRendererCount,
+                        amuse.Lifecycle.BuildPath,
+                        amuse.AlphaPolicyActive,
+                        amuse.SamplingTarget,
+                        amuse.SamplingPolicy));
+                AmuseBuildStatusStore.Forget();
+
+                Assert.That(summaryReports, Has.Count.EqualTo(1),
+                    "the analyzed build reports exactly one summary entry");
+
+                // The unmodified verified fixture baseline analyzes one
+                // renderer. The diagnostic is report-only, so the census
+                // summary must carry the same count.
+                Assert.That(summaryReports[0].TheError.ToMessage(),
+                    Does.Contain("analyzed 1 renderers"),
+                    "the diagnostic must not change the analyzed-renderer " +
+                    "count from the unmodified fixture baseline");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Falsifier 1: reading the deduped Resolutions list ---
+        // Two admitted materials refusing with the same failure merge
+        // into one entry in the stored deduped list. The emission must
+        // walk the raw pre-dedup per-material list, so two entries with
+        // two distinct material names appear.
+        [Test]
+        public void ResolutionRefusedSlotReportsOneEntryPerAdmittedMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE two refused materials");
+            var fixture = default(AnalyzableRendererFixture);
+            Material first = null;
+            Material second = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                first = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refuser one", 1f, 0f, 0f);
+                second = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refuser two", 0f, 1f, 0f);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = first;
+                fixture.Renderer.sharedMaterials = new[] { first };
+                controller = AddAnimatedMaterialSwap(
+                    root, first, second, out clip);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(2),
+                    "two refusing materials are two entries, never one " +
+                    "deduped entry");
+                // Admission is current-first, then clip value order, so
+                // the raw list order is pinned here too.
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE refuser one"));
+                Assert.That(refusedEntries[1],
+                    Does.Contain("AMUSE refuser two"));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                if (second != null) Object.DestroyImmediate(second);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        // --- Falsifier 2: indexing AdmittedMaterials directly ---
+        // Slot 0 swaps between its current material and a third
+        // material, while slot 1 holds the second admitted material.
+        // Admission lists currents first, so slot 0 admits indices
+        // [0, 2]: the offender at admitted index 2 is not the material
+        // at loop index 1.
+        [Test]
+        public void ResolutionRefusedEntryNamesTheAdmittedIndexMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE noncontiguous admission");
+            Material slotZeroCurrent = null;
+            Material slotOneCurrent = null;
+            Material offender = null;
+            Mesh mesh = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                slotZeroCurrent = VerifiedForceOpaqueMaterial(1f);
+                slotZeroCurrent.name = "AMUSE slot zero current";
+                slotOneCurrent = VerifiedForceOpaqueMaterial(1f);
+                slotOneCurrent.name = "AMUSE slot one current";
+                offender = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE noncontiguous offender", 1f, 0f, 0f);
+                AddTwoSlotRenderer(
+                    root, slotZeroCurrent, slotOneCurrent, out mesh);
+                controller = AddAnimatedMaterialSwap(
+                    root, slotZeroCurrent, offender, out clip);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(1),
+                    "only slot 0's second admitted material refused");
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE noncontiguous offender"),
+                    "the entry must name the material at the admitted " +
+                    "index, not the material at the loop index");
+                Assert.That(refusedEntries[0],
+                    Does.Not.Contain("AMUSE slot one current"),
+                    "AdmittedMaterials[i] is the loop-index material; the " +
+                    "entry must go through AdmittedMaterialIndices");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (slotZeroCurrent != null)
+                    Object.DestroyImmediate(slotZeroCurrent);
+                if (slotOneCurrent != null)
+                    Object.DestroyImmediate(slotOneCurrent);
+                if (offender != null) Object.DestroyImmediate(offender);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
         /// One renderer-wide proof-relevant curve; two slots whose admitted
         /// materials disagree about it. Slot 0's captured serialized default
         /// differs from the animated singleton, so its admission returns

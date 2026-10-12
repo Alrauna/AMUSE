@@ -446,6 +446,46 @@ namespace Alrauna.Amuse.Editor.Build
                 "The material's lilToon Multi state is outside the states " +
                 "AMUSE can prove: {0}.",
 
+            // --- Slot-scoped resolution diagnostics. The slot stays
+            // resolved: a refused material resolution only means the
+            // proof lost one admitted material's alpha answer, so the
+            // slot's triangles classify Unknown. Title {0} is the slot
+            // index. Description {0} slot index, {1} renderer name,
+            // {2} the offender material, {3} the failure sentence. The
+            // hint names the material setup to check.
+            ["amuse.slotResolution.UnsupportedMultiplier"] =
+                "AMUSE could not prove alpha on slot {0}.",
+            ["amuse.slotResolution.UnsupportedMultiplier:description"] =
+                "The alpha of material {2} on slot {0} of renderer '{1}' " +
+                "multiplies a sampled alpha by a value above one. AMUSE " +
+                "has no proof for the triangles of this slot, so they " +
+                "keep the original material.",
+            ["amuse.slotResolution.UnsupportedMultiplier:hint"] =
+                "Check the material setup. Set the color alpha to one or " +
+                "below, because a value above one has no alpha meaning.",
+
+            ["amuse.slotResolution.MissingTextureEvidence"] =
+                "AMUSE could not prove alpha on slot {0}.",
+            ["amuse.slotResolution.MissingTextureEvidence:description"] =
+                "The alpha of material {2} on slot {0} of renderer '{1}' " +
+                "needs texture data the capture could not read. AMUSE " +
+                "has no proof for the triangles of this slot, so they " +
+                "keep the original material.",
+            ["amuse.slotResolution.MissingTextureEvidence:hint"] =
+                "Check the material setup. The texture the alpha reads " +
+                "must import in a supported format with readable mips.",
+
+            ["amuse.slotResolution.UnsupportedUvMapping"] =
+                "AMUSE could not prove alpha on slot {0}.",
+            ["amuse.slotResolution.UnsupportedUvMapping:description"] =
+                "The alpha of material {2} on slot {0} of renderer '{1}' " +
+                "samples its texture with a UV mapping AMUSE cannot " +
+                "prove. AMUSE has no proof for the triangles of this " +
+                "slot, so they keep the original material.",
+            ["amuse.slotResolution.UnsupportedUvMapping:hint"] =
+                "Check the material setup. Keep the alpha texture on a " +
+                "plain UV channel without panning or pixel mode.",
+
             // --- Slot-scoped separation refusals ---
             ["amuse.slotSeparation.OpaqueConversionUnsupportedFamily"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
@@ -682,6 +722,24 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string SlotAnalysisKey(RendererAnalysisRefusal cause)
         {
             return Prefix + "slotAnalysis.Refusal";
+        }
+
+        /// <summary>
+        /// The report key for one refused material resolution on a
+        /// resolved slot. The report names the slot, the renderer, the
+        /// offender material, and the exact failure.
+        /// </summary>
+        internal static string SlotResolutionKey(AlphaResolutionFailure failure)
+        {
+            // SemanticsUnknown promotes to a slot refusal at ResolveSlot and
+            // never reaches this path. None never names a fact.
+            if (failure == AlphaResolutionFailure.None ||
+                failure == AlphaResolutionFailure.SemanticsUnknown)
+            {
+                throw new InvalidOperationException(
+                    "Slot resolution reporting has no key for " + failure + ".");
+            }
+            return Prefix + "slotResolution." + failure;
         }
 
         /// <summary>

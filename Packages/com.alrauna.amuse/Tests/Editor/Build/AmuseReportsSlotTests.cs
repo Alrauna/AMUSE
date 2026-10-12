@@ -433,5 +433,77 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "missing hint for " + cause);
             }
         }
+
+        private static CapturedAlphaMaterial OffenderMaterial(string name)
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                new CapturedMaterialEvidence(
+                    false, null, false, default(ColorSpace),
+                    new CapturedMaterialEvidence.PresenceEntry[0],
+                    new CapturedMaterialEvidence.ScalarEntry[0],
+                    new CapturedMaterialEvidence.ColorEntry[0],
+                    new CapturedMaterialEvidence.VectorEntry[0],
+                    new CapturedMaterialEvidence.TextureEntry[0],
+                    new CapturedTextureEvidence[0]),
+                default(Alrauna.Amuse.Editor.Semantics.Poiyomi
+                    .PoiyomiSourceEvidence),
+                null,
+                materialName: name);
+        }
+
+        [Test]
+        public void SlotResolutionRefusedNamesSlotRendererAndMaterial()
+        {
+            var failures = new[]
+            {
+                AlphaResolutionFailure.UnsupportedMultiplier,
+                AlphaResolutionFailure.MissingTextureEvidence,
+                AlphaResolutionFailure.UnsupportedUvMapping,
+            };
+
+            foreach (var failure in failures)
+            {
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.SlotResolutionRefused(
+                        _renderer,
+                        1,
+                        "Body",
+                        OffenderMaterial("AMUSE refused material"),
+                        failure));
+
+                Assert.That(errors, Has.Count.EqualTo(1));
+                var simple = errors[0].TheError as SimpleError;
+                Assert.That(simple, Is.Not.Null);
+                Assert.That(
+                    simple.TitleKey,
+                    Is.EqualTo(AmuseReportStrings.SlotResolutionKey(failure)),
+                    "the entry must use the exact key for " + failure);
+                var message = errors[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain("1"),
+                    "the report must name the refused slot index");
+                Assert.That(message, Does.Contain("Body"),
+                    "the report must name the renderer");
+                Assert.That(message, Does.Contain("AMUSE refused material"),
+                    "the report must name the offender material");
+            }
+        }
+
+        [Test]
+        public void SlotResolutionRefusedBuildersThrowOnNoneAndSemanticsUnknown()
+        {
+            var offender = OffenderMaterial("AMUSE refused material");
+
+            // None never names a fact. SemanticsUnknown promotes to a
+            // slot refusal at ResolveSlot and never reaches this path.
+            Assert.Throws<InvalidOperationException>(() =>
+                AmuseReports.SlotResolutionRefused(
+                    _renderer, 0, "Body", offender,
+                    AlphaResolutionFailure.None));
+            Assert.Throws<InvalidOperationException>(() =>
+                AmuseReports.SlotResolutionRefused(
+                    _renderer, 0, "Body", offender,
+                    AlphaResolutionFailure.SemanticsUnknown));
+        }
     }
 }

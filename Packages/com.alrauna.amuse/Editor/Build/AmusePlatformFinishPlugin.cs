@@ -828,6 +828,42 @@ namespace Alrauna.Amuse.Editor.Build
                             record.Failure));
                 }
 
+                // A resolved slot can still carry refused material resolutions. The
+                // slot stays resolved and the triangles classify Unknown; this entry
+                // names the lost proof reason. Diagnostic only: no census record.
+                if (resolved.Refusal == RendererAnalysisRefusal.None)
+                {
+                    for (var slotIndex = 0;
+                         slotIndex < resolved.SlotResults.Length;
+                         slotIndex++)
+                    {
+                        var slotResult = resolved.SlotResults[slotIndex];
+                        if (!slotResult.IsResolved)
+                        {
+                            continue; // refused slots report through the fold loop above.
+                        }
+                        for (var i = 0;
+                             i < slotResult.MaterialResolutions.Count;
+                             i++)
+                        {
+                            var resolution = slotResult.MaterialResolutions[i];
+                            if (resolution.IsResolved)
+                            {
+                                continue;
+                            }
+                            // Load-bearing indirection: resolution i names the
+                            // material at the slot's admitted index, and admission
+                            // indices are not contiguous. AdmittedMaterials[i]
+                            // compiles and misnames the material.
+                            var offender = evidence.AdmittedMaterials[
+                                slots[slotIndex].AdmittedMaterialIndices[i]];
+                            AmuseReports.SlotResolutionRefused(
+                                renderer, slotIndex, renderer.gameObject.name,
+                                offender, resolution.Failure);
+                        }
+                    }
+                }
+
                 var opaqueCandidateTriangleCount = 0;
                 var extractionMeshSubMeshCount = -1;
                 var extractionMaterialSlotCount = -1;
@@ -1426,9 +1462,13 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 anySlotResolved = true;
+                // The deduped list keeps feeding classification; the raw
+                // list rides along so reporting can attribute a refused
+                // resolution to its own admitted material.
                 slotResults[slotIndex] = SlotResolutionResult.Resolved(
                     AdmittedMaterialStates.DistinctResolutions(
-                        resolved.Resolutions));
+                        resolved.Resolutions),
+                    resolved.MaterialResolutions);
             }
 
             // Nothing resolved, so there is no partial result to preserve and
