@@ -113,6 +113,16 @@ namespace Alrauna.Amuse.Editor.Build
                 : new CommittedControllerGraphResult(
                     AvatarAnimationRefusal.UnsupportedAnimatorControllerForm,
                     Array.Empty<CommittedLayer>());
+
+            // The close-time enumeration is this build's first and only avatar
+            // refusal surface: a barrier avatar refusal returns before the swap-in
+            // opens pairs, and this pass exits when no pairs exist. Reporting here
+            // can therefore never duplicate the barrier's report.
+            if (graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                AmuseReports.AvatarRefusal(context.AvatarRootObject, graph.Refusal);
+            }
+
             var committedClips = CommittedClips(context).ToList();
 
             foreach (var pair in window.OpenPairs.ToList())
