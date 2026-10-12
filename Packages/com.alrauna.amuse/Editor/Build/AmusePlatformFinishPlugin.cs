@@ -950,6 +950,68 @@ namespace Alrauna.Amuse.Editor.Build
                             ? AmuseReports.ClosureFailureSentence(
                                 evidence.SlotClosureFailures[0].Failure)
                             : null);
+                    // A renderer refusal suppresses the per-slot loops below,
+                    // so the slots' captured facts would die. Report exactly
+                    // the facts that did not surface: with empty slot
+                    // results, every slot; otherwise only resolved slots,
+                    // because refused slots folded their facts already.
+                    // Report-only: no census record, and the host-structural
+                    // path never reaches this point with captured evidence.
+                    for (var slotIndex = 0;
+                         slotIndex < slots.Count;
+                         slotIndex++)
+                    {
+                        var foldedAlready =
+                            resolved.SlotResults.Length > 0 &&
+                            !resolved.SlotResults[slotIndex].IsResolved;
+                        if (foldedAlready)
+                        {
+                            continue;
+                        }
+
+                        var slotEvidence = slots[slotIndex];
+                        foreach (var captureRefusal in
+                                 slotEvidence.CaptureRefusals)
+                        {
+                            AmuseReports.TextureCaptureRefusal(
+                                renderer,
+                                slotIndex,
+                                captureRefusal);
+                        }
+
+                        foreach (var noAlphaProperty in
+                                 slotEvidence.NoAlphaChannelProperties)
+                        {
+                            AmuseReports.TextureAlphaMissing(
+                                renderer,
+                                slotIndex,
+                                noAlphaProperty);
+                        }
+
+                        // Locked identity: emit at the first carrier in
+                        // material order.
+                        foreach (var materialIndex in
+                                 slotEvidence.AdmittedMaterialIndices)
+                        {
+                            var material =
+                                evidence.AdmittedMaterials[materialIndex];
+                            if (material.LockedIdentityRefusal !=
+                                RendererAnalysisRefusal.None)
+                            {
+                                AmuseReports.SlotAnalysisRefusal(
+                                    renderer,
+                                    slotIndex,
+                                    material.LockedIdentityRefusal,
+                                    renderer.gameObject.name,
+                                    material,
+                                    unknownReason: null,
+                                    captureRefusals: null,
+                                    closureWaySentence: null);
+                                break;
+                            }
+                        }
+                    }
+
                     continue;
                 }
 
