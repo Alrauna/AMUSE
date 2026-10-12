@@ -345,6 +345,14 @@ namespace Alrauna.Amuse.Editor.Build
             int slotIndex,
             TextureCaptureRefusal refusal)
         {
+            // A None reason is not a refusal. This guard keeps the dead
+            // key "amuse.texture.None" out of the console.
+            if (refusal.Reason == TextureCaptureRefusalReason.None)
+            {
+                throw new InvalidOperationException(
+                    "TextureCaptureRefusalReason.None is not a refusal.");
+            }
+
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(
@@ -427,6 +435,14 @@ namespace Alrauna.Amuse.Editor.Build
             int materialSlotCount = -1,
             string detail = null)
         {
+            // A None cause is not a refusal. This guard keeps the dead
+            // key "amuse.renderer.None" out of the console.
+            if (cause == RendererAnalysisRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "RendererAnalysisRefusal.None is not a refusal.");
+            }
+
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(

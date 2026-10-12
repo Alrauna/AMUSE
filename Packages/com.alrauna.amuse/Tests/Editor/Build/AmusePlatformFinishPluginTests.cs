@@ -347,7 +347,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => false);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.ConsentDeclined, Is.True);
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
                     "a declined consent must analyze nothing");
             }
@@ -373,24 +372,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
 
+                IReadOnlyList<string> offeredSubjects = null;
                 var reports = ErrorReport.CaptureErrors(
                     () => AmusePlatformFinishPass.Execute(
                         context,
                         SupportedFacts(unityVersion: "2022.3.23f1"),
-                        subjects => false));
+                        subjects =>
+                        {
+                            offeredSubjects = subjects;
+                            return false;
+                        }));
 
                 var declinedEntries = 0;
+                var subjectEntries = new List<string>();
                 foreach (var entry in reports)
                 {
-                    if (entry.TheError is SimpleError simple &&
-                        simple.TitleKey == "amuse.consent.Declined")
+                    if (entry.TheError is SimpleError simple)
                     {
-                        declinedEntries++;
+                        if (simple.TitleKey == "amuse.consent.Declined")
+                        {
+                            declinedEntries++;
+                        }
+                        else if (simple.TitleKey ==
+                                 "amuse.consent.Subject")
+                        {
+                            subjectEntries.Add(
+                                entry.TheError.ToMessage());
+                        }
                     }
                 }
 
                 Assert.That(declinedEntries, Is.EqualTo(1),
                     "one consent decline is one console entry, never two");
+
+                // Characterization: the per-subject entries already
+                // exist. The decline report carries one
+                // amuse.consent.Subject entry per offered subject, and
+                // each entry's text names that subject, so the reader
+                // can tell which versions the decline covered.
+                Assert.That(
+                    offeredSubjects, Is.Not.Null,
+                    "the declined build must have been offered subjects");
+                Assert.That(
+                    subjectEntries,
+                    Has.Count.EqualTo(offeredSubjects.Count),
+                    "one amuse.consent.Subject entry per offered subject");
+                foreach (var subject in offeredSubjects)
+                {
+                    Assert.That(
+                        subjectEntries.Any(entryText =>
+                            entryText.Contains(subject)),
+                        Is.True,
+                        "each subject's text must ride its own entry: "
+                        + subject);
+                }
             }
             finally
             {
@@ -420,7 +455,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => true);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.ConsentDeclined, Is.False);
                 Assert.That(amuse.SemanticallyRefusedRendererCount,
                     Is.EqualTo(1),
                     "granted consent reaches the renderer loop, where the " +
@@ -595,7 +629,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .TransparentShaderName)),
                     Is.True,
                     "the swap-only shader's subject must be offered");
-                Assert.That(after.ConsentDeclined, Is.False);
                 Assert.That(
                     after.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
@@ -698,10 +731,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => false);
 
                 var after = context.GetState<AmusePlatformFinishState>();
-                Assert.That(
-                    after.ConsentDeclined,
-                    Is.True,
-                    "the decline must stop the build");
                 Assert.That(after.AnalyzedRendererCount, Is.Zero);
                 Assert.That(
                     context.GetState<TransientUnlockWindowState>()
@@ -1066,6 +1095,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        [Test]
+        public void AvatarRefusalThrowsOnNoneCause()
+        {
+            // Characterization: the None guard already exists. The test
+            // pins the throw, so a later edit cannot emit the dead key
+            // "amuse.avatar.None" as a console entry.
+            Assert.That(
+                () => AmuseReports.AvatarRefusal(
+                    null, AvatarAnimationRefusal.None),
+                Throws.InvalidOperationException);
         }
 
         [Test]

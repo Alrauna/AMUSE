@@ -671,7 +671,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     + " lifecycle=" + (state.Lifecycle != null
                         ? state.Lifecycle.ToString()
                         : "<null>")
-                    + " consentDeclined=" + state.ConsentDeclined
                     + " alphaPolicyActive=" + state.AlphaPolicyActive
                     + " refusedRenderers="
                     + state.SemanticallyRefusedRendererCount

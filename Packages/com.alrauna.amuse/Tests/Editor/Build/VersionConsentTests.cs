@@ -301,10 +301,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         LilToonSourceAttestation.CutoutShaderName),
                     "the subject must name the swap-only shader");
                 Assert.That(
-                    after.ConsentDeclined,
-                    Is.False,
-                    "the granted build must carry the swap-only name");
-                Assert.That(
                     after.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
             }
@@ -379,7 +375,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AvatarAnimationRefusal
                             .UnsupportedAnimatorControllerForm),
                     "the avatar refusal is unchanged by the moved block");
-                Assert.That(after.ConsentDeclined, Is.False);
                 Assert.That(after.AnalyzedRendererCount, Is.Zero);
             }
             finally

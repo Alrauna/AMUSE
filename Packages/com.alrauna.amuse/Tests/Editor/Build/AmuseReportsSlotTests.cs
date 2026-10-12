@@ -505,5 +505,85 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     _renderer, 0, "Body", offender,
                     AlphaResolutionFailure.SemanticsUnknown));
         }
+
+        [Test]
+        public void TextureCaptureRefusalThrowsOnNoneCause()
+        {
+            // The record's constructor rejects None, but a default
+            // record carries it. The report method is the last guard
+            // before the dead key "amuse.texture.None" would render.
+            Assert.That(
+                () => AmuseReports.TextureCaptureRefusal(
+                    _renderer, 0, default(TextureCaptureRefusal)),
+                Throws.InvalidOperationException);
+        }
+
+        // Characterization: the two separation helper reporters and the
+        // None guards on the two slot refusal reporters already exist.
+        // These tests pin the current behavior; they are not RED-first.
+
+        [Test]
+        public void SlotSeparationDivergenceNamesKeySlotAndRenderer()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationDivergence(
+                    _renderer, 4, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(AmuseReportStrings.SlotSeparationDivergenceKey),
+                "the entry must use the exact divergence key");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            Assert.That(
+                errors[0].TheError.ToMessage(),
+                Does.Contain("slot 4 of renderer 'Body'"));
+        }
+
+        [Test]
+        public void SlotSeparationPremultiplyNormalizationNamesKeySlotAndRenderer()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationPremultiplyNormalization(
+                    _renderer, 2, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(
+                    AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationKey),
+                "the entry must use the exact premultiply key");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            Assert.That(
+                errors[0].TheError.ToMessage(),
+                Does.Contain("slot 2 of renderer 'Body'"));
+        }
+
+        [Test]
+        public void SlotAnalysisRefusalThrowsOnNoneCause()
+        {
+            Assert.That(
+                () => AmuseReports.SlotAnalysisRefusal(
+                    _renderer, 0, RendererAnalysisRefusal.None),
+                Throws.InvalidOperationException);
+        }
+
+        [Test]
+        public void SlotSeparationRefusalThrowsOnNoneCause()
+        {
+            Assert.That(
+                () => AmuseReports.SlotSeparationRefusal(
+                    _renderer, 0, AlphaSeparationSlotRefusal.None),
+                Throws.InvalidOperationException);
+        }
     }
 }

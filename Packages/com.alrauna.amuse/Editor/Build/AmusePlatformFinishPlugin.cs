@@ -15,10 +15,6 @@ namespace Alrauna.Amuse.Editor.Build
     internal sealed class AmusePlatformFinishState
     {
         internal bool HasExecuted { get; set; }
-        /// <summary>True when the build stopped because the user declined
-        /// the unverified-version consent dialog (D8 consent layer). The
-        /// report channel consumes this in the report slice.</summary>
-        internal bool ConsentDeclined { get; set; }
         internal HostLifecycleCapability Lifecycle { get; set; }
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
@@ -563,7 +559,6 @@ namespace Alrauna.Amuse.Editor.Build
                     UnityEngine.Application.isBatchMode,
                     consentPresenter ?? VersionConsentDialog.Present))
             {
-                state.ConsentDeclined = true;
                 AmuseReports.ConsentDeclined(subjects);
                 return;
             }
