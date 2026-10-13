@@ -18,10 +18,12 @@ Then add the **AMUSE** package to your avatar project from the package manager. 
 Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usual.
 
 - The preset row under the header picks Safe, Normal, or Aggressive.
-  Safe leaves both anisotropy acceptance settings off. It also disables
-  **Ignore Out-of-Range Material Slots** and **Allow Depth Test Change
-  on Moved Triangles**. Normal and Aggressive enable all four settings.
-  The other preset values stay the same.
+  Safe turns on both anisotropy acceptance settings. It still disables
+  **Ignore Out-of-Range Material Slots** and **Allow Depth Test Change on
+  Moved Triangles**, and it never flattens a mixed material. Normal
+  and Aggressive enable all four settings. Normal flattens a nearly opaque
+  material when fewer than 5 percent of its triangles are unproven.
+  Aggressive uses 10 percent. The other preset values stay the same.
 - The two **Accept Anisotropy Differences** toggles and the preset files
   that carry them live in the Alpha Separator Settings. See **Proof modes
   and acceptance** below.
@@ -44,8 +46,8 @@ Open **Settings**, turn on **Advanced Settings**, and open **Alpha
 Separator Settings**. You find two toggles there: **Accept Desktop
 Anisotropy Differences** and **Accept Mobile Anisotropy Differences**.
 The **Active Sampling Proof** row shows the proof mode the current build
-target reads. New components leave both toggles off. Safe keeps them off.
-Normal and Aggressive turn them on.
+target reads. New components leave both toggles off. The Safe, Normal,
+and Aggressive presets turn them on.
 
 With a toggle off, the proof is conservative. The proof keeps anisotropic
 evidence, so some triangles may not prove. With a toggle on, the proof is
@@ -65,11 +67,11 @@ build reports the missing policy and keeps the conservative output.
 The last build status and the build report name the selected proof mode.
 They name it even when no triangle moves.
 
-Custom preset files use schema version 2. To migrate a version 1 file,
-set `"schemaVersion": 2`. Add
-`"acceptDesktopAnisotropyDifferences": false` and
-`"acceptMobileAnisotropyDifferences": false`.
-The parser refuses version 1 files instead of guessing values.
+Custom preset files use schema version 3. To migrate a version 2 file, set
+`"schemaVersion": 3` and add `"minimumOpaqueCoverageToPreservePercent"` to
+its settings. To migrate a version 1 file, set `"schemaVersion": 3`, add
+both anisotropy acceptance keys and the new preserve key, and keep the
+version 2 acceptance values you want.
 
 ## Reading the console reports
 
