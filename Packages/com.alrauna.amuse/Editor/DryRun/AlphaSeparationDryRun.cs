@@ -88,6 +88,14 @@ namespace Alrauna.Amuse.Editor.DryRun
         private int _rendererIndex;
 
         /// <summary>
+        /// The batch positions the streaming intercept skipped on the
+        /// current compute leg. Their sentinels are the streaming skip,
+        /// not consent subjects, so the consent sweep must exclude them.
+        /// </summary>
+        private readonly HashSet<int> _streamingSkippedOrdinals =
+            new HashSet<int>();
+
+        /// <summary>
         /// The inspector sets this so the next draw pass advances. No-op
         /// when unset. The dry run invokes it after every advancing pass,
         /// so a serve-only pass cannot stall the sequence until the user
@@ -415,7 +423,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             // facts with no capture, so the composite key can be built
             // before any GPU work.
             var refreshOnly = Probe(
-                renderer, rendererPath, out var admittedLive);
+                renderer, rendererPath, rendererTypeName, out var admittedLive);
             var body = BuildRendererBody(
                 renderer, rendererPath, rendererTypeName, admittedLive);
             var rendererKey = DryRunFingerprint.Renderer(InputsFor(body));
@@ -488,10 +496,12 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             var blockState =
                 EffectiveMaterialMaterialization.CaptureBlockState(renderer);
+            _streamingSkippedOrdinals.Clear();
             var evidence = CaptureFor(
                 rendererPath,
                 renderer.sharedMaterials,
                 RealCapturer(renderer),
+                rendererTypeName,
                 out _);
 
             RecordConsentFacts(evidence, admittedLive);
@@ -578,6 +588,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
             ClosedAlphaMaterialCapturer capturer,
+            string rendererTypeName,
             out IReadOnlyList<Material> admittedLive)
         {
             if (_selectRequest == null)
@@ -591,7 +602,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     out admittedLive,
                     capturer,
                     _component.IgnoreOutOfRangeMaterialSlots,
-                    null,
+                    rendererTypeName,
                     LockedMaterialIdentity.PreCheckRefusal,
                     null,
                     null);
@@ -607,7 +618,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 capturer,
                 out admittedLive,
                 _component.IgnoreOutOfRangeMaterialSlots,
-                null,
+                rendererTypeName,
                 LockedMaterialIdentity.PreCheckRefusal,
                 null,
                 null);
@@ -616,19 +627,24 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>
         /// The cheap probe: one capture over a no-op capturer that admits
         /// nothing, so the admitted set and the texture facts enumerate
-        /// without any GPU work. Also reports whether a live RenderTexture
-        /// rides the admitted set, which forces the full compute path and
-        /// withholds the cache store for this renderer.
+        /// without any GPU work. The texture facts re-derive every open
+        /// here, so a run served from the renderer cache still carries its
+        /// streaming and live-texture disclosures. Also reports whether a
+        /// live RenderTexture rides the admitted set, which forces the
+        /// full compute path and withholds the cache store for this
+        /// renderer.
         /// </summary>
         private bool Probe(
             Renderer renderer,
             string rendererPath,
+            string rendererTypeName,
             out IReadOnlyList<Material> admittedLive)
         {
             CaptureFor(
                 rendererPath,
                 renderer.sharedMaterials,
                 ProbeCapturer,
+                rendererTypeName,
                 out admittedLive);
 
             var refreshOnly = false;
@@ -643,11 +659,28 @@ namespace Alrauna.Amuse.Editor.DryRun
 
                 foreach (var textureProperty in alphaRequest.TextureProperties)
                 {
-                    if (material.GetTexture(textureProperty.PropertyName)
-                        is RenderTexture)
+                    var texture = material.GetTexture(
+                        textureProperty.PropertyName);
+                    if (texture is RenderTexture)
                     {
                         refreshOnly = true;
                     }
+                    else if (IsStreamingMipmap(texture))
+                    {
+                        AddNoteOnce(NoteKind.StreamingMipmaps);
+                    }
+                }
+
+                // The locked half of the consent fact re-derives on the
+                // probe set with the same read the capture applies, so a
+                // renderer served from the cache keeps its disclosure.
+                // The transfer-subject half stays compute-only, because
+                // only the capture runs attestation; a cache-served run
+                // can lose that narrower fact, and the report records it.
+                if (LockedMaterialIdentity.PreCheckRefusal(material) !=
+                    RendererAnalysisRefusal.None)
+                {
+                    AddNoteOnce(NoteKind.LockedMaterials);
                 }
             }
 
@@ -753,6 +786,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                     captureMembers.Add(index);
                 }
 
+                _streamingSkippedOrdinals.UnionWith(skippedOrdinals);
+
                 var captured = new List<CapturedAlphaMaterial>();
                 var unattested = new List<int>(skippedOrdinals);
                 if (captureMembers.Count > 0)
@@ -832,7 +867,9 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// set: a locked identity names its refusal on the record, and a
         /// material the selector admits but the closed capture did not
         /// attest is a consent subject. Both facts surface once as the
-        /// consent note row.
+        /// consent note row. A batch member the streaming intercept
+        /// skipped is neither: its sentinel is the streaming skip, and
+        /// the streaming note is its sole disclosure.
         /// </summary>
         private void RecordConsentFacts(
             CapturedAnimationEvidence evidence,
@@ -850,6 +887,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 }
 
                 if (captured.Family == CapturedAlphaMaterialFamily.Unsupported
+                    && !_streamingSkippedOrdinals.Contains(index)
                     && index < admittedLive.Count &&
                     EffectiveSelector(
                         admittedLive[index],
