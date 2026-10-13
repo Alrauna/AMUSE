@@ -6,6 +6,7 @@ using UnityEngine;
 using Alrauna.Amuse.Runtime;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Editor.Presets;
 
 namespace Alrauna.Amuse.Editor
@@ -19,6 +20,32 @@ namespace Alrauna.Amuse.Editor
     {
         private bool _settingsOpen;
         private bool _alphaSeparatorOpen;
+
+        /// <summary>
+        /// The two foldout states live in the editor session, like
+        /// the two states above. No serialized field stores them, so
+        /// presets, Undo, and Reset stay untouched.
+        /// </summary>
+        private bool _materialTransformationsOpen;
+        private bool _alphaSeparationTransformationsOpen;
+
+        /// <summary>
+        /// The current dry run instance. It owns its own renderer
+        /// index, so replacing it restarts the pass sequence, and
+        /// keeping it across passes lets one renderer compute per
+        /// repaint until the run completes.
+        /// </summary>
+        private AlphaSeparationDryRun _dryRun;
+
+        /// <summary>
+        /// The host repaint override for the verified harness. The
+        /// production host is the inspector window, so null keeps the
+        /// editor's own Repaint, and the harness aims the repaint at
+        /// its utility window, which an inspector repaint never
+        /// reaches.
+        /// </summary>
+        internal Action HostRepaintOverride { get; set; }
+
         private List<OptimizerPreset> _presets;
         private string _presetProblemFile;
         private PresetLoadRefusal _presetProblem;
@@ -57,6 +84,8 @@ namespace Alrauna.Amuse.Editor
                     "switch beside this one."));
             serializedObject.ApplyModifiedProperties();
 
+            DrawMaterialTransformations();
+
             if (DrawSettings())
             {
                 DrawAlphaSeparatorSettings();
@@ -66,6 +95,161 @@ namespace Alrauna.Amuse.Editor
             {
                 EditorGUILayout.HelpBox(status, MessageType.None);
             }
+        }
+
+        /// <summary>
+        /// The rows the foldout draws, avatar rows before renderer
+        /// rows. The property exists for the verified editor tests:
+        /// they paint through a utility window and can read no drawn
+        /// widget, so they assert on the row set the painter
+        /// consumed.
+        /// </summary>
+        internal IReadOnlyList<MaterialTransformationRow> TransformationRows
+        {
+            get
+            {
+                if (_dryRun == null)
+                {
+                    return Array.Empty<MaterialTransformationRow>();
+                }
+
+                if (_dryRun.AvatarRows.Count == 0)
+                {
+                    return _dryRun.RendererRows;
+                }
+
+                var rows = new List<MaterialTransformationRow>(
+                    _dryRun.AvatarRows.Count + _dryRun.RendererRows.Count);
+                rows.AddRange(_dryRun.AvatarRows);
+                rows.AddRange(_dryRun.RendererRows);
+                return rows;
+            }
+        }
+
+        /// <summary>
+        /// The Show Material Transformations foldout with the nested
+        /// Alpha Separation view. The view shows outcomes, not
+        /// policy, so it sits outside the Advanced Settings reveal,
+        /// like the Alpha Separator toggle, and no serialized field
+        /// stores its state. The dry run drive runs after the rows
+        /// draw and only on a repaint pass, so a compute never
+        /// mutates the row set between a frame's Layout and Repaint
+        /// events, and at most one renderer computes per repaint.
+        /// </summary>
+        private void DrawMaterialTransformations()
+        {
+            _materialTransformationsOpen = EditorGUILayout.Foldout(
+                _materialTransformationsOpen,
+                "Show Material Transformations",
+                EditorStyles.foldoutHeader);
+            if (!_materialTransformationsOpen)
+            {
+                return;
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Refresh"))
+                {
+                    // Clear drops every stored row and every errored
+                    // mark, and it empties the one avatar slot, so
+                    // the next pass recomputes from a clean session.
+                    DryRunCache.Clear();
+                    _dryRun = null;
+                }
+            }
+
+            _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
+                _alphaSeparationTransformationsOpen,
+                "Alpha Separation",
+                EditorStyles.foldoutHeader);
+            if (!_alphaSeparationTransformationsOpen)
+            {
+                return;
+            }
+
+            EditorGUILayout.LabelField(
+                RowText.DisclosureSentence(0),
+                EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField(
+                RowText.DisclosureSentence(1),
+                EditorStyles.wordWrappedLabel);
+
+            // The rows draw from the state this frame's layout pass
+            // computed. Nothing below a draw mutates it before the
+            // next layout pass.
+            if (_dryRun != null)
+            {
+                foreach (var row in _dryRun.AvatarRows)
+                {
+                    DrawTransformationRow(row);
+                }
+
+                foreach (var row in _dryRun.RendererRows)
+                {
+                    DrawTransformationRow(row);
+                }
+            }
+
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+
+            if (_dryRun == null)
+            {
+                _dryRun = new AlphaSeparationDryRun(
+                    (AmuseAvatarOptimizer)target,
+                    () => EditorUserBuildSettings.activeBuildTarget);
+                _dryRun.RepaintRequested = RequestHostRepaint;
+                _dryRun.Begin();
+                return;
+            }
+
+            if (!_dryRun.Done)
+            {
+                _dryRun.Step();
+            }
+        }
+
+        /// <summary>
+        /// One display row. A banner row and an errored row draw as
+        /// warnings, because each states why results are missing or
+        /// partial. A slot row indents one level under its renderer,
+        /// so the renderer-to-slot shape the build reports stays
+        /// readable. Every other row draws as a plain line.
+        /// </summary>
+        private static void DrawTransformationRow(
+            MaterialTransformationRow row)
+        {
+            switch (row.Kind)
+            {
+                case MaterialTransformationRowKind.Banner:
+                case MaterialTransformationRowKind.Errored:
+                    EditorGUILayout.HelpBox(row.Sentence, MessageType.Warning);
+                    return;
+                case MaterialTransformationRowKind.Slot:
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.LabelField(row.Sentence);
+                    EditorGUI.indentLevel--;
+                    return;
+                default:
+                    EditorGUILayout.LabelField(row.Sentence);
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// The repaint the dry run asks for after an advancing pass.
+        /// The production host is the inspector window, and the
+        /// editor's own Repaint targets that window. The verified
+        /// harness aims the repaint at its utility window instead,
+        /// because an inspector repaint never reaches it.
+        /// </summary>
+        private void RequestHostRepaint()
+        {
+            (HostRepaintOverride ?? Repaint)();
         }
 
 

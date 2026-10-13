@@ -1,4 +1,7 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
@@ -18,6 +21,14 @@ namespace Alrauna.Amuse.Tests.Editor
         private RepaintHostWindow _window;
         private UnityEditor.Editor _hostedEditor;
 
+        /// <summary>
+        /// The mesh, material, and shader objects a fixture creates
+        /// outside the scene hierarchy. Destroying the root does not
+        /// destroy them, so the teardown does.
+        /// </summary>
+        private readonly List<UnityEngine.Object> _tracked =
+            new List<UnityEngine.Object>();
+
         [TearDown]
         public void TearDown()
         {
@@ -27,12 +38,26 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             if (_hostedEditor != null)
             {
-                Object.DestroyImmediate(_hostedEditor);
+                UnityEngine.Object.DestroyImmediate(_hostedEditor);
             }
             if (_root != null)
             {
-                Object.DestroyImmediate(_root);
+                UnityEngine.Object.DestroyImmediate(_root);
             }
+
+            // The foldout view holds one session cache slot. A clear
+            // here keeps one test's rows and errored marks out of the
+            // next test's view.
+            Alrauna.Amuse.Editor.DryRun.DryRunCache.Clear();
+            foreach (var tracked in _tracked)
+            {
+                if (tracked != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(tracked);
+                }
+            }
+
+            _tracked.Clear();
         }
 
         [Test]
@@ -177,6 +202,58 @@ namespace Alrauna.Amuse.Tests.Editor
                 "only when you change this control"));
         }
 
+        [UnityTest]
+        public IEnumerator MaterialTransformationsFoldoutPaintsRows()
+        {
+            // One renderer on the avatar root carries the stand-in
+            // cutout material. Production selection refuses the
+            // stand-in shader by name, so the run completes with a
+            // named renderer row. The host window must keep
+            // repainting until the run reports done, and the editor
+            // must then expose that renderer row.
+            var component = NewHiddenAvatarFixture();
+            yield return RepaintThroughHostWindow(
+                component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(
+                editor.TransformationRows.Any(
+                    row => row.Kind == Alrauna.Amuse.Editor.DryRun
+                        .MaterialTransformationRowKind.Renderer),
+                Is.True,
+                "the foldout exposed no renderer row");
+        }
+
+        [UnityTest]
+        public IEnumerator SeparatorOffPaintsBannerOnly()
+        {
+            // The separator switch off stops the run at the banner,
+            // so the foldout must show that banner row and no
+            // renderer row, after one repaint sequence.
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_alphaSeparatorEnabled", false);
+            yield return RepaintThroughHostWindow(
+                component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            var rows = editor.TransformationRows;
+            var separatorSentence = Alrauna.Amuse.Editor.DryRun.RowText
+                .BannerSentence(
+                    Alrauna.Amuse.Editor.DryRun.BannerKind.SeparatorOff);
+            Assert.That(
+                rows.Any(row => row.Sentence == separatorSentence),
+                Is.True,
+                "the foldout exposed no separator-off banner row");
+            Assert.That(
+                rows.Any(
+                    row => row.Kind == Alrauna.Amuse.Editor.DryRun
+                        .MaterialTransformationRowKind.Renderer),
+                Is.False,
+                "the separator-off view computed a renderer row");
+        }
+
         /// <summary>
         /// A hidden GameObject holds the component, so the fixture
         /// never touches the scene the user keeps open. The fixture
@@ -214,16 +291,80 @@ namespace Alrauna.Amuse.Tests.Editor
             return so.FindProperty(propertyPath).intValue;
         }
 
+        private static void SetSwitch(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer component,
+            string propertyPath, bool value)
+        {
+            var so = new SerializedObject(component);
+            so.FindProperty(propertyPath).boolValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// A one-renderer avatar fixture. The component sits on the
+        /// hidden root, and one child renderer carries the stand-in
+        /// cutout material, so the foldout view has a real renderer
+        /// row to compute for.
+        /// </summary>
+        private Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
+            NewHiddenAvatarFixture()
+        {
+            var component = NewHiddenComponent();
+            var shader = Shader.Find(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            Assert.That(shader, Is.Not.Null,
+                "the stand-in cutout shader must import");
+            var body = new GameObject("Body");
+            body.hideFlags = HideFlags.HideAndDontSave;
+            body.transform.SetParent(_root.transform, false);
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero, Vector3.right, Vector3.up,
+                },
+                triangles = new[] { 0, 1, 2 },
+            };
+            _tracked.Add(mesh);
+            var renderer = body.AddComponent<SkinnedMeshRenderer>();
+            renderer.sharedMesh = mesh;
+            var material = new Material(shader);
+            _tracked.Add(material);
+            renderer.sharedMaterials = new[] { material };
+            return component;
+        }
+
+        /// <summary>
+        /// The completion probe the repaint host window calls after
+        /// every painted pass. The run field starts null before the
+        /// foldout drive creates it, so null reads as not done.
+        /// </summary>
+        private bool DryRunFinished()
+        {
+            var run = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                .GetField("_dryRun",
+                    BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(_hostedEditor);
+            return run != null
+                && ((Alrauna.Amuse.Editor.DryRun.AlphaSeparationDryRun)run)
+                    .Done;
+        }
+
         /// <summary>
         /// One forced repaint through a real GUI host. A plain method
         /// call cannot run IMGUI code, because no GUI view exists
         /// outside OnGUI. The window opens its own editor instance
         /// with the settings foldouts open, so the alpha policy
         /// controls really draw. One painted pass is the repaint the
-        /// assertions measure.
+        /// assertions measure. A completion probe keeps the window
+        /// repainting across passes until it returns true, which the
+        /// foldout tests need, because their run advances one
+        /// renderer per repaint.
         /// </summary>
         private IEnumerator RepaintThroughHostWindow(
-            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer component)
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer component,
+            Func<bool> completionProbe = null,
+            bool openTransformations = false)
         {
             _hostedEditor = UnityEditor.Editor.CreateEditor(component);
             var editorType =
@@ -234,10 +375,22 @@ namespace Alrauna.Amuse.Tests.Editor
             editorType.GetField("_alphaSeparatorOpen",
                     BindingFlags.NonPublic | BindingFlags.Instance)
                 .SetValue(_hostedEditor, true);
+            if (openTransformations)
+            {
+                editorType.GetField("_materialTransformationsOpen",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(_hostedEditor, true);
+                editorType.GetField("_alphaSeparationTransformationsOpen",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SetValue(_hostedEditor, true);
+            }
 
             _window = EditorWindow.GetWindow<RepaintHostWindow>(
                 true, "AMUSE repaint host", false);
             _window.HostedEditor = _hostedEditor;
+            _window.CompletionProbe = completionProbe ?? (() => true);
+            ((Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)_hostedEditor)
+                .HostRepaintOverride = () => _window.Repaint();
             _window.Repaint();
             for (var frame = 0;
                  frame < 60 && !_window.Painted;
@@ -251,21 +404,34 @@ namespace Alrauna.Amuse.Tests.Editor
 
         /// <summary>
         /// A tiny utility window whose OnGUI draws the hosted editor
-        /// once and marks the pass. It exists so the tests can force
-        /// an honest repaint without touching the user's inspector.
+        /// and marks the pass once the completion probe returns true.
+        /// It exists so the tests can force an honest repaint without
+        /// touching the user's inspector. The default probe returns
+        /// true at once, so the old tests keep their single-pass
+        /// behavior, and a longer probe keeps calling and repainting
+        /// until the hosted run reports done.
         /// </summary>
         private sealed class RepaintHostWindow : EditorWindow
         {
             internal UnityEditor.Editor HostedEditor;
+            internal Func<bool> CompletionProbe = () => true;
             internal bool Painted;
 
             private void OnGUI()
             {
-                if (HostedEditor != null)
+                if (HostedEditor == null)
                 {
-                    HostedEditor.OnInspectorGUI();
-                    Painted = true;
+                    return;
                 }
+
+                HostedEditor.OnInspectorGUI();
+                if (!CompletionProbe())
+                {
+                    Repaint();
+                    return;
+                }
+
+                Painted = true;
             }
         }
     }
