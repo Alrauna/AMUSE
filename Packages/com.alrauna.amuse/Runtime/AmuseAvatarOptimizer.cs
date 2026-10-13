@@ -68,6 +68,19 @@ namespace Alrauna.Amuse.Runtime
         private int _minimumOpaqueCoveragePercent = 25;
 
         /// <summary>
+        /// The largest unproven share, in percent, a material slot's
+        /// submeshes can hold and still skip the split. A slot whose every
+        /// submesh sits strictly below this value flattens onto the opaque
+        /// material without proof, which can lose transparency as a visible
+        /// artifact. The value 0 never flattens, so avatars saved before
+        /// this field gain no silent flattening. The inspector shows it as
+        /// "Minimum Opaque Coverage to Preserve (Per Material)".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _minimumOpaqueCoverageToPreservePercent = 0;
+
+        /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence
         /// for materials without a shader cutoff. Alpha at or above this
         /// value is opaque evidence. Alpha between this value and full
@@ -183,6 +196,14 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int MinimumOpaqueCoveragePercent =>
             _minimumOpaqueCoveragePercent;
+
+        /// <summary>
+        /// The largest unproven triangle share, in percent, a slot's
+        /// submeshes can hold and still flatten onto the opaque material.
+        /// The value 0 never flattens.
+        /// </summary>
+        public int MinimumOpaqueCoverageToPreservePercent =>
+            _minimumOpaqueCoverageToPreservePercent;
 
         /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence
