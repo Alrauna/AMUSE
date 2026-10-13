@@ -204,6 +204,11 @@ namespace Alrauna.Amuse.Editor
                     () => EditorUserBuildSettings.activeBuildTarget);
                 _dryRun.RepaintRequested = RequestHostRepaint;
                 _dryRun.Begin();
+                if (!_dryRun.Done)
+                {
+                    _dryRun.RepaintRequested?.Invoke();
+                }
+
                 return;
             }
 

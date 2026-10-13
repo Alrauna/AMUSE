@@ -132,8 +132,8 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         /// <summary>
         /// Runs the avatar facts once per open. Wrapped in the same catch
-        /// shape as Step: an unexpected exception logs, marks the errored
-        /// avatar state, and stops the run.
+        /// shape as Step: an unexpected exception logs, adds the errored
+        /// row, and stops the run.
         /// </summary>
         internal void Begin()
         {
@@ -144,11 +144,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             catch (Exception failure)
             {
                 Debug.LogException(failure);
-                if (_avatarKey != null)
-                {
-                    DryRunCache.MarkErrored(_avatarKey);
-                }
-
                 _avatarRows.Add(MaterialTransformationRow.Errored(
                     null, null, RowText.ErroredSentence(null, null)));
                 Done = true;
@@ -256,7 +251,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             }
 
             var sentence = AmuseReportStrings.Format(key);
-            _avatarRows.Add(MaterialTransformationRow.Note(
+            _avatarRows.Add(MaterialTransformationRow.Banner(
                 RowText.StructuralRowSentence(
                     StructuralPrefixFor(), sentence)));
             Done = true;
@@ -1045,7 +1040,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 var verdict = verdicts[slotIndex];
                 proven += verdict.ProvenTriangles;
                 total += verdict.TotalTriangles;
-                var sentence = SlotSentence(verdict);
+                var sentence = SlotSentence(verdict, rendererName);
                 if (sentence == null)
                 {
                     continue;
@@ -1145,7 +1140,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 sentence + CaptureRefusalSuffix(slot));
         }
 
-        private static string SlotSentence(SlotTransformVerdict verdict)
+        private static string SlotSentence(
+            SlotTransformVerdict verdict, string rendererName)
         {
             switch (verdict.Outcome)
             {
@@ -1165,9 +1161,19 @@ namespace Alrauna.Amuse.Editor.DryRun
                         verdict.ProvenTriangles,
                         verdict.TotalTriangles);
                 case SlotTransformOutcome.AnisotropyDifferences:
+                    // The arguments follow the shared slot-refusal
+                    // contract: slot, reason, renderer name, offender,
+                    // extras. The base sentence reads slot and renderer.
                     return RowText.RefusedRowSentence(
                         verdict.SlotIndex,
-                        "amuse.slotSeparation.AnisotropyDifferences");
+                        "amuse.slotSeparation.AnisotropyDifferences",
+                        verdict.SlotIndex.ToString(
+                            CultureInfo.InvariantCulture),
+                        SlotTransformOutcome.AnisotropyDifferences
+                            .ToString(),
+                        rendererName,
+                        "",
+                        "");
                 default:
                     // A slot with no plan entry and no flag states no
                     // outcome, so it draws no row.

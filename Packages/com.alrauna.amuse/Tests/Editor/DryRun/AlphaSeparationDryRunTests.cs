@@ -477,6 +477,37 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         [Test]
+        public void AnisotropyRefusalNamesRendererWithoutPlaceholders()
+        {
+            // The conservative desktop policy projects anisotropic proof
+            // sampling, so every triangle of the slot stays unproven and
+            // the slot refuses through the shared slot-refusal sentence.
+            // The row must name the renderer and never draw a raw
+            // placeholder.
+            var fixture = NewComputeFixture(0, 0.5f);
+            SetSwitch(
+                fixture.Optimizer,
+                "_acceptDesktopAnisotropyDifferences",
+                false);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence, Does.Contain("refused"));
+            Assert.That(
+                rows[0].Sentence,
+                Does.Contain(fixture.Renderer.gameObject.name),
+                "the refusal must name the renderer");
+            Assert.That(
+                rows[0].Sentence,
+                Does.Not.Contain("{"),
+                "a raw placeholder must never reach the row");
+        }
+
+        [Test]
         public void RendererRefusalShowsNamedSentence()
         {
             var root = Track(NewAvatarRoot("amuse-dry-run-root"));
@@ -610,7 +641,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 row => row.Sentence.Contains(AmuseReportStrings.Format(key)));
             Assert.That(
                 structural.Kind,
-                Is.EqualTo(MaterialTransformationRowKind.Note));
+                Is.EqualTo(MaterialTransformationRowKind.Banner));
         }
 
         [Test]
