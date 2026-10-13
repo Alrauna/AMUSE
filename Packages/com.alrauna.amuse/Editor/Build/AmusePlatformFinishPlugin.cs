@@ -759,13 +759,13 @@ namespace Alrauna.Amuse.Editor.Build
                         : null);
                 var blockState =
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
-                var resolved = ResolveRuntimeStates(
+                var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath, evidence, samplingPolicy,
                     effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
-                var slots = MaterialSlotsFor(
+                var slots = RuntimeStateResolution.MaterialSlotsFor(
                     evidence, rendererPath, rendererTypeName);
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
@@ -873,7 +873,7 @@ namespace Alrauna.Amuse.Editor.Build
                     extractionMaterialSlotCount = extraction.MaterialSlotCount;
                     if (refusal == RendererAnalysisRefusal.None)
                     {
-                        var plan = ClassifyRuntimeStates(
+                        var plan = RuntimeStateResolution.ClassifyRuntimeStates(
                             extraction.Snapshot,
                             resolved.SlotResults);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
@@ -1102,16 +1102,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// the trigger already required one — but the defensive read keeps
         /// the loop's behavior total anyway.
         /// </summary>
-        private static int ProofMipCapFrom(
+        internal static int ProofMipCapFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return int.MaxValue;
             }
-
-            var stored = optimizer.PreserveTransparencyMaxMipLevel;
-            return stored < 0 ? int.MaxValue : stored;
+            return RuntimeStateResolution.ProofMipCapFrom(
+                optimizer.PreserveTransparencyMaxMipLevel);
         }
 
         /// <summary>
@@ -1121,16 +1120,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// component also maps to 1. The defensive read mirrors
         /// <see cref="ProofMipCapFrom"/>.
         /// </summary>
-        private static int MinTextureSizeFrom(
+        internal static int MinTextureSizeFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 1;
             }
-
-            var stored = optimizer.PreserveTransparencyMinTextureSize;
-            return stored < 1 ? 1 : stored;
+            return RuntimeStateResolution.MinTextureSizeFrom(
+                optimizer.PreserveTransparencyMinTextureSize);
         }
 
         /// <summary>
@@ -1140,16 +1138,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// it as 0, which always splits on at least one proven
         /// triangle. The read mirrors <see cref="ProofMipCapFrom"/>.
         /// </summary>
-        private static int MinimumCoverageFrom(
+        internal static int MinimumCoverageFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 0;
             }
-
-            var stored = optimizer.MinimumOpaqueCoveragePercent;
-            return stored < 0 ? 0 : stored;
+            return RuntimeStateResolution.MinimumCoverageFrom(
+                optimizer.MinimumOpaqueCoveragePercent);
         }
 
         /// <summary>
@@ -1162,16 +1159,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// slot may hold and still flatten. The read mirrors
         /// <see cref="MinimumCoverageFrom"/>.
         /// </summary>
-        private static int MinimumPreserveCoverageFrom(
+        internal static int MinimumPreserveCoverageFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 0;
             }
-
-            var stored = optimizer.MinimumOpaqueCoverageToPreservePercent;
-            return stored < 0 ? 0 : stored > 100 ? 100 : stored;
+            return RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                optimizer.MinimumOpaqueCoverageToPreservePercent);
         }
 
         /// <summary>
@@ -1182,25 +1178,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// of classifying with a policy no inspector could have saved.
         /// A missing component maps to the inert 100.
         /// </summary>
-        private static int OpaquePercentFrom(
+        internal static int OpaquePercentFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 100;
             }
-
-            var stored = optimizer.MinimumOpaqueAlphaPercent;
-            if (stored <= 0)
-            {
-                // A fully transparent texel can never be opaque
-                // evidence, so a clamp at or below zero admits
-                // invisible texels and reads as the inert exact-255
-                // contract instead.
-                return 100;
-            }
-
-            return stored > 100 ? 100 : stored;
+            return RuntimeStateResolution.OpaquePercentFrom(
+                optimizer.MinimumOpaqueAlphaPercent);
         }
 
         /// <summary>
@@ -1213,22 +1199,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// component was tampered with. A missing component maps to
         /// the inert 0.
         /// </summary>
-        private static int PolygonClampPercentFrom(
+        internal static int PolygonClampPercentFrom(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 0;
             }
-
-            var stored = optimizer.PolygonAlphaUpperClampPercent;
-            stored = stored < 0 ? 0 : stored > 100 ? 100 : stored;
-            if (stored >= 100)
-            {
-                return 0;
-            }
-
-            return stored;
+            return RuntimeStateResolution.PolygonClampPercentFrom(
+                optimizer.PolygonAlphaUpperClampPercent);
         }
 
         /// <summary>
@@ -1244,29 +1223,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// component before any build work starts. A missing
         /// component maps to the inert 0.
         /// </summary>
-        private static int DensityCapFromCoveragePercent(
+        internal static int DensityCapFromCoveragePercent(
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
         {
             if (optimizer == null)
             {
                 return 0;
             }
-
-            var stored = optimizer.PolygonMinimumOpaqueCoveragePercent;
-            if (stored < 0)
-            {
-                return 0;
-            }
-
-            if (stored > 100)
-            {
-                throw new InvalidOperationException(
-                    "AMUSE Minimum Opaque Coverage to Convert (Per Polygon) is " +
-                    "stored as " + stored + ", outside the 0 to 100 " +
-                    "range.");
-            }
-
-            return 100 - stored;
+            return RuntimeStateResolution.DensityCapFromCoveragePercent(
+                optimizer.PolygonMinimumOpaqueCoveragePercent);
         }
 
         /// <summary>
@@ -1337,340 +1302,6 @@ namespace Alrauna.Amuse.Editor.Build
 
 
         /// <summary>
-        /// Exercises the PlatformFinish-owned runtime-state orchestration with
-        /// already-closed evidence. The proof resolves under the explicitly
-        /// stated sampling policy, exactly as the real pass resolves under
-        /// its captured policy; there is no policy default on this entry.
-        /// The optional resolver is the pre-existing
-        /// verified-frontend seam used by public-package tests whose stand-in
-        /// shader cannot carry vendor source attestation; production calls the
-        /// same core with the real resolver.
-        /// </summary>
-        internal static (RendererAnalysisRefusal Refusal,
-                         int OpaqueCandidateTriangleCount)
-            AnalyzeRuntimeStatesForTests(
-                string rendererPath,
-                CapturedAnimationEvidence evidence,
-                UnityRendererAlphaSnapshot snapshot,
-                AlphaSamplingPolicy samplingPolicy,
-                CapturedAlphaMaterialSemanticsResolver resolveSemantics)
-        {
-            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-            var resolved = ResolveRuntimeStates(
-                rendererPath, evidence, samplingPolicy, resolveSemantics);
-            return resolved.Refusal == RendererAnalysisRefusal.None
-                ? (RendererAnalysisRefusal.None,
-                    ClassifyRuntimeStates(
-                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
-                : (resolved.Refusal, 0);
-        }
-
-        private sealed class ResolvedRuntimeStates
-        {
-            internal ResolvedRuntimeStates(
-                RendererAnalysisRefusal refusal,
-                IReadOnlyList<CapturedAlphaMaterial> currentMaterials,
-                SlotResolutionResult[] slotResults)
-            {
-                Refusal = refusal;
-                CurrentMaterials = currentMaterials;
-                SlotResults = slotResults;
-            }
-
-            internal RendererAnalysisRefusal Refusal { get; }
-            internal IReadOnlyList<CapturedAlphaMaterial> CurrentMaterials { get; }
-
-            /// <summary>
-            /// One retained result per material slot: either that slot's
-            /// deduplicated resolutions or its own named refusal. Renderer- and
-            /// avatar-scoped failures are reported through
-            /// <see cref="Refusal"/> instead and leave this empty.
-            /// <para>
-            /// A refused slot's reason is retained here but is deliberately not
-            /// reported anywhere: this milestone reuses the existing
-            /// <see cref="SlotResolutionResult"/> and
-            /// <see cref="RendererAnalysisRefusal"/> vocabulary and adds no
-            /// persistent per-slot diagnostics. A concrete consumer that needs
-            /// durable per-slot reporting is the point at which a separate
-            /// vocabulary and state representation should be designed, not
-            /// before.
-            /// </para>
-            /// </summary>
-            internal SlotResolutionResult[] SlotResults { get; }
-        }
-
-        private static ResolvedRuntimeStates ResolveRuntimeStates(
-                string rendererPath,
-                CapturedAnimationEvidence evidence,
-                AlphaSamplingPolicy samplingPolicy,
-                CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
-                int maxMipLevel = int.MaxValue,
-                int minTextureSize = 1,
-                int densityCapPercent = 0,
-                IReadOnlyList<BlockStateEntry> blockState = null,
-                string rendererTypeName = null)
-        {
-            if (rendererPath == null)
-                throw new ArgumentNullException(nameof(rendererPath));
-            if (evidence == null)
-                throw new ArgumentNullException(nameof(evidence));
-
-            var floats = new List<CapturedFloatBinding>();
-            var objects = new List<CapturedObjectBinding>();
-            foreach (var clip in evidence.Clips)
-            {
-                floats.AddRange(clip.FloatBindings);
-                objects.AddRange(clip.ObjectBindings);
-            }
-
-            var structural = UnityRendererAlphaAnalysis.StructuralRefusalFor(
-                floats, objects, rendererPath, rendererTypeName);
-            if (structural != RendererAnalysisRefusal.None)
-                return Refused(structural);
-
-            var relevantBindings = new List<(
-                CapturedFloatBinding Binding,
-                AnimatedPropertyRef Reference)>();
-            foreach (var binding in floats)
-            {
-                var resolution =
-                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
-                        binding,
-                        rendererPath,
-                        evidence.AlphaRelevanceRequest,
-                        out var reference,
-                        rendererTypeName);
-                if (resolution ==
-                    ProofRelevantBindingResolution.UnrecognizedMaterialBinding)
-                {
-                    return Refused(
-                        RendererAnalysisRefusal
-                            .UnrecognizedAnimatedMaterialBinding);
-                }
-
-                if (resolution == ProofRelevantBindingResolution.RendererWide)
-                    relevantBindings.Add((binding, reference));
-            }
-
-            // An object-reference curve can name a proof-relevant material
-            // property just as a float curve can, and the same fail-closed rule
-            // applies: recognized structural and material-slot forms are handled
-            // above and below, anything else that could address a requested
-            // property is unsupported syntax rather than irrelevant.
-            foreach (var binding in objects)
-            {
-                if (UnityAnimationEvidenceCapture
-                        .IsUnrecognizedObjectMaterialBinding(
-                            binding, rendererPath, evidence.AlphaRelevanceRequest, rendererTypeName))
-                {
-                    return Refused(
-                        RendererAnalysisRefusal
-                            .UnrecognizedAnimatedMaterialBinding);
-                }
-            }
-
-            if (relevantBindings.Count > 0 && evidence.HasAdditiveLayer)
-            {
-                return Refused(
-                    RendererAnalysisRefusal
-                        .AdditiveLayerWithProofRelevantMaterialProperty);
-            }
-
-            if (relevantBindings.Count > 0 &&
-                evidence.HasUnnormalizedDirectBlendTree)
-            {
-                return Refused(
-                    RendererAnalysisRefusal
-                        .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty);
-            }
-
-            var slots = MaterialSlotsFor(evidence, rendererPath, rendererTypeName);
-            var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                evidence.AdmittedMaterials,
-                maxMipLevel,
-                minTextureSize);
-
-            // Every slot is resolved; no slot's failure stops the loop. A
-            // slot's admission failure is a fact about that slot's own admitted
-            // materials, so it must not decide anything for a sibling slot
-            // whose proof does not depend on it.
-            // Renderer-scoped facts — closure, structural refusals,
-            // unrecognized bindings, additive layers and unnormalized direct
-            // blend trees — are all established above and keep their scope.
-            var slotResults = new SlotResolutionResult[slots.Count];
-            var firstSlotRefusal = RendererAnalysisRefusal.None;
-            var anySlotResolved = false;
-            for (var slotIndex = 0; slotIndex < slots.Count; slotIndex++)
-            {
-                // A slot-scoped closure failure is a fact about this slot
-                // alone. The renderer is closed, so the slot refuses here
-                // and every sibling slot's own resolution continues.
-                var closureWay = ClosureWayForSlot(evidence, slotIndex);
-                if (closureWay !=
-                    MaterialDependencyClosureFailure.None)
-                {
-                    slotResults[slotIndex] = SlotResolutionResult.Refused(
-                        RendererAnalysisRefusal
-                            .MaterialDependencyClosureFailed,
-                        closureWay: closureWay);
-                    if (firstSlotRefusal == RendererAnalysisRefusal.None)
-                    {
-                        firstSlotRefusal = RendererAnalysisRefusal
-                            .MaterialDependencyClosureFailed;
-                    }
-
-                    continue;
-                }
-
-                var slotEntries = FilterBlockEntriesForSlot(blockState, slotIndex);
-                var resolved = AdmittedMaterialStates.ResolveSlot(
-                    slots[slotIndex],
-                    evidence.AdmittedMaterials,
-                    relevantBindings,
-                    evidence.AlphaRelevanceRequest,
-                    fields,
-                    samplingPolicy,
-                    densityCapPercent,
-                    resolveSemantics,
-                    slotEntries);
-                if (!resolved.IsResolved)
-                {
-                    // Retained as it stands, refusal reason included, so the
-                    // slot is preserved rather than dropped.
-                    slotResults[slotIndex] = resolved;
-                    if (firstSlotRefusal == RendererAnalysisRefusal.None)
-                        firstSlotRefusal = resolved.Refusal;
-                    continue;
-                }
-
-                anySlotResolved = true;
-                // The deduped list keeps feeding classification; the raw
-                // list rides along so reporting can attribute a refused
-                // resolution to its own admitted material.
-                slotResults[slotIndex] = SlotResolutionResult.Resolved(
-                    AdmittedMaterialStates.DistinctResolutions(
-                        resolved.Resolutions),
-                    resolved.MaterialResolutions);
-            }
-
-            // Nothing resolved, so there is no partial result to preserve and
-            // the renderer keeps exactly its previous refusal, reason and
-            // accounting. The first refusal is the reported one, which is the
-            // same one the earlier return-on-first-failure produced. The
-            // per-slot results ride along: the pass reports every refused
-            // slot's own exact reason even when the first refusal names the
-            // renderer, so a single-slot avatar still reads which material
-            // and which shader fact stopped its proof.
-            if (firstSlotRefusal != RendererAnalysisRefusal.None &&
-                !anySlotResolved)
-            {
-                return new ResolvedRuntimeStates(
-                    firstSlotRefusal,
-                    Array.Empty<CapturedAlphaMaterial>(),
-                    slotResults);
-            }
-
-            var currentMaterials =
-                new CapturedAlphaMaterial[evidence.CurrentMaterialIndices.Count];
-            for (var slot = 0; slot < currentMaterials.Length; slot++)
-            {
-                // The -1 sentinel marks a closure-failed slot. Geometry
-                // extraction carries the slots positionally and never reads
-                // them for classification: a refused slot's triangles are
-                // unproven outcomes, so the null entry is inert.
-                var index = evidence.CurrentMaterialIndices[slot];
-                currentMaterials[slot] = index >= 0
-                    ? evidence.AdmittedMaterials[index]
-                    : null;
-            }
-
-            return new ResolvedRuntimeStates(
-                RendererAnalysisRefusal.None,
-                currentMaterials,
-                slotResults);
-        }
-
-
-        private static IReadOnlyList<BlockStateEntry> FilterBlockEntriesForSlot(
-            IReadOnlyList<BlockStateEntry> blockState,
-            int slotIndex)
-        {
-            if (blockState == null || blockState.Count == 0)
-            {
-                return null;
-            }
-
-            var list = new List<BlockStateEntry>();
-            for (var i = 0; i < blockState.Count; i++)
-            {
-                if (blockState[i].SlotIndex == slotIndex)
-                {
-                    list.Add(blockState[i]);
-                }
-            }
-
-            return list;
-        }
-
-        /// <summary>
-        /// The way the slot's material dependency closure failed, or
-        /// <see cref="MaterialDependencyClosureFailure.None"/> when the slot
-        /// closed cleanly. One lookup per slot over the sorted failure
-        /// records; the records are unique per slot, so the first match is
-        /// the only one.
-        /// </summary>
-        private static MaterialDependencyClosureFailure ClosureWayForSlot(
-            CapturedAnimationEvidence evidence,
-            int slotIndex)
-        {
-            foreach (var record in evidence.SlotClosureFailures)
-            {
-                if (record.SlotIndex == slotIndex)
-                {
-                    return record.Failure;
-                }
-            }
-
-            return MaterialDependencyClosureFailure.None;
-        }
-
-        private static ResolvedRuntimeStates Refused(
-            RendererAnalysisRefusal refusal)
-        {
-            return new ResolvedRuntimeStates(
-                refusal,
-                Array.Empty<CapturedAlphaMaterial>(),
-                Array.Empty<SlotResolutionResult>());
-        }
-
-        /// <summary>
-        /// Classifies every submesh against its own slot's admitted states and
-        /// returns the separation plan. The plan was previously reduced to its
-        /// opaque triangle count here; it is returned whole so the caller can
-        /// also retain it, which changes no classification.
-        /// </summary>
-        private static MeshSeparationPlan ClassifyRuntimeStates(
-            UnityRendererAlphaSnapshot snapshot,
-            IReadOnlyList<SlotResolutionResult> slotResults)
-        {
-            var submeshes = new List<SubmeshSeparationInput>(
-                snapshot.Submeshes.Count);
-            foreach (var submesh in snapshot.Submeshes)
-            {
-                var slot = slotResults[submesh.MaterialSlotIndex];
-                submeshes.Add(new SubmeshSeparationInput(
-                    submesh.MaterialSlotIndex,
-                    submesh.Indices,
-                    slot.IsResolved
-                        ? IntersectResolvedOutcomes(snapshot, submesh, slot)
-                        : UnprovenOutcomes(submesh.Indices.Count / 3)));
-            }
-
-            return MeshSeparationPlanner.Create(
-                new MeshSeparationInput(snapshot.VertexCount, submeshes));
-        }
-
-        /// <summary>
         /// Retains what this renderer's plan found, for the later pass that
         /// validates and applies it. A renderer whose plan proves no triangle
         /// opaque has nothing to prepare and is not retained at all; neither
@@ -1719,204 +1350,5 @@ namespace Alrauna.Amuse.Editor.Build
             state.Separation ??= new PreparedAlphaSeparation();
             state.Separation.Add(prepared);
         }
-
-        private static TriangleAlphaOutcome[] IntersectResolvedOutcomes(
-            UnityRendererAlphaSnapshot snapshot,
-            UnitySubmeshAlphaSnapshot submesh,
-            SlotResolutionResult slot)
-        {
-            var perResolution = new List<TriangleAlphaOutcome[]>(
-                slot.Resolutions.Count);
-            foreach (var resolution in slot.Resolutions)
-            {
-                var outcomes = UnityRendererAlphaAnalysis.Classify(
-                    submesh.Indices,
-                    snapshot.Positions,
-                    snapshot.HasUv0 ? snapshot.Uv0 : null,
-                    resolution,
-                    snapshot.ExtraUvSets);
-                perResolution.Add(outcomes);
-            }
-
-            return UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
-        }
-
-        /// <summary>
-        /// The outcomes for a slot whose admitted states could not be resolved.
-        /// Such a slot proves nothing about its own triangles and nothing about
-        /// any other slot's, so it keeps its submesh and its positional
-        /// correspondence with its material slot, and every triangle is
-        /// explicitly <see cref="TriangleAlphaOutcome.Unknown"/>: not opaque,
-        /// and not asserted to require transparency either, which would be a
-        /// claim this slot has no evidence for.
-        /// <para>
-        /// Written out rather than left to the enum's numeric default, which is
-        /// <see cref="TriangleAlphaOutcome.ProvenOpaque"/> and would turn an
-        /// unresolved slot into a false positive.
-        /// </para>
-        /// <para>
-        /// This also keeps the empty-state guard in
-        /// <c>IntersectOutcomes</c> intact: an unresolved slot never reaches it
-        /// with no admitted states, so intersecting nothing still means what it
-        /// means today.
-        /// </para>
-        /// </summary>
-        private static TriangleAlphaOutcome[] UnprovenOutcomes(int triangleCount)
-        {
-            var outcomes = new TriangleAlphaOutcome[triangleCount];
-            for (var triangle = 0; triangle < outcomes.Length; triangle++)
-                outcomes[triangle] = TriangleAlphaOutcome.Unknown;
-
-            return outcomes;
-        }
-
-        /// <summary>
-        /// One entry per renderer material slot addressing
-        /// <see cref="CapturedAnimationEvidence.AdmittedMaterials"/>: the
-        /// current assignment first, then clip/binding/value order. Shared
-        /// with the barrier-side alpha-separation preparation, which maps the
-        /// same per-slot admitted sets.
-        /// </summary>
-        internal static IReadOnlyList<CapturedMaterialSlotEvidence>
-            MaterialSlotsFor(
-                CapturedAnimationEvidence evidence,
-                string rendererPath,
-                string rendererTypeName = null)
-        {
-            var admittedBySlot = new List<int>[evidence.CurrentMaterialIndices.Count];
-            for (var slot = 0; slot < admittedBySlot.Length; slot++)
-            {
-                admittedBySlot[slot] = new List<int>();
-
-                // The -1 sentinel marks a slot whose closure failed: no
-                // current material was admitted. The slot refuses as a
-                // closure failure before resolution, so its admitted list
-                // only needs the swap indices it still validly holds.
-                if (evidence.CurrentMaterialIndices[slot] >= 0)
-                {
-                    admittedBySlot[slot].Add(
-                        evidence.CurrentMaterialIndices[slot]);
-                }
-            }
-
-            foreach (var clip in evidence.Clips)
-            {
-                foreach (var binding in clip.ObjectBindings)
-                {
-                    if (!UnityAnimationEvidenceCapture
-                            .TryParseMaterialSlotBindingFor(
-                                binding.Path,
-                                binding.TypeName,
-                                binding.PropertyName,
-                                rendererPath,
-                                rendererTypeName,
-                                out var slot))
-                        continue;
-
-                    foreach (var material in binding.AdmittedMaterialIndices)
-                    {
-                        if (!admittedBySlot[slot].Contains(material))
-                            admittedBySlot[slot].Add(material);
-                    }
-                }
-            }
-
-            var slots = new CapturedMaterialSlotEvidence[admittedBySlot.Length];
-            for (var slot = 0; slot < slots.Length; slot++)
-            {
-                slots[slot] = new CapturedMaterialSlotEvidence(
-                    slot,
-                    admittedBySlot[slot],
-                    CaptureRefusalsFor(evidence, admittedBySlot[slot]),
-                    NoAlphaChannelPropertiesFor(evidence, admittedBySlot[slot]));
-            }
-
-            return slots;
-        }
-
-        /// <summary>
-        /// Collects the texture properties on a slot's admitted materials
-        /// whose captured evidence proves sampled alpha exactly one through
-        /// the importer theorem: the source file has no alpha channel and the
-        /// import writes none, so the runtime samples exactly one at every
-        /// texel. The report names these so the author can spot a likely
-        /// material misconfiguration; the proof itself is exact and changes
-        /// no classification outcome.
-        /// </summary>
-        private static IReadOnlyList<string> NoAlphaChannelPropertiesFor(
-            CapturedAnimationEvidence evidence,
-            IReadOnlyList<int> admittedIndices)
-        {
-            var properties = new List<string>();
-            var seen = new HashSet<string>();
-            foreach (var index in admittedIndices)
-            {
-                foreach (var entry in evidence
-                             .AdmittedMaterials[index]
-                             .Evidence
-                             .TextureAssignments)
-                {
-                    if (!entry.HasValue ||
-                        entry.Value.Texture == null ||
-                        (entry.Value.RequestedEvidence &
-                            TextureEvidenceKinds.AlphaChannel) == 0 ||
-                        !entry.Value.Texture.SampledAlphaIsProvenOne ||
-                        seen.Contains(entry.Name))
-                    {
-                        continue;
-                    }
-
-                    seen.Add(entry.Name);
-                    properties.Add(entry.Name);
-                }
-            }
-
-            return properties;
-        }
-
-        /// <summary>
-        /// Collects one slot's named capture refusals from its admitted
-        /// materials' evidence, in the slot's admitted order, with duplicates
-        /// collapsed: the same texture source can serve two admitted materials
-        /// of one slot, and a refusal is a fact about the capture, not about
-        /// the material that hit it. The records name the texture and the
-        /// reason family for the report; they refuse nothing by themselves.
-        /// </summary>
-        private static IReadOnlyList<TextureCaptureRefusal> CaptureRefusalsFor(
-            CapturedAnimationEvidence evidence,
-            IReadOnlyList<int> admittedIndices)
-        {
-            var refusals = new List<TextureCaptureRefusal>();
-            var seen = new HashSet<
-                (string Property,
-                 bool HasSource,
-                 string Source,
-                 TextureChannel Channel,
-                 TextureCaptureRefusalReason Reason)>();
-            foreach (var index in admittedIndices)
-            {
-                foreach (var refusal in evidence
-                             .AdmittedMaterials[index]
-                             .Evidence
-                             .CaptureRefusals)
-                {
-                    var key = (
-                        refusal.PropertyName,
-                        refusal.HasSourceIdentity,
-                        refusal.HasSourceIdentity
-                            ? refusal.SourceIdentity.Value
-                            : null,
-                        refusal.Channel,
-                        refusal.Reason);
-                    if (seen.Add(key))
-                    {
-                        refusals.Add(refusal);
-                    }
-                }
-            }
-
-            return refusals;
-        }
-
     }
 }

@@ -355,7 +355,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var slots = AmusePlatformFinishPass.MaterialSlotsFor(
+            var slots = RuntimeStateResolution.MaterialSlotsFor(
                 evidence, rendererPath, rendererTypeName);
             var candidateSlots = new List<PreparedSlotSeparation>(
                 plan.Submeshes.Count);
