@@ -102,6 +102,7 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
+            int minimumOpaqueCoverageToPreservePercent = 0,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -115,6 +116,72 @@ namespace Alrauna.Amuse.Editor.Build
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
             if (admittedLiveMaterials == null)
                 throw new ArgumentNullException(nameof(admittedLiveMaterials));
+
+            // The preserve gate folds whole material slots whose every
+            // submesh holds a strictly smaller unproven share than the
+            // stored preserve value. A folded entry is an ordinary
+            // wholly-opaque candidate for every later consumer here, so
+            // no candidate-loop gate changes. The unproven count per
+            // folded submesh feeds the forced report event of the later
+            // report pass. A preserve value of 0 qualifies nothing, so
+            // the original plan object flows through unchanged.
+            var unprovenCountByFoldedSubmesh = new Dictionary<int, int>();
+            var entriesByBindingIndex =
+                new Dictionary<int, List<SubmeshSeparationPlan>>();
+            foreach (var entry in plan.Submeshes)
+            {
+                if (!entriesByBindingIndex.TryGetValue(
+                        entry.SourceMaterialBindingIndex,
+                        out var slotEntries))
+                {
+                    slotEntries = new List<SubmeshSeparationPlan>();
+                    entriesByBindingIndex.Add(
+                        entry.SourceMaterialBindingIndex, slotEntries);
+                }
+
+                slotEntries.Add(entry);
+            }
+
+            var foldedEntries = new List<SubmeshSeparationPlan>();
+            foreach (var slotEntries in entriesByBindingIndex.Values)
+            {
+                var slotQualifies = true;
+                foreach (var entry in slotEntries)
+                {
+                    var totalTriangles =
+                        entry.OpaqueTriangleOrdinals.Count +
+                        entry.TransparentTriangleOrdinals.Count;
+                    if (entry.Disposition !=
+                            SubmeshSeparationDisposition.Split ||
+                        entry.TransparentTriangleOrdinals.Count * 100 >=
+                        minimumOpaqueCoverageToPreservePercent *
+                        totalTriangles)
+                    {
+                        slotQualifies = false;
+                        break;
+                    }
+                }
+
+                if (!slotQualifies)
+                {
+                    continue;
+                }
+
+                foreach (var entry in slotEntries)
+                {
+                    var folded = MeshSeparationPlanner.Folded(entry);
+                    unprovenCountByFoldedSubmesh.Add(
+                        folded.SourceSubmeshIndex,
+                        entry.TransparentTriangleOrdinals.Count);
+                    foldedEntries.Add(folded);
+                }
+            }
+
+            if (foldedEntries.Count > 0)
+            {
+                plan = MeshSeparationPlanner.WithFoldedSubmeshes(
+                    plan, foldedEntries);
+            }
 
             // An unproven slot whose own resolution samples anisotropically
             // refuses before the opaque-candidate gate: a renderer whose

@@ -605,6 +605,8 @@ namespace Alrauna.Amuse.Editor.Build
             var maxMipLevel = ProofMipCapFrom(optimizer);
             var minTextureSize = MinTextureSizeFrom(optimizer);
             var minimumOpaqueCoveragePercent = MinimumCoverageFrom(optimizer);
+            var minimumOpaqueCoverageToPreservePercent =
+                MinimumPreserveCoverageFrom(optimizer);
             var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
             var polygonClampPercent = PolygonClampPercentFrom(optimizer);
             var densityCapPercent =
@@ -918,6 +920,7 @@ namespace Alrauna.Amuse.Editor.Build
                             poiyomiConversion,
                             lilToonConversion,
                             minimumOpaqueCoveragePercent,
+                            minimumOpaqueCoverageToPreservePercent,
                             rendererTypeName,
                             allowDepthTestChange,
                             grantedShaderNames,
@@ -1147,6 +1150,28 @@ namespace Alrauna.Amuse.Editor.Build
 
             var stored = optimizer.MinimumOpaqueCoveragePercent;
             return stored < 0 ? 0 : stored;
+        }
+
+        /// <summary>
+        /// Maps the optimizer's "Minimum Opaque Coverage to Preserve (Per
+        /// Material)" policy to the fold gate. A stored value below zero
+        /// is a defect against the Range attribute. The defensive read
+        /// treats it as 0, which never flattens. A stored value above 100
+        /// clamps to 100. The high side is the aggressive direction for
+        /// this gate, so the clamp caps how large an unproven share a
+        /// slot may hold and still flatten. The read mirrors
+        /// <see cref="MinimumCoverageFrom"/>.
+        /// </summary>
+        private static int MinimumPreserveCoverageFrom(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
+        {
+            if (optimizer == null)
+            {
+                return 0;
+            }
+
+            var stored = optimizer.MinimumOpaqueCoverageToPreservePercent;
+            return stored < 0 ? 0 : stored > 100 ? 100 : stored;
         }
 
         /// <summary>
@@ -1665,6 +1690,7 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
+            int minimumOpaqueCoverageToPreservePercent,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -1680,6 +1706,7 @@ namespace Alrauna.Amuse.Editor.Build
                 poiyomiConversion,
                 lilToonConversion,
                 minimumOpaqueCoveragePercent,
+                minimumOpaqueCoverageToPreservePercent,
                 rendererTypeName,
                 allowDepthTestChange,
                 grantedShaderNames,

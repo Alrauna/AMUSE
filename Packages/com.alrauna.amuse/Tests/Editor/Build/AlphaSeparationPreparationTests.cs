@@ -9081,6 +9081,1039 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return shader;
         }
 
+        // --- Preserve gate: slot fold in preparation -------------------------
+
+        /// <summary>
+        /// Stores the preserve coverage percent on this root's own optimizer
+        /// through its serialized field, exactly as the apply-side coverage
+        /// suite writes <c>_minimumOpaqueCoveragePercent</c>.
+        /// </summary>
+        private static void SetPreserveCoverage(
+            GameObject root,
+            int percent)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_minimumOpaqueCoverageToPreservePercent")
+                .intValue = percent;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Stores the convert coverage percent on this root's own optimizer
+        /// through its serialized field, exactly as the apply-side coverage
+        /// suite writes it. The fixtures that keep a surviving split pin
+        /// the preserve gate alone, so they park the convert gate at the
+        /// inert 0 instead of the component's stored default 25.
+        /// </summary>
+        private static void SetConvertCoverage(
+            GameObject root,
+            int percent)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = percent;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// One split submesh over the shared split texture: triangle
+        /// ordinal 0 sits wholly inside the opaque half, and ordinal 1 sits
+        /// wholly inside the translucent half, so the plan is a one-and-one
+        /// split with a 50 percent unproven share.
+        /// </summary>
+        private static Mesh TwoTriangleSplitMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    new Vector3(2f, 0f, 0f),
+                    new Vector3(3f, 0f, 0f),
+                    new Vector3(2f, 1f, 0f),
+                },
+                uv = new[]
+                {
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.4f, 0.1f),
+                    new Vector2(0.1f, 0.4f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                },
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            return mesh;
+        }
+
+        /// <summary>
+        /// One submesh of one hundred triangles: ordinal 0 is proven
+        /// opaque, ordinals 1 to 4 are proven transparent, and ordinals 5
+        /// to 99 are collinear degenerate triangles whose proof answers
+        /// Unknown. The unproven bucket share is 99 percent.
+        /// </summary>
+        private static Mesh OneOpaqueAndNinetyNineUnprovenMesh()
+        {
+            var vertices = new Vector3[18];
+            var uvs = new Vector2[18];
+            vertices[0] = Vector3.zero;
+            vertices[1] = Vector3.right;
+            vertices[2] = Vector3.up;
+            uvs[0] = new Vector2(0.1f, 0.1f);
+            uvs[1] = new Vector2(0.4f, 0.1f);
+            uvs[2] = new Vector2(0.1f, 0.4f);
+            for (var triangle = 1; triangle <= 4; triangle++)
+            {
+                var baseVertex = triangle * 3;
+                vertices[baseVertex] =
+                    new Vector3(triangle * 3f, 0f, 0f);
+                vertices[baseVertex + 1] =
+                    new Vector3(triangle * 3f + 1f, 0f, 0f);
+                vertices[baseVertex + 2] =
+                    new Vector3(triangle * 3f, 1f, 0f);
+                uvs[baseVertex] = new Vector2(0.6f, 0.6f);
+                uvs[baseVertex + 1] = new Vector2(0.9f, 0.6f);
+                uvs[baseVertex + 2] = new Vector2(0.6f, 0.9f);
+            }
+
+            // The degenerate vertex triple: collinear, so every triangle
+            // that references it is degenerate and answers Unknown.
+            vertices[15] = new Vector3(100f, 0f, 0f);
+            vertices[16] = new Vector3(101f, 0f, 0f);
+            vertices[17] = new Vector3(102f, 0f, 0f);
+
+            var indices = new int[300];
+            for (var triangle = 0; triangle < 5; triangle++)
+            {
+                indices[triangle * 3] = triangle * 3;
+                indices[triangle * 3 + 1] = triangle * 3 + 1;
+                indices[triangle * 3 + 2] = triangle * 3 + 2;
+            }
+
+            for (var triangle = 5; triangle < 100; triangle++)
+            {
+                indices[triangle * 3] = 15;
+                indices[triangle * 3 + 1] = 16;
+                indices[triangle * 3 + 2] = 17;
+            }
+
+            var mesh = new Mesh { vertices = vertices, uv = uvs };
+            mesh.SetTriangles(indices, 0);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Two submeshes on one renderer: submesh 0 is the one-and-one
+        /// split, and submesh 1 is uniformly transparent over the shared
+        /// transparent stand-in, so its entry stays Unchanged.
+        /// </summary>
+        private static Mesh SplitPlusTransparentTwoSubmeshMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    new Vector3(2f, 0f, 0f),
+                    new Vector3(3f, 0f, 0f),
+                    new Vector3(2f, 1f, 0f),
+                    new Vector3(4f, 0f, 0f),
+                    new Vector3(5f, 0f, 0f),
+                    new Vector3(4f, 1f, 0f),
+                },
+                uv = new[]
+                {
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.4f, 0.1f),
+                    new Vector2(0.1f, 0.4f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.25f, 0.25f),
+                },
+                subMeshCount = 2,
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(new[] { 6, 7, 8 }, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Two submeshes for one shared split material. Submesh 0 holds 49
+        /// proven-opaque triangles and 1 proven-transparent triangle, a 2
+        /// percent unproven share. Submesh 1 holds 25 and 25, a 50 percent
+        /// unproven share.
+        /// </summary>
+        private static Mesh MixedShareTwoSubmeshMesh()
+        {
+            var vertices = new Vector3[300];
+            var uvs = new Vector2[300];
+            for (var triangle = 0; triangle < 50; triangle++)
+            {
+                var baseVertex = triangle * 3;
+                vertices[baseVertex] = new Vector3(triangle, 0f, 0f);
+                vertices[baseVertex + 1] =
+                    new Vector3(triangle + 1f, 0f, 0f);
+                vertices[baseVertex + 2] =
+                    new Vector3(triangle, 1f, 0f);
+                var opaque = triangle < 49;
+                uvs[baseVertex] = opaque
+                    ? new Vector2(0.1f, 0.1f)
+                    : new Vector2(0.6f, 0.6f);
+                uvs[baseVertex + 1] = opaque
+                    ? new Vector2(0.4f, 0.1f)
+                    : new Vector2(0.9f, 0.6f);
+                uvs[baseVertex + 2] = opaque
+                    ? new Vector2(0.1f, 0.4f)
+                    : new Vector2(0.6f, 0.9f);
+            }
+
+            for (var triangle = 0; triangle < 50; triangle++)
+            {
+                var baseVertex = 150 + triangle * 3;
+                vertices[baseVertex] =
+                    new Vector3(100f + triangle, 0f, 0f);
+                vertices[baseVertex + 1] =
+                    new Vector3(101f + triangle, 0f, 0f);
+                vertices[baseVertex + 2] =
+                    new Vector3(100f + triangle, 1f, 0f);
+                var opaque = triangle < 25;
+                uvs[baseVertex] = opaque
+                    ? new Vector2(0.1f, 0.1f)
+                    : new Vector2(0.6f, 0.6f);
+                uvs[baseVertex + 1] = opaque
+                    ? new Vector2(0.4f, 0.1f)
+                    : new Vector2(0.9f, 0.6f);
+                uvs[baseVertex + 2] = opaque
+                    ? new Vector2(0.1f, 0.4f)
+                    : new Vector2(0.6f, 0.9f);
+            }
+
+            var mesh = new Mesh
+            {
+                vertices = vertices,
+                uv = uvs,
+                subMeshCount = 2,
+            };
+            var slotA = new int[150];
+            var slotB = new int[150];
+            for (var triangle = 0; triangle < 50; triangle++)
+            {
+                slotA[triangle * 3] = triangle * 3;
+                slotA[triangle * 3 + 1] = triangle * 3 + 1;
+                slotA[triangle * 3 + 2] = triangle * 3 + 2;
+                slotB[triangle * 3] = 150 + triangle * 3;
+                slotB[triangle * 3 + 1] = 150 + triangle * 3 + 1;
+                slotB[triangle * 3 + 2] = 150 + triangle * 3 + 2;
+            }
+
+            mesh.SetTriangles(slotA, 0);
+            mesh.SetTriangles(slotB, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Two submeshes on one renderer. Submesh 0 is the one-and-one
+        /// split that folds at preserve 60. Submesh 1 is a one-and-ninety-
+        /// nine split whose 99 percent unproven share survives.
+        /// </summary>
+        private static Mesh SplitAndSurvivingSplitTwoSubmeshMesh()
+        {
+            var vertices = new Vector3[24];
+            var uvs = new Vector2[24];
+            vertices[0] = Vector3.zero;
+            vertices[1] = Vector3.right;
+            vertices[2] = Vector3.up;
+            uvs[0] = new Vector2(0.1f, 0.1f);
+            uvs[1] = new Vector2(0.4f, 0.1f);
+            uvs[2] = new Vector2(0.1f, 0.4f);
+            vertices[3] = new Vector3(2f, 0f, 0f);
+            vertices[4] = new Vector3(3f, 0f, 0f);
+            vertices[5] = new Vector3(2f, 1f, 0f);
+            uvs[3] = new Vector2(0.6f, 0.6f);
+            uvs[4] = new Vector2(0.9f, 0.6f);
+            uvs[5] = new Vector2(0.6f, 0.9f);
+            vertices[6] = new Vector3(10f, 0f, 0f);
+            vertices[7] = new Vector3(11f, 0f, 0f);
+            vertices[8] = new Vector3(10f, 1f, 0f);
+            uvs[6] = new Vector2(0.1f, 0.1f);
+            uvs[7] = new Vector2(0.4f, 0.1f);
+            uvs[8] = new Vector2(0.1f, 0.4f);
+            for (var triangle = 1; triangle <= 4; triangle++)
+            {
+                var baseVertex = 6 + triangle * 3;
+                vertices[baseVertex] =
+                    new Vector3(10f + triangle * 3f, 0f, 0f);
+                vertices[baseVertex + 1] =
+                    new Vector3(11f + triangle * 3f, 0f, 0f);
+                vertices[baseVertex + 2] =
+                    new Vector3(10f + triangle * 3f, 1f, 0f);
+                uvs[baseVertex] = new Vector2(0.6f, 0.6f);
+                uvs[baseVertex + 1] = new Vector2(0.9f, 0.6f);
+                uvs[baseVertex + 2] = new Vector2(0.6f, 0.9f);
+            }
+
+            vertices[21] = new Vector3(100f, 0f, 0f);
+            vertices[22] = new Vector3(101f, 0f, 0f);
+            vertices[23] = new Vector3(102f, 0f, 0f);
+
+            var mesh = new Mesh
+            {
+                vertices = vertices,
+                uv = uvs,
+                subMeshCount = 2,
+            };
+            var surviving = new int[300];
+            surviving[0] = 6;
+            surviving[1] = 7;
+            surviving[2] = 8;
+            for (var triangle = 1; triangle <= 4; triangle++)
+            {
+                surviving[triangle * 3] = 6 + triangle * 3;
+                surviving[triangle * 3 + 1] = 6 + triangle * 3 + 1;
+                surviving[triangle * 3 + 2] = 6 + triangle * 3 + 2;
+            }
+
+            for (var triangle = 5; triangle < 100; triangle++)
+            {
+                surviving[triangle * 3] = 21;
+                surviving[triangle * 3 + 1] = 22;
+                surviving[triangle * 3 + 2] = 23;
+            }
+
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(surviving, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// A one-and-one split holds a 50 percent unproven share. At
+        /// preserve 60 the share sits strictly below the value, so the
+        /// slot folds. The entry becomes an ordinary wholly-opaque
+        /// candidate. Both triangle ordinals move onto the opaque list,
+        /// and the transparent list empties. Task 8 adds the forced
+        /// report event, so this fixture asserts dispositions only.
+        /// </summary>
+        [Test]
+        public void PreserveFold_BelowThreshold_FoldsTheSlotAsWhollyOpaque()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE preserve fold below threshold");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "preserve_fold_below"));
+                    mesh = TwoTriangleSplitMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: only the proven triangle " +
+                        "is the candidate before the fold");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the folded slot must prepare with no " +
+                            "refusal of any kind: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the qualifying slot must prepare instead of " +
+                        "refusing");
+                    Assert.That(
+                        amuse.Separation.Renderers, Has.Count.EqualTo(1));
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(1));
+                    Assert.That(
+                        plan.Submeshes[0].Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the stored preserve value must fold the " +
+                        "below-threshold split");
+                    Assert.That(
+                        plan.Submeshes[0].OpaqueTriangleOrdinals,
+                        Is.EqualTo(new[] { 0, 1 }),
+                        "the fold moves every triangle onto the opaque " +
+                        "list");
+                    Assert.That(
+                        plan.Submeshes[0].TransparentTriangleOrdinals,
+                        Is.Empty,
+                        "the fold empties the transparent list");
+                    Assert.That(
+                        amuse.Separation.Renderers[0]
+                            .CandidateSlots.Single().Plan.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the candidate slot record carries the folded " +
+                        "entry");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 3: at-or-below boundary ---
+        /// The same one-and-one split at preserve 50 holds a share exactly
+        /// at the threshold. Only a strictly smaller share qualifies, so
+        /// the entry stays a split. A gate that folds at or below the
+        /// boundary flips this fixture to a folded entry and fails.
+        /// </summary>
+        [Test]
+        public void PreserveFold_AtThreshold_StaysSplit()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE preserve fold at threshold");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 50);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "preserve_fold_at_threshold"));
+                    mesh = TwoTriangleSplitMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the at-threshold slot must prepare as a split");
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(1));
+                    Assert.That(
+                        plan.Submeshes[0].Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition.Split),
+                        "a share exactly at the threshold must not fold");
+                    Assert.That(
+                        plan.Submeshes[0].OpaqueTriangleOrdinals,
+                        Is.EqualTo(new[] { 0 }));
+                    Assert.That(
+                        plan.Submeshes[0].TransparentTriangleOrdinals,
+                        Is.EqualTo(new[] { 1 }));
+                    Assert.That(plan.RequiresAnySplit, Is.True,
+                        "the surviving split keeps the plan requiring " +
+                        "splits");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A preserve value of 0 qualifies nothing. The plan entries and
+        /// the plan aggregates equal the planner output for the same
+        /// input. This is the invariant 1 pin. It is not a falsifier.
+        /// </summary>
+        [Test]
+        public void PreserveFold_Zero_NeverFoldsAndMatchesThePlannerOutput()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE preserve fold zero");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 0);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "preserve_fold_zero"));
+                    mesh = TwoTriangleSplitMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the split slot must prepare at preserve 0");
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(1));
+                    Assert.That(
+                        plan.Submeshes[0].Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "preserve 0 never folds");
+                    Assert.That(
+                        plan.Submeshes[0].OpaqueTriangleOrdinals,
+                        Is.EqualTo(new[] { 0 }));
+                    Assert.That(
+                        plan.Submeshes[0].TransparentTriangleOrdinals,
+                        Is.EqualTo(new[] { 1 }));
+                    Assert.That(plan.OpaqueTriangleCount, Is.EqualTo(1),
+                        "the aggregates equal the planner output");
+                    Assert.That(
+                        plan.TransparentTriangleCount, Is.EqualTo(1),
+                        "the aggregates equal the planner output");
+                    Assert.That(plan.HasAnyOpaqueCandidates, Is.True);
+                    Assert.That(plan.RequiresAnySplit, Is.True);
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 5: unchanged rides along ---
+        /// A uniformly transparent slot stays Unchanged beside a
+        /// qualifying sibling slot while a preserve value is active. The
+        /// gate never flattens the Unchanged entry, and its triangle
+        /// stays on the original material. The capture binds one submesh
+        /// per material slot, so the shared-slot block rule has no
+        /// end-to-end shape yet. The gate still groups by binding index,
+        /// and the Unchanged entry's own group never qualifies.
+        /// </summary>
+        [Test]
+        public void
+            PreserveFold_UnchangedSibling_StaysUnchangedBesideTheFoldedSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE preserve fold unchanged sibling");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            Material splitMaterial = null;
+            Material transparentMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    splitMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                                "preserve_fold_unchanged"));
+                    transparentMaterial = VerifiedTransparentMaterial();
+                    mesh = SplitPlusTransparentTwoSubmeshMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[]
+                    {
+                        splitMaterial, transparentMaterial,
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the unchanged sibling must refuse nothing: " +
+                            reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(2));
+                    var splitEntry = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 0);
+                    var unchangedEntry = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 1);
+                    Assert.That(
+                        splitEntry.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the qualifying sibling slot folds");
+                    Assert.That(
+                        unchangedEntry.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition.Unchanged),
+                        "the unchanged sibling never flattens while a " +
+                        "preserve value is active");
+                    Assert.That(
+                        unchangedEntry.TransparentTriangleOrdinals,
+                        Is.EqualTo(new[] { 0 }),
+                        "the unchanged sibling keeps its triangle on the " +
+                        "original material");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (splitMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(splitMaterial);
+                }
+
+                if (transparentMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(transparentMaterial);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 1: strict numerator ---
+        /// One submesh holds 1 proven-opaque triangle, 4 proven-
+        /// transparent triangles, and 95 unknown triangles. The bucket
+        /// share is 99 percent, so preserve 5 does not qualify. A gate
+        /// that counts only the proven-transparent numerator reads 4
+        /// percent, folds the submesh, and fails the does-not-qualify
+        /// assertion. The fixture's bucket share is the assertion target.
+        /// </summary>
+        [Test]
+        public void PreserveFold_UnknownHeavySubmesh_DoesNotQualify()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE preserve fold unknown heavy");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 5);
+            SetConvertCoverage(root, 0);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "preserve_fold_unknown_heavy"));
+                    mesh = OneOpaqueAndNinetyNineUnprovenMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.OpaqueCandidateTriangleCount,
+                        Is.EqualTo(1),
+                        "fixture precondition: only the proven triangle " +
+                        "is the candidate");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the unknown-heavy split must prepare with " +
+                            "no refusal of any kind: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the unknown-heavy split must prepare");
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(1));
+                    Assert.That(
+                        plan.Submeshes[0].Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the 99 percent bucket share must not fold at " +
+                        "preserve 5");
+                    Assert.That(
+                        plan.Submeshes[0].OpaqueTriangleOrdinals,
+                        Is.EqualTo(new[] { 0 }));
+                    Assert.That(
+                        plan.Submeshes[0].TransparentTriangleOrdinals,
+                        Has.Count.EqualTo(99),
+                        "the whole unproven bucket, unknown triangles " +
+                        "included, holds the share");
+                    Assert.That(plan.RequiresAnySplit, Is.True);
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 2: per-submesh fold ---
+        /// One split material binds two slots. Slot A holds a 2 percent
+        /// unproven share. Slot B holds a 50 percent share. At preserve 5
+        /// only slot A qualifies, so only slot A folds. Slot B stays a
+        /// split and keeps all 25 of its conserved transparent ordinals.
+        /// The capture binds one submesh per material slot, so the slots
+        /// are separate plan groups here. The gate groups by binding
+        /// index, and this fixture pins the per-group decision: the
+        /// non-qualifying group folds nothing while its sibling group
+        /// folds.
+        /// </summary>
+        [Test]
+        public void PreserveFold_MixedSlot_FoldsOnlyTheQualifyingSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE preserve fold mixed slot");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 5);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "preserve_fold_mixed"));
+                    mesh = MixedShareTwoSubmeshMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material, material };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "the mixed shares must prepare, not refuse");
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(2));
+                    var slotA = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 0);
+                    var slotB = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 1);
+                    Assert.That(
+                        slotA.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the 2 percent share qualifies at preserve 5 " +
+                        "and folds");
+                    Assert.That(
+                        slotA.OpaqueTriangleOrdinals, Has.Count.EqualTo(50),
+                        "the fold moves every slot A triangle onto the " +
+                        "opaque list");
+                    Assert.That(
+                        slotA.TransparentTriangleOrdinals, Is.Empty);
+                    Assert.That(
+                        slotB.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the 50 percent share does not qualify, so slot " +
+                        "B keeps its conserved transparency");
+                    Assert.That(
+                        slotB.OpaqueTriangleOrdinals,
+                        Has.Count.EqualTo(25));
+                    Assert.That(
+                        slotB.TransparentTriangleOrdinals,
+                        Has.Count.EqualTo(25));
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A full fold leaves no split in the plan, so the rebuilt plan
+        /// answers RequiresAnySplit false. A fold beside a surviving
+        /// genuine split keeps RequiresAnySplit true. A rewrite that
+        /// keeps the stale aggregates answers true for the full fold and
+        /// fails the first renderer's assertion.
+        /// </summary>
+        [Test]
+        public void
+            PreserveFold_RebuiltPlan_RequiresAnySplitTracksSurvivingSplits()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE preserve fold rebuilt plan");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            SetConvertCoverage(root, 0);
+
+            var fullyFoldedChild = new GameObject("fully folded");
+            fullyFoldedChild.transform.SetParent(root.transform, false);
+            var foldedRenderer =
+                fullyFoldedChild.AddComponent<SkinnedMeshRenderer>();
+
+            var mixedChild = new GameObject("fold and survivor");
+            mixedChild.transform.SetParent(root.transform, false);
+            var survivorRenderer =
+                mixedChild.AddComponent<SkinnedMeshRenderer>();
+
+            Material foldedMaterial = null;
+            Material survivorMaterial = null;
+            Mesh foldedMesh = null;
+            Mesh survivorMesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = AlphaSeparationSplitTests
+                        .ImportSplitAlphaTexture(
+                            "preserve_fold_rebuilt");
+                    foldedMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    survivorMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    foldedMesh = TwoTriangleSplitMesh();
+                    foldedRenderer.sharedMesh = foldedMesh;
+                    foldedRenderer.sharedMaterials = new[] { foldedMaterial };
+                    survivorMesh =
+                        SplitAndSurvivingSplitTwoSubmeshMesh();
+                    survivorRenderer.sharedMesh = survivorMesh;
+                    survivorRenderer.sharedMaterials = new[]
+                    {
+                        survivorMaterial, survivorMaterial,
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: every renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    Assert.That(
+                        amuse.Separation.Renderers, Has.Count.EqualTo(2));
+                    var foldedPlan = amuse.Separation.Renderers.Single(
+                        prepared =>
+                            prepared.Target.Renderer == foldedRenderer)
+                        .Plan;
+                    Assert.That(
+                        foldedPlan.RequiresAnySplit, Is.False,
+                        "a full fold leaves no split, so the rebuilt " +
+                        "aggregates answer false");
+                    var survivorPlan = amuse.Separation.Renderers.Single(
+                        prepared =>
+                            prepared.Target.Renderer == survivorRenderer)
+                        .Plan;
+                    Assert.That(
+                        survivorPlan.RequiresAnySplit, Is.True,
+                        "a genuine surviving split keeps the rebuilt " +
+                        "aggregates answering true");
+                    Assert.That(
+                        survivorPlan.Submeshes.Single(
+                            entry => entry.SourceSubmeshIndex == 0)
+                            .Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate));
+                    Assert.That(
+                        survivorPlan.Submeshes.Single(
+                            entry => entry.SourceSubmeshIndex == 1)
+                            .Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the 99 percent share survives the fold");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (foldedMesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(foldedMesh);
+                }
+
+                if (survivorMesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(survivorMesh);
+                }
+
+                UnityEngine.Object.DestroyImmediate(fullyFoldedChild);
+                UnityEngine.Object.DestroyImmediate(mixedChild);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (foldedMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(foldedMaterial);
+                }
+
+                if (survivorMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(survivorMaterial);
+                }
+            }
+        }
+
         // --- Fixture helpers ---------------------------------------------------
 
 
