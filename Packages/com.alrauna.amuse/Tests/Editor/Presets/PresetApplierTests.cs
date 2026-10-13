@@ -9,29 +9,29 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetApplierTests
     {
         [Test]
-        public void ApplyingShippedSafeRevokesBothAcceptanceSettings()
+        public void ApplyingShippedSafeGrantsBothAcceptanceSettings()
         {
             var go = new GameObject("Root");
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
 
-                // Grant both acceptance settings first, so the shipped
-                // Safe preset must actively revoke them. No preset may
-                // leave an earlier acceptance behind.
+                // Revoke both acceptance settings first, so the shipped
+                // Safe preset must actively grant them. No preset may
+                // leave an earlier refusal behind.
                 var serialized = new UnityEditor.SerializedObject(optimizer);
                 serialized.FindProperty(
                         "_acceptDesktopAnisotropyDifferences")
-                    .boolValue = true;
+                    .boolValue = false;
                 serialized.FindProperty(
                         "_acceptMobileAnisotropyDifferences")
-                    .boolValue = true;
+                    .boolValue = false;
                 serialized.ApplyModifiedProperties();
 
                 Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
-                    Is.True, "setup must grant desktop acceptance");
+                    Is.False, "setup must revoke desktop acceptance");
                 Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
-                    Is.True, "setup must grant mobile acceptance");
+                    Is.False, "setup must revoke mobile acceptance");
 
                 Assert.That(PresetFileStore.TryLoadAll(
                         out var presets, out var failedFile,
@@ -44,12 +44,12 @@ namespace Alrauna.Amuse.Tests.Editor
                 PresetApplier.Apply(safe, serialized);
 
                 Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
-                    Is.False,
-                    "the shipped Safe preset must revoke desktop " +
+                    Is.True,
+                    "the shipped Safe preset must grant desktop " +
                     "acceptance");
                 Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
-                    Is.False,
-                    "the shipped Safe preset must revoke mobile " +
+                    Is.True,
+                    "the shipped Safe preset must grant mobile " +
                     "acceptance");
             }
             finally

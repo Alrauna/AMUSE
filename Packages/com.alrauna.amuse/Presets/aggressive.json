@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "name": "Aggressive",
-  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens more materials and admits more texels than Normal.",
   "features": {
     "alphaSeparator": true
   },

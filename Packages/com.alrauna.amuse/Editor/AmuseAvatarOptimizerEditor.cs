@@ -264,8 +264,8 @@ namespace Alrauna.Amuse.Editor
                 "VRChat can filter textures anisotropically. " +
                 "Proven parts can lose transparency near texture " +
                 "edges or at oblique views. This setting does not " +
-                "change texture filtering. A shipped preset turns " +
-                "this setting off.");
+                "change texture filtering. The Safe, Normal, " +
+                "and Aggressive presets turn this setting on.");
 
         private static readonly GUIContent AcceptMobileRowContent =
             new GUIContent(
@@ -274,8 +274,8 @@ namespace Alrauna.Amuse.Editor
                 "footprints when the build target is Android or " +
                 "iOS. AMUSE texture capture does not support " +
                 "these targets. This setting alone enables no " +
-                "conversion. A shipped preset turns this setting " +
-                "off.");
+                "conversion. The Safe, Normal, and Aggressive " +
+                "presets turn this setting on.");
 
         private static readonly GUIContent ActiveSamplingProofRowContent =
             new GUIContent(

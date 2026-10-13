@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "name": "Normal",
-  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens a nearly opaque material to save a draw call.",
   "features": {
     "alphaSeparator": true
   },
