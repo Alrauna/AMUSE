@@ -653,11 +653,36 @@ namespace Alrauna.Amuse.Editor.Build
                             : null);
                 }
 
+                // One Information entry per folded surviving submesh, so
+                // the build report names every triangle set that moved
+                // onto the opaque material without an opacity proof. The
+                // fold map holds one entry per folded submesh, so a
+                // folded slot reports once per submesh, and a slot the
+                // gate did not fold stays silent. A refused slot never
+                // reaches this point, so a marker-clip refusal reports
+                // alone.
+                var hasFoldedSubmesh =
+                    unprovenCountByFoldedSubmesh.TryGetValue(
+                        submesh.SourceSubmeshIndex,
+                        out var foldedUnprovenCount);
+                if (hasFoldedSubmesh)
+                {
+                    AmuseReports.SlotSeparationForcedOpaque(
+                        target.Renderer,
+                        slotIndex,
+                        foldedUnprovenCount,
+                        target.Renderer != null
+                            ? target.Renderer.gameObject.name
+                            : null);
+                }
+
                 // One Information entry per prepared slot whose
                 // conversion used the revised premultiply premise, so the
                 // build report states the normalization through its own
-                // sentence. The depth sentence stays depth-only, and a
-                // slot without a premultiply conversion stays silent.
+                // sentence. A folded slot selects the folded entries,
+                // which name the preserve setting instead of claiming
+                // exact colors. The depth sentence stays depth-only, and
+                // a slot without a premultiply conversion stays silent.
                 if (slotPremultiply)
                 {
                     AmuseReports.SlotSeparationPremultiplyNormalization(
@@ -665,7 +690,8 @@ namespace Alrauna.Amuse.Editor.Build
                         slotIndex,
                         target.Renderer != null
                             ? target.Renderer.gameObject.name
-                            : null);
+                            : null,
+                        hasFoldedSubmesh);
                 }
             }
 

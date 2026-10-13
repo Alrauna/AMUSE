@@ -64,7 +64,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// alpha-separation write.</summary>
         internal int AppliedRendererCount { get; set; }
 
-        /// <summary>How many triangles were moved to proven-opaque rendering
+        /// <summary>How many triangles were moved to opaque rendering
         /// by applied writes.</summary>
         internal int AppliedOpaqueTriangleCount { get; set; }
 

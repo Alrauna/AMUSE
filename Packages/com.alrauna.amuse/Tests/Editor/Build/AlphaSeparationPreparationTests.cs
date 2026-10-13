@@ -2372,6 +2372,422 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Task 8: forced opaque report events -----------------------------
+
+        /// <summary>
+        /// --- Falsifier 4: per-slot dedup ---
+        /// Two folded submeshes of one shared material produce two forced
+        /// events, each with its own unproven count. The capture binds one
+        /// submesh per material slot, so the shared material rides two
+        /// slots and each folded submesh reports through its own slot. A
+        /// wrong implementation that deduplicates the events emits one
+        /// entry or two equal counts, and the differing counts fail it.
+        /// </summary>
+        [Test]
+        public void ForcedOpaqueReport_FiresOncePerFoldedSubmeshWithItsOwnCount()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE forced fold counts");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "forced_fold_counts"));
+                    mesh = MixedShareTwoSubmeshMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material, material };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "fixture precondition: both shares must fold and " +
+                        "prepare");
+                    Assert.That(
+                        amuse.Separation.Renderers[0].Plan.Submeshes.All(
+                            entry => entry.Disposition ==
+                                     SubmeshSeparationDisposition
+                                         .WhollyOpaqueCandidate),
+                        Is.True,
+                        "fixture precondition: both shares fold at " +
+                        "preserve 60");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the folded slots must prepare with no " +
+                            "refusal of any kind: " + reason);
+                    }
+
+                    // Foreign NDMF plugins may add their own report lines
+                    // to the same capture, so every count is asserted on
+                    // the forced sentences themselves.
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(2).Contains(
+                            "The moved triangles have no opacity proof."),
+                        "each folded submesh must report its own forced " +
+                        "event");
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "1 unproven triangle of material slot 0"),
+                        "the two percent share must report its own count");
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "25 unproven triangles of material slot 1"),
+                        "the fifty percent share must report its own " +
+                        "count");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A folded slot whose conversion used the premultiply premise
+        /// reports the folded premultiply entries, which name the preserve
+        /// setting and never claim exact colors. The fold moved an
+        /// unproven triangle onto the opaque material, so the exact-color
+        /// sentence would be false. A wrong implementation reports the
+        /// proven-slot sentence or stays silent.
+        /// </summary>
+        [Test]
+        public void
+            ForcedOpaqueReport_FoldedPremultiplySlotSelectsTheFoldedEntries()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE forced fold premultiply");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    material = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "forced_fold_premultiply"));
+                    material.SetFloat("_AlphaPremultiply", 1f);
+                    mesh = TwoTriangleSplitMesh();
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(amuse.Separation, Is.Not.Null,
+                        "fixture precondition: the premultiply slot must " +
+                        "prepare under the fold");
+                    Assert.That(
+                        amuse.Separation.Renderers[0].Plan.Submeshes
+                            .Single().Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "fixture precondition: the preserve value must " +
+                        "fold the split");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the folded premultiply slot must prepare " +
+                            "with no refusal of any kind: " + reason);
+                    }
+
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "the moved colors may differ from the " +
+                            "original colors."),
+                        "the folded premultiply slot must report the " +
+                        "folded entries");
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "1 unproven triangle of material slot 0"),
+                        "the fold must still report its own forced event");
+                    Assert.That(
+                        reports.Select(r => r.TheError.ToMessage()),
+                        Has.None.Contains(
+                            "The opaque material reproduces those colors " +
+                            "exactly."),
+                        "a folded slot must never claim exact colors");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 7: fold-time emission ---
+        /// A folded slot refused by a marker clip produces the marker
+        /// refusal and zero forced events. The same fixture without the
+        /// marker stub produces exactly one event per folded submesh. An
+        /// emitter that reports the forced event before the refusal path
+        /// would leak one event into the refused fixture and fail its
+        /// first half.
+        /// </summary>
+        [Test]
+        public void ForcedOpaqueReport_MarkerClipRefusalSuppressesTheForcedEvents()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+
+            // (a) The marker stub arms the swap clip as a special motion,
+            // so the folded slot refuses and no forced event may appear.
+            var rootA = new GameObject("AMUSE forced fold marker");
+            FixtureAvatarIdentity.AttachVrcDescriptor(rootA);
+            rootA.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(rootA);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(rootA);
+            SetPreserveCoverage(rootA, 60);
+            Material splitA = null;
+            Material swapA = null;
+            Mesh meshA = null;
+            AnimationClip markedClipA = null;
+            AnimatorController controllerA = null;
+            AmusePlatformFinishState amuseA = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = AlphaSeparationSplitTests
+                        .ImportSplitAlphaTexture("forced_fold_marker");
+                    splitA = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        texture);
+                    swapA = VerifiedOpaqueMaterial();
+                    meshA = TwoTriangleSplitMesh();
+                    var rendererA = rootA.AddComponent<SkinnedMeshRenderer>();
+                    rendererA.sharedMesh = meshA;
+                    rendererA.sharedMaterials = new[] { splitA };
+
+                    markedClipA = NewSwapClip(
+                        "AMUSE marked folded swap", string.Empty, 0,
+                        (0f, swapA));
+                    controllerA = NewController(
+                        rootA, "AMUSE forced marker graph", markedClipA);
+
+                    var reportsA = ErrorReport.CaptureErrors(
+                        () => amuseA = RunBarrier(
+                            rootA,
+                            animatorBindings: new MarkerStubBindings(
+                                "AMUSE marked folded swap")));
+
+                    Assert.That(amuseA.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuseA.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .MarkerClipCarriesSlotBinding),
+                        Is.EqualTo(1),
+                        "the folded slot whose binding the special motion " +
+                        "carries must be refused");
+                    Assert.That(amuseA.Separation, Is.Null,
+                        "the refused slot leaves no candidate, so the " +
+                        "renderer prepares nothing");
+                    Assert.That(
+                        reportsA.Select(r => r.TheError.ToMessage()),
+                        Has.None.Contains(
+                            "The moved triangles have no opacity proof."),
+                        "a refused folded slot must produce zero forced " +
+                        "events");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuseA);
+                DestroyControllerGraph(rootA, controllerA);
+                if (markedClipA != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(markedClipA);
+                }
+                if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
+                UnityEngine.Object.DestroyImmediate(rootA);
+                if (splitA != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(splitA);
+                }
+                if (swapA != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(swapA);
+                }
+            }
+
+            // (b) The same fixture without the marker stub: the folded
+            // slot prepares and reports exactly one forced event for its
+            // one folded submesh.
+            var rootB = new GameObject("AMUSE forced fold unmarked");
+            FixtureAvatarIdentity.AttachVrcDescriptor(rootB);
+            rootB.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(rootB);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(rootB);
+            SetPreserveCoverage(rootB, 60);
+            Material splitB = null;
+            Material swapB = null;
+            Mesh meshB = null;
+            AnimationClip markedClipB = null;
+            AnimatorController controllerB = null;
+            AmusePlatformFinishState amuseB = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = AlphaSeparationSplitTests
+                        .ImportSplitAlphaTexture("forced_fold_marker");
+                    splitB = AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        texture);
+                    swapB = VerifiedOpaqueMaterial();
+                    meshB = TwoTriangleSplitMesh();
+                    var rendererB = rootB.AddComponent<SkinnedMeshRenderer>();
+                    rendererB.sharedMesh = meshB;
+                    rendererB.sharedMaterials = new[] { splitB };
+
+                    markedClipB = NewSwapClip(
+                        "AMUSE marked folded swap", string.Empty, 0,
+                        (0f, swapB));
+                    controllerB = NewController(
+                        rootB, "AMUSE forced marker graph", markedClipB);
+
+                    var reportsB = ErrorReport.CaptureErrors(
+                        () => amuseB = RunBarrier(rootB));
+
+                    Assert.That(amuseB.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuseB.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuseB.SlotRefusalCount(reason), Is.Zero,
+                            "the unmarked folded slot must prepare with " +
+                            "no refusal of any kind: " + reason);
+                    }
+
+                    Assert.That(amuseB.Separation, Is.Not.Null,
+                        "fixture precondition: the unmarked folded slot " +
+                        "must prepare, or the absent event proves nothing");
+                    Assert.That(
+                        reportsB.Select(r => r.TheError.ToMessage()),
+                        Has.Exactly(1).Contains(
+                            "1 unproven triangle of material slot 0"),
+                        "the unmarked folded submesh must report exactly " +
+                        "one forced event");
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(amuseB);
+                DestroyControllerGraph(rootB, controllerB);
+                if (markedClipB != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(markedClipB);
+                }
+                if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
+                UnityEngine.Object.DestroyImmediate(rootB);
+                if (splitB != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(splitB);
+                }
+                if (swapB != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(swapB);
+                }
+            }
+        }
+
         /// <summary>
         /// End-to-end cutout conversion: a convertible cutout fixture
         /// material at fresh defaults — its main texture a fully-opaque
@@ -10129,7 +10545,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             ClosedAlphaMaterialCapturer capturer = null,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
             VerifiedPoiyomiConversion poiyomiConversion = null,
-            VerifiedLilToonConversion lilToonConversion = null)
+            VerifiedLilToonConversion lilToonConversion = null,
+            IPlatformAnimatorBindings animatorBindings = null)
         {
             // Every arm and scenario fixture runs through this one build
             // entry. The descriptor goes on here so each fixture creator
@@ -10139,7 +10556,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var context = AvatarProcessor.ProcessAvatar(
                 root, PreparationTestPlatform.Instance);
             context.GetState<AmusePlatformFinishState>().AnimatorBindings =
-                GenericPlatformAnimatorBindings.Instance;
+                animatorBindings ?? GenericPlatformAnimatorBindings.Instance;
             AmuseStructuralGraphCheck.Execute(context);
 
             AmusePlatformFinishPass.Execute(
@@ -10156,6 +10573,44 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     .VerifiedConversion);
 
             return context.GetState<AmusePlatformFinishState>();
+        }
+
+        /// <summary>
+        /// The marker-stub override: the public project installs no VRChat
+        /// SDK, so no real proxy clip can exist and the live marker route is
+        /// unreachable. This stub reports the armed clip names as special
+        /// motions, exactly as the apply suite's stub does, so a fixture can
+        /// exercise the barrier-side marker refusal.
+        /// </summary>
+        private sealed class MarkerStubBindings : IPlatformAnimatorBindings
+        {
+            private readonly string[] specialClipNames;
+
+            internal MarkerStubBindings(params string[] clipNames)
+            {
+                specialClipNames = clipNames;
+            }
+
+            public bool IsSpecialMotion(Motion motion)
+            {
+                return motion is AnimationClip clip &&
+                       specialClipNames.Contains(clip.name);
+            }
+
+            public IEnumerable<(object, RuntimeAnimatorController, bool)>
+                GetInnateControllers(GameObject root)
+            {
+                return GenericPlatformAnimatorBindings.Instance
+                    .GetInnateControllers(root);
+            }
+
+            public void CommitControllers(
+                GameObject root,
+                IDictionary<object, RuntimeAnimatorController> controllers)
+            {
+                GenericPlatformAnimatorBindings.Instance.CommitControllers(
+                    root, controllers);
+            }
         }
 
         private static void DestroyGenerated(AmusePlatformFinishState amuse)

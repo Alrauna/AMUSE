@@ -570,7 +570,7 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.DepthTestDivergence"] =
                 "AMUSE separated material slot {0} of renderer '{1}'.",
             ["amuse.slotSeparation.DepthTestDivergence:description"] =
-                "AMUSE moved the proven-opaque triangles of material " +
+                "AMUSE moved the opaque triangles of material " +
                 "slot {0} of renderer '{1}' onto an opaque material. " +
                 "Some moved triangles now use the normal depth rule " +
                 "because their source material set a special one.",
@@ -581,7 +581,7 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.PremultiplyNormalization"] =
                 "AMUSE separated material slot {0} of renderer '{1}'.",
             ["amuse.slotSeparation.PremultiplyNormalization:description"] =
-                "AMUSE moved the proven-opaque triangles of material " +
+                "AMUSE moved the opaque triangles of material " +
                 "slot {0} of renderer '{1}' onto an opaque material. " +
                 "The source material scaled its color by alpha. " +
                 "The proof moves only triangles whose alpha is exactly " +
@@ -589,6 +589,31 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.PremultiplyNormalization:hint"] =
                 "No action is needed. The moved triangles keep their " +
                 "colors exactly.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFolded"] =
+                "AMUSE separated material slot {0} of renderer '{1}'.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFolded:description"] =
+                "AMUSE moved the triangles of material slot {0} of " +
+                "renderer '{1}' onto an opaque material without an " +
+                "opacity proof. The unproven share sits below your " +
+                "Minimum Opaque Coverage to Preserve setting. The source " +
+                "material scaled its color by alpha, so the moved colors " +
+                "may differ from the original colors.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFolded:hint"] =
+                "Lower Minimum Opaque Coverage to Preserve on the AMUSE " +
+                "Avatar Optimizer component if you want to keep this " +
+                "material's transparency.",
+            ["amuse.slotSeparation.ForcedOpaque"] =
+                "AMUSE moved {2} of material slot {0} of renderer '{1}' " +
+                "onto an opaque material.",
+            ["amuse.slotSeparation.ForcedOpaque:description"] =
+                "The moved triangles have no opacity proof. The unproven " +
+                "share of material slot {0} of renderer '{1}' sits below " +
+                "your Minimum Opaque Coverage to Preserve setting, so " +
+                "AMUSE moved the whole slot onto the opaque material.",
+            ["amuse.slotSeparation.ForcedOpaque:hint"] =
+                "Lower Minimum Opaque Coverage to Preserve on the AMUSE " +
+                "Avatar Optimizer component to keep this material's " +
+                "transparency.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
@@ -772,6 +797,34 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string SlotSeparationPremultiplyNormalizationKey
         {
             get { return Prefix + "slotSeparation.PremultiplyNormalization"; }
+        }
+
+        /// <summary>
+        /// The report key for one prepared folded slot whose conversion
+        /// used the premultiply premise. The folded slot's moved set
+        /// holds unproven triangles, so this entry names the preserve
+        /// setting and never claims exact colors. A genuinely proven
+        /// slot keeps the exact-color sentence under the unfolded key.
+        /// </summary>
+        internal static string SlotSeparationPremultiplyNormalizationFoldedKey
+        {
+            get
+            {
+                return Prefix +
+                       "slotSeparation.PremultiplyNormalizationFolded";
+            }
+        }
+
+        /// <summary>
+        /// The report key for one folded submesh whose triangles moved
+        /// onto the opaque material without an opacity proof. The report
+        /// names the slot, the renderer, and the unproven triangle
+        /// count, and its own sentences state the forced premise and
+        /// the preserve setting.
+        /// </summary>
+        internal static string SlotSeparationForcedOpaqueKey
+        {
+            get { return Prefix + "slotSeparation.ForcedOpaque"; }
         }
 
         /// <summary>

@@ -3305,6 +3305,441 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Preserve fold: forced opaque apply -----------------------------
+
+        /// <summary>
+        /// Stores the preserve coverage percent on this root's own optimizer
+        /// through its serialized field, exactly as the preparation-side
+        /// preserve suite writes it.
+        /// </summary>
+        private static void SetPreserveCoverage(
+            GameObject root,
+            int percent)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_minimumOpaqueCoverageToPreservePercent")
+                .intValue = percent;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// One submesh of two triangles: ordinal 0 sits wholly inside the
+        /// split texture's opaque half, and ordinal 1 sits wholly inside
+        /// the translucent half, so the plan is a one-and-one split with a
+        /// 50 percent unproven share. The same shape the preparation-side
+        /// preserve suite folds.
+        /// </summary>
+        private static Mesh TwoTriangleSplitSourceMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    new Vector3(2f, 0f, 0f),
+                    new Vector3(3f, 0f, 0f),
+                    new Vector3(2f, 1f, 0f),
+                },
+                uv = new[]
+                {
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.4f, 0.1f),
+                    new Vector2(0.1f, 0.4f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                },
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Two submeshes: submesh 0 is the one-and-one split that folds at
+        /// preserve 60, and submesh 1 is a one-and-two split whose 67
+        /// percent unproven share stays a genuine split at preserve 60 and
+        /// passes the stored 25 percent convert gate.
+        /// </summary>
+        private static Mesh FoldedAndSurvivingSplitTwoSubmeshMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    new Vector3(2f, 0f, 0f),
+                    new Vector3(3f, 0f, 0f),
+                    new Vector3(2f, 1f, 0f),
+                    new Vector3(4f, 0f, 0f),
+                    new Vector3(5f, 0f, 0f),
+                    new Vector3(4f, 1f, 0f),
+                    new Vector3(6f, 0f, 0f),
+                    new Vector3(7f, 0f, 0f),
+                    new Vector3(6f, 1f, 0f),
+                    new Vector3(8f, 0f, 0f),
+                    new Vector3(9f, 0f, 0f),
+                    new Vector3(8f, 1f, 0f),
+                },
+                uv = new[]
+                {
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.4f, 0.1f),
+                    new Vector2(0.1f, 0.4f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                    new Vector2(0.1f, 0.1f),
+                    new Vector2(0.4f, 0.1f),
+                    new Vector2(0.1f, 0.4f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                    new Vector2(0.6f, 0.6f),
+                    new Vector2(0.9f, 0.6f),
+                    new Vector2(0.6f, 0.9f),
+                },
+                subMeshCount = 2,
+            };
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(
+                new[] { 6, 7, 8, 9, 10, 11, 12, 13, 14 }, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// A fully folded renderer swaps its material in place. The folded
+        /// slot is an ordinary wholly-opaque candidate to the apply pass,
+        /// so the write rewrites the swap curve onto the opaque result,
+        /// adds no appended slot, and creates no mesh clone. Both folded
+        /// triangles count as applied opaque.
+        /// </summary>
+        [Test]
+        public void FullyFoldedRendererSwapsInPlaceWithoutAppendedSlotOrClone()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE folded apply in place");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "folded_apply_in_place"));
+                    var split = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    var mesh = Track(TwoTriangleSplitSourceMesh());
+                    var renderer = AddRenderer(root, "body", mesh, split);
+
+                    // The clip's key is the converting source itself, so
+                    // the rewrite maps a real value and the committed
+                    // curve names the opaque result.
+                    var clip = Track(NewSwapClip(
+                        "AMUSE folded swap", "body", 0, (0f, split)));
+                    controller = NewController(
+                        root, "AMUSE folded apply graph", clip);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(state.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        "fixture precondition: the renderer must analyze");
+                    Assert.That(state.Separation, Is.Not.Null,
+                        "fixture precondition: the folded slot must " +
+                        "prepare");
+                    Assert.That(
+                        state.Separation.Renderers[0].Plan.Submeshes
+                            .Single().Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "fixture precondition: the preserve value must " +
+                        "fold the split");
+                    Assert.That(
+                        state.Separation.CreatedClones, Has.Count.EqualTo(1),
+                        "fixture precondition: the material must convert");
+
+                    var clone = state.Separation.OpaqueBySource[split];
+                    Assert.That(renderer.sharedMaterials[0],
+                        Is.SameAs(clone),
+                        "the folded slot must carry the opaque result in " +
+                        "place");
+                    Assert.That(renderer.sharedMaterials,
+                        Has.Length.EqualTo(1),
+                        "a fully folded renderer adds no appended slot");
+                    Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                        "a fully folded renderer must not touch the mesh");
+                    Assert.That(mesh.subMeshCount, Is.EqualTo(1),
+                        "a fully folded renderer adds no appended submesh");
+                    Assert.That(
+                        state.Separation.Renderers[0].MeshClone, Is.Null,
+                        "a fully folded renderer creates no mesh clone");
+
+                    var committedClip = CommittedClipWithObjectBinding(
+                        root, "body", "m_Materials.Array.data[0]");
+                    Assert.That(committedClip, Is.Not.Null,
+                        "fixture precondition: the committed clip must " +
+                        "carry the folded slot's own binding");
+                    var committedCurve = AnimationUtility
+                        .GetObjectReferenceCurve(
+                            committedClip,
+                            EditorCurveBinding.PPtrCurve(
+                                "body", typeof(SkinnedMeshRenderer),
+                                "m_Materials.Array.data[0]"));
+                    Assert.That(committedCurve, Has.Length.EqualTo(1));
+                    Assert.That(committedCurve[0].value, Is.SameAs(clone),
+                        "the folded slot's swap curve must map to the " +
+                        "opaque result");
+
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                    Assert.That(state.AppliedOpaqueTriangleCount,
+                        Is.EqualTo(2),
+                        "both folded triangles moved onto the opaque " +
+                        "material");
+                    AssertNoFeatureRefusals(state);
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyCommittedClone(root, controller);
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// One folded slot beside one genuine split slot keeps both
+        /// materials honest: the folded slot swaps in place with no
+        /// appended slot, and the split slot keeps its original material
+        /// while the appended slot carries its own opaque clone. The mesh
+        /// clone exists for the split alone, and the summary counter
+        /// counts both folded triangles and the moved split triangle.
+        /// </summary>
+        [Test]
+        public void FoldedSlotBesideSplitSlotKeepsBothMaterialsHonest()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE folded beside split");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetPreserveCoverage(root, 60);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = Track(
+                        AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                            "folded_beside_split"));
+                    var folded = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    var surviving = Track(
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture));
+                    var mesh = Track(
+                        FoldedAndSurvivingSplitTwoSubmeshMesh());
+                    var renderer = AddRenderer(
+                        root, "body", mesh, folded, surviving);
+
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                    state = context.GetState<AmusePlatformFinishState>();
+
+                    Assert.That(state.SemanticallyRefusedRendererCount,
+                        Is.Zero,
+                        "fixture precondition: the renderer must analyze");
+                    Assert.That(state.Separation, Is.Not.Null,
+                        "fixture precondition: both slots must prepare");
+                    var plan = state.Separation.Renderers[0].Plan;
+                    Assert.That(
+                        plan.Submeshes.Single(
+                                entry => entry.SourceMaterialBindingIndex
+                                         == 0)
+                            .Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "fixture precondition: the one-and-one split " +
+                        "folds at preserve 60");
+                    Assert.That(
+                        plan.Submeshes.Single(
+                                entry => entry.SourceMaterialBindingIndex
+                                         == 1)
+                            .Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "fixture precondition: the one-and-two split " +
+                        "stays genuine");
+                    Assert.That(
+                        state.Separation.CreatedClones, Has.Count.EqualTo(2),
+                        "fixture precondition: both materials must " +
+                        "convert");
+
+                    var foldedClone =
+                        state.Separation.OpaqueBySource[folded];
+                    var survivingClone =
+                        state.Separation.OpaqueBySource[surviving];
+                    Assert.That(renderer.sharedMaterials,
+                        Has.Length.EqualTo(3),
+                        "two original slots plus exactly one appended " +
+                        "slot for the genuine split");
+                    Assert.That(renderer.sharedMaterials[0],
+                        Is.SameAs(foldedClone),
+                        "the folded slot must carry its opaque result in " +
+                        "place");
+                    Assert.That(renderer.sharedMaterials[1],
+                        Is.SameAs(surviving),
+                        "the split slot keeps its original material on " +
+                        "its own submesh");
+                    Assert.That(renderer.sharedMaterials[2],
+                        Is.SameAs(survivingClone),
+                        "the split's appended slot must carry its own " +
+                        "opaque clone");
+
+                    Assert.That(renderer.sharedMesh,
+                        Is.Not.EqualTo(mesh),
+                        "the genuine split must clone the mesh");
+                    Assert.That(renderer.sharedMesh.subMeshCount,
+                        Is.EqualTo(3),
+                        "the genuine split appends exactly one submesh");
+
+                    Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                    Assert.That(state.AppliedOpaqueTriangleCount,
+                        Is.EqualTo(3),
+                        "both folded triangles and the split's moved " +
+                        "triangle count as applied opaque");
+                    AssertNoFeatureRefusals(state);
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Two folded submeshes of one changed slot both add to the
+        /// summary count. The counter must accumulate over every candidate
+        /// whose slot matches the changed material, so the folded pair
+        /// counts five triangles. A counter that stops at the first
+        /// matching candidate counts two and fails. The prepared record is
+        /// built directly, because the capture binds one submesh per
+        /// material slot end to end, and only the direct record can carry
+        /// two candidates on one slot.
+        /// </summary>
+        [Test]
+        public void
+            AppliedOpaqueTriangleCountAccumulatesAcrossOneSlotsFoldedSubmeshes()
+        {
+            var source = Track(VerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var rendererObj = Track(new GameObject(
+                "AMUSE folded counter renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source };
+
+            var mapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 0,
+                        new[] { 0, 1, 2 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 5, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], mapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], mapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                string.Empty,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+
+            var write = new AlphaSeparationRendererWrite(
+                renderer,
+                null,
+                new[] { clone },
+                Array.Empty<AlphaSeparationCurveEdit>());
+
+            Assert.DoesNotThrow(
+                () => AlphaSeparationApply.ApplyFinalization(
+                    new AlphaSeparationFinalization(
+                        new[] { write }),
+                    state),
+                "the apply must write the folded pair without throwing");
+
+            Assert.That(renderer.sharedMaterials[0], Is.SameAs(clone),
+                "the write must swap the changed slot in place");
+            Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+            Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(5),
+                "both folded submeshes of the changed slot must add " +
+                "their own triangles to the summary count");
+        }
+
         // --- Task 5 integration coverage: the cutout family end to end ------
 
         /// <summary>
