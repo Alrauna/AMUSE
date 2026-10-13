@@ -1,38 +1,44 @@
-# Show Material Transformations Dropdown — Investigation
+# Show Material Transformations Dropdown
 
 Date: 2026-10-13
 
-Base: 3ff7ed6 on branch `feat/show-material-transformations`
+Base: `3ff7ed6` on branch `feat/show-material-transformations`
 
 This document records facts about the current code. It changes nothing.
 
 Evidence labels:
 
-- `[SOURCE]` fact read in this repository at the base commit, cited by repo-relative path and lines, or fact read in a cited external primary source.
-- `[INFERENCE]` deduction from named facts.
-- `[RECOMMENDATION]` proposal for the design round.
+- `[SOURCE]` A fact read in this repository at the base commit. The citation gives a repository-relative path and line numbers. A fact from a cited external primary source also carries this label.
+- `[INFERENCE]` A deduction from named facts.
+- `[RECOMMENDATION]` A proposal for the design round.
+
+Paths under the AMUSE package drop the `Packages/com.alrauna.amuse/` prefix. Paths under the upstream optimizer name the external GitHub repository `d4rkc0d3r/d4rkAvatarOptimizer`.
 
 ## 1. Purpose
 
 The owner requested a feature on a new branch: a "Show Material Transformations" dropdown in the AmuseAvatarOptimizer inspector. It holds an "Alpha Separation" dropdown inside. It shows the user what transformations will and will not occur across the entire avatar. The owner named d4rkAvatarOptimizer's "show mesh & material dropdown" as the model.
 
-The owner set the workflow: parallel investigation, adversarial review of the investigation, design spec, adversarial review of the spec, implementation plan, adversarial review of the plan, then subagent driven execution. Commits land between finalized changes. The run halts when a choice needs owner input.
+The owner set the workflow: parallel investigation, adversarial review of the investigation, design spec, adversarial review of the spec, implementation plan, adversarial review of the plan, then subagent-driven execution. Commits land between finalized changes. The run halts when a choice needs owner input.
+
+This investigation covers the upstream reference behavior, the current inspector surface, the data a build computes, the lifetime of that data, the NDMF facilities in the pinned version, and the seam where the dropdown sits.
 
 ## 2. Reference behavior in d4rkAvatarOptimizer
 
-[SOURCE] The upstream repository is `d4rkc0d3r/d4rkAvatarOptimizer` on GitHub. `d4rkpl4y3r` redirects there. Findings cite `Editor/` paths on the `main` branch.
+[SOURCE] The upstream repository is `d4rkc0d3r/d4rkAvatarOptimizer` on GitHub. `d4rkpl4y3r` is the author handle in the package id and code namespace. It is not a GitHub path. Findings cite `Editor/` paths on the `main` branch at commit `d61f293` from 2026-09-29.
 
-[SOURCE] The upstream label is "Show Mesh & Material Merge Preview". The exact string "Show Mesh & Material Information" does not exist upstream. The foldout binds to a serialized component field `ShowMeshAndMaterialMergePreview`, default true (`Editor/d4rkAvatarOptimizer.cs:68`), drawn in `Editor/d4rkAvatarOptimizerEditor.cs` around lines 287 to 311.
+[SOURCE] The upstream label is "Show Mesh & Material Merge Preview". The exact string "Show Mesh & Material Information" does not exist upstream. The foldout binds to the serialized component field `ShowMeshAndMaterialMergePreview`. Its default is true (`Editor/d4rkAvatarOptimizer.cs:68`). The editor code draws it at `Editor/d4rkAvatarOptimizerEditor.cs:267-291`.
 
-[SOURCE] The foldout shows one block per predicted mesh group. Inside a block, material slots that will merge into one material draw as one vertical column of rows. Each row is a renderer object field plus a material object field (`DrawMatchedMaterialSlot`, around lines 1548 to 1559). A lone row in a column means "kept as is". Merge versus keep is positional. No per-material verdict text or icon exists in the inspector preview.
+[SOURCE] The foldout shows one block per predicted mesh group. Inside a block, material slots that will merge into one material draw as one vertical column of rows. Each row is a renderer object field plus a material object field (`DrawMatchedMaterialSlot`, `Editor/d4rkAvatarOptimizerEditor.cs:1487-1505`). A lone row in a column means "kept as is". Merge versus keep is positional. No per-material verdict text or icon exists in the inspector preview.
 
-[SOURCE] "Why not" reasons live in a separate window, not the inspector. The window `Editor/WhyNoMaterialMerge.cs` evaluates one picked pair of slots and prints the failure sentence from `CanCombineMaterialsError` (`Editor/d4rkAvatarOptimizer.cs` around lines 5081 to 5211).
+[SOURCE] "Why not" reasons live in a separate window, not the inspector. The window `Editor/WhyNoMaterialMerge.cs` evaluates one picked pair of slots and prints the failure sentence from `CanCombineMaterialsError` (`Editor/d4rkAvatarOptimizer.cs:5081`).
 
-[SOURCE] The preview is an edit-time dry run. It calls the same decision functions the build uses: `FindPossibleSkinnedMeshMerges` and `FindAllMergeAbleMaterials` (`Editor/d4rkAvatarOptimizer.cs:5589-5601`). The build reuses them, so the preview differs from a real build only in input state. The input is the scene avatar before nondestructive tools run. Upstream marks this with a warning icon, a tooltip, and a HelpBox that says previews "can be inaccurate" (`d4rkAvatarOptimizerEditor.cs` around 830 to 843).
+[SOURCE] The preview is an edit-time dry run. It calls the same decision functions the build uses. The preview calls `FindPossibleSkinnedMeshMerges` and then `FindAllMergeAbleMaterials` per mesh group (`Editor/d4rkAvatarOptimizerEditor.cs:1030-1051`). The build's `CombineSkinnedMeshes` calls `FindPossibleSkinnedMeshMerges` (`Editor/d4rkAvatarOptimizer.cs:5601`), which itself calls `FindAllMergeAbleMaterials` (`:1766`). The preview differs from a real build only in input state. The input is the scene avatar before nondestructive tools run. Upstream flags that gap when it detects such a tool. A warning icon with a tooltip draws on the preview foldout (`Editor/d4rkAvatarOptimizerEditor.cs:1457-1463` and `913-921`). HelpBoxes for VRCFury and Modular Avatar state that previews "can be inaccurate" (`:877-895`).
 
-[SOURCE] The preview computes lazily on first draw and caches in editor fields. Selection changes, setting edits, a foldout right click, or a refresh button clear the caches. Auto refresh disables itself when a pass exceeds a 500 ms budget (`Editor/AvatarOptimizerSettings.cs:28-32`).
+[SOURCE] The preview computes lazily on first draw and caches in editor fields. Selection changes, setting edits, a foldout right click, or a refresh button clear the caches. Auto refresh disables itself when a pass exceeds a 500 ms budget (`Editor/AvatarOptimizerSettings.cs:28-32`, disable behavior at `Editor/d4rkAvatarOptimizerEditor.cs:186-190` and `952-953`).
 
-[INFERENCE] The upstream edit-time preview works because the upstream decision functions are cheap pure functions over scene state. AMUSE decision functions are not cheap in that sense. Section 5 states what they require.
+[SOURCE] The upstream decision functions run at edit time on scene and component state. They stay affordable only through caching and that time budget. They are not side-effect free. `FindPossibleSkinnedMeshMerges` writes component state (`Editor/d4rkAvatarOptimizer.cs:1709`).
+
+[INFERENCE] The upstream edit-time preview stays affordable through caching, a time budget, and accepted side effects. AMUSE decision functions do not run in that regime. Section 5 states what they require.
 
 ## 3. Current AMUSE inspector surface
 
@@ -48,7 +54,7 @@ The owner set the workflow: parallel investigation, adversarial review of the in
 
 [SOURCE] Everything user visible writes through `serializedObject` with `ApplyModifiedProperties()`.
 
-[SOURCE] Inspector tests exist (`Tests/Editor/AmuseAvatarOptimizerEditorTests.cs`). Three techniques: pure static helpers asserted directly (`:108-112`), stored state driven through `SerializedObject` helpers (`:202-215`), and real IMGUI through a host `EditorWindow` whose `OnGUI` calls the editor once, with foldout fields forced by reflection (`:230-279`).
+[SOURCE] Inspector tests exist (`Tests/Editor/AmuseAvatarOptimizerEditorTests.cs`). Three techniques exist. Pure static helpers get direct asserts (`:108-112`). `SerializedObject` helpers drive stored state (`:202-215`). A host `EditorWindow` draws real IMGUI. Its `OnGUI` calls the editor once, and reflection forces the foldout fields (`:230-279`).
 
 ## 4. What a build already computes
 
@@ -66,29 +72,33 @@ The owner set the workflow: parallel investigation, adversarial review of the in
 
 [SOURCE] All per-renderer and per-slot results live inside the build's `BuildContext` state. Nothing serializes them. No SessionState, no disk, no static store except the single status string of `AmuseBuildStatusStore`. The build copy of the avatar dies with the build.
 
-[SOURCE] No edit-time path computes classification today. Grep shows the analysis and preparation types are called only from `Editor/Build` and from tests. The string "Show Material Transformations" exists nowhere in the repository.
+[SOURCE] No edit-time path computes classification today. Grep shows the analysis and preparation types have callers only in `Editor/Build` and in tests. The string "Show Material Transformations" exists in no production file. It did not exist in the repository at the base commit.
 
-[SOURCE] Building blocks for an edit-time computation exist but are not free. `UnityRendererAlphaAnalysis` reads `sharedMesh` and `sharedMaterials` read only (`Editor/Host/UnityRendererAlphaAnalysis.cs:210-223`). `AlphaSeparationPreparation.Prepare` creates AMUSE clone materials and emits console reports as side effects (`Editor/Build/AlphaSeparationPreparation.cs:69-78` and emission sites through `:809`). Exact triangle proof needs GPU alpha readback evidence and the committed animation closure. Both exist in that form only during a build.
+[SOURCE] All five AMUSE passes run in the NDMF `PlatformFinish` phase (`Editor/Build/AmusePlatformFinishPlugin.cs:225-260`). The NDMF phase order runs `Optimizing` before `PlatformFinish` (`Packages/nadena.dev.ndmf/Editor/API/Attributes/BuildPhase.cs:93-106`). NDMF also purges EditorOnly objects during `Resolving`. The scene avatar therefore differs from the build avatar even with no third-party tool installed.
 
-[INFERENCE] An edit-time exact preview is inexact by construction. AMUSE runs at PlatformFinish, after other nondestructive tools rewrite the avatar. A preview computed on the scene avatar sees pre-NDMF state, so it cannot match the build the way the build matches itself. Upstream d4rk has the same gap and warns about it.
+[SOURCE] Building blocks for an edit-time computation exist but are not free. `UnityRendererAlphaAnalysis` reads `sharedMesh` and `sharedMaterials` read only (`Editor/Host/UnityRendererAlphaAnalysis.cs:210-223`). `AlphaSeparationPreparation.Prepare` is declared at `Editor/Build/AlphaSeparationPreparation.cs:93`. It creates AMUSE clone materials through the canonical clone builders of the two shader frontends (`:933-935`, `:1030-1032`, `:1207-1209`) and emits console reports through `:810`. Exact triangle proof needs GPU alpha readback evidence and the committed animation closure. Both exist in that form only during a build.
+
+[INFERENCE] An edit-time exact preview is inexact by construction. AMUSE runs at PlatformFinish, after NDMF and other tools rewrite the avatar. A preview computed on the scene avatar sees pre-NDMF state, so it cannot match the build the way the build matches itself. Upstream d4rk has the same gap and warns about it when it detects such tools.
 
 [INFERENCE] A last-run record is exact by construction. It reports what the build decided, on the state the build actually saw. Under unchanged inputs it answers "what will occur" as well as "what did occur".
 
 ## 6. NDMF facilities in the pinned version
 
-[SOURCE] The repo pins `nadena.dev.ndmf` 1.14.4 (`Packages/com.alrauna.amuse/package.json:15-17`). NDMF ships `ErrorReport`, `SimpleError` with title, details, and hint keys, `Localizer`, and the NDMF Console window that renders entries with clickable context links (`Packages/nadena.dev.ndmf/Editor/ErrorReporting/`).
+[SOURCE] The manifest pins `nadena.dev.ndmf` in the range with floor 1.14.4 (`Packages/com.alrauna.amuse/package.json:18`). The restored package is exactly 1.14.4 (`Packages/nadena.dev.ndmf/package.json:3`). NDMF ships `ErrorReport`, `SimpleError` with title, details, and hint keys, `Localizer`, and the NDMF Console window that renders entries with clickable context links (`Packages/nadena.dev.ndmf/Editor/ErrorReporting/`).
 
 [SOURCE] NDMF 1.14.4 ships an edit-time preview namespace `nadena.dev.ndmf.preview` with `IRenderFilter` and `ComputeContext` (`Packages/nadena.dev.ndmf/Editor/PreviewSystem/`). `PreviewBuilder` does not exist in this version. AMUSE uses no preview API today.
 
-[SOURCE] Package identity: `com.alrauna.amuse` version `0.1.0-pre.5`, Unity `2022.3` (`Packages/com.alrauna.amuse/package.json:3-4`).
+[SOURCE] Package identity: `com.alrauna.amuse` version `0.1.0-pre.5`, Unity `2022.3` (`Packages/com.alrauna.amuse/package.json:4-5`).
 
 ## 7. Conventions that bind the design
 
-[SOURCE] Documents under `docs/superpowers/` are dated records. They never get retro edits. Status words describe the record date (`docs/superpowers/README.md`).
+[SOURCE] Documents under `docs/superpowers/` are dated records. Status words such as "today" describe the record date (`docs/superpowers/README.md`).
+
+[INFERENCE] A record never gets a retro edit. Changes add new dated records.
 
 [SOURCE] Every English text a human reads uses short active sentences. One idea per sentence. No contractions. No semicolons in prose (`.omp/RULES.md`). This binds labels, tooltips, report sentences, and this document.
 
-[SOURCE] Tests are EditMode NUnit. A filtered run that reports zero tests is a failure. Behavior changes observe RED first against a named wrong implementation, then GREEN. Falsifiers carry no-op guards (`docs/superpowers/plans/2026-10-13-opaque-coverage-preserve-slider-plan.md`, `Tests/Editor/AlphaSeparationPreparationTests.cs:2066-2067` and `2202-2213`).
+[SOURCE] Tests are EditMode NUnit. A filtered run that reports zero tests is a failure. Behavior changes observe RED first against a named wrong implementation, then GREEN. Falsifiers carry no-op guards (`docs/superpowers/plans/2026-10-13-opaque-coverage-preserve-slider-plan.md:23`, falsifier blocks at `Tests/Editor/Build/AlphaSeparationPreparationTests.cs:2066-2067` and `:2202-2213`).
 
 [SOURCE] New report strings must extend the report string tables. The completeness test fails otherwise.
 
@@ -96,7 +106,7 @@ The owner set the workflow: parallel investigation, adversarial review of the in
 
 ## 8. Where the seam sits
 
-[SOURCE] The natural placement for a new top-level foldout is in `OnInspectorGUI` between the alpha separator block and the status HelpBox (`Editor/AmuseAvatarOptimizerEditor.cs:60-68`). A session bool plus `EditorStyles.foldoutHeader` matches the house pattern. The nested "Alpha Separation" foldout nests inside it.
+[SOURCE] The natural placement for a new top-level foldout is in `OnInspectorGUI` between the alpha separator block and the status HelpBox (`Editor/AmuseAvatarOptimizerEditor.cs:60-68`). A session bool plus `EditorStyles.foldoutHeader` matches the house pattern. The "Alpha Separation" foldout sits inside it.
 
 [SOURCE] The data seam is the gap between build state and inspector. Today only the single status string crosses it. A structured per-renderer record needs a new session store beside `AmuseBuildStatusStore`, or a new edit-time computation.
 
@@ -108,7 +118,7 @@ The owner set the workflow: parallel investigation, adversarial review of the in
 
 [RECOMMENDATION] Strategy A. It is the smallest complete solution that keeps AMUSE exact. It reuses data the build already computes. B violates the scope policy and AMUSE exactness. C drifts and can promise wrongly. A subsection header can state the last-run semantics, so the user is never misled.
 
-[INFERENCE] Consumer compatibility: a display-only foldout adds no serialized component field, so presets and Undo stay untouched. `OptimizerPreset` and `PresetApplier` need no change. The report string completeness test extends only if new report keys appear. The research package is unaffected.
+[INFERENCE] Consumer compatibility holds under the session-bool foldout of open point 3. A display-only foldout then adds no serialized component field. Presets and Undo stay untouched. `OptimizerPreset` and `PresetApplier` need no change. The report string completeness test extends only if new report keys appear. The research package is unaffected.
 
 ## 9. Blast radius
 
@@ -135,4 +145,4 @@ The owner set the workflow: parallel investigation, adversarial review of the in
 
 ## 12. Verification record
 
-The read-only sweep ran on 2026-10-13. Four parallel scouts gathered sections 2 through 7. Three adversarial accuracy reviews then checked repository citations, external claims, and language compliance. Findings and fixes are recorded after the review round in this section.
+Four parallel scouts gathered the facts for sections 2 through 7 on 2026-10-13. The strategy analysis in sections 8 through 11 came from a controller synthesis of those facts on the same day. Three adversarial accuracy reviews then ran on this document. They checked repository citations, external claims, and language conventions. The reviews found citation and language defects. This document incorporates every confirmed fix. No review challenged the strategy recommendation in section 8.
