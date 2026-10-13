@@ -59,7 +59,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ApplyWritesAllElevenFields()
+        public void ApplyWritesAllTwelveFields()
         {
             var go = new GameObject("Root");
             try
@@ -77,6 +77,9 @@ namespace Alrauna.Amuse.Tests.Editor
                     .intValue = 256;
                 serialized.FindProperty("_minimumOpaqueCoveragePercent")
                     .intValue = 50;
+                serialized.FindProperty(
+                        "_minimumOpaqueCoverageToPreservePercent")
+                    .intValue = 75;
                 serialized.FindProperty("_minimumOpaqueAlphaPercent")
                     .intValue = 90;
                 serialized.FindProperty("_polygonAlphaUpperClampPercent")
@@ -107,6 +110,8 @@ namespace Alrauna.Amuse.Tests.Editor
                     Is.EqualTo(128));
                 Assert.That(optimizer.MinimumOpaqueCoveragePercent,
                     Is.EqualTo(25));
+                Assert.That(optimizer.MinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(0));
                 Assert.That(optimizer.MinimumOpaqueAlphaPercent,
                     Is.EqualTo(100));
                 Assert.That(optimizer.PolygonAlphaUpperClampPercent,

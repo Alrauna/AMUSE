@@ -11,7 +11,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             return new OptimizerPreset(
                 "Safe", "Shipped defaults.", true,
-                4, 128, 25, 100, 100, 100, true, true, false, false);
+                4, 128, 25, 0, 100, 100, 100, true, true, false, false);
         }
 
         [Test]
@@ -39,6 +39,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 ("_preserveTransparencyMaxMipLevel", 5),
                 ("_preserveTransparencyMinTextureSize", 256),
                 ("_minimumOpaqueCoveragePercent", 30),
+                ("_minimumOpaqueCoverageToPreservePercent", 10),
                 ("_minimumOpaqueAlphaPercent", 90),
                 ("_polygonAlphaUpperClampPercent", 80),
                 ("_polygonMinimumOpaqueCoveragePercent", 70),

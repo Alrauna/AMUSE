@@ -6,7 +6,7 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetParserTests
     {
         private const string ValidJson = @"{
-  ""schemaVersion"": 2,
+  ""schemaVersion"": 3,
   ""name"": ""Safe"",
   ""description"": ""Shipped defaults."",
   ""features"": { ""alphaSeparator"": true },
@@ -14,6 +14,7 @@ namespace Alrauna.Amuse.Tests.Editor
     ""preserveTransparencyMaxMipLevel"": 4,
     ""preserveTransparencyMinTextureSize"": 128,
     ""minimumOpaqueCoveragePercent"": 25,
+    ""minimumOpaqueCoverageToPreservePercent"": 0,
     ""minimumOpaqueAlphaPercent"": 100,
     ""polygonAlphaUpperClampPercent"": 100,
     ""polygonMinimumOpaqueCoveragePercent"": 100,
@@ -29,12 +30,23 @@ namespace Alrauna.Amuse.Tests.Editor
             return ValidJson.Replace(find, replace);
         }
 
+        // A realistic version 2 body: version 2 and none of the
+        // version 3 preserve key.
+        private static string LegacyVersionTwoBody()
+        {
+            return WithSettings(
+                    "\"schemaVersion\": 3", "\"schemaVersion\": 2")
+                .Replace(
+                    "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
+                    "");
+        }
+
         // A realistic version 1 body: version 1 and none of the
         // version 2 acceptance keys.
         private static string LegacyVersionOneBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 2", "\"schemaVersion\": 1")
+                    "\"schemaVersion\": 3", "\"schemaVersion\": 1")
                 .Replace(
                     "    \"ignoreOutOfRangeMaterialSlots\": true,\n" +
                     "    \"acceptDesktopAnisotropyDifferences\": false,\n" +
@@ -50,7 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ValidSchemaParsesAllElevenValues()
+        public void ValidSchemaParsesAllTwelveValues()
         {
             var parsed = PresetParser.TryParse(
                 ValidJson, out var preset, out var refusal);
@@ -62,6 +74,8 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(preset.PreserveTransparencyMinTextureSize,
                 Is.EqualTo(128));
             Assert.That(preset.MinimumOpaqueCoveragePercent, Is.EqualTo(25));
+            Assert.That(preset.MinimumOpaqueCoverageToPreservePercent,
+                Is.EqualTo(0));
             Assert.That(preset.MinimumOpaqueAlphaPercent, Is.EqualTo(100));
             Assert.That(preset.PolygonAlphaUpperClampPercent, Is.EqualTo(100));
             Assert.That(preset.PolygonMinimumOpaqueCoveragePercent,
@@ -101,7 +115,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 2", "\"schemaVersion\": 3");
+                "\"schemaVersion\": 3", "\"schemaVersion\": 4");
             Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
@@ -113,6 +127,17 @@ namespace Alrauna.Amuse.Tests.Editor
             // missing-key refusal, and nothing invents its missing
             // acceptance values.
             var legacy = LegacyVersionOneBody();
+            Refuses(legacy, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
+        [Test]
+        public void SchemaVersionTwoRefusesAsUnknown()
+        {
+            // A real version 2 file carries only the version 2 keys.
+            // It refuses with UnknownSchemaVersion, not with a
+            // missing-key refusal, and nothing invents its missing
+            // preserve value.
+            var legacy = LegacyVersionTwoBody();
             Refuses(legacy, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
@@ -138,7 +163,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void UnknownTopLevelFieldRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 2", "\"schemaVersion\": 2, \"extra\": 1");
+                "\"schemaVersion\": 3", "\"schemaVersion\": 3, \"extra\": 1");
             Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
@@ -172,7 +197,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongValueTypeForSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 2", "\"schemaVersion\": \"2\"");
+                "\"schemaVersion\": 3", "\"schemaVersion\": \"3\"");
             Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
@@ -230,6 +255,13 @@ namespace Alrauna.Amuse.Tests.Editor
                 "\"preserveTransparencyMinTextureSize\": " + value);
         }
 
+        private static string WithPreserveCoverage(int value)
+        {
+            return ValidJson.Replace(
+                "\"minimumOpaqueCoverageToPreservePercent\": 0",
+                "\"minimumOpaqueCoverageToPreservePercent\": " + value);
+        }
+
         [Test]
         public void AcceptedEdgeValuesParseSuccessfully()
         {
@@ -260,7 +292,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondIntRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 2",
+                    "\"schemaVersion\": 3",
                     "\"schemaVersion\": 3000000000"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -269,7 +301,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondLongRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 2",
+                    "\"schemaVersion\": 3",
                     "\"schemaVersion\": 99999999999999999999"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -322,6 +354,22 @@ namespace Alrauna.Amuse.Tests.Editor
                     "\"minimumOpaqueCoveragePercent\": 25",
                     "\"minimumOpaqueCoveragePercent\": -1"),
                 PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void PreserveCoverageAboveHundredRefuses()
+        {
+            Refuses(
+                WithPreserveCoverage(101),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void MissingPreserveCoverageRefuses()
+        {
+            var json = ValidJson.Replace(
+                "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n", "");
+            Refuses(json, PresetLoadRefusal.MissingField);
         }
 
         [Test]
