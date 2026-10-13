@@ -143,5 +143,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     MaterialDependencyClosureFailure.None),
                 Throws.InvalidOperationException);
         }
+
+        [Test]
+        public void RendererRefusalThrowsOnNoneCause()
+        {
+            Assert.That(
+                () => AmuseReports.RendererRefusal(
+                    _renderer, RendererAnalysisRefusal.None),
+                Throws.InvalidOperationException);
+        }
     }
 }

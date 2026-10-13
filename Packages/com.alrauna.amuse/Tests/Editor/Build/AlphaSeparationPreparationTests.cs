@@ -912,6 +912,301 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A swap slot that keeps converting still names the material that
+        /// refused: one slotSeparation entry reports the refused sibling
+        /// while the converting material's candidate survives untouched.
+        /// The slot is not refused, so no census record is written.
+        /// <para>
+        /// Falsifies: an emitter that stays silent for a partially
+        /// converted slot, and an entry that names the converting
+        /// sibling instead of the refused material.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void PartialConversionRefusalNamesTheRefusingMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE partial conversion refusal");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material poiyomi = null;
+            Material unsupported = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                poiyomi = VerifiedOpaqueMaterial();
+                unsupported = new Material(Shader.Find("Unlit/Color"));
+                unsupported.name = "AMUSE partial refusing material";
+                AddSingleTriangleRenderer(root, poiyomi, out mesh);
+
+                clip = NewSwapClip(
+                    "AMUSE partial refusal swap", string.Empty, 0,
+                    (0f, unsupported));
+                controller = NewController(
+                    root, "AMUSE partial refusal graph", clip);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(
+                        root,
+                        selectRequest: (Material mat,
+                                        out CapturedAlphaMaterialFamily fam,
+                                        out MaterialEvidenceRequest alphaReq,
+                                        out MaterialEvidenceRequest schemaReq) =>
+                        {
+                            if (mat != null && mat == unsupported)
+                            {
+                                fam = CapturedAlphaMaterialFamily.Unsupported;
+                                alphaReq = LilToonMaterialSemantics
+                                    .AlphaEvidenceRequest;
+                                schemaReq = LilToonMaterialSemantics
+                                    .AlphaEvidenceRequest;
+                                return true;
+                            }
+
+                            return VerifiedPoiyomiTestSeams
+                                .SelectVerifiedFixtureRequest(
+                                    mat, out fam, out alphaReq,
+                                    out schemaReq);
+                        },
+                        resolveSemantics: (CapturedAlphaMaterial captured) =>
+                        {
+                            if (captured.Family ==
+                                CapturedAlphaMaterialFamily.Unsupported)
+                            {
+                                return new CapturedAlphaSemantics(
+                                    new MaterialSemantics(
+                                        SemanticOutput<ColorSemanticValue>
+                                            .Unknown(),
+                                        SemanticOutput<ScalarSemanticValue>
+                                            .Complete(
+                                                ScalarSemanticValue
+                                                    .Constant(1f)),
+                                        SemanticOutput<ColorSemanticValue>
+                                            .Unknown(),
+                                        SemanticOutput<NormalSemanticValue>
+                                            .Unknown()),
+                                    null);
+                            }
+
+                            return VerifiedPoiyomiTestSeams
+                                .VerifiedAlphaOnly(captured);
+                        }));
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the converting material must " +
+                    "prove the slot's one opaque candidate triangle");
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "the slot must still prepare around the refused " +
+                    "sibling");
+                Assert.That(
+                    amuse.Separation.Renderers[0].CandidateSlots,
+                    Has.Count.EqualTo(1));
+                var mapping = amuse.Separation.Renderers[0]
+                    .CandidateSlots[0].OpaqueOfAdmitted;
+                Assert.That(mapping, Has.Count.EqualTo(2),
+                    "both admitted values must map");
+                Assert.That(mapping[poiyomi], Is.Not.SameAs(poiyomi),
+                    "the converting material's candidate must survive the " +
+                    "sibling's refusal");
+                Assert.That(mapping[unsupported], Is.SameAs(unsupported),
+                    "the refused sibling falls back to identity on the " +
+                    "appended submesh");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionUnsupportedFamily),
+                    Is.Zero,
+                    "the slot kept converting, so no census record may be " +
+                    "written for the refused sibling");
+
+                var slotSeparation = new List<(SimpleError Error,
+                    string Message)>();
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey.StartsWith("amuse.slotSeparation."))
+                    {
+                        slotSeparation.Add(
+                            (simple, entry.TheError.ToMessage()));
+                    }
+                }
+
+                Assert.That(slotSeparation, Has.Count.EqualTo(1),
+                    "the kept slot reports exactly one entry for the " +
+                    "refused sibling");
+                Assert.That(
+                    slotSeparation[0].Error.TitleKey,
+                    Is.EqualTo("amuse.slotSeparation." +
+                        AlphaSeparationSlotRefusal
+                            .OpaqueConversionUnsupportedFamily));
+                Assert.That(
+                    slotSeparation[0].Error.References,
+                    Has.Some.Matches<ObjectReference>(reference =>
+                        reference.Object == unsupported),
+                    "the entry must name the refusing material, never " +
+                    "the converting sibling");
+                Assert.That(
+                    slotSeparation[0].Error.References,
+                    Has.None.Matches<ObjectReference>(reference =>
+                        reference.Object == poiyomi),
+                    "the converting sibling must stay out of the refusal " +
+                    "entry");
+            }
+            finally
+            {
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
+                if (unsupported != null) UnityEngine.Object.DestroyImmediate(unsupported);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+            }
+        }
+
+        // --- Falsifier 4: the all-fail case double-reporting per material ---
+
+        /// <summary>
+        /// A swap slot whose every admitted material refuses conversion
+        /// keeps its single slot-level entry, built from the last collected
+        /// record: the entry names the last refusing material and never the
+        /// earlier one, and the per-material partial branch stays silent in
+        /// the all-fail case.
+        /// <para>
+        /// Falsifies: an all-fail entry built from the first record, and a
+        /// partial branch that leaks its per-material entries into the
+        /// all-fail path. The refusal, separation and census asserts are
+        /// the no-op guard: a fixture that stops exercising the all-fail
+        /// branch fails here instead of passing silently.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void
+            AllFailSlotReportsOneEntryNamingTheLastRefusingMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var fixtures = new LilToonTransparentConversionFixtures();
+            var root = new GameObject("AMUSE all-fail swap");
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            Material firstRefused = null;
+            Material lastRefused = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                fixtures.BaseSetUp();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "all_fail_last_record");
+                firstRefused = LilToonFixtureTestBase
+                    .CreateTransparentConversionMaterial();
+                firstRefused.name = "AMUSE all-fail first refusing";
+                firstRefused.SetTexture("_MainTex", opaqueTexture);
+                firstRefused.SetFloat("_ZTest", 8f);
+                lastRefused = LilToonFixtureTestBase
+                    .CreateTransparentConversionMaterial();
+                lastRefused.name = "AMUSE all-fail last refusing";
+                lastRefused.SetTexture("_MainTex", opaqueTexture);
+                lastRefused.SetFloat("_ZTest", 8f);
+                AddSingleTriangleRenderer(root, firstRefused, out mesh);
+                FillInBoundsUvs(mesh);
+
+                clip = NewSwapClip(
+                    "AMUSE all-fail swap", string.Empty, 0,
+                    (0f, lastRefused));
+                controller = NewController(
+                    root, "AMUSE all-fail graph", clip);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunBarrier(
+                        root, lilToonConversion: VerifiedFamilyConversion));
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the serialized refusing " +
+                    "material must prove the slot's one opaque candidate " +
+                    "triangle, or the run never reached conversion");
+                Assert.That(amuse.Separation, Is.Null,
+                    "every admitted material refused conversion, so the " +
+                    "all-fail branch must have refused the slot");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                    Is.EqualTo(1),
+                    "the all-fail branch records exactly one slot-level " +
+                    "census refusal");
+
+                var slotSeparation = new List<(SimpleError Error,
+                    string Message)>();
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey.StartsWith("amuse.slotSeparation."))
+                    {
+                        slotSeparation.Add(
+                            (simple, entry.TheError.ToMessage()));
+                    }
+                }
+
+                Assert.That(slotSeparation, Has.Count.EqualTo(1),
+                    "the all-fail slot reports exactly one entry, so the " +
+                    "per-material partial branch must stay silent here");
+                Assert.That(slotSeparation[0].Error.TitleKey,
+                    Is.EqualTo("amuse.slotSeparation." +
+                        AlphaSeparationSlotRefusal.OpaqueConversionRefused));
+                Assert.That(slotSeparation[0].Message,
+                    Does.Contain(lastRefused.name),
+                    "the all-fail entry must name the last refusing " +
+                    "material, pinning the last-record semantics");
+                Assert.That(slotSeparation[0].Message,
+                    Does.Not.Contain(firstRefused.name),
+                    "the all-fail entry must never name the earlier " +
+                    "refusing material");
+                Assert.That(slotSeparation[0].Message,
+                    Does.Contain("OpaqueConversionRefused: " +
+                        LilToonOpaqueConversionRefusal
+                            .UnsupportedDepthComparison),
+                    "the all-fail entry must carry the last record's " +
+                    "inner per-gate refusal");
+            }
+            finally
+            {
+                fixtures.BaseTearDown();
+                DestroyGenerated(amuse);
+                DestroyControllerGraph(root, controller);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (firstRefused != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(firstRefused);
+                }
+
+                if (lastRefused != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(lastRefused);
+                }
+
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+            }
+        }
+
 
         // --- Falsifier 10: Poiyomi slot survives beside an opaque lilToon ---
 

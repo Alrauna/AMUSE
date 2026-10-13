@@ -38,13 +38,18 @@ namespace Alrauna.Amuse.Editor.Build
     /// by a rewritten curve would serialize as a missing reference. Only
     /// the close destroys copies, and it destroys only AMUSE-owned ones:
     /// the locked originals and every output AMUSE did not create are
-    /// never destroyed by anything. When the close cannot prove the
-    /// committed-curve inversion complete, it keeps the unlocked copies
-    /// alive and records the named
+    /// never destroyed by anything. The retention promise covers pairs
+    /// with recorded slots. When the close cannot prove the
+    /// committed-curve inversion complete for such a pair, it keeps the
+    /// unlocked copies alive and records the named
     /// <see cref="AlphaSeparationSlotRefusal.TransientUnlockCloneRetained"/>
-    /// refusal for every slot of the pair, so the retention never passes
-    /// silently. A build that completes holds zero open pairs, and no
-    /// pair ships unlocked.
+    /// refusal for every slot of the pair. A slot-less pair has no slot
+    /// or renderer scope to report against, so its disposition is
+    /// silent by contract. In the refusal-driven case the close-time
+    /// avatar entry names the cause for the whole build. A close that
+    /// proves every curve inversion holds zero open pairs. An unproven
+    /// pair stays in the window, and its unlocked clone stays alive in
+    /// the shipped output.
     /// </para>
     /// </summary>
     internal static class TransientUnlockWindowClose
@@ -113,6 +118,16 @@ namespace Alrauna.Amuse.Editor.Build
                 : new CommittedControllerGraphResult(
                     AvatarAnimationRefusal.UnsupportedAnimatorControllerForm,
                     Array.Empty<CommittedLayer>());
+
+            // The close-time enumeration is this build's first and only avatar
+            // refusal surface: a barrier avatar refusal returns before the swap-in
+            // opens pairs, and this pass exits when no pairs exist. Reporting here
+            // can therefore never duplicate the barrier's report.
+            if (graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                AmuseReports.AvatarRefusal(context.AvatarRootObject, graph.Refusal);
+            }
+
             var committedClips = CommittedClips(context).ToList();
 
             foreach (var pair in window.OpenPairs.ToList())

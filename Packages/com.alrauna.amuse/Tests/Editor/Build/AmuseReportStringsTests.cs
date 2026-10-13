@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using UnityEngine;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -156,6 +157,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AmuseReportStrings.Has(key + ":hint"), Is.True,
                     "missing hint for " + reason);
             }
+        }
+
+        [Test]
+        public void EverySlotResolutionFailureHasPlainEnglishStrings()
+        {
+            foreach (AlphaResolutionFailure failure in Enum.GetValues(
+                         typeof(AlphaResolutionFailure)))
+            {
+                // SemanticsUnknown promotes to a slot refusal at
+                // ResolveSlot and never reaches this key family.
+                if (failure == AlphaResolutionFailure.None ||
+                    failure == AlphaResolutionFailure.SemanticsUnknown)
+                {
+                    continue;
+                }
+
+                var key = AmuseReportStrings.SlotResolutionKey(failure);
+                Assert.That(
+                    AmuseReportStrings.Has(key), Is.True,
+                    "missing title for " + failure);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":description"), Is.True,
+                    "missing description for " + failure);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":hint"), Is.True,
+                    "missing hint for " + failure);
+                Assert.That(
+                    AmuseReports.ResolutionFailureSentence(failure),
+                    Is.Not.Empty,
+                    "missing failure sentence for " + failure);
+            }
+        }
+
+        [Test]
+        public void SlotResolutionBuildersThrowOnNoneAndSemanticsUnknown()
+        {
+            // None never names a fact. SemanticsUnknown promotes to a
+            // slot refusal at ResolveSlot and never reaches this path.
+            Assert.Throws<InvalidOperationException>(
+                () => AmuseReportStrings.SlotResolutionKey(
+                    AlphaResolutionFailure.None));
+            Assert.Throws<InvalidOperationException>(
+                () => AmuseReportStrings.SlotResolutionKey(
+                    AlphaResolutionFailure.SemanticsUnknown));
+            Assert.Throws<InvalidOperationException>(
+                () => AmuseReports.ResolutionFailureSentence(
+                    AlphaResolutionFailure.None));
+            Assert.Throws<InvalidOperationException>(
+                () => AmuseReports.ResolutionFailureSentence(
+                    AlphaResolutionFailure.SemanticsUnknown));
         }
 
         [Test]

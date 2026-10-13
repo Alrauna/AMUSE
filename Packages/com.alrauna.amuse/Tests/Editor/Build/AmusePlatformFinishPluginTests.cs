@@ -347,7 +347,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => false);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.ConsentDeclined, Is.True);
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero,
                     "a declined consent must analyze nothing");
             }
@@ -373,24 +372,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, TestGenericPlatform.Instance);
                 SeedRetainedHostBindings(context);
 
+                IReadOnlyList<string> offeredSubjects = null;
                 var reports = ErrorReport.CaptureErrors(
                     () => AmusePlatformFinishPass.Execute(
                         context,
                         SupportedFacts(unityVersion: "2022.3.23f1"),
-                        subjects => false));
+                        subjects =>
+                        {
+                            offeredSubjects = subjects;
+                            return false;
+                        }));
 
                 var declinedEntries = 0;
+                var subjectEntries = new List<string>();
                 foreach (var entry in reports)
                 {
-                    if (entry.TheError is SimpleError simple &&
-                        simple.TitleKey == "amuse.consent.Declined")
+                    if (entry.TheError is SimpleError simple)
                     {
-                        declinedEntries++;
+                        if (simple.TitleKey == "amuse.consent.Declined")
+                        {
+                            declinedEntries++;
+                        }
+                        else if (simple.TitleKey ==
+                                 "amuse.consent.Subject")
+                        {
+                            subjectEntries.Add(
+                                entry.TheError.ToMessage());
+                        }
                     }
                 }
 
                 Assert.That(declinedEntries, Is.EqualTo(1),
                     "one consent decline is one console entry, never two");
+
+                // Characterization: the per-subject entries already
+                // exist. The decline report carries one
+                // amuse.consent.Subject entry per offered subject, and
+                // each entry's text names that subject, so the reader
+                // can tell which versions the decline covered.
+                Assert.That(
+                    offeredSubjects, Is.Not.Null,
+                    "the declined build must have been offered subjects");
+                Assert.That(
+                    subjectEntries,
+                    Has.Count.EqualTo(offeredSubjects.Count),
+                    "one amuse.consent.Subject entry per offered subject");
+                foreach (var subject in offeredSubjects)
+                {
+                    Assert.That(
+                        subjectEntries.Any(entryText =>
+                            entryText.Contains(subject)),
+                        Is.True,
+                        "each subject's text must ride its own entry: "
+                        + subject);
+                }
             }
             finally
             {
@@ -420,7 +455,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => true);
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
-                Assert.That(amuse.ConsentDeclined, Is.False);
                 Assert.That(amuse.SemanticallyRefusedRendererCount,
                     Is.EqualTo(1),
                     "granted consent reaches the renderer loop, where the " +
@@ -595,7 +629,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             .TransparentShaderName)),
                     Is.True,
                     "the swap-only shader's subject must be offered");
-                Assert.That(after.ConsentDeclined, Is.False);
                 Assert.That(
                     after.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
@@ -698,10 +731,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     subjects => false);
 
                 var after = context.GetState<AmusePlatformFinishState>();
-                Assert.That(
-                    after.ConsentDeclined,
-                    Is.True,
-                    "the decline must stop the build");
                 Assert.That(after.AnalyzedRendererCount, Is.Zero);
                 Assert.That(
                     context.GetState<TransientUnlockWindowState>()
@@ -1066,6 +1095,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        [Test]
+        public void AvatarRefusalThrowsOnNoneCause()
+        {
+            // Characterization: the None guard already exists. The test
+            // pins the throw, so a later edit cannot emit the dead key
+            // "amuse.avatar.None" as a console entry.
+            Assert.That(
+                () => AmuseReports.AvatarRefusal(
+                    null, AvatarAnimationRefusal.None),
+                Throws.InvalidOperationException);
         }
 
         [Test]
@@ -4094,6 +4135,597 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // --- Per-slot evidence facts for renderer-refused renderers (D2) ----
+
+        private const string RendererRefusalFactsTempFolder =
+            "Assets/AmuseTests_RendererRefusalFacts";
+
+        private static void EnsureRendererRefusalFactsFolder()
+        {
+            if (!AssetDatabase.IsValidFolder(RendererRefusalFactsTempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_RendererRefusalFacts");
+            }
+        }
+
+        private static void DeleteRendererRefusalFactsFolder()
+        {
+            if (AssetDatabase.IsValidFolder(RendererRefusalFactsTempFolder))
+            {
+                AssetDatabase.DeleteAsset(RendererRefusalFactsTempFolder);
+            }
+        }
+
+        /// <summary>
+        /// Imports a real asset texture whose source PNG carries no alpha
+        /// channel and whose import writes none, so the capture proves the
+        /// sampled alpha exactly one through the importer theorem. The
+        /// established no-alpha lever: RGB24 source pixels, alpha source
+        /// None, and a Standalone DXT1 override, the shape the outline
+        /// alpha semantics fixtures import.
+        /// </summary>
+        private static Texture2D ImportNoAlphaChannelTexture(string name)
+        {
+            EnsureRendererRefusalFactsFolder();
+            var pixels = new Color32[4 * 4];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(255, 255, 255, 255);
+            }
+
+            var path = RendererRefusalFactsTempFolder + "/" + name + ".png";
+            var texture = TestTextureImport.WritePng(
+                path, 4, 4, pixels, importer =>
+                {
+                    importer.alphaSource = TextureImporterAlphaSource.None;
+                    var settings = importer.GetPlatformTextureSettings(
+                        "Standalone");
+                    settings.overridden = true;
+                    settings.format = TextureImporterFormat.DXT1;
+                    importer.SetPlatformTextureSettings(settings);
+                }, alpha: false);
+            Assert.That(
+                texture.format,
+                Is.EqualTo(UnityEngine.TextureFormat.DXT1),
+                "fixture precondition: the import must land on DXT1");
+            return texture;
+        }
+
+        /// <summary>
+        /// The verified fixture seam with production's real locked-identity
+        /// outcome: a material the locked pre-check names (a recognized
+        /// locked material whose original shader fails the pinned identity)
+        /// selects nothing, exactly as the production selector attests no
+        /// locked stand-in. The sentinel path records the locked fact, and
+        /// every other material selects through the shared verified seam.
+        /// </summary>
+        private static bool SelectExceptUnattestedLocked(
+            Material material,
+            out CapturedAlphaMaterialFamily family,
+            out MaterialEvidenceRequest alphaRelevance,
+            out MaterialEvidenceRequest captureSchema)
+        {
+            if (LockedMaterialIdentity.PreCheckRefusal(material) !=
+                RendererAnalysisRefusal.None)
+            {
+                family = CapturedAlphaMaterialFamily.Unsupported;
+                alphaRelevance = null;
+                captureSchema = null;
+                return false;
+            }
+
+            return SelectVerifiedFixtureRequest(
+                material, out family, out alphaRelevance,
+                out captureSchema);
+        }
+
+        /// <summary>
+        /// The additive-layer renderer refusal suppresses the per-slot
+        /// loops, so the slot's texture capture refusal would die
+        /// unreported. The renderer-refused path must emit the slot's own
+        /// capture entry exactly once, naming the refusing slot.
+        /// </summary>
+        [Test]
+        public void RendererRefusalCarriesTheRefusedSlotsCaptureFacts()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE refused renderer capture facts");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Texture2D refusedTexture = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                // The unavailable-capture lever from the folded-entry
+                // fixture: an in-memory texture has no source identity, so
+                // the capture's identity gate refuses it and the slot
+                // carries the refusal as a captured fact.
+                refusedTexture = new Texture2D(
+                    8, 8, TextureFormat.RGBA32, false);
+                fixture.Material.SetTexture("_MainTex", refusedTexture);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdditiveLayerWithProofRelevantMaterialProperty),
+                    Is.EqualTo(1),
+                    "fixture precondition: the renderer must refuse at " +
+                    "renderer scope");
+
+                var rendererEntries = 0;
+                var textureEntryMessages = new List<string>();
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple)
+                    {
+                        if (simple.TitleKey ==
+                            "amuse.renderer." +
+                            "AdditiveLayerWithProofRelevantMaterialProperty")
+                        {
+                            rendererEntries++;
+                        }
+
+                        if (simple.TitleKey != null &&
+                            simple.TitleKey.StartsWith(
+                                "amuse.texture.",
+                                System.StringComparison.Ordinal))
+                        {
+                            textureEntryMessages.Add(simple.ToMessage());
+                        }
+                    }
+                }
+
+                Assert.That(rendererEntries, Is.EqualTo(1),
+                    "the renderer refusal entry is the refused scope's " +
+                    "own report");
+                Assert.That(textureEntryMessages, Has.Count.EqualTo(1),
+                    "the refused renderer's slot capture fact is exactly " +
+                    "one texture entry");
+                Assert.That(textureEntryMessages[0],
+                    Does.Contain("slot 0"),
+                    "the entry names the refusing slot");
+                Assert.That(textureEntryMessages[0],
+                    Does.Contain("_MainTex"),
+                    "the entry names the refused texture property");
+                Assert.That(textureEntryMessages[0],
+                    Does.Contain("UnavailableCapture"),
+                    "the entry names the capture reason family");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (refusedTexture != null)
+                {
+                    Object.DestroyImmediate(refusedTexture);
+                }
+
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// The additive-layer renderer refusal fires before slot
+        /// resolution, so no fold loop runs to carry a captured locked
+        /// identity. The renderer-refused path must emit exactly one slot
+        /// analysis entry naming the unattested-original fact, and the
+        /// locked fact must stay report-only: the renderer's census
+        /// refusal keeps the additive reason.
+        /// </summary>
+        [Test]
+        public void RendererRefusalNamesTheLockedIdentityFact()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE refused renderer locked fact");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Material locked = null;
+            Material swap = null;
+
+            try
+            {
+                // The named original resolves to the locked original
+                // stand-in, which passes no pinned identity, so the locked
+                // pre-check names the unattested direction.
+                var original = Shader.Find(LockedOriginalStandInShaderName);
+                Assert.That(original, Is.Not.Null,
+                    $"'{LockedOriginalStandInShaderName}' must import.");
+                Assert.That(
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
+                        original, out var originalGuid, out long _),
+                    Is.True);
+
+                fixture = AddVerifiedOpaqueRenderer(root);
+                swap = fixture.Material;
+                locked = LockedMaterial();
+                locked.SetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName,
+                    1f);
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderTagName,
+                    ".poiyomi/Poiyomi Toon");
+                locked.SetOverrideTag(
+                    LockedMaterialIdentity.OriginalShaderGuidTagName,
+                    originalGuid);
+                fixture.Material = locked;
+                fixture.Renderer.sharedMaterials = new[] { locked };
+                // The verified swap keeps the alpha request alive, so the
+                // agreeing float curve stays proof-relevant and the
+                // additive refusal fires at renderer scope with empty slot
+                // results, while the locked current material rides the
+                // capture as the sentinel fact.
+                controller = AddAnimatedMaterialAssignment(
+                    root, swap, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectExceptUnattestedLocked,
+                        CaptureVerifiedFixtureMaterials,
+                        ResolvingVerifiedAlphaOnly));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdditiveLayerWithProofRelevantMaterialProperty),
+                    Is.EqualTo(1),
+                    "fixture precondition: the renderer must refuse at " +
+                    "renderer scope");
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .LockedPoiyomiOriginalShaderUnattested),
+                    Is.Zero,
+                    "the locked fact is report-only: the census refusal " +
+                    "keeps the renderer-scope reason");
+
+                var slotEntryMessages = new List<string>();
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                    {
+                        slotEntryMessages.Add(simple.ToMessage());
+                    }
+                }
+
+                Assert.That(slotEntryMessages, Has.Count.EqualTo(1),
+                    "the captured locked identity is exactly one slot " +
+                    "entry on the renderer-refused path");
+                Assert.That(slotEntryMessages[0],
+                    Does.Contain("LockedPoiyomiOriginalShaderUnattested"),
+                    "the entry names the unattested-original fact");
+                Assert.That(slotEntryMessages[0],
+                    Does.Contain("slot 0"),
+                    "the entry names the carrying slot");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (swap != null) Object.DestroyImmediate(swap);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// The additive-layer renderer refusal suppresses the per-slot
+        /// loops, so the slot's no-alpha-channel diagnostic would die
+        /// unreported. The renderer-refused path must emit the
+        /// amuse.texture.NoAlphaChannel entry for the carrying slot. The
+        /// outline texture is the request surface whose captured evidence
+        /// proves the sampled alpha exactly one, so the no-alpha texture
+        /// rides _OutlineTexture.
+        /// </summary>
+        [Test]
+        public void RendererRefusalCarriesTheNoAlphaDiagnostics()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE refused renderer no-alpha facts");
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+            Texture2D noAlphaTexture = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                noAlphaTexture = ImportNoAlphaChannelTexture(
+                    "refused_renderer_noalpha_slot");
+                fixture.Material.SetTexture("_OutlineTexture", noAlphaTexture);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(amuse.RendererRefusalCount(
+                        RendererAnalysisRefusal
+                            .AdditiveLayerWithProofRelevantMaterialProperty),
+                    Is.EqualTo(1),
+                    "fixture precondition: the renderer must refuse at " +
+                    "renderer scope");
+
+                var noAlphaMessages = new List<string>();
+                var textureEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple)
+                    {
+                        if (simple.TitleKey != null &&
+                            simple.TitleKey.StartsWith(
+                                "amuse.texture.",
+                                System.StringComparison.Ordinal))
+                        {
+                            textureEntries++;
+                            if (simple.TitleKey ==
+                                "amuse.texture.NoAlphaChannel")
+                            {
+                                noAlphaMessages.Add(simple.ToMessage());
+                            }
+                        }
+                    }
+                }
+
+                Assert.That(textureEntries, Is.EqualTo(1),
+                    "the no-alpha texture captured cleanly, so the " +
+                    "diagnostic is the only texture entry");
+                Assert.That(noAlphaMessages, Has.Count.EqualTo(1),
+                    "the refused renderer's no-alpha fact is exactly one " +
+                    "diagnostic entry");
+                Assert.That(noAlphaMessages[0],
+                    Does.Contain("slot 0"),
+                    "the entry names the carrying slot");
+                Assert.That(noAlphaMessages[0],
+                    Does.Contain("_OutlineTexture"),
+                    "the entry names the no-alpha texture property");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+                // The no-alpha texture is an imported asset, so the folder
+                // delete below is its only teardown.
+                DeleteRendererRefusalFactsFolder();
+            }
+        }
+
+        /// <summary>
+        /// Runs one fully resolving renderer through the production pass
+        /// under the verified seams and captures the reported entries. The
+        /// material must be the slot's only assignment and carry no
+        /// animation, so nothing refuses the renderer.
+        /// </summary>
+        private static List<ErrorContext> ExecuteResolvingFixture(
+            GameObject root,
+            Material material,
+            out AmusePlatformFinishState amuse)
+        {
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            FixtureProofScope.PinAllSizes(root);
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TestGenericPlatform.Instance);
+            SeedRetainedHostBindings(context);
+
+            var reports = ErrorReport.CaptureErrors(() =>
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly));
+            amuse = context.GetState<AmusePlatformFinishState>();
+            return reports;
+        }
+
+        /// <summary>
+        /// Asserts the entry set of a fully resolving renderer with one
+        /// texture fact: no renderer refusal entry, no slot analysis
+        /// entry, and exactly today's one texture entry of the named key.
+        /// A wrong implementation that emits the slot facts outside the
+        /// renderer-refused path doubles the texture entry or adds a
+        /// refusal entry, and fails here.
+        /// </summary>
+        private static void AssertResolvingEntrySetsExactlyToday(
+            List<ErrorContext> reports,
+            string textureKey)
+        {
+            var rendererEntries = 0;
+            var slotEntries = 0;
+            var textureKeys = new List<string>();
+            foreach (var entry in reports)
+            {
+                if (entry.TheError is SimpleError simple)
+                {
+                    if (simple.TitleKey != null &&
+                        simple.TitleKey.StartsWith(
+                            "amuse.renderer.",
+                            System.StringComparison.Ordinal))
+                    {
+                        rendererEntries++;
+                    }
+
+                    if (simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                    {
+                        slotEntries++;
+                    }
+
+                    if (simple.TitleKey != null &&
+                        simple.TitleKey.StartsWith(
+                            "amuse.texture.",
+                            System.StringComparison.Ordinal))
+                    {
+                        textureKeys.Add(simple.TitleKey);
+                    }
+                }
+            }
+
+            Assert.That(rendererEntries, Is.Zero,
+                "a resolving renderer reports no renderer refusal entry");
+            Assert.That(slotEntries, Is.Zero,
+                "a resolving renderer reports no slot analysis entry");
+            Assert.That(
+                textureKeys,
+                Is.EqualTo(new[] { textureKey }),
+                "a resolving renderer keeps exactly today's texture " +
+                "entry set");
+        }
+
+        // --- Falsifier 3: emitting on a resolving renderer ---
+
+        /// <summary>
+        /// Runs the capture-refusal and no-alpha fixtures through a fully
+        /// resolving renderer and asserts the entry sets are exactly
+        /// today's: the standalone capture refusal for the resolved slot,
+        /// the unconditional no-alpha diagnostic, and nothing new. A wrong
+        /// implementation emitting the slot facts unconditionally fails
+        /// this.
+        /// </summary>
+        [Test]
+        public void RendererRefusalFactsStaySilentOnResolvingRenderers()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var resolvingRoot = new GameObject(
+                "AMUSE resolving capture facts");
+            var noAlphaRoot = new GameObject(
+                "AMUSE resolving no-alpha facts");
+            var resolvingFixture = default(AnalyzableRendererFixture);
+            var noAlphaFixture = default(AnalyzableRendererFixture);
+            Texture2D refusedTexture = null;
+            Texture2D noAlphaTexture = null;
+
+            try
+            {
+                // The Test 1 lever on a resolving renderer: the forced
+                // opaque material keeps the slot resolved, and the
+                // standalone loop is today's only reporter.
+                resolvingFixture = AddVerifiedOpaqueRenderer(resolvingRoot);
+                refusedTexture = new Texture2D(
+                    8, 8, TextureFormat.RGBA32, false);
+                resolvingFixture.Material.SetTexture(
+                    "_MainTex", refusedTexture);
+                var resolvingReports = ExecuteResolvingFixture(
+                    resolvingRoot,
+                    resolvingFixture.Material,
+                    out var resolvingState);
+                Assert.That(resolvingState.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(resolvingState.AnalyzedRendererCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the renderer must fully resolve");
+                AssertResolvingEntrySetsExactlyToday(
+                    resolvingReports,
+                    "amuse.texture.UnavailableCapture");
+
+                // The Test 3 lever on a resolving renderer: the no-alpha
+                // outline texture captured cleanly, so the unconditional
+                // diagnostic is today's only texture entry.
+                noAlphaFixture = AddVerifiedOpaqueRenderer(noAlphaRoot);
+                noAlphaTexture = ImportNoAlphaChannelTexture(
+                    "resolving_noalpha_slot");
+                noAlphaFixture.Material.SetTexture(
+                    "_OutlineTexture", noAlphaTexture);
+                var noAlphaReports = ExecuteResolvingFixture(
+                    noAlphaRoot,
+                    noAlphaFixture.Material,
+                    out var noAlphaState);
+                Assert.That(noAlphaState.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None));
+                Assert.That(noAlphaState.AnalyzedRendererCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the renderer must fully resolve");
+                AssertResolvingEntrySetsExactlyToday(
+                    noAlphaReports,
+                    "amuse.texture.NoAlphaChannel");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(resolvingFixture);
+                DisposeAnalyzableRenderer(noAlphaFixture);
+                Object.DestroyImmediate(resolvingRoot);
+                Object.DestroyImmediate(noAlphaRoot);
+                if (refusedTexture != null)
+                {
+                    Object.DestroyImmediate(refusedTexture);
+                }
+
+                // The no-alpha texture is an imported asset, so the folder
+                // delete below is its only teardown.
+                DeleteRendererRefusalFactsFolder();
+            }
+        }
+
         [Test]
         public void RuntimeStateIntegration_UnnormalizedDirectWithRelevantPropertyRefuses()
         {
@@ -5444,6 +6076,320 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DisposeAnalyzableRenderer(fixtureA);
                 DisposeAnalyzableRenderer(fixtureB);
                 if (swapped != null) Object.DestroyImmediate(swapped);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// A verified Poiyomi fixture material whose alpha equation
+        /// multiplies the sampled alpha by a constant above one. The
+        /// resolver refuses an above-one multiplier before every other
+        /// gate, including the texture-evidence lookup, so the material
+        /// needs no texture asset. Distinct RGB tints keep two such
+        /// materials distinct.
+        /// </summary>
+        private static Material VerifiedRefusedMultiplierMaterial(
+            string name,
+            float red,
+            float green,
+            float blue)
+        {
+            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(red, green, blue, 1.5f));
+            material.name = name;
+            return material;
+        }
+
+        private static AnimatorController AddAnimatedMaterialSwap(
+            GameObject root,
+            Material first,
+            Material second,
+            out AnimationClip clip)
+        {
+            clip = new AnimationClip { name = "AMUSE material swap" };
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    string.Empty,
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe { time = 0f, value = first },
+                    new ObjectReferenceKeyframe { time = 1f, value = second },
+                });
+
+            var controller =
+                new AnimatorController { name = "AMUSE material swap graph" };
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            root.AddComponent<Animator>().runtimeAnimatorController = controller;
+            return controller;
+        }
+
+        private static List<string> SlotResolutionEntryMessages(
+            List<ErrorContext> reports)
+        {
+            var messages = new List<string>();
+            foreach (var entry in reports)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey != null &&
+                    simple.TitleKey.StartsWith(
+                        "amuse.slotResolution.", System.StringComparison.Ordinal))
+                {
+                    messages.Add(simple.ToMessage());
+                }
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// A resolved slot whose admitted material's alpha proof refused
+        /// with UnsupportedMultiplier stays resolved: no
+        /// amuse.slotAnalysis.Refusal entry appears, and exactly one
+        /// amuse.slotResolution.UnsupportedMultiplier entry names the
+        /// lost proof reason. The summary is a census record, so its
+        /// analyzed-renderer count equals the unmodified fixture
+        /// baseline.
+        /// </summary>
+        [Test]
+        public void ResolutionRefusedSlotReportsOneDiagnosticEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE slot resolution refused");
+            var fixture = default(AnalyzableRendererFixture);
+            Material refused = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                refused = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refused multiplier", 1f, 1f, 1f);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = refused;
+                fixture.Renderer.sharedMaterials = new[] { refused };
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+                var slotRefusalEntries = 0;
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey == "amuse.slotAnalysis.Refusal")
+                    {
+                        slotRefusalEntries++;
+                    }
+                }
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(1),
+                    "one refused material resolution is exactly one " +
+                    "diagnostic entry");
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE refused multiplier"),
+                    "the entry must name the offender material");
+
+                Assert.That(slotRefusalEntries, Is.Zero,
+                    "the slot stays resolved, so no slot-refusal entry " +
+                    "may appear for it");
+
+                // The summary line is the apply pass's census record,
+                // built from the counts the finish pass recorded. Report
+                // it from those recorded counts, exactly as the apply
+                // pass does, so the assertion reads the same line a
+                // build prints.
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.ReachedRendererAnalysis, Is.True,
+                    "fixture precondition: the run reached renderer " +
+                    "analysis, so a build would print a summary");
+                var summaryReports = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.AvatarSummary(
+                        root,
+                        amuse.AnalyzedRendererCount,
+                        amuse.AppliedOpaqueTriangleCount,
+                        amuse.UntouchedRendererCount,
+                        amuse.Lifecycle.BuildPath,
+                        amuse.AlphaPolicyActive,
+                        amuse.SamplingTarget,
+                        amuse.SamplingPolicy));
+                AmuseBuildStatusStore.Forget();
+
+                Assert.That(summaryReports, Has.Count.EqualTo(1),
+                    "the analyzed build reports exactly one summary entry");
+
+                // The unmodified verified fixture baseline analyzes one
+                // renderer. The diagnostic is report-only, so the census
+                // summary must carry the same count.
+                Assert.That(summaryReports[0].TheError.ToMessage(),
+                    Does.Contain("analyzed 1 renderers"),
+                    "the diagnostic must not change the analyzed-renderer " +
+                    "count from the unmodified fixture baseline");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                DestroyCommittedClone(root, null);
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Falsifier 1: reading the deduped Resolutions list ---
+        // Two admitted materials refusing with the same failure merge
+        // into one entry in the stored deduped list. The emission must
+        // walk the raw pre-dedup per-material list, so two entries with
+        // two distinct material names appear.
+        [Test]
+        public void ResolutionRefusedSlotReportsOneEntryPerAdmittedMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE two refused materials");
+            var fixture = default(AnalyzableRendererFixture);
+            Material first = null;
+            Material second = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                first = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refuser one", 1f, 0f, 0f);
+                second = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE refuser two", 0f, 1f, 0f);
+                Object.DestroyImmediate(fixture.Material);
+                fixture.Material = first;
+                fixture.Renderer.sharedMaterials = new[] { first };
+                controller = AddAnimatedMaterialSwap(
+                    root, first, second, out clip);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(2),
+                    "two refusing materials are two entries, never one " +
+                    "deduped entry");
+                // Admission is current-first, then clip value order, so
+                // the raw list order is pinned here too.
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE refuser one"));
+                Assert.That(refusedEntries[1],
+                    Does.Contain("AMUSE refuser two"));
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                if (second != null) Object.DestroyImmediate(second);
+                DestroyCommittedClone(root, controller);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        // --- Falsifier 2: indexing AdmittedMaterials directly ---
+        // Slot 0 swaps between its current material and a third
+        // material, while slot 1 holds the second admitted material.
+        // Admission lists currents first, so slot 0 admits indices
+        // [0, 2]: the offender at admitted index 2 is not the material
+        // at loop index 1.
+        [Test]
+        public void ResolutionRefusedEntryNamesTheAdmittedIndexMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE noncontiguous admission");
+            Material slotZeroCurrent = null;
+            Material slotOneCurrent = null;
+            Material offender = null;
+            Mesh mesh = null;
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                slotZeroCurrent = VerifiedForceOpaqueMaterial(1f);
+                slotZeroCurrent.name = "AMUSE slot zero current";
+                slotOneCurrent = VerifiedForceOpaqueMaterial(1f);
+                slotOneCurrent.name = "AMUSE slot one current";
+                offender = VerifiedRefusedMultiplierMaterial(
+                    "AMUSE noncontiguous offender", 1f, 0f, 0f);
+                AddTwoSlotRenderer(
+                    root, slotZeroCurrent, slotOneCurrent, out mesh);
+                controller = AddAnimatedMaterialSwap(
+                    root, slotZeroCurrent, offender, out clip);
+
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                FixtureProofScope.PinAllSizes(root);
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                var reports = ErrorReport.CaptureErrors(() =>
+                    AmusePlatformFinishPass.Execute(
+                        context,
+                        SupportedFacts(),
+                        SelectVerifiedFixtureRequest,
+                        CaptureVerifiedFixtureMaterials,
+                        VerifiedAlphaOnly));
+
+                var refusedEntries = SlotResolutionEntryMessages(reports);
+
+                Assert.That(refusedEntries, Has.Count.EqualTo(1),
+                    "only slot 0's second admitted material refused");
+                Assert.That(refusedEntries[0],
+                    Does.Contain("AMUSE noncontiguous offender"),
+                    "the entry must name the material at the admitted " +
+                    "index, not the material at the loop index");
+                Assert.That(refusedEntries[0],
+                    Does.Not.Contain("AMUSE slot one current"),
+                    "AdmittedMaterials[i] is the loop-index material; the " +
+                    "entry must go through AdmittedMaterialIndices");
+            }
+            finally
+            {
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (slotZeroCurrent != null)
+                    Object.DestroyImmediate(slotZeroCurrent);
+                if (slotOneCurrent != null)
+                    Object.DestroyImmediate(slotOneCurrent);
+                if (offender != null) Object.DestroyImmediate(offender);
                 DestroyCommittedClone(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);

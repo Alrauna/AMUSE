@@ -413,14 +413,15 @@ namespace Alrauna.Amuse.Editor.Build
                 var pendingClones = new List<Material>();
                 var slotRefusal = AlphaSeparationSlotRefusal.None;
                 var unconvertedCount = 0;
-                var lastConversionRefusal = AlphaSeparationSlotRefusal.None;
-                Material lastRefusedMaterial = null;
 
-                // The inner per-gate refusal token of the last conversion
-                // refusal, when the family boundary carries one. The report
-                // prints it after the cause, so the seven conversion arms
-                // stop collapsing into one bare enum.
-                var lastConversionRefusedDetail = default(string);
+                // One record per refused material, in admission order. The
+                // inner per-gate refusal token rides along when the family
+                // boundary carries one. The report prints it after the
+                // cause, so the seven conversion arms stop collapsing into
+                // one bare enum.
+                var collectedRefusals =
+                    new List<(AlphaSeparationSlotRefusal cause,
+                        Material material, string detail)>();
                 var slotDivergence = false;
                 var slotPremultiply = false;
                 var isMultiMaterialSlot = slots[slotIndex].AdmittedMaterialIndices.Count > 1;
@@ -479,9 +480,9 @@ namespace Alrauna.Amuse.Editor.Build
                     slotPremultiply |= materialPremultiply;
                     if (conversionRefusal != AlphaSeparationSlotRefusal.None)
                     {
-                        lastConversionRefusal = conversionRefusal;
-                        lastRefusedMaterial = live;
-                        lastConversionRefusedDetail = conversionRefusedDetail;
+                        collectedRefusals.Add(
+                            (conversionRefusal, live,
+                                conversionRefusedDetail));
                         if (isMultiMaterialSlot)
                         {
                             // In a multi-material swap, an unconverted material falls back
@@ -511,23 +512,26 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     // Every admitted material in this swap failed conversion: refuse the slot
                     // with the last conversion failure rather than creating an un-optimized clone.
-                    slotRefusal = lastConversionRefusal;
+                    slotRefusal =
+                        collectedRefusals[collectedRefusals.Count - 1].cause;
                 }
 
                 if (slotRefusal != AlphaSeparationSlotRefusal.None)
                 {
+                    var lastRefusal =
+                        collectedRefusals[collectedRefusals.Count - 1];
                     state.RecordSlotRefusal(slotRefusal);
                     AmuseReports.SlotSeparationRefusal(
                         target.Renderer,
                         slotIndex,
                         slotRefusal,
-                        offendingMaterial: lastRefusedMaterial,
+                        offendingMaterial: lastRefusal.material,
                         detail: slotRefusal ==
                                 AlphaSeparationSlotRefusal
                                     .OpaqueConversionRefused &&
-                            !string.IsNullOrEmpty(lastConversionRefusedDetail)
+                            !string.IsNullOrEmpty(lastRefusal.detail)
                             ? "OpaqueConversionRefused: " +
-                              lastConversionRefusedDetail
+                              lastRefusal.detail
                             : null);
                     // The slot is dropped with nothing registered: clones
                     // created for its earlier admitted materials would be
@@ -540,6 +544,19 @@ namespace Alrauna.Amuse.Editor.Build
                     }
 
                     continue;
+                }
+                // A slot that kept converting emits one entry per refused material,
+                // so the console names every conversion that did not happen. The slot
+                // is not refused, so this writes no census record.
+                else if (isMultiMaterialSlot && collectedRefusals.Count > 0)
+                {
+                    foreach (var refusal in collectedRefusals)
+                    {
+                        AmuseReports.SlotSeparationRefusal(
+                            target.Renderer, slotIndex, refusal.cause,
+                            offendingMaterial: refusal.material,
+                            detail: refusal.detail);
+                    }
                 }
 
                 // Every admitted material of the slot mapped, so the slot is

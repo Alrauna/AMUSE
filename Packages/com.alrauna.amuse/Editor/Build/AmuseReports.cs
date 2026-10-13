@@ -345,6 +345,14 @@ namespace Alrauna.Amuse.Editor.Build
             int slotIndex,
             TextureCaptureRefusal refusal)
         {
+            // A None reason is not a refusal. This guard keeps the dead
+            // key "amuse.texture.None" out of the console.
+            if (refusal.Reason == TextureCaptureRefusalReason.None)
+            {
+                throw new InvalidOperationException(
+                    "TextureCaptureRefusalReason.None is not a refusal.");
+            }
+
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(
@@ -386,6 +394,33 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// One Information entry per refused material resolution on a
+        /// resolved slot. The slot stays resolved and nothing is refused
+        /// at slot scope, so this entry is a diagnostic only: it names
+        /// the lost proof reason and the offender material, and it
+        /// changes no classification outcome and no census record.
+        /// </summary>
+        internal static void SlotResolutionRefused(
+            Renderer renderer,
+            int slotIndex,
+            string rendererName,
+            CapturedAlphaMaterial offenderMaterial,
+            AlphaResolutionFailure failure)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.SlotResolutionKey(failure),
+                    slotIndex,
+                    rendererName,
+                    MaterialDescription(offenderMaterial),
+                    ResolutionFailureSentence(failure));
+            }
+        }
+
+        /// <summary>
         /// One Information entry per refused renderer. The mapping refusal
         /// carries the two slot counts the refusal was computed from, so
         /// the reader can tell which side to change. The counts ride the
@@ -400,6 +435,14 @@ namespace Alrauna.Amuse.Editor.Build
             int materialSlotCount = -1,
             string detail = null)
         {
+            // A None cause is not a refusal. This guard keeps the dead
+            // key "amuse.renderer.None" out of the console.
+            if (cause == RendererAnalysisRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "RendererAnalysisRefusal.None is not a refusal.");
+            }
+
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(
@@ -438,6 +481,44 @@ namespace Alrauna.Amuse.Editor.Build
                 default:
                     throw new InvalidOperationException(
                         "MaterialDependencyClosureFailure has an unhandled value. " +
+                        "Every value needs its own report sentence.");
+            }
+        }
+
+        /// <summary>
+        /// One plain sentence naming the way one material's alpha proof
+        /// refused. The slot-resolution entry embeds it, so the reader
+        /// sees the cause and not only the refused rule's name. An
+        /// unhandled value throws, so every enum value needs its own
+        /// sentence.
+        /// </summary>
+        internal static string ResolutionFailureSentence(
+            AlphaResolutionFailure failure)
+        {
+            // SemanticsUnknown promotes to a slot refusal at ResolveSlot
+            // and never reaches this path. None never names a fact.
+            if (failure == AlphaResolutionFailure.None ||
+                failure == AlphaResolutionFailure.SemanticsUnknown)
+            {
+                throw new InvalidOperationException(
+                    "Slot resolution reporting has no sentence for " +
+                    failure + ".");
+            }
+
+            switch (failure)
+            {
+                case AlphaResolutionFailure.UnsupportedMultiplier:
+                    return "The alpha proof multiplies a sampled alpha " +
+                           "by a value above one. ";
+                case AlphaResolutionFailure.MissingTextureEvidence:
+                    return "The alpha proof needs texture data the " +
+                           "capture could not read. ";
+                case AlphaResolutionFailure.UnsupportedUvMapping:
+                    return "The alpha proof samples its texture with a " +
+                           "UV mapping AMUSE cannot prove. ";
+                default:
+                    throw new InvalidOperationException(
+                        "AlphaResolutionFailure has an unhandled value. " +
                         "Every value needs its own report sentence.");
             }
         }

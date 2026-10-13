@@ -30,6 +30,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private SlotResolutionResult(
             RendererAnalysisRefusal refusal,
             IReadOnlyList<AlphaResolution> resolutions,
+            IReadOnlyList<AlphaResolution> materialResolutions,
             CapturedAlphaMaterial offender,
             AlphaUnknownReason unknownReason,
             MaterialDependencyClosureFailure closureWay)
@@ -37,6 +38,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             IsResolved = refusal == RendererAnalysisRefusal.None;
             Refusal = refusal;
             Resolutions = resolutions;
+            MaterialResolutions = materialResolutions;
             Offender = offender;
             UnknownReason = unknownReason;
             ClosureWay = closureWay;
@@ -45,6 +47,16 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal bool IsResolved { get; }
         internal RendererAnalysisRefusal Refusal { get; }
         internal IReadOnlyList<AlphaResolution> Resolutions { get; }
+
+        /// <summary>
+        /// The raw pre-dedup per-material resolutions, parallel to the
+        /// slot's admitted material indices by construction. The deduped
+        /// <see cref="Resolutions"/> list keeps feeding classification and
+        /// the anisotropy scan; this list exists so reporting can attribute
+        /// a refused resolution to its own admitted material. A refused
+        /// slot holds none.
+        /// </summary>
+        internal IReadOnlyList<AlphaResolution> MaterialResolutions { get; }
 
         /// <summary>
         /// Reports whether any admitted material's resolution samples its
@@ -108,15 +120,28 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return new SlotResolutionResult(
-                refusal, Array.Empty<AlphaResolution>(), offender,
-                unknownReason, closureWay);
+                refusal, Array.Empty<AlphaResolution>(),
+                Array.Empty<AlphaResolution>(), offender, unknownReason,
+                closureWay);
         }
 
         internal static SlotResolutionResult Resolved(
             IReadOnlyList<AlphaResolution> resolutions)
         {
+            // A caller that resolves exactly the slot's admitted materials
+            // in order holds the raw list, which is parallel to the slot's
+            // admitted material indices. One list serves both roles.
+            return Resolved(resolutions, resolutions);
+        }
+
+        internal static SlotResolutionResult Resolved(
+            IReadOnlyList<AlphaResolution> resolutions,
+            IReadOnlyList<AlphaResolution> materialResolutions)
+        {
             if (resolutions == null)
                 throw new ArgumentNullException(nameof(resolutions));
+            if (materialResolutions == null)
+                throw new ArgumentNullException(nameof(materialResolutions));
 
             var copy = new AlphaResolution[resolutions.Count];
             for (var index = 0; index < copy.Length; index++)
@@ -124,9 +149,17 @@ namespace Alrauna.Amuse.Editor.Analysis
                 copy[index] = resolutions[index];
             }
 
+            var materialCopy =
+                new AlphaResolution[materialResolutions.Count];
+            for (var index = 0; index < materialCopy.Length; index++)
+            {
+                materialCopy[index] = materialResolutions[index];
+            }
+
             return new SlotResolutionResult(
                 RendererAnalysisRefusal.None, Array.AsReadOnly(copy),
-                null, null, MaterialDependencyClosureFailure.None);
+                Array.AsReadOnly(materialCopy), null, null,
+                MaterialDependencyClosureFailure.None);
         }
     }
 

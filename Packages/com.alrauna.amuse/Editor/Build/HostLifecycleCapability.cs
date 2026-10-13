@@ -10,7 +10,10 @@ namespace Alrauna.Amuse.Editor.Build
     /// other edit-mode builds are <see cref="NonPlayNdmfBuild"/>, and
     /// entering Play mode is <see cref="ApplyOnPlay"/> (the Play mode part
     /// of V11, reversed on 2026-09-06). <see cref="Unknown"/> means no
-    /// caller classified the build, and it refuses.
+    /// caller classified the build, and it refuses. Production code
+    /// never constructs <see cref="Unknown"/>. Tests construct it to
+    /// drive the <see
+    /// cref="HostLifecycleRefusal.UnsupportedBuildPath"/> refusal path.
     /// </summary>
     internal enum AmuseBuildPath
     {

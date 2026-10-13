@@ -433,5 +433,157 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "missing hint for " + cause);
             }
         }
+
+        private static CapturedAlphaMaterial OffenderMaterial(string name)
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                new CapturedMaterialEvidence(
+                    false, null, false, default(ColorSpace),
+                    new CapturedMaterialEvidence.PresenceEntry[0],
+                    new CapturedMaterialEvidence.ScalarEntry[0],
+                    new CapturedMaterialEvidence.ColorEntry[0],
+                    new CapturedMaterialEvidence.VectorEntry[0],
+                    new CapturedMaterialEvidence.TextureEntry[0],
+                    new CapturedTextureEvidence[0]),
+                default(Alrauna.Amuse.Editor.Semantics.Poiyomi
+                    .PoiyomiSourceEvidence),
+                null,
+                materialName: name);
+        }
+
+        [Test]
+        public void SlotResolutionRefusedNamesSlotRendererAndMaterial()
+        {
+            var failures = new[]
+            {
+                AlphaResolutionFailure.UnsupportedMultiplier,
+                AlphaResolutionFailure.MissingTextureEvidence,
+                AlphaResolutionFailure.UnsupportedUvMapping,
+            };
+
+            foreach (var failure in failures)
+            {
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.SlotResolutionRefused(
+                        _renderer,
+                        1,
+                        "Body",
+                        OffenderMaterial("AMUSE refused material"),
+                        failure));
+
+                Assert.That(errors, Has.Count.EqualTo(1));
+                var simple = errors[0].TheError as SimpleError;
+                Assert.That(simple, Is.Not.Null);
+                Assert.That(
+                    simple.TitleKey,
+                    Is.EqualTo(AmuseReportStrings.SlotResolutionKey(failure)),
+                    "the entry must use the exact key for " + failure);
+                var message = errors[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain("1"),
+                    "the report must name the refused slot index");
+                Assert.That(message, Does.Contain("Body"),
+                    "the report must name the renderer");
+                Assert.That(message, Does.Contain("AMUSE refused material"),
+                    "the report must name the offender material");
+            }
+        }
+
+        [Test]
+        public void SlotResolutionRefusedBuildersThrowOnNoneAndSemanticsUnknown()
+        {
+            var offender = OffenderMaterial("AMUSE refused material");
+
+            // None never names a fact. SemanticsUnknown promotes to a
+            // slot refusal at ResolveSlot and never reaches this path.
+            Assert.Throws<InvalidOperationException>(() =>
+                AmuseReports.SlotResolutionRefused(
+                    _renderer, 0, "Body", offender,
+                    AlphaResolutionFailure.None));
+            Assert.Throws<InvalidOperationException>(() =>
+                AmuseReports.SlotResolutionRefused(
+                    _renderer, 0, "Body", offender,
+                    AlphaResolutionFailure.SemanticsUnknown));
+        }
+
+        [Test]
+        public void TextureCaptureRefusalThrowsOnNoneCause()
+        {
+            // The record's constructor rejects None, but a default
+            // record carries it. The report method is the last guard
+            // before the dead key "amuse.texture.None" would render.
+            Assert.That(
+                () => AmuseReports.TextureCaptureRefusal(
+                    _renderer, 0, default(TextureCaptureRefusal)),
+                Throws.InvalidOperationException);
+        }
+
+        // Characterization: the two separation helper reporters and the
+        // None guards on the two slot refusal reporters already exist.
+        // These tests pin the current behavior; they are not RED-first.
+
+        [Test]
+        public void SlotSeparationDivergenceNamesKeySlotAndRenderer()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationDivergence(
+                    _renderer, 4, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(AmuseReportStrings.SlotSeparationDivergenceKey),
+                "the entry must use the exact divergence key");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            Assert.That(
+                errors[0].TheError.ToMessage(),
+                Does.Contain("slot 4 of renderer 'Body'"));
+        }
+
+        [Test]
+        public void SlotSeparationPremultiplyNormalizationNamesKeySlotAndRenderer()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationPremultiplyNormalization(
+                    _renderer, 2, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(
+                    AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationKey),
+                "the entry must use the exact premultiply key");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            Assert.That(
+                errors[0].TheError.ToMessage(),
+                Does.Contain("slot 2 of renderer 'Body'"));
+        }
+
+        [Test]
+        public void SlotAnalysisRefusalThrowsOnNoneCause()
+        {
+            Assert.That(
+                () => AmuseReports.SlotAnalysisRefusal(
+                    _renderer, 0, RendererAnalysisRefusal.None),
+                Throws.InvalidOperationException);
+        }
+
+        [Test]
+        public void SlotSeparationRefusalThrowsOnNoneCause()
+        {
+            Assert.That(
+                () => AmuseReports.SlotSeparationRefusal(
+                    _renderer, 0, AlphaSeparationSlotRefusal.None),
+                Throws.InvalidOperationException);
+        }
     }
 }

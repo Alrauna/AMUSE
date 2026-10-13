@@ -15,10 +15,6 @@ namespace Alrauna.Amuse.Editor.Build
     internal sealed class AmusePlatformFinishState
     {
         internal bool HasExecuted { get; set; }
-        /// <summary>True when the build stopped because the user declined
-        /// the unverified-version consent dialog (D8 consent layer). The
-        /// report channel consumes this in the report slice.</summary>
-        internal bool ConsentDeclined { get; set; }
         internal HostLifecycleCapability Lifecycle { get; set; }
         internal int AnalyzedRendererCount { get; set; }
         internal int OpaqueCandidateTriangleCount { get; set; }
@@ -563,7 +559,6 @@ namespace Alrauna.Amuse.Editor.Build
                     UnityEngine.Application.isBatchMode,
                     consentPresenter ?? VersionConsentDialog.Present))
             {
-                state.ConsentDeclined = true;
                 AmuseReports.ConsentDeclined(subjects);
                 return;
             }
@@ -828,6 +823,42 @@ namespace Alrauna.Amuse.Editor.Build
                             record.Failure));
                 }
 
+                // A resolved slot can still carry refused material resolutions. The
+                // slot stays resolved and the triangles classify Unknown; this entry
+                // names the lost proof reason. Diagnostic only: no census record.
+                if (resolved.Refusal == RendererAnalysisRefusal.None)
+                {
+                    for (var slotIndex = 0;
+                         slotIndex < resolved.SlotResults.Length;
+                         slotIndex++)
+                    {
+                        var slotResult = resolved.SlotResults[slotIndex];
+                        if (!slotResult.IsResolved)
+                        {
+                            continue; // refused slots report through the fold loop above.
+                        }
+                        for (var i = 0;
+                             i < slotResult.MaterialResolutions.Count;
+                             i++)
+                        {
+                            var resolution = slotResult.MaterialResolutions[i];
+                            if (resolution.IsResolved)
+                            {
+                                continue;
+                            }
+                            // Load-bearing indirection: resolution i names the
+                            // material at the slot's admitted index, and admission
+                            // indices are not contiguous. AdmittedMaterials[i]
+                            // compiles and misnames the material.
+                            var offender = evidence.AdmittedMaterials[
+                                slots[slotIndex].AdmittedMaterialIndices[i]];
+                            AmuseReports.SlotResolutionRefused(
+                                renderer, slotIndex, renderer.gameObject.name,
+                                offender, resolution.Failure);
+                        }
+                    }
+                }
+
                 var opaqueCandidateTriangleCount = 0;
                 var extractionMeshSubMeshCount = -1;
                 var extractionMaterialSlotCount = -1;
@@ -914,6 +945,68 @@ namespace Alrauna.Amuse.Editor.Build
                             ? AmuseReports.ClosureFailureSentence(
                                 evidence.SlotClosureFailures[0].Failure)
                             : null);
+                    // A renderer refusal suppresses the per-slot loops below,
+                    // so the slots' captured facts would die. Report exactly
+                    // the facts that did not surface: with empty slot
+                    // results, every slot; otherwise only resolved slots,
+                    // because refused slots folded their facts already.
+                    // Report-only: no census record, and the host-structural
+                    // path never reaches this point with captured evidence.
+                    for (var slotIndex = 0;
+                         slotIndex < slots.Count;
+                         slotIndex++)
+                    {
+                        var foldedAlready =
+                            resolved.SlotResults.Length > 0 &&
+                            !resolved.SlotResults[slotIndex].IsResolved;
+                        if (foldedAlready)
+                        {
+                            continue;
+                        }
+
+                        var slotEvidence = slots[slotIndex];
+                        foreach (var captureRefusal in
+                                 slotEvidence.CaptureRefusals)
+                        {
+                            AmuseReports.TextureCaptureRefusal(
+                                renderer,
+                                slotIndex,
+                                captureRefusal);
+                        }
+
+                        foreach (var noAlphaProperty in
+                                 slotEvidence.NoAlphaChannelProperties)
+                        {
+                            AmuseReports.TextureAlphaMissing(
+                                renderer,
+                                slotIndex,
+                                noAlphaProperty);
+                        }
+
+                        // Locked identity: emit at the first carrier in
+                        // material order.
+                        foreach (var materialIndex in
+                                 slotEvidence.AdmittedMaterialIndices)
+                        {
+                            var material =
+                                evidence.AdmittedMaterials[materialIndex];
+                            if (material.LockedIdentityRefusal !=
+                                RendererAnalysisRefusal.None)
+                            {
+                                AmuseReports.SlotAnalysisRefusal(
+                                    renderer,
+                                    slotIndex,
+                                    material.LockedIdentityRefusal,
+                                    renderer.gameObject.name,
+                                    material,
+                                    unknownReason: null,
+                                    captureRefusals: null,
+                                    closureWaySentence: null);
+                                break;
+                            }
+                        }
+                    }
+
                     continue;
                 }
 
@@ -1426,9 +1519,13 @@ namespace Alrauna.Amuse.Editor.Build
                 }
 
                 anySlotResolved = true;
+                // The deduped list keeps feeding classification; the raw
+                // list rides along so reporting can attribute a refused
+                // resolution to its own admitted material.
                 slotResults[slotIndex] = SlotResolutionResult.Resolved(
                     AdmittedMaterialStates.DistinctResolutions(
-                        resolved.Resolutions));
+                        resolved.Resolutions),
+                    resolved.MaterialResolutions);
             }
 
             // Nothing resolved, so there is no partial result to preserve and

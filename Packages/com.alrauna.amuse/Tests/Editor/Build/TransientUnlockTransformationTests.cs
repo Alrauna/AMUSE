@@ -502,6 +502,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The restore-mismatch refusal reaches the NDMF console as the
+        /// broken fact, not the bare cause name: the entry for a member
+        /// that failed verification through an unresolvable recorded GUID
+        /// renders the first broken fact from the restore verification
+        /// contract. The unresolvable GUID leaves the locked shader
+        /// bound, so the name fact precedes the GUID fact for this
+        /// shape.
+        /// </summary>
+        [Test]
+        public void
+            TransientUnlockRestoreMismatchEntryCarriesTheMismatchFact()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE mismatch report fixture");
+            var failing = Track(
+                TransientUnlockTestLifecycle.LockedMaterial("ReportCape"));
+            // The member fails verification for real: the recorded
+            // original shader GUID resolves to no asset.
+            failing.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                "0123456789abcdef0123456789abcdef");
+            var sibling = Track(VerifiedOpaqueFixtureMaterial());
+            var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, failing, sibling));
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // The scenario held: the restore failed and the named slot
+            // refusal was recorded.
+            Assert.That(state, Is.Not.Null,
+                "the build must complete with the refused slot");
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockRestoreMismatch),
+                Is.EqualTo(1),
+                "the failing member must take the named slot refusal");
+
+            var mismatchReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey ==
+                    "amuse.slotSeparation" +
+                    ".TransientUnlockRestoreMismatch")
+                {
+                    mismatchReports.Add(entry);
+                }
+            }
+
+            Assert.That(
+                mismatchReports, Has.Count.EqualTo(1),
+                "NDMF console must receive exactly one " +
+                "restore-mismatch report");
+            var message = mismatchReports[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain(renderer.gameObject.name));
+            Assert.That(message, Does.Contain("slot 0"));
+            Assert.That(message, Does.Contain(
+                    "the clone shader name does not match the " +
+                    "recorded original shader name"),
+                "the console description must carry the broken fact, " +
+                "not the bare cause name");
+        }
+
+        /// <summary>
         /// F5. Suffixed clip bindings survive swap-in, transformation, and
         /// the reversion as live. The named wrong implementation renames
         /// a build copy for diagnostics, which orphans every suffixed
@@ -1007,6 +1084,402 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "can prove the inversion");
             Assert.That(locked.shader, Is.EqualTo(lockedShaderBefore),
                 "the locked original keeps its locked stand-in shader");
+        }
+
+        /// <summary>
+        /// The close-time graph enumeration is an avatar refusal surface:
+        /// when the close cannot enumerate the committed graph through the
+        /// null-bindings sentinel, the retention it names must also reach
+        /// the NDMF console as one avatar-scoped entry. The named wrong
+        /// implementation is the close that retains the clone and names
+        /// only the per-slot retention, leaving the avatar refusal
+        /// unreported.
+        /// </summary>
+        [Test]
+        public void CloseTimeGraphRefusalReportsOneAvatarEntry()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot(
+                "AMUSE close refusal report fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
+                    "CloseRefusalReportCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+
+            Material unlockedClone = null;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                unlockedClone = context
+                    .GetState<TransientUnlockWindowState>()
+                    .OpenPairs[0].UnlockedClone;
+                // The committed graph is unavailable to the close pass:
+                // no host bindings were retained, so the close hits its
+                // null-bindings sentinel.
+                context.GetState<AmusePlatformFinishState>()
+                    .AnimatorBindings = null;
+            };
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier, the real transformation, and the real close, or
+            // the assertions below prove nothing.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(unlockedClone, Is.Not.Null,
+                "the swapped pair must hold its unlocked clone at " +
+                "close");
+
+            // The close retained the pair: the clone stays alive and the
+            // retention is named once for the affected slot.
+            Assert.That(unlockedClone == null, Is.False,
+                "the close must keep the clone alive when the committed " +
+                "graph cannot be enumerated");
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(1),
+                "the retention of the clone is named once for the " +
+                "affected slot");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the retained pair stays in the window until a close " +
+                "can prove the inversion");
+
+            // The avatar refusal the close hit is named on the console:
+            // exactly one avatar-scoped entry.
+            var avatarReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey.StartsWith("amuse.avatar."))
+                {
+                    avatarReports.Add(entry);
+                }
+            }
+
+            Assert.That(
+                avatarReports, Has.Count.EqualTo(1),
+                "NDMF console must receive exactly one avatar-scoped " +
+                "report for the close-time graph refusal");
+        }
+
+        /// <summary>
+        /// The slot-less pair disposition, pinned on both close paths. A
+        /// pair whose every swap failed records no slots, so the
+        /// retention has no slot or renderer scope to name. On the
+        /// refusal-driven path the close emits exactly the one
+        /// avatar-scoped entry for the unproven graph, zero
+        /// slot-separation retention entries, and keeps the pair open.
+        /// On the proven path the clone is destroyed and the pair
+        /// leaves the window with zero close entries. The build's
+        /// informational summary is the only other report on both
+        /// paths. Spec D6 decided doc-only.
+        /// </summary>
+        [Test]
+        [TestCase(false)]
+        [TestCase(true)]
+        public void SlotLessPairDispositionIsPinned(bool retentionPath)
+        {
+            // Characterization: pins today's slot-less pair disposition. Spec D6 decided doc-only.
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot("AMUSE slot-less pair fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedMaterial(
+                    "SlotLessCape"));
+            var opaque = Track(VerifiedOpaqueFixtureMaterial());
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, opaque));
+            // The swap clip names the material the slot already holds,
+            // so the pipeline runs its real capture and apply while the
+            // swap-in recognizes no locked identity and opens no pair.
+            // The test then opens the pair through the window's own
+            // OpenPair factory and performs no slot swaps, the direct
+            // form of the swap-in's SwapSlot false path.
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, opaque);
+
+            var pairAtClose =
+                default(TransientUnlockWindowState.SwappedPair);
+            var cloneAtClose = default(Material);
+            var slotCountAtClose = -1;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var window = context
+                    .GetState<TransientUnlockWindowState>();
+                pairAtClose = window.OpenPair(locked);
+                pairAtClose.UnlockedClone = Track(
+                    UnityEngine.Object.Instantiate(locked));
+                cloneAtClose = pairAtClose.UnlockedClone;
+                slotCountAtClose = pairAtClose.Slots.Count;
+                if (retentionPath)
+                {
+                    // The committed graph is unavailable to the close
+                    // pass: no host bindings were retained, so the close
+                    // hits its null-bindings sentinel.
+                    context.GetState<AmusePlatformFinishState>()
+                        .AnimatorBindings = null;
+                }
+            };
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // The observed report keys, so a failure names the entries
+            // the build carried instead of a bare count, and the
+            // scope-split the assertions read. The plugin reports one
+            // informational build summary on every analyzed build, so
+            // the close-path counts read against that baseline.
+            var observedKeys = new List<string>();
+            var summaryReports = new List<ErrorContext>();
+            var avatarReports = new List<ErrorContext>();
+            var slotRetentionReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                observedKeys.Add(
+                    entry.TheError is SimpleError simple
+                        ? simple.TitleKey
+                        : entry.TheError?.GetType().Name ?? "null error");
+                if (!(entry.TheError is SimpleError keyed))
+                {
+                    continue;
+                }
+
+                if (keyed.TitleKey == "amuse.summary.Title")
+                {
+                    summaryReports.Add(entry);
+                }
+
+                if (keyed.TitleKey.StartsWith("amuse.avatar."))
+                {
+                    avatarReports.Add(entry);
+                }
+
+                if (keyed.TitleKey.StartsWith("amuse.slotSeparation."))
+                {
+                    slotRetentionReports.Add(entry);
+                }
+            }
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier and the real close, and the pair the close saw
+            // must have recorded no slots, or the assertions below
+            // prove nothing.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(pairAtClose, Is.Not.Null,
+                "the fixture must arm one open pair before the close");
+            Assert.That(slotCountAtClose, Is.EqualTo(0),
+                "the fixture's pair must record no slots");
+
+            if (!retentionPath)
+            {
+                // The proven path: nothing names the clone, so the close
+                // destroys it and drains the window without naming
+                // anything. The build's informational summary is the
+                // only captured entry.
+                Assert.That(summaryReports, Has.Count.EqualTo(1),
+                    "the build's informational summary is the " +
+                    "baseline entry");
+                Assert.That(avatarReports, Is.Empty,
+                    "the proven close emits zero avatar entries");
+                Assert.That(slotRetentionReports, Is.Empty,
+                    "the proven close emits zero slot-separation " +
+                    "entries");
+                Assert.That(errors, Has.Count.EqualTo(1),
+                    "the close emits zero entries: the build carried " +
+                    string.Join(", ", observedKeys));
+                Assert.That(cloneAtClose == null, Is.True,
+                    "the close destroyed the unlocked clone of the " +
+                    "slot-less pair");
+                Assert.That(
+                    TransientUnlockTestKnobs.Window.OpenPairs,
+                    Is.Empty,
+                    "the destroyed pair left the window");
+                return;
+            }
+
+            // The retention path: the close cannot prove the inversion,
+            // the pair records no slots, so no slot-separation retention
+            // entry is emitted and the avatar entry alone names the
+            // cause for the whole build.
+            Assert.That(
+                summaryReports, Has.Count.EqualTo(1),
+                "the build's informational summary is the " +
+                "baseline entry");
+            Assert.That(
+                avatarReports, Has.Count.EqualTo(1),
+                "the refusal-driven close names the cause for the " +
+                "whole build in exactly one avatar-scoped entry");
+            Assert.That(
+                slotRetentionReports, Is.Empty,
+                "a slot-less pair has no slot scope to report " +
+                "against, so the retention emits zero " +
+                "slot-separation entries");
+            Assert.That(errors, Has.Count.EqualTo(2),
+                "the avatar entry is the close's whole report over " +
+                "the build summary, but the build carried: " +
+                string.Join(", ", observedKeys));
+            Assert.That(state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .TransientUnlockCloneRetained),
+                Is.EqualTo(0),
+                "a pair with no slots records no slot refusal");
+            Assert.That(cloneAtClose == null, Is.False,
+                "the close keeps the clone alive when it cannot " +
+                "prove the inversion");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "the slot-less pair stays in the window: its " +
+                "retention is silent by contract");
+        }
+
+        /// <summary>
+        /// --- Falsifier 5: reporting the avatar refusal in both the
+        /// barrier and the close pass. ---
+        /// A barrier avatar refusal returns before the swap-in opens
+        /// pairs, and the close exits when no pairs exist, so the
+        /// close-time report can never duplicate the barrier's entry: the
+        /// refused build carries exactly one avatar-scoped entry, the
+        /// barrier's. The barrier entry count is asserted as a no-op
+        /// guard, so a later change that silences the barrier cannot turn
+        /// this test green.
+        /// </summary>
+        [Test]
+        public void ClosePassAddsNoAvatarEntryWhenTheBarrierAlreadyRefused()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = BuildAvatarRoot(
+                "AMUSE barrier refused close fixture");
+            var locked = Track(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
+                    "BarrierRefusedCloseCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, locked));
+            var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, renderer, 0, locked);
+            // An animation event lies outside the admitted animation value
+            // model, so the structural enumeration refuses the avatar
+            // before the barrier's swap-in can open a pair.
+            AnimationUtility.SetAnimationEvents(clip, new[]
+            {
+                new AnimationEvent
+                {
+                    time = 0f,
+                    functionName = "AmuseFalsifierFixture",
+                },
+            });
+
+            AmusePlatformFinishState state = null;
+            var errors = ErrorReport.CaptureErrors(() =>
+            {
+                state = AvatarProcessor.ProcessAvatar(
+                        root,
+                        TransientUnlockTransformationTestPlugin
+                            .PlatformInstance)
+                    .GetState<AmusePlatformFinishState>();
+            });
+
+            // No-op guards: the fixture must have exercised the real
+            // barrier, the real transformation, and the real close, or
+            // the assertions below prove nothing.
+            Assert.That(
+                TransientUnlockTransformationTestPlugin.LastBarrierError,
+                Is.Null,
+                "the barrier threw: " +
+                TransientUnlockTransformationTestPlugin.LastBarrierError);
+            Assert.That(
+                TransientUnlockTestKnobs.LastCloseError,
+                Is.Null,
+                "the window close threw: " +
+                TransientUnlockTestKnobs.LastCloseError);
+            Assert.That(
+                state.AvatarRefusal,
+                Is.EqualTo(
+                    AvatarAnimationRefusal.AnimationEventPresent),
+                "the fixture must refuse avatar-wide at the barrier");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Is.Empty,
+                "a barrier-refused build never opens a pair, so the " +
+                "close exits before any reporting");
+
+            var avatarReports = new List<ErrorContext>();
+            var barrierReports = new List<ErrorContext>();
+            foreach (var entry in errors)
+            {
+                if (entry.TheError is SimpleError simple &&
+                    simple.TitleKey.StartsWith("amuse.avatar."))
+                {
+                    avatarReports.Add(entry);
+                    if (simple.TitleKey ==
+                        "amuse.avatar.AnimationEventPresent")
+                    {
+                        barrierReports.Add(entry);
+                    }
+                }
+            }
+
+            // The no-op guard: the barrier named the cause exactly once.
+            Assert.That(
+                barrierReports, Has.Count.EqualTo(1),
+                "the barrier must report the avatar refusal exactly " +
+                "once, or the zero-entry assertion below proves " +
+                "nothing");
+            Assert.That(
+                avatarReports, Has.Count.EqualTo(1),
+                "the barrier's avatar entry is the build's only " +
+                "avatar-scoped report: the close adds none");
         }
 
         /// <summary>
