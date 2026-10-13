@@ -1131,7 +1131,7 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Maps the optimizer's "Minimum Opaque Coverage Percentage"
+        /// Maps the optimizer's "Minimum Opaque Coverage to Convert (Per Material)"
         /// policy to the gate: a stored value below zero is a defect
         /// against the Range attribute, and the defensive read treats
         /// it as 0, which always splits on at least one proven
@@ -1179,7 +1179,7 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Maps the optimizer's "Alpha Upper Clamp (Per Polygon)"
+        /// Maps the optimizer's "Alpha Upper Clamp to Convert (Per Polygon)"
         /// policy to the proof's noise percent. The parser enforces
         /// the clamp pair invariant for preset files, and the
         /// inspector enforces it for live edits. This method keeps
@@ -1207,8 +1207,8 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Maps the optimizer's "Minimum Opaque Coverage (Per
-        /// Polygon)" policy to the classifier's density bound. The
+        /// Maps the optimizer's "Minimum Opaque Coverage to Convert
+        /// (Per Polygon)" policy to the classifier's density bound. The
         /// coverage share and the tolerated stray share are
         /// complements, so a coverage of 98 maps to a density bound
         /// of 2. A coverage of 100 maps to the inert 0, which never
@@ -1236,7 +1236,7 @@ namespace Alrauna.Amuse.Editor.Build
             if (stored > 100)
             {
                 throw new InvalidOperationException(
-                    "AMUSE Minimum Opaque Coverage (Per Polygon) is " +
+                    "AMUSE Minimum Opaque Coverage to Convert (Per Polygon) is " +
                     "stored as " + stored + ", outside the 0 to 100 " +
                     "range.");
             }

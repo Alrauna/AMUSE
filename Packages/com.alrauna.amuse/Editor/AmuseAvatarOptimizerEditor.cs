@@ -167,7 +167,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent MaterialCoverageRowContent =
             new GUIContent(
-                "Minimum Opaque Coverage (Per Material)",
+                "Minimum Opaque Coverage to Convert (Per Material)",
                 "AMUSE moves proven opaque triangles of a mixed " +
                 "material onto a separate opaque material. Each " +
                 "split adds one draw call, and draw calls cost " +
@@ -182,7 +182,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent TextureClampRowContent =
             new GUIContent(
-                "Alpha Upper Clamp (Per Texture)",
+                "Alpha Upper Clamp to Convert (Per Texture)",
                 "Alpha is how strong transparency is. A value " +
                 "of 100 is fully opaque. Some mixed transparent " +
                 "and opaque materials hold texels that are " +
@@ -200,7 +200,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent PolygonCoverageRowContent =
             new GUIContent(
-                "Minimum Opaque Coverage (Per Polygon)",
+                "Minimum Opaque Coverage to Convert (Per Polygon)",
                 "The minimum percentage of a polygon's texels " +
                 "that must stay at or above the per-polygon " +
                 "clamp before AMUSE moves the polygon onto an " +
@@ -217,7 +217,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent PolygonClampRowContent =
             new GUIContent(
-                "Alpha Upper Clamp (Per Polygon)",
+                "Alpha Upper Clamp to Convert (Per Polygon)",
                 "Alpha below this value is a stray texel on the " +
                 "polygon. AMUSE ignores strays only while the " +
                 "coverage slider passes. Lowering this value " +
