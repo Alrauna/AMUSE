@@ -313,14 +313,49 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// One Information entry per prepared slot whose conversion used
         /// the revised premultiply premise: the source scaled its color
-        /// by alpha, the proof moves only triangles whose alpha is
-        /// exactly one, and the opaque material reproduces those colors
-        /// exactly. A slot without a premultiply conversion reports
-        /// nothing here, exactly as before.
+        /// by alpha, and the moved triangles' alpha is exactly one, so
+        /// the opaque material reproduces those colors exactly. A slot
+        /// with a folded submesh selects the folded entries instead,
+        /// which name the preserve setting and never claim exact
+        /// colors, because the fold moved unproven triangles too. A
+        /// slot without a premultiply conversion reports nothing here,
+        /// exactly as before.
         /// </summary>
         internal static void SlotSeparationPremultiplyNormalization(
             Renderer renderer,
             int slotIndex,
+            string rendererName = null,
+            bool slotHasFoldedSubmeshes = false)
+        {
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    slotHasFoldedSubmeshes
+                        ? AmuseReportStrings
+                            .SlotSeparationPremultiplyNormalizationFoldedKey
+                        : AmuseReportStrings
+                            .SlotSeparationPremultiplyNormalizationKey,
+                    slotIndex,
+                    rendererName);
+            }
+        }
+
+        /// <summary>
+        /// One Information entry per folded surviving submesh whose
+        /// triangles moved onto the opaque material without an opacity
+        /// proof: the preserve fold moved a split whose unproven share
+        /// sat below the preserve setting. The report names the
+        /// renderer, the slot, and the exact unproven triangle count,
+        /// so the user can weigh the flatten against the setting. A
+        /// submesh without a fold reports nothing here, exactly as
+        /// before, and a refused slot never reaches its report.
+        /// </summary>
+        internal static void SlotSeparationForcedOpaque(
+            Renderer renderer,
+            int slotIndex,
+            int unprovenTriangleCount,
             string rendererName = null)
         {
             using (ErrorReport.WithContextObject(renderer))
@@ -328,10 +363,10 @@ namespace Alrauna.Amuse.Editor.Build
                 ErrorReport.ReportError(
                     Localizer,
                     ErrorSeverity.Information,
-                    AmuseReportStrings
-                        .SlotSeparationPremultiplyNormalizationKey,
+                    AmuseReportStrings.SlotSeparationForcedOpaqueKey,
                     slotIndex,
-                    rendererName);
+                    rendererName,
+                    UnprovenTrianglesPhrase(unprovenTriangleCount));
             }
         }
         /// <summary>
@@ -538,6 +573,18 @@ namespace Alrauna.Amuse.Editor.Build
             return count == 1
                 ? "1 material slot"
                 : count + " material slots";
+        }
+
+        /// <summary>
+        /// The unproven triangle count as a count phrase, so the forced
+        /// report reads as plain English for every count. The caller-side
+        /// pluralization follows <see cref="SlotCountPhrase"/>.
+        /// </summary>
+        private static string UnprovenTrianglesPhrase(int count)
+        {
+            return count == 1
+                ? "1 unproven triangle"
+                : count + " unproven triangles";
         }
 
         internal static void ConsentDeclined(

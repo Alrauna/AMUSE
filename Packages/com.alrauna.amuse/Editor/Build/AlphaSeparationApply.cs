@@ -893,9 +893,12 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Counts the triangles an applied write actually moved to
-        /// proven-opaque rendering: the opaque triangles of surviving slots
+        /// opaque rendering: the opaque triangles of surviving slots
         /// whose material result differs from what the renderer held, plus
         /// the appended submeshes' triangles for surviving Split slots.
+        /// Every candidate whose slot matches a changed material adds, so
+        /// a slot that binds several folded submeshes counts each submesh
+        /// once.
         /// </summary>
         private static int CountOpaqueTriangles(
             AlphaSeparationRendererWrite write,
@@ -933,7 +936,6 @@ namespace Alrauna.Amuse.Editor.Build
                     if (candidate.Plan.SourceMaterialBindingIndex == slot)
                     {
                         total += candidate.Plan.OpaqueTriangleOrdinals.Count;
-                        break;
                     }
                 }
             }

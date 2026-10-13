@@ -569,6 +569,122 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void SlotSeparationForcedOpaqueNamesRendererSlotCountCauseAndSetting()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationForcedOpaque(
+                    _renderer, 3, 7, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(AmuseReportStrings.SlotSeparationForcedOpaqueKey),
+                "the entry must use the exact forced-opaque key");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("slot 3 of renderer 'Body'"),
+                "the report must name the renderer and the slot");
+            Assert.That(message, Does.Contain("7 unproven triangles"),
+                "the report must name the exact unproven triangle count");
+            Assert.That(
+                message,
+                Does.Contain("The moved triangles have no opacity proof."),
+                "the report must state the forced premise");
+            Assert.That(
+                message,
+                Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the report must name the exact setting");
+
+            // NDMF renders the hint outside ToMessage, so the actionable
+            // guidance is checked through the formatted hint of the same
+            // report entry.
+            var hint = simple.FormatHint();
+            Assert.That(hint, Is.Not.Null);
+            Assert.That(
+                hint,
+                Does.Contain(
+                    "Lower Minimum Opaque Coverage to Preserve on the " +
+                    "AMUSE Avatar Optimizer component"),
+                "the hint must name the setting and the component");
+        }
+
+        [Test]
+        public void SlotSeparationForcedOpaqueRendersTheSingularCount()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationForcedOpaque(
+                    _renderer, 0, 1, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("1 unproven triangle of"),
+                "the report must name the exact unproven triangle count");
+            Assert.That(
+                message, Does.Not.Contain("1 unproven triangles"),
+                "the count phrase must read as plain English for one " +
+                "triangle");
+        }
+
+        [Test]
+        public void SlotSeparationPremultiplyNormalizationSelectsTheFoldedEntries()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationPremultiplyNormalization(
+                    _renderer, 2, "Body", slotHasFoldedSubmeshes: true));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(
+                    AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationFoldedKey),
+                "a folded slot must select the folded premultiply entries");
+
+            // Falsifier: an emitter that swaps the two arguments names
+            // the renderer as the slot and the slot as the renderer.
+            var message = errors[0].TheError.ToMessage();
+            Assert.That(message, Does.Contain("slot 2 of renderer 'Body'"));
+            Assert.That(
+                message, Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the folded entry must name the preserve setting");
+            Assert.That(
+                message,
+                Does.Not.Contain(
+                    "The opaque material reproduces those colors exactly."),
+                "a folded slot moved unproven triangles, so the entry " +
+                "must not claim exact colors");
+        }
+
+        [Test]
+        public void SlotSeparationPremultiplyNormalizationKeepsTheProvenEntries()
+        {
+            var errors = ErrorReport.CaptureErrors(() =>
+                AmuseReports.SlotSeparationPremultiplyNormalization(
+                    _renderer, 2, "Body"));
+
+            Assert.That(errors, Has.Count.EqualTo(1));
+            var simple = errors[0].TheError as SimpleError;
+            Assert.That(simple, Is.Not.Null);
+            Assert.That(
+                simple.TitleKey,
+                Is.EqualTo(
+                    AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationKey),
+                "a slot without a folded submesh keeps the proven entries");
+            Assert.That(
+                errors[0].TheError.ToMessage(),
+                Does.Contain(
+                    "The opaque material reproduces those colors exactly."),
+                "a genuinely proven slot keeps the exact-color sentence");
+        }
+
+        [Test]
         public void SlotAnalysisRefusalThrowsOnNoneCause()
         {
             Assert.That(

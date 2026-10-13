@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Safe",
-  "description": "Keeps anisotropy checks and does not allow slot or depth-test exceptions.",
+  "description": "Accepts desktop and mobile anisotropy differences. It does not allow slot or depth-test exceptions, and it never flattens a mixed material.",
   "features": {
     "alphaSeparator": true
   },
@@ -9,12 +9,13 @@
     "preserveTransparencyMaxMipLevel": 4,
     "preserveTransparencyMinTextureSize": 128,
     "minimumOpaqueCoveragePercent": 25,
+    "minimumOpaqueCoverageToPreservePercent": 0,
     "minimumOpaqueAlphaPercent": 100,
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,
     "allowDepthTestChange": false,
     "ignoreOutOfRangeMaterialSlots": false,
-    "acceptDesktopAnisotropyDifferences": false,
-    "acceptMobileAnisotropyDifferences": false
+    "acceptDesktopAnisotropyDifferences": true,
+    "acceptMobileAnisotropyDifferences": true
   }
 }

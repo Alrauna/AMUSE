@@ -61,11 +61,24 @@ namespace Alrauna.Amuse.Runtime
         /// share can cost more CPU than it saves GPU work. The value 0
         /// always splits when at least one triangle is proven opaque.
         /// The default of 25 percent is a rule of thumb. The inspector
-        /// shows it as "Minimum Opaque Coverage (Per Material)".
+        /// shows it as "Minimum Opaque Coverage to Convert (Per Material)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
         private int _minimumOpaqueCoveragePercent = 25;
+
+        /// <summary>
+        /// The largest unproven share, in percent, a material slot's
+        /// submeshes can hold and still skip the split. A slot whose every
+        /// submesh sits strictly below this value flattens onto the opaque
+        /// material without proof, which can lose transparency as a visible
+        /// artifact. The value 0 never flattens, so avatars saved before
+        /// this field gain no silent flattening. The inspector shows it as
+        /// "Minimum Opaque Coverage to Preserve (Per Material)".
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _minimumOpaqueCoverageToPreservePercent = 0;
 
         /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence
@@ -74,7 +87,7 @@ namespace Alrauna.Amuse.Runtime
         /// opacity becomes fully opaque after a move, so a value below
         /// 100 consents to that flattening. The default of 100 is inert:
         /// only exact full opacity is opaque evidence, as before. The
-        /// inspector shows it as "Alpha Upper Clamp (Per Texture)".
+        /// inspector shows it as "Alpha Upper Clamp to Convert (Per Texture)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
@@ -88,7 +101,7 @@ namespace Alrauna.Amuse.Runtime
         /// strays become fully opaque after a move, so a value below
         /// 100 consents to that flattening. The default of 100 is
         /// inert: nothing is a stray. The inspector shows it as
-        /// "Alpha Upper Clamp (Per Polygon)".
+        /// "Alpha Upper Clamp to Convert (Per Polygon)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
@@ -99,8 +112,8 @@ namespace Alrauna.Amuse.Runtime
         /// percent, that must stay non-stray before AMUSE ignores the
         /// strays. Lowering it lets AMUSE ignore denser strays. The
         /// default of 100 is inert: no share of strays is ever
-        /// ignored. The inspector shows it as "Minimum Opaque Coverage
-        /// (Per Polygon)".
+        /// ignored. The inspector shows it as
+        /// "Minimum Opaque Coverage to Convert (Per Polygon)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
@@ -183,6 +196,14 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public int MinimumOpaqueCoveragePercent =>
             _minimumOpaqueCoveragePercent;
+
+        /// <summary>
+        /// The largest unproven triangle share, in percent, a slot's
+        /// submeshes can hold and still flatten onto the opaque material.
+        /// The value 0 never flattens.
+        /// </summary>
+        public int MinimumOpaqueCoverageToPreservePercent =>
+            _minimumOpaqueCoverageToPreservePercent;
 
         /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence

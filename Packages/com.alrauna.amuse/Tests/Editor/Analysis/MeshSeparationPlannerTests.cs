@@ -553,5 +553,250 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 plan.Source.Submeshes[0].Outcomes[0],
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
+
+        // --- Falsifier 6: stale aggregates ---
+        [Test]
+        public void WithFoldedSubmeshesEntryPointExistsAsNoOpGuard()
+        {
+            Assert.That(
+                (Func<MeshSeparationPlan, IReadOnlyList<SubmeshSeparationPlan>,
+                    MeshSeparationPlan>)MeshSeparationPlanner.WithFoldedSubmeshes,
+                Is.Not.Null);
+        }
+
+        [Test]
+        public void FoldedMergesBothOrdinalListsIntoOneAscendingOpaqueList()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmesh(
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.MustRemainTransparent,
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.Unknown));
+
+            var folded = MeshSeparationPlanner.Folded(plan.Submeshes[0]);
+
+            Assert.That(
+                folded.Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.WhollyOpaqueCandidate));
+            AssertOrdinals(folded.OpaqueTriangleOrdinals, 0, 1, 2, 3);
+            AssertOrdinals(folded.TransparentTriangleOrdinals);
+            Assert.That(folded.SourceSubmeshIndex, Is.Zero);
+            AssertOrdinals(plan.Submeshes[0].OpaqueTriangleOrdinals, 0, 2);
+            AssertOrdinals(plan.Submeshes[0].TransparentTriangleOrdinals, 1, 3);
+        }
+
+        [Test]
+        public void FoldedCarriesSourceProvenanceFromTheOriginalEntry()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmeshWithBinding(
+                7,
+                TriangleAlphaOutcome.Unknown,
+                TriangleAlphaOutcome.MustRemainTransparent));
+
+            var folded = MeshSeparationPlanner.Folded(plan.Submeshes[0]);
+
+            Assert.That(folded.SourceSubmeshIndex, Is.Zero);
+            Assert.That(folded.SourceMaterialBindingIndex, Is.EqualTo(7));
+            AssertOrdinals(folded.OpaqueTriangleOrdinals, 0, 1);
+            AssertOrdinals(folded.TransparentTriangleOrdinals);
+        }
+
+        [Test]
+        public void FoldingEverySplittableSubmeshClearsRequiresAnySplitAndRecomputesCounts()
+        {
+            var input = new MeshSeparationInput(
+                36,
+                new[]
+                {
+                    new SubmeshSeparationInput(
+                        4,
+                        new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 },
+                        new[]
+                        {
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.MustRemainTransparent,
+                            TriangleAlphaOutcome.Unknown
+                        }),
+                    new SubmeshSeparationInput(
+                        2,
+                        new[] { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 },
+                        new[]
+                        {
+                            TriangleAlphaOutcome.MustRemainTransparent,
+                            TriangleAlphaOutcome.MustRemainTransparent,
+                            TriangleAlphaOutcome.MustRemainTransparent,
+                            TriangleAlphaOutcome.MustRemainTransparent
+                        }),
+                    new SubmeshSeparationInput(
+                        4,
+                        new[] { 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 },
+                        new[]
+                        {
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.ProvenOpaque
+                        })
+                });
+            var plan = MeshSeparationPlanner.Create(input);
+
+            Assert.That(plan.RequiresAnySplit, Is.True);
+            Assert.That(plan.OpaqueTriangleCount, Is.EqualTo(6));
+            Assert.That(plan.TransparentTriangleCount, Is.EqualTo(6));
+
+            var foldedPlan = MeshSeparationPlanner.WithFoldedSubmeshes(
+                plan,
+                new[] { MeshSeparationPlanner.Folded(plan.Submeshes[0]) });
+
+            Assert.That(
+                foldedPlan.Submeshes[0].Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.WhollyOpaqueCandidate));
+            AssertOrdinals(foldedPlan.Submeshes[0].OpaqueTriangleOrdinals, 0, 1, 2, 3);
+            AssertOrdinals(foldedPlan.Submeshes[0].TransparentTriangleOrdinals);
+            Assert.That(foldedPlan.Submeshes[1], Is.SameAs(plan.Submeshes[1]));
+            Assert.That(foldedPlan.Submeshes[2], Is.SameAs(plan.Submeshes[2]));
+            Assert.That(foldedPlan.HasAnyOpaqueCandidates, Is.True);
+            Assert.That(foldedPlan.RequiresAnySplit, Is.False);
+            Assert.That(foldedPlan.OpaqueTriangleCount, Is.EqualTo(8));
+            Assert.That(foldedPlan.TransparentTriangleCount, Is.EqualTo(4));
+            Assert.That(foldedPlan.Source, Is.SameAs(plan.Source));
+        }
+
+        [Test]
+        public void FoldingOneSubmeshKeepsRequiresAnySplitForRemainingSplits()
+        {
+            var input = new MeshSeparationInput(
+                6,
+                new[]
+                {
+                    new SubmeshSeparationInput(
+                        4,
+                        new[] { 0, 1, 2, 3, 4, 5 },
+                        new[]
+                        {
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.MustRemainTransparent
+                        }),
+                    new SubmeshSeparationInput(
+                        8,
+                        new[] { 3, 4, 5, 0, 1, 2 },
+                        new[]
+                        {
+                            TriangleAlphaOutcome.ProvenOpaque,
+                            TriangleAlphaOutcome.Unknown
+                        })
+                });
+            var plan = MeshSeparationPlanner.Create(input);
+
+            Assert.That(plan.RequiresAnySplit, Is.True);
+            Assert.That(plan.OpaqueTriangleCount, Is.EqualTo(2));
+            Assert.That(plan.TransparentTriangleCount, Is.EqualTo(2));
+
+            var foldedPlan = MeshSeparationPlanner.WithFoldedSubmeshes(
+                plan,
+                new[] { MeshSeparationPlanner.Folded(plan.Submeshes[0]) });
+
+            Assert.That(
+                foldedPlan.Submeshes[0].Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.WhollyOpaqueCandidate));
+            Assert.That(foldedPlan.Submeshes[1], Is.SameAs(plan.Submeshes[1]));
+            Assert.That(foldedPlan.RequiresAnySplit, Is.True);
+            Assert.That(foldedPlan.HasAnyOpaqueCandidates, Is.True);
+            Assert.That(foldedPlan.OpaqueTriangleCount, Is.EqualTo(3));
+            Assert.That(foldedPlan.TransparentTriangleCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FoldingAnUnchangedEntryMovesEveryOrdinalIntoTheOpaqueList()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmesh(
+                TriangleAlphaOutcome.MustRemainTransparent,
+                TriangleAlphaOutcome.MustRemainTransparent));
+
+            Assert.That(
+                plan.Submeshes[0].Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.Unchanged));
+
+            var foldedPlan = MeshSeparationPlanner.WithFoldedSubmeshes(
+                plan,
+                new[] { MeshSeparationPlanner.Folded(plan.Submeshes[0]) });
+
+            Assert.That(
+                foldedPlan.Submeshes[0].Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.WhollyOpaqueCandidate));
+            AssertOrdinals(foldedPlan.Submeshes[0].OpaqueTriangleOrdinals, 0, 1);
+            AssertOrdinals(foldedPlan.Submeshes[0].TransparentTriangleOrdinals);
+            Assert.That(foldedPlan.HasAnyOpaqueCandidates, Is.True);
+            Assert.That(foldedPlan.RequiresAnySplit, Is.False);
+            Assert.That(foldedPlan.OpaqueTriangleCount, Is.EqualTo(2));
+            Assert.That(foldedPlan.TransparentTriangleCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FoldedSubmeshesRebuildThrowsForNullArguments()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmesh(
+                TriangleAlphaOutcome.ProvenOpaque));
+
+            Assert.Throws<ArgumentNullException>(() =>
+                MeshSeparationPlanner.WithFoldedSubmeshes(
+                    null,
+                    Array.Empty<SubmeshSeparationPlan>()));
+            Assert.Throws<ArgumentNullException>(() =>
+                MeshSeparationPlanner.WithFoldedSubmeshes(plan, null));
+        }
+
+        [Test]
+        public void FoldedSubmeshesRebuildThrowsForUnknownSubmeshIndex()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmesh(
+                TriangleAlphaOutcome.ProvenOpaque));
+            var stranger = new SubmeshSeparationPlan(
+                5,
+                0,
+                new[] { 0 },
+                Array.Empty<int>(),
+                SubmeshSeparationDisposition.WhollyOpaqueCandidate);
+
+            Assert.Throws<ArgumentException>(() =>
+                MeshSeparationPlanner.WithFoldedSubmeshes(plan, new[] { stranger }));
+        }
+
+        [Test]
+        public void FoldedSubmeshesRebuildThrowsForDuplicateSubmeshIndex()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmesh(
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.MustRemainTransparent));
+            var folded = MeshSeparationPlanner.Folded(plan.Submeshes[0]);
+
+            Assert.Throws<ArgumentException>(() =>
+                MeshSeparationPlanner.WithFoldedSubmeshes(
+                    plan,
+                    new[]
+                    {
+                        folded,
+                        MeshSeparationPlanner.Folded(plan.Submeshes[0])
+                    }));
+        }
+
+        [Test]
+        public void FoldedSubmeshesRebuildThrowsForSourceMaterialBindingMismatch()
+        {
+            var plan = MeshSeparationPlanner.Create(OneSubmeshWithBinding(
+                4,
+                TriangleAlphaOutcome.ProvenOpaque,
+                TriangleAlphaOutcome.MustRemainTransparent));
+            var mismatched = new SubmeshSeparationPlan(
+                0,
+                9,
+                new[] { 0, 1 },
+                Array.Empty<int>(),
+                SubmeshSeparationDisposition.WhollyOpaqueCandidate);
+
+            Assert.Throws<ArgumentException>(() =>
+                MeshSeparationPlanner.WithFoldedSubmeshes(plan, new[] { mismatched }));
+        }
     }
 }

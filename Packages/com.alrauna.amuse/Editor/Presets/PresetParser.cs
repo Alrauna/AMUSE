@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 namespace Alrauna.Amuse.Editor.Presets
 {
     /// <summary>
-    /// Parses preset text against the closed version 2 schema. The
+    /// Parses preset text against the closed version 3 schema. The
     /// parser refuses instead of guessing: an unknown key, a missing
     /// key, a wrong type, or an out-of-range value answers a named
     /// refusal and no preset, because a file must never half-apply.
@@ -15,7 +15,7 @@ namespace Alrauna.Amuse.Editor.Presets
     /// </summary>
     internal static class PresetParser
     {
-        internal const int CurrentSchemaVersion = 2;
+        internal const int CurrentSchemaVersion = 3;
 
         private static readonly string[] FileKeys =
             { "schemaVersion", "name", "description", "features", "settings" };
@@ -27,6 +27,7 @@ namespace Alrauna.Amuse.Editor.Presets
             "preserveTransparencyMaxMipLevel",
             "preserveTransparencyMinTextureSize",
             "minimumOpaqueCoveragePercent",
+            "minimumOpaqueCoverageToPreservePercent",
             "minimumOpaqueAlphaPercent",
             "polygonAlphaUpperClampPercent",
             "polygonMinimumOpaqueCoveragePercent",
@@ -105,6 +106,9 @@ namespace Alrauna.Amuse.Editor.Presets
                     settings, "minimumOpaqueCoveragePercent",
                     ref refusal, out var coverage)
                 || !TryReadPercent(
+                    settings, "minimumOpaqueCoverageToPreservePercent",
+                    ref refusal, out var preserveCoverage)
+                || !TryReadPercent(
                     settings, "minimumOpaqueAlphaPercent",
                     ref refusal, out var alphaClamp)
                 || !TryReadPercent(
@@ -141,8 +145,9 @@ namespace Alrauna.Amuse.Editor.Presets
 
             preset = new OptimizerPreset(
                 name, description, alphaSeparator, mipCap, minSize,
-                coverage, alphaClamp, polygonClamp, polygonCoverage,
-                depthTest, ignoreOutOfRange, acceptDesktop, acceptMobile);
+                coverage, preserveCoverage, alphaClamp, polygonClamp,
+                polygonCoverage, depthTest, ignoreOutOfRange,
+                acceptDesktop, acceptMobile);
             return true;
         }
 

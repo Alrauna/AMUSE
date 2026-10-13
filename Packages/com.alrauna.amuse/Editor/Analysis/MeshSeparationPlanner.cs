@@ -216,5 +216,118 @@ namespace Alrauna.Amuse.Editor.Analysis
                 opaqueTriangleCount,
                 transparentTriangleCount);
         }
+
+        internal static SubmeshSeparationPlan Folded(SubmeshSeparationPlan entry)
+        {
+            if (entry == null)
+                throw new ArgumentNullException(nameof(entry));
+
+            var mergedOrdinals = new List<int>(
+                entry.OpaqueTriangleOrdinals.Count +
+                entry.TransparentTriangleOrdinals.Count);
+            for (var index = 0;
+                 index < entry.OpaqueTriangleOrdinals.Count;
+                 index++)
+            {
+                mergedOrdinals.Add(entry.OpaqueTriangleOrdinals[index]);
+            }
+
+            for (var index = 0;
+                 index < entry.TransparentTriangleOrdinals.Count;
+                 index++)
+            {
+                mergedOrdinals.Add(entry.TransparentTriangleOrdinals[index]);
+            }
+
+            mergedOrdinals.Sort();
+
+            return new SubmeshSeparationPlan(
+                entry.SourceSubmeshIndex,
+                entry.SourceMaterialBindingIndex,
+                mergedOrdinals,
+                Array.Empty<int>(),
+                SubmeshSeparationDisposition.WhollyOpaqueCandidate);
+        }
+
+        internal static MeshSeparationPlan WithFoldedSubmeshes(
+            MeshSeparationPlan plan,
+            IReadOnlyList<SubmeshSeparationPlan> foldedEntries)
+        {
+            if (plan == null)
+                throw new ArgumentNullException(nameof(plan));
+            if (foldedEntries == null)
+                throw new ArgumentNullException(nameof(foldedEntries));
+
+            var planSubmeshIndexes = new HashSet<int>();
+            for (var index = 0; index < plan.Submeshes.Count; index++)
+                planSubmeshIndexes.Add(plan.Submeshes[index].SourceSubmeshIndex);
+
+            var foldedBySubmeshIndex =
+                new Dictionary<int, SubmeshSeparationPlan>();
+            for (var index = 0; index < foldedEntries.Count; index++)
+            {
+                var folded = foldedEntries[index];
+                if (folded == null)
+                    throw new ArgumentNullException(nameof(foldedEntries));
+                if (!planSubmeshIndexes.Contains(folded.SourceSubmeshIndex))
+                {
+                    throw new ArgumentException(
+                        "A folded submesh must match a plan entry's "
+                            + "source submesh index.",
+                        nameof(foldedEntries));
+                }
+
+                if (foldedBySubmeshIndex.ContainsKey(folded.SourceSubmeshIndex))
+                {
+                    throw new ArgumentException(
+                        "Each plan entry must receive at most one folded "
+                            + "submesh.",
+                        nameof(foldedEntries));
+                }
+
+                foldedBySubmeshIndex.Add(folded.SourceSubmeshIndex, folded);
+            }
+
+            var submeshPlans = new List<SubmeshSeparationPlan>(plan.Submeshes.Count);
+            var opaqueTriangleCount = 0;
+            var transparentTriangleCount = 0;
+            var hasAnyOpaqueCandidates = false;
+            var requiresAnySplit = false;
+            for (var index = 0; index < plan.Submeshes.Count; index++)
+            {
+                var entry = plan.Submeshes[index];
+                if (foldedBySubmeshIndex.TryGetValue(
+                        entry.SourceSubmeshIndex,
+                        out var folded))
+                {
+                    if (folded.SourceMaterialBindingIndex
+                        != entry.SourceMaterialBindingIndex)
+                    {
+                        throw new ArgumentException(
+                            "A folded submesh must carry the plan entry's "
+                                + "source material binding index.",
+                            nameof(foldedEntries));
+                    }
+
+                    entry = folded;
+                }
+
+                submeshPlans.Add(entry);
+                hasAnyOpaqueCandidates |= entry.OpaqueTriangleOrdinals.Count > 0;
+                requiresAnySplit |=
+                    entry.Disposition == SubmeshSeparationDisposition.Split;
+                opaqueTriangleCount += entry.OpaqueTriangleOrdinals.Count;
+                transparentTriangleCount +=
+                    entry.TransparentTriangleOrdinals.Count;
+            }
+
+            return new MeshSeparationPlan(
+                plan.Source,
+                submeshPlans,
+                hasAnyOpaqueCandidates,
+                requiresAnySplit,
+                opaqueTriangleCount,
+                transparentTriangleCount);
+        }
     }
 }

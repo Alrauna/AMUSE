@@ -72,7 +72,7 @@ namespace Alrauna.Amuse.Editor
         /// <summary>
         /// The preset row. One button per shipped preset file, in the
         /// fixed order safe, normal, aggressive. A button presses only
-        /// while the component matches that preset on all eleven
+        /// while the component matches that preset on all twelve
         /// fields,
         /// so the pressed state is always honest and never stored. A
         /// broken preset file turns the row off with a warning,
@@ -167,7 +167,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent MaterialCoverageRowContent =
             new GUIContent(
-                "Minimum Opaque Coverage (Per Material)",
+                "Minimum Opaque Coverage to Convert (Per Material)",
                 "AMUSE moves proven opaque triangles of a mixed " +
                 "material onto a separate opaque material. Each " +
                 "split adds one draw call, and draw calls cost " +
@@ -180,9 +180,32 @@ namespace Alrauna.Amuse.Editor
                 "is proven opaque. Raise the value to skip splits " +
                 "that move too little.");
 
+        private static readonly GUIContent PreserveCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage to Preserve (Per Material)",
+                "AMUSE splits a mixed material. The proven opaque " +
+                "triangles move onto a separate opaque material. " +
+                "Each split adds one draw call. Some materials " +
+                "are almost fully opaque. A split for such a " +
+                "material can cost more than it saves. A material " +
+                "whose unproven share sits below this value skips " +
+                "the split. It moves onto the opaque material in " +
+                "full. No proof is needed for the move. Triangles " +
+                "that would keep their transparency lose it. The " +
+                "share counts the triangles of one submesh. A " +
+                "material slot that binds several submeshes " +
+                "flattens only when every one of its submeshes " +
+                "sits below this value. This setting works " +
+                "together with Minimum Opaque Coverage to Convert " +
+                "(Per Material). The convert setting decides " +
+                "whether a split is big enough to pay for. This " +
+                "setting decides whether a material is opaque " +
+                "enough to skip the split. The value 0 never " +
+                "flattens a material. It is the default.");
+
         private static readonly GUIContent TextureClampRowContent =
             new GUIContent(
-                "Alpha Upper Clamp (Per Texture)",
+                "Alpha Upper Clamp to Convert (Per Texture)",
                 "Alpha is how strong transparency is. A value " +
                 "of 100 is fully opaque. Some mixed transparent " +
                 "and opaque materials hold texels that are " +
@@ -200,7 +223,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent PolygonCoverageRowContent =
             new GUIContent(
-                "Minimum Opaque Coverage (Per Polygon)",
+                "Minimum Opaque Coverage to Convert (Per Polygon)",
                 "The minimum percentage of a polygon's texels " +
                 "that must stay at or above the per-polygon " +
                 "clamp before AMUSE moves the polygon onto an " +
@@ -217,7 +240,7 @@ namespace Alrauna.Amuse.Editor
 
         private static readonly GUIContent PolygonClampRowContent =
             new GUIContent(
-                "Alpha Upper Clamp (Per Polygon)",
+                "Alpha Upper Clamp to Convert (Per Polygon)",
                 "Alpha below this value is a stray texel on the " +
                 "polygon. AMUSE ignores strays only while the " +
                 "coverage slider passes. Lowering this value " +
@@ -241,8 +264,8 @@ namespace Alrauna.Amuse.Editor
                 "VRChat can filter textures anisotropically. " +
                 "Proven parts can lose transparency near texture " +
                 "edges or at oblique views. This setting does not " +
-                "change texture filtering. A shipped preset turns " +
-                "this setting off.");
+                "change texture filtering. The Safe, Normal, " +
+                "and Aggressive presets turn this setting on.");
 
         private static readonly GUIContent AcceptMobileRowContent =
             new GUIContent(
@@ -251,8 +274,8 @@ namespace Alrauna.Amuse.Editor
                 "footprints when the build target is Android or " +
                 "iOS. AMUSE texture capture does not support " +
                 "these targets. This setting alone enables no " +
-                "conversion. A shipped preset turns this setting " +
-                "off.");
+                "conversion. The Safe, Normal, and Aggressive " +
+                "presets turn this setting on.");
 
         private static readonly GUIContent ActiveSamplingProofRowContent =
             new GUIContent(
@@ -273,6 +296,7 @@ namespace Alrauna.Amuse.Editor
             MipCapRowContent,
             MinTextureRowContent,
             MaterialCoverageRowContent,
+            PreserveCoverageRowContent,
             TextureClampRowContent,
             PolygonCoverageRowContent,
             PolygonClampRowContent,
@@ -306,6 +330,8 @@ namespace Alrauna.Amuse.Editor
             DrawMipCapPopup();
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
+            PercentSlider("_minimumOpaqueCoverageToPreservePercent",
+                PreserveCoverageRowContent);
             DrawAlphaPolicyControls();
             DrawAcceptanceControls();
             EditorGUIUtility.labelWidth = previousWidth;

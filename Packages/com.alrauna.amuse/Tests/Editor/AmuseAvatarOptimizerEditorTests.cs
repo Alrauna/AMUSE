@@ -167,7 +167,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 Is.True,
                 "a stored percent of 150 must count as out-of-band");
             var message = Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                .OutOfBandWarning("Alpha Upper Clamp (Per Texture)",
+                .OutOfBandWarning("Alpha Upper Clamp to Convert (Per Texture)",
                     150, 100);
             Assert.That(message, Does.Contain("150"),
                 "the warning must name the stored value");

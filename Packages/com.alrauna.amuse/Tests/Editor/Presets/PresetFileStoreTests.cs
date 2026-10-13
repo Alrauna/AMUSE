@@ -11,7 +11,7 @@ namespace Alrauna.Amuse.Tests.Editor
 
         private const string ValidBody =
             "{\n" +
-            "  \"schemaVersion\": 2,\n" +
+            "  \"schemaVersion\": 3,\n" +
             "  \"name\": \"Safe\",\n" +
             "  \"description\": \"A valid preset body for the store test.\",\n" +
             "  \"features\": {\n" +
@@ -21,6 +21,7 @@ namespace Alrauna.Amuse.Tests.Editor
             "    \"preserveTransparencyMaxMipLevel\": 4,\n" +
             "    \"preserveTransparencyMinTextureSize\": 128,\n" +
             "    \"minimumOpaqueCoveragePercent\": 25,\n" +
+            "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n" +
             "    \"minimumOpaqueAlphaPercent\": 100,\n" +
             "    \"polygonAlphaUpperClampPercent\": 100,\n" +
             "    \"polygonMinimumOpaqueCoveragePercent\": 100,\n" +

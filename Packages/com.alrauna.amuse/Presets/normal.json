@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Normal",
-  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens a nearly opaque material to save a draw call.",
   "features": {
     "alphaSeparator": true
   },
@@ -9,6 +9,7 @@
     "preserveTransparencyMaxMipLevel": 4,
     "preserveTransparencyMinTextureSize": 128,
     "minimumOpaqueCoveragePercent": 25,
+    "minimumOpaqueCoverageToPreservePercent": 5,
     "minimumOpaqueAlphaPercent": 100,
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,

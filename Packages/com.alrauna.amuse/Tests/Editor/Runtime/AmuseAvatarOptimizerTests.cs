@@ -208,6 +208,47 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void DefaultMinimumOpaqueCoverageToPreservePercentIs0()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.MinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(0));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void MinimumOpaqueCoverageToPreservePercentSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_minimumOpaqueCoverageToPreservePercent");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 40;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.MinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(40));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void AlphaPolicyFieldsRoundTripAndDefaultInert()
         {
             var go = new GameObject("Root");

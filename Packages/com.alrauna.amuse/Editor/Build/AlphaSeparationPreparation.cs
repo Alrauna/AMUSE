@@ -102,6 +102,7 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedPoiyomiConversion poiyomiConversion,
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
+            int minimumOpaqueCoverageToPreservePercent = 0,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -115,6 +116,72 @@ namespace Alrauna.Amuse.Editor.Build
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
             if (admittedLiveMaterials == null)
                 throw new ArgumentNullException(nameof(admittedLiveMaterials));
+
+            // The preserve gate folds whole material slots whose every
+            // submesh holds a strictly smaller unproven share than the
+            // stored preserve value. A folded entry is an ordinary
+            // wholly-opaque candidate for every later consumer here, so
+            // no candidate-loop gate changes. The unproven count per
+            // folded submesh feeds the forced report event of the later
+            // report pass. A preserve value of 0 qualifies nothing, so
+            // the original plan object flows through unchanged.
+            var unprovenCountByFoldedSubmesh = new Dictionary<int, int>();
+            var entriesByBindingIndex =
+                new Dictionary<int, List<SubmeshSeparationPlan>>();
+            foreach (var entry in plan.Submeshes)
+            {
+                if (!entriesByBindingIndex.TryGetValue(
+                        entry.SourceMaterialBindingIndex,
+                        out var slotEntries))
+                {
+                    slotEntries = new List<SubmeshSeparationPlan>();
+                    entriesByBindingIndex.Add(
+                        entry.SourceMaterialBindingIndex, slotEntries);
+                }
+
+                slotEntries.Add(entry);
+            }
+
+            var foldedEntries = new List<SubmeshSeparationPlan>();
+            foreach (var slotEntries in entriesByBindingIndex.Values)
+            {
+                var slotQualifies = true;
+                foreach (var entry in slotEntries)
+                {
+                    var totalTriangles =
+                        entry.OpaqueTriangleOrdinals.Count +
+                        entry.TransparentTriangleOrdinals.Count;
+                    if (entry.Disposition !=
+                            SubmeshSeparationDisposition.Split ||
+                        entry.TransparentTriangleOrdinals.Count * 100 >=
+                        minimumOpaqueCoverageToPreservePercent *
+                        totalTriangles)
+                    {
+                        slotQualifies = false;
+                        break;
+                    }
+                }
+
+                if (!slotQualifies)
+                {
+                    continue;
+                }
+
+                foreach (var entry in slotEntries)
+                {
+                    var folded = MeshSeparationPlanner.Folded(entry);
+                    unprovenCountByFoldedSubmesh.Add(
+                        folded.SourceSubmeshIndex,
+                        entry.TransparentTriangleOrdinals.Count);
+                    foldedEntries.Add(folded);
+                }
+            }
+
+            if (foldedEntries.Count > 0)
+            {
+                plan = MeshSeparationPlanner.WithFoldedSubmeshes(
+                    plan, foldedEntries);
+            }
 
             // An unproven slot whose own resolution samples anisotropically
             // refuses before the opaque-candidate gate: a renderer whose
@@ -586,11 +653,36 @@ namespace Alrauna.Amuse.Editor.Build
                             : null);
                 }
 
+                // One Information entry per folded surviving submesh, so
+                // the build report names every triangle set that moved
+                // onto the opaque material without an opacity proof. The
+                // fold map holds one entry per folded submesh, so a
+                // folded slot reports once per submesh, and a slot the
+                // gate did not fold stays silent. A refused slot never
+                // reaches this point, so a marker-clip refusal reports
+                // alone.
+                var hasFoldedSubmesh =
+                    unprovenCountByFoldedSubmesh.TryGetValue(
+                        submesh.SourceSubmeshIndex,
+                        out var foldedUnprovenCount);
+                if (hasFoldedSubmesh)
+                {
+                    AmuseReports.SlotSeparationForcedOpaque(
+                        target.Renderer,
+                        slotIndex,
+                        foldedUnprovenCount,
+                        target.Renderer != null
+                            ? target.Renderer.gameObject.name
+                            : null);
+                }
+
                 // One Information entry per prepared slot whose
                 // conversion used the revised premultiply premise, so the
                 // build report states the normalization through its own
-                // sentence. The depth sentence stays depth-only, and a
-                // slot without a premultiply conversion stays silent.
+                // sentence. A folded slot selects the folded entries,
+                // which name the preserve setting instead of claiming
+                // exact colors. The depth sentence stays depth-only, and
+                // a slot without a premultiply conversion stays silent.
                 if (slotPremultiply)
                 {
                     AmuseReports.SlotSeparationPremultiplyNormalization(
@@ -598,7 +690,8 @@ namespace Alrauna.Amuse.Editor.Build
                         slotIndex,
                         target.Renderer != null
                             ? target.Renderer.gameObject.name
-                            : null);
+                            : null,
+                        hasFoldedSubmesh);
                 }
             }
 

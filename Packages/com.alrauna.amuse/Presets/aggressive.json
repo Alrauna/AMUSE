@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "Aggressive",
-  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes.",
+  "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens more materials and admits more texels than Normal.",
   "features": {
     "alphaSeparator": true
   },
@@ -9,6 +9,7 @@
     "preserveTransparencyMaxMipLevel": 4,
     "preserveTransparencyMinTextureSize": 128,
     "minimumOpaqueCoveragePercent": 25,
+    "minimumOpaqueCoverageToPreservePercent": 10,
     "minimumOpaqueAlphaPercent": 95,
     "polygonAlphaUpperClampPercent": 94,
     "polygonMinimumOpaqueCoveragePercent": 95,

@@ -91,6 +91,100 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ForcedOpaqueEntryExistsWithThreeParts()
+        {
+            var key = "amuse.slotSeparation.ForcedOpaque";
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the forced-opaque entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the forced-opaque entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the forced-opaque entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description, Does.Contain("no opacity proof"),
+                "the description must state the missing opacity proof");
+            Assert.That(
+                description,
+                Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the description must name the exact setting");
+        }
+
+        [Test]
+        public void FoldedPremultiplyEntriesNameTheSettingNotExactColors()
+        {
+            var key = "amuse.slotSeparation.PremultiplyNormalizationFolded";
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the folded premultiply entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the folded premultiply entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the folded premultiply entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description,
+                Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the folded entry must name the preserve setting");
+            Assert.That(
+                description,
+                Does.Not.Contain(
+                    "The opaque material reproduces those colors exactly."),
+                "a folded slot moved unproven triangles, so the entry " +
+                "must not claim exact colors");
+            Assert.That(
+                description, Does.Contain("may differ"),
+                "the folded entry must state the honest color premise");
+        }
+
+        [Test]
+        public void DisclosureDescriptionsDescribeTheMovedSetAsOpaqueTriangles()
+        {
+            var descriptions = new[]
+            {
+                AmuseReportStrings.Get(
+                    "amuse.slotSeparation.DepthTestDivergence:description"),
+                AmuseReportStrings.Get(
+                    "amuse.slotSeparation.PremultiplyNormalization" +
+                    ":description"),
+            };
+
+            foreach (var description in descriptions)
+            {
+                Assert.That(
+                    description,
+                    Does.Contain(
+                        "moved the opaque triangles of material slot"),
+                    "the disclosure must describe the moved set as opaque " +
+                    "triangles: " + description);
+                Assert.That(
+                    description, Does.Not.Contain("proven-opaque"),
+                    "a disclosure of a moved set must not claim a proof " +
+                    "the fold does not carry: " + description);
+            }
+        }
+
+        [Test]
+        public void RefusalEntryKeepsTheProvenOpaquePremise()
+        {
+            // The refusal moves nothing, so its premise stays genuine.
+            var description = AmuseReportStrings.Get(
+                "amuse.slotSeparation.OpaqueCoverageBelowMinimum" +
+                ":description");
+            Assert.That(
+                description, Does.Contain("proven-opaque share"),
+                "a refused slot moves nothing, so the entry keeps the " +
+                "proven premise");
+        }
+
+        [Test]
         public void EveryHostRefusalCauseHasPlainEnglishStrings()
         {
             foreach (HostLifecycleRefusal cause in

@@ -15,6 +15,7 @@ namespace Alrauna.Amuse.Editor.Presets
         internal int PreserveTransparencyMaxMipLevel { get; }
         internal int PreserveTransparencyMinTextureSize { get; }
         internal int MinimumOpaqueCoveragePercent { get; }
+        internal int MinimumOpaqueCoverageToPreservePercent { get; }
         internal int MinimumOpaqueAlphaPercent { get; }
         internal int PolygonAlphaUpperClampPercent { get; }
         internal int PolygonMinimumOpaqueCoveragePercent { get; }
@@ -30,6 +31,7 @@ namespace Alrauna.Amuse.Editor.Presets
             int preserveTransparencyMaxMipLevel,
             int preserveTransparencyMinTextureSize,
             int minimumOpaqueCoveragePercent,
+            int minimumOpaqueCoverageToPreservePercent,
             int minimumOpaqueAlphaPercent,
             int polygonAlphaUpperClampPercent,
             int polygonMinimumOpaqueCoveragePercent,
@@ -44,6 +46,8 @@ namespace Alrauna.Amuse.Editor.Presets
             PreserveTransparencyMaxMipLevel = preserveTransparencyMaxMipLevel;
             PreserveTransparencyMinTextureSize = preserveTransparencyMinTextureSize;
             MinimumOpaqueCoveragePercent = minimumOpaqueCoveragePercent;
+            MinimumOpaqueCoverageToPreservePercent =
+                minimumOpaqueCoverageToPreservePercent;
             MinimumOpaqueAlphaPercent = minimumOpaqueAlphaPercent;
             PolygonAlphaUpperClampPercent = polygonAlphaUpperClampPercent;
             PolygonMinimumOpaqueCoveragePercent = polygonMinimumOpaqueCoveragePercent;
@@ -56,7 +60,7 @@ namespace Alrauna.Amuse.Editor.Presets
         }
 
         /// <summary>
-        /// True when the component equals this preset on all eleven
+        /// True when the component equals this preset on all twelve
         /// mapped fields. The pressed state is computed from this
         /// comparison and never stored, so a manual edit of one value
         /// leaves every button unpressed.
@@ -70,6 +74,8 @@ namespace Alrauna.Amuse.Editor.Presets
                     == PreserveTransparencyMinTextureSize
                 && component.MinimumOpaqueCoveragePercent
                     == MinimumOpaqueCoveragePercent
+                && component.MinimumOpaqueCoverageToPreservePercent
+                    == MinimumOpaqueCoverageToPreservePercent
                 && component.MinimumOpaqueAlphaPercent
                     == MinimumOpaqueAlphaPercent
                 && component.PolygonAlphaUpperClampPercent
