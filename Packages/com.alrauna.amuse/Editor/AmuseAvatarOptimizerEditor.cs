@@ -180,6 +180,29 @@ namespace Alrauna.Amuse.Editor
                 "is proven opaque. Raise the value to skip splits " +
                 "that move too little.");
 
+        private static readonly GUIContent PreserveCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage to Preserve (Per Material)",
+                "AMUSE splits a mixed material. The proven opaque " +
+                "triangles move onto a separate opaque material. " +
+                "Each split adds one draw call. Some materials " +
+                "are almost fully opaque. A split for such a " +
+                "material can cost more than it saves. A material " +
+                "whose unproven share sits below this value skips " +
+                "the split. It moves onto the opaque material in " +
+                "full. No proof is needed for the move. Triangles " +
+                "that would keep their transparency lose it. The " +
+                "share counts the triangles of one submesh. A " +
+                "material slot that binds several submeshes " +
+                "flattens only when every one of its submeshes " +
+                "sits below this value. This setting works " +
+                "together with Minimum Opaque Coverage to Convert " +
+                "(Per Material). The convert setting decides " +
+                "whether a split is big enough to pay for. This " +
+                "setting decides whether a material is opaque " +
+                "enough to skip the split. The value 0 never " +
+                "flattens a material. It is the default.");
+
         private static readonly GUIContent TextureClampRowContent =
             new GUIContent(
                 "Alpha Upper Clamp to Convert (Per Texture)",
@@ -273,6 +296,7 @@ namespace Alrauna.Amuse.Editor
             MipCapRowContent,
             MinTextureRowContent,
             MaterialCoverageRowContent,
+            PreserveCoverageRowContent,
             TextureClampRowContent,
             PolygonCoverageRowContent,
             PolygonClampRowContent,
@@ -306,6 +330,8 @@ namespace Alrauna.Amuse.Editor
             DrawMipCapPopup();
             DrawMinTextureSizePopup();
             DrawCoverageSlider();
+            PercentSlider("_minimumOpaqueCoverageToPreservePercent",
+                PreserveCoverageRowContent);
             DrawAlphaPolicyControls();
             DrawAcceptanceControls();
             EditorGUIUtility.labelWidth = previousWidth;
