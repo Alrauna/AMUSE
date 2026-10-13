@@ -132,23 +132,27 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AlreadyOpaqueWinsOverSplit()
         {
+            // The flagged slot's entry qualifies for Fold at preserve 5,
+            // so the flag genuinely decides the precedence: a ladder that
+            // folds first would answer Fold here and fail.
             var plan = Plan(
-                SplitSubmesh(0, 0, 2, 0),
+                SplitSubmesh(0, 0, 99, 1),
                 UnchangedSubmesh(1, 1));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, new[] { true, false }, 50, 0);
+                plan, null, new[] { true, false }, 50, 5);
 
             Assert.That(verdicts, Has.Count.EqualTo(2));
             Assert.That(verdicts[0].SlotIndex, Is.Zero);
             Assert.That(verdicts[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.AlreadyOpaque));
+            Assert.That(verdicts[0].FoldedUnprovenTriangles, Is.Zero);
             Assert.That(verdicts[1].SlotIndex, Is.EqualTo(1));
             Assert.That(verdicts[1].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Split));
 
             var extended = SlotTransformDecision.Decide(
-                plan, null, new[] { true, true, false }, 50, 0);
+                plan, null, new[] { true, true, false }, 50, 5);
 
             // The flag wins over a plan entry, and a slot with no plan
             // entry and no flag gets None.
