@@ -4,6 +4,7 @@ using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -11,21 +12,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 {
     public sealed class UnityRendererAlphaSnapshotTests
     {
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var value in _transient)
-            {
-                if (value != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(value);
-                }
-            }
-
-            _transient.Clear();
+            _scope.TearDown();
         }
 
         [Test]
@@ -423,8 +416,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private T Track<T>(T value) where T : UnityEngine.Object
         {
-            _transient.Add(value);
-            return value;
+            return _scope.Track(value);
         }
     }
 }

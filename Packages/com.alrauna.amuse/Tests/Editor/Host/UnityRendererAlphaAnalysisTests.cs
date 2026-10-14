@@ -20,20 +20,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     /// </summary>
     public sealed class UnityRendererAlphaAnalysisTests
     {
-        private readonly List<Object> _transient = new List<Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
+            _scope.TearDown();
             if (AssetDatabase.IsValidFolder(FixtureAssetFolder))
             {
                 AssetDatabase.DeleteAsset(FixtureAssetFolder);
@@ -42,8 +35,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private T Track<T>(T obj) where T : Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         /// <summary>Two triangles over four vertices, UV0 present.</summary>

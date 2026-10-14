@@ -8,6 +8,7 @@ using Alrauna.Amuse.Editor.Semantics;
 using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -311,21 +312,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
         private const string RendererPath = "Body";
 
-        private readonly List<UnityEngine.Object> _owned =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void DestroyOwnedFixtureObjects()
         {
-            foreach (var value in _owned)
-            {
-                if (value != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(value);
-                }
-            }
-
-            _owned.Clear();
+            _scope.TearDown();
         }
 
         private static MaterialEvidenceRequest Relevance
@@ -350,7 +343,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private Material NewFixtureMaterial()
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            _owned.Add(material);
+            _scope.Track(material);
             return material;
         }
 
@@ -389,7 +382,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private Material MaterialWithoutRequestedProperties()
         {
             var material = new Material(Shader.Find("Unlit/Color"));
-            _owned.Add(material);
+            _scope.Track(material);
             return material;
         }
 

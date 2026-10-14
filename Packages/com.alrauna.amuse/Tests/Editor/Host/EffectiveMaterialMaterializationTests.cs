@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -17,26 +18,18 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private const string FixtureShaderName =
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
 
-        private readonly List<Object> _transient = new List<Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
+            _scope.TearDown();
         }
 
         private T Track<T>(T obj) where T : Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         /// <summary>

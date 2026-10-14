@@ -1,8 +1,8 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -26,8 +26,8 @@ namespace Alrauna.Amuse.Tests.Editor
         /// outside the scene hierarchy. Destroying the root does not
         /// destroy them, so the teardown does.
         /// </summary>
-        private readonly List<UnityEngine.Object> _tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
@@ -49,15 +49,7 @@ namespace Alrauna.Amuse.Tests.Editor
             // here keeps one test's rows and errored marks out of the
             // next test's view.
             Alrauna.Amuse.Editor.DryRun.DryRunCache.Clear();
-            foreach (var tracked in _tracked)
-            {
-                if (tracked != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked);
-                }
-            }
-
-            _tracked.Clear();
+            _scope.TearDown();
         }
 
         [Test]
@@ -325,11 +317,11 @@ namespace Alrauna.Amuse.Tests.Editor
                 },
                 triangles = new[] { 0, 1, 2 },
             };
-            _tracked.Add(mesh);
+            _scope.Track(mesh);
             var renderer = body.AddComponent<SkinnedMeshRenderer>();
             renderer.sharedMesh = mesh;
             var material = new Material(shader);
-            _tracked.Add(material);
+            _scope.Track(material);
             renderer.sharedMaterials = new[] { material };
             return component;
         }

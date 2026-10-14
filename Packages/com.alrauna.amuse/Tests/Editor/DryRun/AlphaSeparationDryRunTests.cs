@@ -39,8 +39,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
         private TestTransientScope _scope;
         private AnisotropicFilteringPin _filteringPin;
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
 
         private int _selectCalls;
         private int _captureCalls;
@@ -64,22 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             _filteringPin.Dispose();
             DryRunCache.Clear();
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
             _scope.TearDown();
-        }
-
-        private T Track<T>(T obj) where T : UnityEngine.Object
-        {
-            _transient.Add(obj);
-            return obj;
         }
 
         // --- Fixture helpers -------------------------------------------------
@@ -153,7 +136,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         /// </summary>
         private Mesh TwoTriangleMesh()
         {
-            var mesh = Track(new Mesh());
+            var mesh = _scope.Track(new Mesh());
             mesh.vertices = new[]
             {
                 new Vector3(0f, 0f, 0f),
@@ -201,7 +184,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             var shader = Shader.Find(CutoutShaderName);
             Assert.That(shader, Is.Not.Null, CutoutShaderName + " must import.");
-            var material = Track(new Material(shader));
+            var material = _scope.Track(new Material(shader));
             material.SetTexture("_MainTex", mainTex);
             material.SetTextureScale("_MainTex", Vector2.one);
             material.SetTextureOffset("_MainTex", Vector2.zero);
@@ -214,7 +197,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             var shader = Shader.Find(OpaqueShaderName);
             Assert.That(shader, Is.Not.Null, OpaqueShaderName + " must import.");
-            var material = Track(new Material(shader));
+            var material = _scope.Track(new Material(shader));
             material.SetTexture("_MainTex", mainTex);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
             return material;
@@ -229,7 +212,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var renderer = child.AddComponent<SkinnedMeshRenderer>();
             renderer.sharedMesh = mesh;
             renderer.sharedMaterials = slots;
-            return Track(renderer);
+            return _scope.Track(renderer);
         }
 
         private sealed class Fixture
@@ -245,7 +228,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             bool streaming = false,
             Texture2D mainTexOverride = null)
         {
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
             var texture = mainTexOverride
                 ?? ImportHalfTexture(
@@ -503,7 +486,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [Test]
         public void RendererRefusalShowsNamedSentence()
         {
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
             var texture = ImportHalfTexture("tail", 255);
             var material = NewCutoutMaterial(texture, 0.5f);
@@ -512,7 +495,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             tail.transform.SetParent(root.transform, false);
             var trail = tail.AddComponent<TrailRenderer>();
             trail.sharedMaterial = material;
-            Track(trail);
+            _scope.Track(trail);
 
             var dryRun = NewDryRun(
                 new Fixture
@@ -542,7 +525,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // an AAO atlas pack refuses at the atlas identity gate when no
             // origin material backs it, before any readback. The refusal
             // sentence must ride the slot row, never a standalone entry.
-            var atlas = Track(new Texture2D(
+            var atlas = _scope.Track(new Texture2D(
                 TextureSize, TextureSize, TextureFormat.RGBA32, false));
             atlas.name = "MainTex (AAO UV Packed)";
             var colors = new Color32[TextureSize * TextureSize];
@@ -598,9 +581,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [Test]
         public void StructuralRefusalStopsWithStructuralRow()
         {
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
-            var clip = Track(new AnimationClip { name = "event-clip" });
+            var clip = _scope.Track(new AnimationClip { name = "event-clip" });
             AnimationUtility.SetAnimationEvents(
                 clip,
                 new[]
@@ -611,7 +594,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                         functionName = "AmuseDryRunTestEvent"
                     }
                 });
-            var controller = Track(new AnimatorController { name = "event" });
+            var controller = _scope.Track(new AnimatorController { name = "event" });
             controller.AddLayer("L0");
             controller.layers[0].stateMachine.AddState("S0").motion = clip;
             var animator = root.AddComponent<Animator>();
@@ -674,7 +657,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [Test]
         public void ChildPlacementProducesBanner()
         {
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var texture = ImportHalfTexture("child", 255);
             var material = NewCutoutMaterial(texture, 0.5f);
             AddSkinnedRenderer(root, TwoTriangleMesh(), material);
@@ -682,7 +665,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             child.hideFlags = HideFlags.HideAndDontSave;
             child.transform.SetParent(root.transform, false);
             var optimizer = AddOptimizer(child);
-            Track(child);
+            _scope.Track(child);
 
             var dryRun = NewDryRun(
                 new Fixture
@@ -781,7 +764,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var texture = ImportHalfTexture("cache", 255);
             var material = NewCutoutMaterial(texture, 0.5f);
             var mesh = TwoTriangleMesh();
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
             var renderer = AddSkinnedRenderer(root, mesh, material);
 
@@ -838,7 +821,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [Test]
         public void OpaqueFamilySlotShowsAlreadyOpaque()
         {
-            var root = Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
             var texture = ImportHalfTexture("opaque", 255);
             var material = NewOpaqueMaterial(texture);

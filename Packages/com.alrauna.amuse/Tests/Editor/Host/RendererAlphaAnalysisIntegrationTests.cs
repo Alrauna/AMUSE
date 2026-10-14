@@ -43,7 +43,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
         private const int Size = 4;
 
-        private readonly List<Object> _transient = new List<Object>();
+        private TestTransientScope _scope;
 
         private AnisotropicFilteringPin _filteringPin;
 
@@ -51,37 +51,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void SetUp()
         {
             _filteringPin = new AnisotropicFilteringPin();
-
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder(
-                    "Assets", "AmuseTests_RendererIntegration");
-            }
+            _scope = new TestTransientScope(TempFolder);
+            _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void TearDown()
         {
             _filteringPin.Dispose();
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
+            _scope.TearDown();
         }
 
         private T Track<T>(T obj) where T : Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         /// <summary>

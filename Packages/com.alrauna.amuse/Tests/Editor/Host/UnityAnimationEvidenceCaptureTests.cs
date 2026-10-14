@@ -42,8 +42,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// </summary>
         private const string ForeignRendererPath = "OtherBody";
 
-        private readonly List<UnityEngine.Object> _owned =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
         private readonly Dictionary<Material, CapturedAlphaMaterialFamily>
             _fixtureFamilies =
                 new Dictionary<Material, CapturedAlphaMaterialFamily>();
@@ -70,12 +70,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TearDown]
         public void TearDown()
         {
-            foreach (var value in _owned)
-            {
-                if (value != null) Object.DestroyImmediate(value);
-            }
-
-            _owned.Clear();
+            _scope.TearDown();
             _fixtureFamilies.Clear();
             if (AssetDatabase.IsValidFolder(UnattestedShaderFolder))
             {
@@ -2042,8 +2037,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private T Own<T>(T value) where T : UnityEngine.Object
         {
-            _owned.Add(value);
-            return value;
+            return _scope.Track(value);
         }
 
         private CapturedAnimationEvidence CaptureVerified(

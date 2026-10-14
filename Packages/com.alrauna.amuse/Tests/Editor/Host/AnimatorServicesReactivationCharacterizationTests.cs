@@ -331,8 +331,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private sealed class Fixture : IDisposable
         {
-            private readonly List<UnityEngine.Object> tracked =
-                new List<UnityEngine.Object>();
+            private readonly TestTransientScope _scope =
+                new TestTransientScope();
 
             internal GameObject Root;
             internal AnimatorController SourceController;
@@ -348,8 +348,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             internal T Track<T>(T value) where T : UnityEngine.Object
             {
-                tracked.Add(value);
-                return value;
+                return _scope.Track(value);
             }
 
             internal string SourceCurveDescription;
@@ -451,15 +450,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             public void Dispose()
             {
-                for (var index = tracked.Count - 1; index >= 0; index--)
-                {
-                    if (tracked[index] != null)
-                    {
-                        UnityEngine.Object.DestroyImmediate(tracked[index]);
-                    }
-                }
-
-                tracked.Clear();
+                _scope.TearDown();
             }
         }
 
