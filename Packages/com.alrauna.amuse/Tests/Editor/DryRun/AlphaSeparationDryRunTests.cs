@@ -1027,6 +1027,41 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False);
         }
 
+        [Test]
+        public void UnsupportedShaderWithStreamingTextureReportsRefusedAndEmitsRendererRefusalBox()
+        {
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-unsupported-streaming"));
+            var optimizer = AddOptimizer(root);
+            var shader = Shader.Find("Hidden/InternalErrorShader");
+            var material = _scope.Track(new Material(shader));
+            var texture = ImportHalfTexture("unsupported_streaming", 255);
+            material.mainTexture = texture;
+            AddSkinnedRenderer(root, OneTriangleMesh(), material);
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root,
+                    Optimizer = optimizer,
+                    Renderer = null
+                },
+                null,
+                FixtureSelector(),
+                FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Refused: AMUSE currently does not support this material"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.True,
+                "renderer refusal box must NOT be suppressed when slot is truly refused");
+        }
+
         // --- No-persistence guard -------------------------------------------
 
         [Test]

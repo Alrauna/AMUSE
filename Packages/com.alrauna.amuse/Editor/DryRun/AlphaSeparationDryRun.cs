@@ -855,7 +855,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return true;
             }
 
-            if (HasStreamingTexture(material))
+            if (HasUnreadableAlphaStreamingTexture(material))
             {
                 return true;
             }
@@ -874,25 +874,19 @@ namespace Alrauna.Amuse.Editor.DryRun
                    tag == PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName;
         }
 
-        private static bool HasStreamingTexture(Material material)
+        private static bool HasUnreadableAlphaStreamingTexture(Material material)
         {
-            if (material == null)
+            if (material == null ||
+                !UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    material, out _, out var alphaRequest, out _))
             {
                 return false;
             }
 
-            var count = ShaderUtil.GetPropertyCount(material.shader);
-            for (var i = 0; i < count; i++)
+            foreach (var textureProperty in alphaRequest.TextureProperties)
             {
-                if (ShaderUtil.GetPropertyType(material.shader, i) !=
-                    ShaderUtil.ShaderPropertyType.TexEnv)
-                {
-                    continue;
-                }
-
-                var propName = ShaderUtil.GetPropertyName(material.shader, i);
-                var tex = material.GetTexture(propName);
-                if (IsStreamingMipmap(tex))
+                var tex = material.GetTexture(textureProperty.PropertyName);
+                if (IsStreamingMipmap(tex) && !CanDecodeInMemory(tex))
                 {
                     return true;
                 }
@@ -952,7 +946,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                         out _,
                         out _))
                 {
-                    if (HasStreamingTexture(admittedLive[index]))
+                    if (HasUnreadableAlphaStreamingTexture(admittedLive[index]))
                     {
                         AddNoteOnce(NoteKind.StreamingMipmaps);
                     }
