@@ -72,13 +72,12 @@ namespace Alrauna.Amuse.Runtime
         /// submeshes can hold and still skip the split. A slot whose every
         /// submesh sits strictly below this value flattens onto the opaque
         /// material without proof, which can lose transparency as a visible
-        /// artifact. The value 0 never flattens, so avatars saved before
-        /// this field gain no silent flattening. The inspector shows it as
-        /// "Minimum Opaque Coverage to Preserve (Per Material)".
+        /// artifact. The default of 5 matches the Normal preset. The inspector
+        /// shows it as "Minimum Opaque Coverage to Preserve (Per Material)".
         /// </summary>
         [SerializeField]
         [Range(0, 100)]
-        private int _minimumOpaqueCoverageToPreservePercent = 0;
+        private int _minimumOpaqueCoverageToPreservePercent = 5;
 
         /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence
@@ -127,23 +126,22 @@ namespace Alrauna.Amuse.Runtime
         /// True when the user accepts possible desktop anisotropy
         /// filtering differences, so the opacity proof may drop
         /// anisotropic footprints on the Windows target. The default of
-        /// false keeps the proof conservative: an avatar saved before
-        /// this field gains no silent acceptance. This field never
-        /// changes the mobile field.
+        /// true matches the Normal preset. This field never changes the
+        /// mobile field.
         /// </summary>
         [SerializeField]
-        private bool _acceptDesktopAnisotropyDifferences;
+        private bool _acceptDesktopAnisotropyDifferences = true;
 
         /// <summary>
         /// True when the user accepts possible mobile anisotropy
         /// filtering differences, so the proof may drop anisotropic
         /// footprints on the Android and iOS targets. The default of
-        /// false keeps the proof conservative, and the existing mobile
+        /// true matches the Normal preset. The existing mobile
         /// texture-capture and shader refusals keep their force. This
         /// field never changes the desktop field.
         /// </summary>
         [SerializeField]
-        private bool _acceptMobileAnisotropyDifferences;
+        private bool _acceptMobileAnisotropyDifferences = true;
 
         [ToggleLeft]
         [SerializeField]

@@ -10804,9 +10804,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 // The opt-in component on the avatar root is the pass's
                 // trigger: without it the barrier returns before any
-                // renderer is observed. No acceptance field is set, so
+                // renderer is observed. Desktop acceptance is revoked, so
                 // the build holds the conservative desktop policy.
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var optimizer = root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var optSerialized = new SerializedObject(optimizer);
+                optSerialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                    .boolValue = false;
+                optSerialized.ApplyModifiedPropertiesWithoutUndo();
                 FixtureAvatarIdentity.RequireVrcDescriptorSupport();
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 FixtureProofScope.PinAllSizes(root);

@@ -121,17 +121,13 @@ namespace Alrauna.Amuse.Editor
                 return;
             }
 
-            using (new EditorGUILayout.HorizontalScope())
+            if (GUILayout.Button("Refresh"))
             {
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Refresh"))
-                {
-                    // Clear drops every stored row and every errored
-                    // mark, and it empties the one avatar slot, so
-                    // the next pass recomputes from a clean session.
-                    DryRunCache.Clear();
-                    _dryRun = null;
-                }
+                // Clear drops every stored row and every errored
+                // mark, and it empties the one avatar slot, so
+                // the next pass recomputes from a clean session.
+                DryRunCache.Clear();
+                _dryRun = null;
             }
 
             _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
