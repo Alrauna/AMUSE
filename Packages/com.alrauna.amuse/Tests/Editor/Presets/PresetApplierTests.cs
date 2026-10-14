@@ -93,10 +93,10 @@ namespace Alrauna.Amuse.Tests.Editor
                     .boolValue = false;
                 serialized.FindProperty(
                         "_acceptDesktopAnisotropyDifferences")
-                    .boolValue = true;
+                    .boolValue = false;
                 serialized.FindProperty(
                         "_acceptMobileAnisotropyDifferences")
-                    .boolValue = true;
+                    .boolValue = false;
                 serialized.ApplyModifiedProperties();
 
                 var preset = OptimizerPresetTests.ShippedDefaults();
@@ -111,7 +111,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(optimizer.MinimumOpaqueCoveragePercent,
                     Is.EqualTo(25));
                 Assert.That(optimizer.MinimumOpaqueCoverageToPreservePercent,
-                    Is.EqualTo(0));
+                    Is.EqualTo(5));
                 Assert.That(optimizer.MinimumOpaqueAlphaPercent,
                     Is.EqualTo(100));
                 Assert.That(optimizer.PolygonAlphaUpperClampPercent,
@@ -122,11 +122,11 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(optimizer.IgnoreOutOfRangeMaterialSlots,
                     Is.True);
                 Assert.That(optimizer.AcceptDesktopAnisotropyDifferences,
-                    Is.False,
-                    "the preset must revoke desktop acceptance");
+                    Is.True,
+                    "the preset must write desktop acceptance");
                 Assert.That(optimizer.AcceptMobileAnisotropyDifferences,
-                    Is.False,
-                    "the preset must revoke mobile acceptance");
+                    Is.True,
+                    "the preset must write mobile acceptance");
                 Assert.That(optimizer.AmuseDisabled, Is.False,
                     "a preset never touches the master switch");
             }

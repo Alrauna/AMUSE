@@ -1156,10 +1156,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "sampling policy for the desktop target");
                 Assert.That(
                     state.SamplingPolicy,
-                    Is.EqualTo(AlphaSamplingPolicy.ConservativeDesktop),
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
                     "fixture precondition: the fixture's default " +
-                    "acceptance must capture the conservative desktop " +
-                    "policy");
+                    "acceptance must capture the accepted non-anisotropic " +
+                    "desktop policy");
                 Assert.That(
                     state.OpaqueCandidateTriangleCount, Is.EqualTo(1),
                     "fixture precondition: both admitted values must " +
@@ -4223,10 +4223,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var run = new ConversionRun();
             run.Root = Track(FixtureAvatarIdentity.CreateOptedRoot(rootName));
-            if (acceptDesktopDifferences)
-            {
-                FixtureProofScope.AcceptDesktopAnisotropyDifferences(run.Root);
-            }
+            var optimizer = run.Root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
+                .boolValue = acceptDesktopDifferences;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
 
             var savedFiltering = UnityEngine.QualitySettings.anisotropicFiltering;
             try

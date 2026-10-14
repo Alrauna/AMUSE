@@ -208,7 +208,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void DefaultMinimumOpaqueCoverageToPreservePercentIs0()
+        public void DefaultMinimumOpaqueCoverageToPreservePercentIs5()
         {
             var go = new GameObject("Root");
             try
@@ -216,7 +216,41 @@ namespace Alrauna.Amuse.Tests.Editor
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
                 Assert.That(
                     optimizer.MinimumOpaqueCoverageToPreservePercent,
-                    Is.EqualTo(0));
+                    Is.EqualTo(5));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultAcceptDesktopAnisotropyDifferencesIsTrue()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.AcceptDesktopAnisotropyDifferences,
+                    Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultAcceptMobileAnisotropyDifferencesIsTrue()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.AcceptMobileAnisotropyDifferences,
+                    Is.True);
             }
             finally
             {

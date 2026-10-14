@@ -10,8 +10,8 @@ namespace Alrauna.Amuse.Tests.Editor
         internal static OptimizerPreset ShippedDefaults()
         {
             return new OptimizerPreset(
-                "Safe", "Shipped defaults.", true,
-                4, 128, 25, 0, 100, 100, 100, true, true, false, false);
+                "Normal", "Shipped defaults.", true,
+                4, 128, 25, 5, 100, 100, 100, true, true, true, true);
         }
 
         [Test]
@@ -28,6 +28,27 @@ namespace Alrauna.Amuse.Tests.Editor
                 Object.DestroyImmediate(go);
             }
         }
+        [Test]
+        public void DefaultComponentMatchesTheShippedNormalPreset()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(PresetFileStore.TryLoadAll(
+                        out var presets, out var failedFile,
+                        out var refusal),
+                    Is.True, failedFile + ": " + refusal);
+                var normal = System.Linq.Enumerable.Single(
+                    presets, p => p.Name == "Normal");
+                Assert.That(normal.Matches(optimizer), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
 
         [Test]
         public void FlippingAnyOneFieldValueBreaksTheMatch()
@@ -45,8 +66,8 @@ namespace Alrauna.Amuse.Tests.Editor
                 ("_polygonMinimumOpaqueCoveragePercent", 70),
                 ("_allowDepthTestChange", false),
                 ("_ignoreOutOfRangeMaterialSlots", false),
-                ("_acceptDesktopAnisotropyDifferences", true),
-                ("_acceptMobileAnisotropyDifferences", true),
+                ("_acceptDesktopAnisotropyDifferences", false),
+                ("_acceptMobileAnisotropyDifferences", false),
             };
 
             foreach (var field in fields)
