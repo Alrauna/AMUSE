@@ -19,7 +19,7 @@ Paths under the AMUSE package drop the `Packages/com.alrauna.amuse/` prefix. Pat
 
 The owner set this run: parallel ponytail audit, then this investigation, then a parallel adversarial accuracy review of the investigation, then the design spec, then a parallel adversarial review of the spec, then the implementation plan, then a parallel adversarial review of the plan, then a stop for owner review. Commits land between finalized changes. The run halts when a choice needs owner input.
 
-The audit found 55 merged findings. The audit estimates a net cut of 3775 lines `[ESTIMATE]` and zero removable package dependencies. This investigation sorts the findings into decision classes, verifies the facts that drive the big decisions, records interactions and risks, and names the open points the design round must settle.
+The audit found 56 merged findings. The audit estimates a net cut of 3775 lines `[ESTIMATE]` and zero removable package dependencies. This investigation sorts the findings into decision classes, verifies the facts that drive the big decisions, records interactions and risks, and names the open points the design round must settle.
 
 ## 2. Verification of the load-bearing facts
 
@@ -69,7 +69,7 @@ The design round selects findings by class. The classes carry different risk and
 
 - **D1 - dead production symbols and production test seams.** Production symbols whose only callers are tests, plus plain-dead symbols with no callers: findings 11, 14, 19, 27, 31, 32, 34, 35, 41, 42, 43, 44, 45, 47, 50, 51, 52, 54, 55. Findings 45, 50, 54, and 55 have no callers at all, and finding 55 deletes an unread property in a research test file. Those four delete with no test-side edit. The rest move composition into the test assembly. Suite outcomes must stay identical.
 - **D2 - dead flexibility with a document conflict.** Finding 1 (the three non-alpha semantic pipelines) and finding 13 (the eight row fields). Facts are verified. Direction or recency argues the other way. Owner decision.
-- **D3 - test duplication collapses.** Findings 2, 3, 5, 6, 8, 12, 16, 17, 20, 21, 22, 23, 24, 25, 26, 30, 36, 37, 38, 39, 40, 48, 53. Mechanical, low risk, and the suites must pass unchanged.
+- **D3 - test duplication collapses.** Findings 2, 3, 5, 6, 8, 12, 16, 17, 20, 21, 22, 23, 24, 25, 26, 30, 36, 37, 38, 39, 40, 48, 53, 56. Mechanical, low risk, and the suites must pass unchanged.
 - **D4 - production deduplication and shrink.** Findings 4, 9, 10, 15, 18, 28, 29, 33, 46, 49. Behavior-identical by argument, and each needs its own verification step. Findings 4 and 9 touch the proof core. Findings 9, 10, 15, 18, 28, and 49 are medium confidence in the audit. The audit caveat 4 also requires a verification step for finding 30 before any cut.
 - **D5 - cross-package seam.** Finding 7. Requires a research-side migration with census coverage consequences. Section 2.4.
 
@@ -110,4 +110,4 @@ The design round selects findings by class. The classes carry different risk and
 
 ## 9. Verification record
 
-Eight parallel read-only scouts gathered the audit facts on 2026-10-13. The controller verified the load-bearing facts in section 2 by direct reads and greps on the same date, at base `e6f6c7e`. Line counts in the audit table are `[ESTIMATE]`s. Three adversarial accuracy reviews ran on this document on 2026-10-13, covering citations, reasoning, and record rules. They found two wrong line citations, a false time-gap sentence, missing class members, false interaction claims, and unlabeled estimates. This document incorporates every confirmed fix.
+Eight parallel read-only scouts gathered the audit facts on 2026-10-13. The controller verified the load-bearing facts in section 2 by direct reads and greps on the same date, at base `e6f6c7e`. Line counts in the audit table are `[ESTIMATE]`s. Three adversarial accuracy reviews ran on this document on 2026-10-13, covering citations, reasoning, and record rules. They found two wrong line citations, a false time-gap sentence, missing class members, false interaction claims, and unlabeled estimates. This document incorporates every confirmed fix. A controller inventory check the same day restored audit row 56, which the integration pass had dropped, and corrected the merged count to 56.

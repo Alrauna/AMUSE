@@ -2,6 +2,8 @@
 
 Date: 2026-10-13
 
+Revision note: first issue 2026-10-13 as commit `e6f6c7e`. A controller inventory check the same day found that the integration pass dropped one merged finding: the `DeleteTempFolder` triplication of the Build test slice. Row 56 restores it. The merged count is 56, not 55. The net line is unchanged, because the dropped row's 25 lines were already inside the recorded sum.
+
 ## Status and scope
 
 - Branch: `ponytail-audit`
@@ -112,6 +114,7 @@ Ranked, biggest cut first. Paths drop the `Packages/com.alrauna.amuse/` prefix e
 | 53 | yagni | the one-caller `AlphaSeparationSplitTests.CreateSplitTexture` wrapper | inline the two calls at the single call site | `Tests/Editor/Build/AlphaSeparationSplitTests.cs` | 8 | high |
 | 54 | delete | `LilToonActivatorOccurrence.Text`, a write-only property | nothing | `Editor/Semantics/LilToon/LilToonSourceAttestation.cs` | 7 | high |
 | 55 | delete | the unread `AlphaProbeLevel.Mip` property and constructor parameter | nothing | research `Tests/Editor/Calibration/AlphaEvidenceProbe.cs` | 4 | high |
+| 56 | shrink | `DeleteTempFolder`, duplicated byte-for-byte in three transient-unlock test classes, all deleting `TransientUnlockTestLifecycle.TempFolder` | move it once onto `TransientUnlockTestLifecycle` beside `TempFolder` | `Tests/Editor/Build/TransientUnlockSwapInTests.cs` | 25 | high |
 
 net: -3775 lines, -0 deps possible.
 
