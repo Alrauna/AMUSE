@@ -264,6 +264,20 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(parameters[1].ParameterType, Is.EqualTo(typeof(Transform)));
         }
 
+        [Test]
+        public void DrawTransformationRowRendersDeferredSlotRow()
+        {
+            var row = Alrauna.Amuse.Editor.DryRun.MaterialTransformationRow.Slot(
+                "Body",
+                "UnityEngine.SkinnedMeshRenderer",
+                0,
+                0,
+                100,
+                Alrauna.Amuse.Editor.DryRun.RowText.DeferredSlotSentence(100));
+            Assert.That(row.Sentence, Does.Contain("Deferred:"));
+            Assert.That(row.Sentence, Does.Contain("100"));
+        }
+
         [UnityTest]
         public IEnumerator SeparatorOffPaintsBannerOnly()
         {
