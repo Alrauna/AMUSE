@@ -1014,11 +1014,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             string rendererName)
         {
             var rows = new List<MaterialTransformationRow>();
-            var moved = 0;
-            var proven = 0;
-            var total = 0;
-            var foldContributed = false;
-            var resolvedSlots = 0;
             for (var slotIndex = 0; slotIndex < slotResults.Length; slotIndex++)
             {
                 if (!slotResults[slotIndex].IsResolved)
@@ -1027,34 +1022,21 @@ namespace Alrauna.Amuse.Editor.DryRun
                         rendererPath,
                         rendererTypeName,
                         slotResults[slotIndex],
-                        slots[slotIndex],
+                        slotIndex < slots.Count ? slots[slotIndex] : null,
                         rendererName));
                     continue;
                 }
 
-                resolvedSlots++;
                 if (slotIndex >= verdicts.Count)
                 {
                     continue;
                 }
 
                 var verdict = verdicts[slotIndex];
-                proven += verdict.ProvenTriangles;
-                total += verdict.TotalTriangles;
-                var sentence = SlotSentence(verdict, rendererName);
+                var sentence = SlotSentence(verdict);
                 if (sentence == null)
                 {
                     continue;
-                }
-
-                if (verdict.Outcome == SlotTransformOutcome.Split)
-                {
-                    moved += verdict.ProvenTriangles;
-                }
-                else if (verdict.Outcome == SlotTransformOutcome.Fold)
-                {
-                    moved += verdict.FoldedUnprovenTriangles;
-                    foldContributed = true;
                 }
 
                 rows.Add(MaterialTransformationRow.Slot(
@@ -1063,52 +1045,12 @@ namespace Alrauna.Amuse.Editor.DryRun
                     verdict.SlotIndex,
                     verdict.ProvenTriangles,
                     verdict.TotalTriangles,
-                    sentence +
-                    CaptureRefusalSuffix(slotIndex < slots.Count
-                        ? slots[slotIndex]
-                        : null)));
+                    sentence));
             }
 
-            // An unresolved slot has no triangles to sum. The summary's
-            // proven and total shares stay over the slots the proof ran
-            // on, which is what the sentence words.
-            var refusedSlots = slotResults.Length - resolvedSlots;
-            string summary;
-            if (moved > 0 || refusedSlots > 0)
-            {
-                summary = RowText.RendererSummarySentence(
-                    rendererPath,
-                    rendererTypeName,
-                    moved,
-                    proven,
-                    total,
-                    refusedSlots,
-                    slots.Count,
-                    foldContributed);
-            }
-            else if (proven > 0)
-            {
-                summary = RowText.RendererNoMovementSentence(
-                    rendererPath, rendererTypeName, proven, total);
-            }
-            else
-            {
-                summary = RowText.RendererNoChangeSentence(
-                    rendererPath, rendererTypeName);
-            }
-
-            rows.Insert(0, MaterialTransformationRow.Renderer(
-                rendererPath, rendererTypeName, moved, proven, total,
-                refusedSlots, slots.Count, summary));
             return rows;
         }
 
-        /// <summary>
-        /// One refused slot row per unresolved slot result, through the
-        /// shared slot-analysis sentence the build reports from, with the
-        /// material named path-first and the slot's texture capture facts
-        /// folded in.
-        /// </summary>
         private static MaterialTransformationRow RefusedSlotRow(
             string rendererPath,
             string rendererTypeName,
@@ -1116,140 +1058,40 @@ namespace Alrauna.Amuse.Editor.DryRun
             CapturedMaterialSlotEvidence slot,
             string rendererName)
         {
-            var key = AmuseReportStrings.SlotAnalysisKey(result.Refusal);
-            if (!AmuseReportStrings.Has(key))
-            {
-                throw new InvalidOperationException(
-                    "The report string table has no sentence for key '"
-                    + key + "'.");
-            }
-
-            var sentence = RowText.RefusedRowSentence(
-                slot.SlotIndex,
-                key,
-                slot.SlotIndex.ToString(CultureInfo.InvariantCulture),
-                result.Refusal.ToString(),
-                rendererName,
-                MaterialDescription(result.Offender),
-                "");
             return MaterialTransformationRow.Slot(
                 rendererPath,
                 rendererTypeName,
-                slot.SlotIndex,
+                slot != null ? slot.SlotIndex : -1,
                 -1,
                 -1,
-                sentence + CaptureRefusalSuffix(slot));
+                RowText.RefusedSlotSentence());
         }
 
-        private static string SlotSentence(
-            SlotTransformVerdict verdict, string rendererName)
+        private static string SlotSentence(SlotTransformVerdict verdict)
         {
             switch (verdict.Outcome)
             {
                 case SlotTransformOutcome.Split:
-                    return RowText.SplitRowSentence(
-                        verdict.SlotIndex,
-                        verdict.ProvenTriangles,
-                        verdict.TotalTriangles);
+                    if (verdict.TotalTriangles > 0 && verdict.ProvenTriangles == verdict.TotalTriangles)
+                    {
+                        return RowText.ConvertableSlotSentence(verdict.TotalTriangles);
+                    }
+                    if (verdict.ProvenTriangles > 0)
+                    {
+                        return RowText.SplittableSlotSentence(
+                            verdict.ProvenTriangles, verdict.TotalTriangles);
+                    }
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.Fold:
-                    return RowText.FoldRowSentence(verdict.SlotIndex);
+                    return RowText.ConvertableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.AlreadyOpaque:
-                    return RowText.AlreadyOpaqueRowSentence(
-                        verdict.SlotIndex);
                 case SlotTransformOutcome.CoverageBelowMinimum:
-                    return RowText.UnchangedRowSentence(
-                        verdict.SlotIndex,
-                        verdict.ProvenTriangles,
-                        verdict.TotalTriangles);
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.AnisotropyDifferences:
-                    // The arguments follow the shared slot-refusal
-                    // contract: slot, reason, renderer name, offender,
-                    // extras. The base sentence reads slot and renderer.
-                    return RowText.RefusedRowSentence(
-                        verdict.SlotIndex,
-                        "amuse.slotSeparation.AnisotropyDifferences",
-                        verdict.SlotIndex.ToString(
-                            CultureInfo.InvariantCulture),
-                        SlotTransformOutcome.AnisotropyDifferences
-                            .ToString(),
-                        rendererName,
-                        "",
-                        "");
+                    return RowText.RefusedSlotSentence();
                 default:
-                    // A slot with no plan entry and no flag states no
-                    // outcome, so it draws no row.
-                    return null;
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
             }
-        }
-
-        /// <summary>
-        /// The slot's texture capture refusals fold into their slot row
-        /// through the existing texture capture strings, once per reason,
-        /// with the Has guard the shared table contract demands. A
-        /// resolved slot's proof may still have lost a texture field, and
-        /// a refused slot's row carries its own facts.
-        /// </summary>
-        private static string CaptureRefusalSuffix(
-            CapturedMaterialSlotEvidence slot)
-        {
-            if (slot == null || slot.CaptureRefusals.Count == 0)
-            {
-                return "";
-            }
-
-            var seen = new HashSet<TextureCaptureRefusalReason>();
-            var sentences = new List<string>();
-            foreach (var refusal in slot.CaptureRefusals)
-            {
-                if (!seen.Add(refusal.Reason))
-                {
-                    continue;
-                }
-
-                var key = AmuseReportStrings.TextureCaptureKey(
-                    refusal.Reason);
-                if (!AmuseReportStrings.Has(key))
-                {
-                    throw new InvalidOperationException(
-                        "The report string table has no sentence for key '"
-                        + key + "'.");
-                }
-
-                sentences.Add(AmuseReportStrings.Format(
-                    key,
-                    slot.SlotIndex.ToString(
-                        CultureInfo.InvariantCulture)));
-            }
-
-            return sentences.Count == 0
-                ? ""
-                : " " + string.Join(" ", sentences);
-        }
-
-        /// <summary>
-        /// The refused slot's material, named path-first, the same shape
-        /// the console entry uses: the project asset path when the capture
-        /// recorded one, else the material name, else a plain word.
-        /// </summary>
-        private static string MaterialDescription(
-            CapturedAlphaMaterial offender)
-        {
-            if (offender == null)
-            {
-                return "an unknown material";
-            }
-
-            if (!string.IsNullOrEmpty(offender.MaterialPath))
-            {
-                return "'" + offender.MaterialPath + "'";
-            }
-
-            if (!string.IsNullOrEmpty(offender.MaterialName))
-            {
-                return offender.MaterialName;
-            }
-
-            return "an unknown material";
         }
 
         private static MaterialTransformationRow RendererRefusedRow(

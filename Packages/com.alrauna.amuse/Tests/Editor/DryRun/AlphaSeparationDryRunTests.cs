@@ -97,6 +97,14 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        private static void SetInt(
+            AmuseAvatarOptimizer optimizer, string field, int value)
+        {
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty(field).intValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         /// <summary>
         /// An 8x8 mip-free RGBA32 asset with Point/Clamp sampling. The left
         /// half (u &lt; 0.5) carries <paramref name="leftAlpha"/>; the right
@@ -412,7 +420,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         // --- Behavior sentences ---------------------------------------------
 
         [Test]
-        public void ProvenTriangleDisplaysAsWouldSplit()
+        public void CutoutSplitSlotProducesSplittableSentence()
         {
             var fixture = NewComputeFixture(255, 0.5f);
             var dryRun = NewDryRun(
@@ -427,11 +435,16 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.TotalTriangles, Is.EqualTo(2));
             Assert.That(
                 row.Sentence,
-                Is.EqualTo("slot 0: would split. Triangles proven: 1 of 2."));
+                Is.EqualTo("Splittable: 1 of out 2 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False,
+                "a healthy renderer must emit no summary row");
         }
 
         [Test]
-        public void UnknownStaysUnchanged()
+        public void UnknownStaysUntouchable()
         {
             var fixture = NewComputeFixture(0, 0.5f);
             var dryRun = NewDryRun(
@@ -440,26 +453,75 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
             Assert.That(
                 dryRun.RendererRows.Any(row => row.Sentence.Contains(
-                    "would split")),
+                    "Splittable")),
                 Is.False,
                 "a fully transparent texture must never split");
             var rows = SlotRows(dryRun);
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo(
-                    "slot 0: unchanged. Triangles proven: 0 of 2. " +
-                    "The share is below the convert setting."));
+                Is.EqualTo("Untouchable: 0 of out 2 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False,
+                "a healthy renderer must emit no summary row");
         }
 
         [Test]
-        public void AnisotropyRefusalNamesRendererWithoutPlaceholders()
+        public void CutoutSplitSlotAllProvenProducesConvertableSentence()
         {
-            // The conservative desktop policy projects anisotropic proof
-            // sampling, so every triangle of the slot stays unproven and
-            // the slot refuses through the shared slot-refusal sentence.
-            // The row must name the renderer and never draw a raw
-            // placeholder.
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("all_proven", 255);
+            var material = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(root, OneTriangleMesh(), material);
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Convertable: 1 out of 1 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
+        }
+
+        [Test]
+        public void FoldSlotProducesConvertableSentence()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            SetInt(
+                fixture.Optimizer,
+                "_minimumOpaqueCoverageToPreservePercent",
+                60);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Convertable: 2 out of 2 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
+        }
+
+        [Test]
+        public void AnisotropyRefusalProducesRefusedSentence()
+        {
             var fixture = NewComputeFixture(0, 0.5f);
             SetSwitch(
                 fixture.Optimizer,
@@ -472,15 +534,34 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var rows = SlotRows(dryRun);
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
-                rows[0].Sentence, Does.Contain("refused"));
+                rows[0].Sentence,
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
+        }
+
+        [Test]
+        public void UnresolvedSlotProducesRefusedSentence()
+        {
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
+            var optimizer = AddOptimizer(root);
+            var shader = Shader.Find("Hidden/InternalErrorShader");
+            var material = _scope.Track(new Material(shader));
+            AddSkinnedRenderer(root, OneTriangleMesh(), material);
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Does.Contain(fixture.Renderer.gameObject.name),
-                "the refusal must name the renderer");
-            Assert.That(
-                rows[0].Sentence,
-                Does.Not.Contain("{"),
-                "a raw placeholder must never reach the row");
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
         }
 
         [Test]
@@ -519,12 +600,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         [Test]
-        public void TextureRefusalAttachesToSlotRow()
+        public void TextureRefusalProducesRefusedSlotRow()
         {
-            // The in-repo UnavailableCapture recipe: a texture shaped like
-            // an AAO atlas pack refuses at the atlas identity gate when no
-            // origin material backs it, before any readback. The refusal
-            // sentence must ride the slot row, never a standalone entry.
             var atlas = _scope.Track(new Texture2D(
                 TextureSize, TextureSize, TextureFormat.RGBA32, false));
             atlas.name = "MainTex (AAO UV Packed)";
@@ -553,24 +630,16 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     fixture, null, FixtureSelector(), FixtureCapturer());
                 Run(dryRun);
 
-                var sentence = AmuseReportStrings.Format(
-                    AmuseReportStrings.TextureCaptureKey(
-                        TextureCaptureRefusalReason.UnavailableCapture),
-                    "0");
-                Assert.That(AmuseReportStrings.Has(
-                    AmuseReportStrings.TextureCaptureKey(
-                        TextureCaptureRefusalReason.UnavailableCapture)),
-                    Is.True);
+                var rows = SlotRows(dryRun);
+                Assert.That(rows, Has.Count.EqualTo(1));
+                Assert.That(
+                    rows[0].Sentence,
+                    Is.EqualTo(
+                        "Refused: AMUSE currently does not support this material"));
                 Assert.That(
                     dryRun.RendererRows.Any(
-                        row => row.Kind ==
-                            MaterialTransformationRowKind.Slot &&
-                            row.Sentence.Contains(sentence)),
-                    Is.True,
-                    "the slot row must carry the texture refusal text. " +
-                    "Rows: " + string.Join(
-                        " | ",
-                        dryRun.RendererRows.Select(row => row.Sentence)));
+                        row => row.Kind == MaterialTransformationRowKind.Renderer),
+                    Is.True);
             }
             finally
             {
@@ -748,9 +817,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo(
-                    "slot 0: unchanged. Triangles proven: 0 of 2. " +
-                    "The share is below the convert setting."));
+                Is.EqualTo("Untouchable: 0 of out 2 polygons may be moved"));
             var material = (Material)fixture.Renderer.sharedMaterials[0];
             Assert.That(
                 material.GetTexture("_MainTex"),
@@ -819,7 +886,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         [Test]
-        public void OpaqueFamilySlotShowsAlreadyOpaque()
+        public void OpaqueFamilySlotShowsUntouchable()
         {
             var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
             var optimizer = AddOptimizer(root);
@@ -839,7 +906,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("slot 0: already opaque. It stays as it is."));
+                Is.EqualTo("Untouchable: 0 of out 1 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
         }
 
         // --- No-persistence guard -------------------------------------------
