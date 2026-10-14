@@ -81,12 +81,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         internal static Material CreateVerifiedMaterial()
         {
-            var shader = Shader.Find(FixtureShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{FixtureShaderName}' must import.");
-            return new Material(shader);
+            return TestShaderWriter.CreateMaterial(FixtureShaderName);
         }
 
         /// <summary>
@@ -153,12 +148,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </summary>
         internal static Material CreateTwoPassVerifiedMaterial()
         {
-            var shader = Shader.Find(TwoPassFixtureShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{TwoPassFixtureShaderName}' must import.");
-            return new Material(shader);
+            return TestShaderWriter.CreateMaterial(TwoPassFixtureShaderName);
         }
 
         /// <summary>
@@ -172,23 +162,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Action<TextureImporter> configure = null,
             bool sourceHasAlpha = true)
         {
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(128, 64, 32, 200);
-            }
-
-            return TestTextureImport.WritePng(
-                TempFolder + "/" + name + ".png",
-                4,
-                4,
-                pixels,
-                importer =>
-                {
-                    importer.mipmapEnabled = false;
-                    configure?.Invoke(importer);
-                },
-                alpha: sourceHasAlpha);
+            return TestTextureImport.ImportTexture(
+                TempFolder, name, configure, sourceHasAlpha);
         }
 
         /// <summary>
@@ -199,8 +174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </summary>
         protected Texture2D NewNativeTextureAsset(string name)
         {
-            return TestTextureImport.ImportNative(
-                TempFolder + "/" + name + ".asset");
+            return TestTextureImport.ImportNativeAsset(TempFolder, name);
         }
 
         protected static string ExpectedToken(Texture texture)

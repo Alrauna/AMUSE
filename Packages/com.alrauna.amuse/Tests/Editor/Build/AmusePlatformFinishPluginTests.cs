@@ -807,11 +807,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             string shaderName,
             string properties)
         {
-            return TestShaderWriter.WriteTestShader(
+            return TestShaderWriter.WriteStandInShader(
                 SwapConsentShaderFolder + "/" + fileName,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    Properties\n    {" + properties +
-                "\n    }\n    SubShader { Pass {} }\n}\n");
+                shaderName,
+                properties);
         }
 
         private static Mesh TwoSubmeshTriangleMesh()
@@ -1628,12 +1627,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 var shaderPath = fixtureFolder + "/locked.shader";
-                var lockedShader = TestShaderWriter.WriteTestShader(
+                var lockedShader = TestShaderWriter.WriteStandInShader(
                     shaderPath,
-                    "Shader \"Hidden/Locked/AmuseTestLocked\"\n" +
-                    "{\n    Properties\n    {\n" +
-                    "        _ShaderOptimizerEnabled (\"\", Float) = 0\n" +
-                    "    }\n    SubShader { Pass {} }\n}\n");
+                    "Hidden/Locked/AmuseTestLocked",
+                    "\n        _ShaderOptimizerEnabled (\"\", Float) = 0");
 
                 // The authoring asset carries the project path. The live
                 // build copy stays in memory, so its own project path is

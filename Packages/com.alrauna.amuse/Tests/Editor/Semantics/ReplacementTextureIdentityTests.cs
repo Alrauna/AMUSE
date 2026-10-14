@@ -33,7 +33,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // The registry lookup needs an asset-backed source, so this
             // test imports one. The folder helper mirrors the shared
             // fixture shape.
-            var source = ImportSourceAsset("mint");
+            var source = ImportSourceAsset("mint", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
             try
@@ -59,7 +59,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void SameCopyRemintingOneSourceStaysUsable()
         {
-            var source = ImportSourceAsset("remint");
+            var source = ImportSourceAsset("remint", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
             try
@@ -86,7 +86,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             // --- Falsifier 4: two distinct objects claiming one source
             // refuse both, and the refusal names the identity fact. ---
-            var source = ImportSourceAsset("contested");
+            var source = ImportSourceAsset("contested", FixtureFolder);
             var copyA = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copyA.name = source.name + "_compressed";
             var copyB = new Texture2D(4, 4, TextureFormat.RGBA32, false);
@@ -119,7 +119,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void ClearSessionDropsEveryMintedClaim()
         {
-            var source = ImportSourceAsset("cleared");
+            var source = ImportSourceAsset("cleared", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
             try
@@ -145,20 +145,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         /// <summary>
         /// Imports a real texture asset so the source side of a
-        /// registration is asset-backed, the shape the mint demands of
-        /// every source. Mirrors the shared fixture shape of the
-        /// attestation tests. Kept local: the deferred (non-forced)
-        /// import and the identity asserts do not fit the WritePng
-        /// callback shape.
+        /// registration is asset-backed, the shape the identity mint and
+        /// the attestation both demand of that source. Kept beside the two
+        /// replacement-texture suites: the deferred (non-forced) import
+        /// and the identity asserts do not fit the WritePng callback
+        /// shape.
         /// </summary>
-        private static Texture2D ImportSourceAsset(string marker)
+        internal static Texture2D ImportSourceAsset(string marker, string folder)
         {
-            if (!AssetDatabase.IsValidFolder(FixtureFolder))
+            if (!AssetDatabase.IsValidFolder(folder))
             {
-                AssetDatabase.CreateFolder(
-                    "Assets", Path.GetFileName(FixtureFolder));
+                AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
             }
-            var path = $"{FixtureFolder}/{marker}.png";
+            var path = $"{folder}/{marker}.png";
             var pixels = new Color32[4 * 4];
             for (var i = 0; i < pixels.Length; i++)
             {

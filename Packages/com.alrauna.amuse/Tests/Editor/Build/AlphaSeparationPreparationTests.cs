@@ -10893,11 +10893,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             var path = UnverifiedPoiyomiTempFolder + "/" + fileName;
-            var shader = TestShaderWriter.WriteTestShader(
-                path,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    Properties\n    {" + properties +
-                "\n    }\n    SubShader { Pass {} }\n}\n");
+            var shader = TestShaderWriter.WriteStandInShader(
+                path, shaderName, properties);
             return new Material(shader);
         }
 

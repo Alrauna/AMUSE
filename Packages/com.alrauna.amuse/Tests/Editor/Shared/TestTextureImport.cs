@@ -86,5 +86,46 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
                 $"Native asset '{path}' must load.");
             return loaded;
         }
+
+        /// <summary>
+        /// Writes, imports, and returns a tiny texture asset under the
+        /// given folder: a 4x4 pixel grid, mipmaps off. The default import
+        /// yields a supported sampler unless a test opts out through
+        /// <paramref name="configure"/>.
+        /// </summary>
+        internal static Texture2D ImportTexture(
+            string folder,
+            string name,
+            Action<TextureImporter> configure = null,
+            bool sourceHasAlpha = true)
+        {
+            var pixels = new Color32[16];
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = new Color32(128, 64, 32, 200);
+            }
+
+            return WritePng(
+                folder + "/" + name + ".png",
+                4,
+                4,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    configure?.Invoke(importer);
+                },
+                alpha: sourceHasAlpha);
+        }
+
+        /// <summary>
+        /// Creates a native (non-imported) texture asset under the given
+        /// folder: stable identity and a bounded format, but no
+        /// <see cref="TextureImporter"/> at all.
+        /// </summary>
+        internal static Texture2D ImportNativeAsset(string folder, string name)
+        {
+            return ImportNative(folder + "/" + name + ".asset");
+        }
     }
 }

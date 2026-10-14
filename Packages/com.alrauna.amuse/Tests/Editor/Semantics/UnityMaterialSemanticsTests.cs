@@ -1487,11 +1487,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             string properties)
         {
             var path = TempFolder + "/" + fileName;
-            var shader = TestShaderWriter.WriteTestShader(
-                path,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    Properties\n    {" + properties +
-                "\n    }\n    SubShader { Pass {} }\n}\n");
+            var shader = TestShaderWriter.WriteStandInShader(
+                path, shaderName, properties);
             var material = new Material(shader);
             _batchMaterials.Add(material);
             return material;

@@ -480,22 +480,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return Capture(material, MultiResolutionRequest());
         }
 
+        /// <summary>
+        /// The properties block the Multi stand-in declares, fed to the
+        /// shared stand-in writer verbatim between its braces.
+        /// </summary>
+        private const string MultiStandInProperties =
+            "\n        _TransparentMode (\"TransparentMode\", Float) = 0" +
+            "\n        _UseClippingCanceller (\"ClippingCanceller\", Float) = 0" +
+            "\n        _AsOverlay (\"AsOverlay\", Float) = 0" +
+            "\n        _Invisible (\"Invisible\", Int) = 0" +
+            "\n        _UDIMDiscardCompile (\"UDIMDiscardCompile\", Int) = 0";
+
         private Material NewMaterial(string shaderName)
         {
             var path = TempFolder + "/" +
                 shaderName.Replace('/', '-') + ".shader";
-            var shader = TestShaderWriter.WriteTestShader(
-                path,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    Properties\n    {\n" +
-                "        _TransparentMode (\"TransparentMode\", Float) = 0\n" +
-                "        _UseClippingCanceller" +
-                " (\"ClippingCanceller\", Float) = 0\n" +
-                "        _AsOverlay (\"AsOverlay\", Float) = 0\n" +
-                "        _Invisible (\"Invisible\", Int) = 0\n" +
-                "        _UDIMDiscardCompile" +
-                " (\"UDIMDiscardCompile\", Int) = 0\n" +
-                "    }\n    SubShader { Pass {} }\n}\n");
+            var shader = TestShaderWriter.WriteStandInShader(
+                path, shaderName, MultiStandInProperties);
             var material = new Material(shader);
             _scope.Track(material);
             return material;

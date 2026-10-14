@@ -92,11 +92,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             var path = UnattestedShaderFolder + "/" + fileName;
-            var shader = TestShaderWriter.WriteTestShader(
-                path,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    SubShader { Pass {} }\n}\n");
-            return shader;
+            return TestShaderWriter.WriteStandInShader(path, shaderName, null);
         }
 
         [Test]
