@@ -12,7 +12,6 @@ namespace Alrauna.Amuse.Editor.DryRun
     internal enum MaterialTransformationRowKind
     {
         Banner,
-        Disclosure,
         Note,
         Renderer,
         Slot,
@@ -112,14 +111,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Note,
-                null, null, -1, -1, -1, -1, -1, -1,
-                sentence);
-        }
-
-        internal static MaterialTransformationRow Disclosure(string sentence)
-        {
-            return new MaterialTransformationRow(
-                MaterialTransformationRowKind.Disclosure,
                 null, null, -1, -1, -1, -1, -1, -1,
                 sentence);
         }

@@ -421,7 +421,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 renderer, rendererPath, rendererTypeName, out var admittedLive);
             var body = BuildRendererBody(
                 renderer, rendererPath, rendererTypeName, admittedLive);
-            var rendererKey = DryRunFingerprint.Renderer(InputsFor(body));
+            var rendererKey = body;
             var composite = DryRunFingerprint.Composite(_avatarKey, rendererKey);
 
             if (refreshOnly)

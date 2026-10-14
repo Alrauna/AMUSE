@@ -209,8 +209,9 @@ namespace Alrauna.Amuse.Tests.Editor
 
             var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
                 _hostedEditor;
+            var rows = editor.DryRun.AvatarRows.Concat(editor.DryRun.RendererRows);
             Assert.That(
-                editor.TransformationRows.Any(
+                rows.Any(
                     row => row.Kind == Alrauna.Amuse.Editor.DryRun
                         .MaterialTransformationRowKind.Renderer),
                 Is.True,
@@ -230,7 +231,7 @@ namespace Alrauna.Amuse.Tests.Editor
 
             var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
                 _hostedEditor;
-            var rows = editor.TransformationRows;
+            var rows = editor.DryRun.AvatarRows.Concat(editor.DryRun.RendererRows);
             var separatorSentence = Alrauna.Amuse.Editor.DryRun.RowText
                 .BannerSentence(
                     Alrauna.Amuse.Editor.DryRun.BannerKind.SeparatorOff);
