@@ -5041,11 +5041,98 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// One parameterized single-triangle policy arm over one optimizer
+        /// component. The serialized policy hook writes the arm's fields
+        /// before the shared apply, the material factory builds the arm's
+        /// material and its main texture (importing from the cutout
+        /// conversion fixtures when the arm owns the fixture scope), and
+        /// the barrier runs through the production entry over the given
+        /// verified seams. Arms with the fixture scope also run under the
+        /// temporary-directory override and tear the fixtures down with
+        /// the arm.
+        /// <para>
+        /// The serialized writes must land before the acceptance helper
+        /// runs. This SerializedObject caches the component as it was
+        /// before that helper stores its acceptance, so applying it
+        /// afterwards replays the stale cache and restores the stored
+        /// acceptance to false. The optional post-serialized hook is where
+        /// an arm grants that acceptance.
+        /// </para>
+        /// </summary>
+        private static AmusePlatformFinishState RunPolicyArm(
+            string rootName,
+            Func<LilToonCutoutConversionFixtures, Material> createMaterial,
+            Action<SerializedObject> writeSerializedPolicy = null,
+            Action<GameObject> postSerializedPolicy = null,
+            bool withFixtureScope = false,
+            AlphaMaterialRequestSelector selectRequest = null,
+            ClosedAlphaMaterialCapturer capturer = null,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
+            VerifiedLilToonConversion lilToonConversion = null)
+        {
+            using var assets = withFixtureScope
+                ? new OverrideTemporaryDirectoryScope(null)
+                : null;
+            var fixtures = withFixtureScope
+                ? new LilToonCutoutConversionFixtures()
+                : null;
+            fixtures?.BaseSetUp();
+            var root = new GameObject(rootName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
+            writeSerializedPolicy?.Invoke(serialized);
+            // These numeric writes must land before the acceptance helper
+            // runs. This SerializedObject caches the component as it was
+            // before that helper stores its acceptance, so applying it
+            // afterwards replays the stale cache and restores the stored
+            // acceptance to false.
+            serialized.ApplyModifiedProperties();
+            postSerializedPolicy?.Invoke(root);
+
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = createMaterial(fixtures);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: selectRequest,
+                    capturer: capturer,
+                    resolveSemantics: resolveSemantics,
+                    lilToonConversion: lilToonConversion);
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures?.BaseTearDown();
+            }
+
+            return amuse;
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the stray chain, with the
         /// optimizer component's three alpha policy fields set through
-        /// serialized properties. Mirrors <see cref="RunAlphaPolicyArm"/>
-        /// with the cutout fixture material, whose shader cutoff the
-        /// capture declares.
+        /// serialized properties. Uses the cutout fixture material, whose
+        /// shader cutoff the capture declares.
         /// </summary>
         private static AmusePlatformFinishState RunCutoutPolicyArm(
             int opaquePercent,
@@ -5053,71 +5140,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int polygonCoveragePercent,
             string armName)
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var fixtures = new LilToonCutoutConversionFixtures();
-            fixtures.BaseSetUp();
-            var root = new GameObject("AMUSE cutout policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                .intValue = opaquePercent;
-            serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                .intValue = polygonClampPercent;
-            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
-                .intValue = polygonCoveragePercent;
-            serialized.ApplyModifiedProperties();
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                var texture = fixtures.ImportStrayTexelTexture(
-                    "cutout_policy_stray_" + armName);
-                material =
-                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
-                material.SetTexture("_MainTex", texture);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE cutout policy " + armName,
+                fixtures =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var texture = fixtures.ImportStrayTexelTexture(
+                        "cutout_policy_stray_" + armName);
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    material.SetTexture("_MainTex", texture);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-
-                UnityEngine.Object.DestroyImmediate(root);
-                fixtures.BaseTearDown();
-            }
-
-            return amuse;
+                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                        .intValue = opaquePercent;
+                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                        .intValue = polygonClampPercent;
+                    serialized.FindProperty(
+                            "_polygonMinimumOpaqueCoveragePercent")
+                        .intValue = polygonCoveragePercent;
+                },
+                withFixtureScope: true,
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly);
         }
 
         /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
         /// the optimizer component's serialized mip cap and minimum
         /// size set when requested.
-        /// Follows the streaming-clone arm's shape: verified seams, manual
-        /// teardown, and the barrier run through the production entry.
         /// </summary>
         private static AmusePlatformFinishState RunMipPolicyArm(
             Texture2D mainTex,
@@ -5125,72 +5182,45 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int? maxMipLevel,
             int? minTextureSize = null)
         {
-            var root = new GameObject("AMUSE mip policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            if (maxMipLevel.HasValue)
-            {
-                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
-                    .intValue = maxMipLevel.Value;
-            }
-
-            if (minTextureSize.HasValue)
-            {
-                serialized.FindProperty("_preserveTransparencyMinTextureSize")
-                    .intValue = minTextureSize.Value;
-            }
-
-            serialized.ApplyModifiedProperties();
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                material =
-                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
-                material.SetTexture("_MainTex", mainTex);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE mip policy " + armName,
+                _ =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    material.SetTexture("_MainTex", mainTex);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
+                    if (maxMipLevel.HasValue)
+                    {
+                        serialized.FindProperty(
+                                "_preserveTransparencyMaxMipLevel")
+                            .intValue = maxMipLevel.Value;
+                    }
 
-                UnityEngine.Object.DestroyImmediate(root);
-            }
-
-            return amuse;
+                    if (minTextureSize.HasValue)
+                    {
+                        serialized.FindProperty(
+                                "_preserveTransparencyMinTextureSize")
+                            .intValue = minTextureSize.Value;
+                    }
+                },
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly);
         }
 
         /// <summary>
         /// One single-triangle transparent (fade-eligible) arm over a
         /// procedural 4x4 chain whose alpha bytes are all 255 except one
         /// texel at 3, with the optimizer component's three alpha policy
-        /// fields set through serialized properties. Mirrors
-        /// <see cref="RunMipPolicyArm"/>: verified seams, manual teardown,
-        /// and the barrier run through the production entry. The chain is
+        /// fields set through serialized properties. The chain is
         /// authored at runtime and stored as an asset, so it carries a
         /// project identity and capture routes through the direct GPU
         /// path and its policy-aware predicate shader.
@@ -5203,80 +5233,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             byte? uniformAlpha = null,
             bool acceptDesktopDifferences = false)
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var fixtures = new LilToonCutoutConversionFixtures();
-            fixtures.BaseSetUp();
-            var root = new GameObject("AMUSE alpha policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                .intValue = opaquePercent;
-            serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                .intValue = polygonClampPercent;
-            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
-                .intValue = polygonCoveragePercent;
-            // These numeric writes must land before the acceptance helper
-            // runs. This SerializedObject caches the component as it was
-            // before that helper stores its acceptance, so applying it
-            // afterwards replays the stale cache and restores the stored
-            // acceptance to false.
-            serialized.ApplyModifiedProperties();
-            if (acceptDesktopDifferences)
-            {
-                // The arm's local footprint proof resolves only under the
-                // accepted non-anisotropic policy; the caller states that
-                // per arm, and no default grants it.
-                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
-            }
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                var texture = uniformAlpha.HasValue
-                    ? fixtures.ImportUniformAlphaTexture(
-                        "alpha_policy_uniform_" + armName,
-                        uniformAlpha.Value)
-                    : fixtures.ImportStrayTexelTexture(
-                        "alpha_policy_stray_" + armName);
-                material =
-                    LilToonFixtureTestBase.CreateTransparentConversionMaterial();
-                material.SetTexture("_MainTex", texture);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE alpha policy " + armName,
+                fixtures =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var texture = uniformAlpha.HasValue
+                        ? fixtures.ImportUniformAlphaTexture(
+                            "alpha_policy_uniform_" + armName,
+                            uniformAlpha.Value)
+                        : fixtures.ImportStrayTexelTexture(
+                            "alpha_policy_stray_" + armName);
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial();
+                    material.SetTexture("_MainTex", texture);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-
-                UnityEngine.Object.DestroyImmediate(root);
-                fixtures.BaseTearDown();
-            }
-
-            return amuse;
+                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                        .intValue = opaquePercent;
+                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                        .intValue = polygonClampPercent;
+                    serialized.FindProperty(
+                            "_polygonMinimumOpaqueCoveragePercent")
+                        .intValue = polygonCoveragePercent;
+                },
+                root =>
+                {
+                    if (acceptDesktopDifferences)
+                    {
+                        // The arm's local footprint proof resolves only
+                        // under the accepted non-anisotropic policy; the
+                        // caller states that per arm, and no default
+                        // grants it.
+                        FixtureProofScope
+                            .AcceptDesktopAnisotropyDifferences(root);
+                    }
+                },
+                withFixtureScope: true,
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly,
+                lilToonConversion: VerifiedFamilyConversion);
         }
 
 
@@ -6473,17 +6475,89 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Shared base of the barrier arms: the arm root, its mesh, its
+        /// captured finish state, the one barrier run every arm uses, and
+        /// the create skeleton the arm fixtures build on. Subclasses add
+        /// only their own materials, policy writes, mesh shape, and
+        /// cleanup.
+        /// </summary>
+        private abstract class ArmFixture : IDisposable
+        {
+            protected GameObject root;
+            protected Mesh mesh;
+            protected AmusePlatformFinishState amuse;
+
+            /// <summary>
+            /// Creates the arm root over its optimizer component.
+            /// </summary>
+            protected Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
+                CreateArmRoot(string rootName)
+            {
+                root = new GameObject(rootName);
+                return root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            }
+
+            /// <summary>
+            /// Builds the in-bounds single-triangle mesh the one-slot arms
+            /// share; the optional hook runs after the UV fill.
+            /// </summary>
+            protected void BuildSingleTriangleMesh(
+                Action<Mesh> configureMesh = null)
+            {
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(mesh);
+                configureMesh?.Invoke(mesh);
+            }
+
+            /// <summary>
+            /// Attaches the arm's skinned renderer over the given
+            /// materials and returns it.
+            /// </summary>
+            protected SkinnedMeshRenderer AttachRenderer(
+                params Material[] materials)
+            {
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = materials;
+                return renderer;
+            }
+
+            internal AmusePlatformFinishState Run()
+            {
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+                return amuse;
+            }
+
+            public abstract void Dispose();
+        }
+
+        /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
         /// through the real barrier with the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class LocalityArmFixture : IDisposable
+        private sealed class LocalityArmFixture : ArmFixture
         {
             private readonly LilToonTransparentConversionFixtures fixtures;
-            private GameObject root;
-            private Mesh mesh;
-            private AmusePlatformFinishState amuse;
 
             internal Material PoiyomiMaterial { get; private set; }
             internal Material CutoutMaterial { get; private set; }
@@ -6500,17 +6574,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Texture opaqueTexture,
                 Action<Material> configureTransparent)
             {
-                var arm = new LocalityArmFixture(fixtures)
-                {
-                    root = new GameObject("AMUSE transparent locality"),
-                    PoiyomiMaterial = VerifiedOpaqueMaterial(),
-                    CutoutMaterial =
-                        LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
-                    TransparentMaterial =
-                        LilToonFixtureTestBase
-                            .CreateTransparentConversionMaterial(),
-                };
-                arm.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var arm = new LocalityArmFixture(fixtures);
+                arm.CreateArmRoot("AMUSE transparent locality");
+                arm.PoiyomiMaterial = VerifiedOpaqueMaterial();
+                arm.CutoutMaterial =
+                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                arm.TransparentMaterial =
+                    LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial();
                 FixtureProofScope.PinAllSizes(arm.root);
                 arm.CutoutMaterial.SetTexture("_MainTex", opaqueTexture);
                 arm.TransparentMaterial.SetTexture(
@@ -6538,33 +6609,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 arm.mesh.SetTriangles(new[] { 6, 7, 8 }, 2);
                 FillInBoundsUvs(arm.mesh);
 
-                var renderer = arm.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = arm.mesh;
-                renderer.sharedMaterials = new[]
-                {
+                arm.AttachRenderer(
                     arm.PoiyomiMaterial,
                     arm.CutoutMaterial,
-                    arm.TransparentMaterial,
-                };
+                    arm.TransparentMaterial);
 
                 return arm;
             }
 
-            internal AmusePlatformFinishState Run()
-            {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
+            public override void Dispose()
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
@@ -7717,13 +7770,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// transparent stand-in material and the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class TransparentArmFixture : IDisposable
+        private sealed class TransparentArmFixture : ArmFixture
         {
-            private GameObject root;
-            private Mesh mesh;
             private AnimationClip clip;
             private AnimatorController controller;
-            private AmusePlatformFinishState amuse;
 
             private TransparentArmFixture() { }
 
@@ -7740,32 +7790,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new TransparentArmFixture
                 {
-                    root = new GameObject(rootName),
                     Material = LilToonFixtureTestBase
                         .CreateTransparentConversionMaterial(),
                 };
-                fixture.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                fixture.CreateArmRoot(rootName);
                 FixtureProofScope.PinAllSizes(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
-
-                fixture.mesh = new Mesh
-                {
-                    vertices = new[]
-                    {
-                        Vector3.zero,
-                        Vector3.right,
-                        Vector3.up,
-                    },
-                };
-                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-                FillInBoundsUvs(fixture.mesh);
-
-                var renderer =
-                    fixture.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = fixture.mesh;
-                renderer.sharedMaterials = new[] { fixture.Material };
-                fixture.Renderer = renderer;
+                fixture.BuildSingleTriangleMesh();
+                fixture.Renderer = fixture.AttachRenderer(fixture.Material);
 
                 if (animatedBinding != null)
                 {
@@ -7779,21 +7812,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return fixture;
             }
 
-            internal AmusePlatformFinishState Run()
-            {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
+            public override void Dispose()
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
@@ -7859,12 +7878,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// through the real barrier with the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class DepthTestPolicyArmFixture : IDisposable
+        private sealed class DepthTestPolicyArmFixture : ArmFixture
         {
-            private GameObject root;
-            private Mesh mesh;
-            private AmusePlatformFinishState amuse;
-
             internal Material Material { get; private set; }
 
             internal static DepthTestPolicyArmFixture Create(
@@ -7877,12 +7892,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new DepthTestPolicyArmFixture
                 {
-                    root = new GameObject(rootName),
                     Material = LilToonFixtureTestBase
                         .CreateTransparentConversionMaterial(),
                 };
-                var component = fixture.root.AddComponent<
-                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var component = fixture.CreateArmRoot(rootName);
                 if (!allowDepthTestChange)
                 {
                     var serialized = new SerializedObject(component);
@@ -7904,43 +7917,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 FixtureAvatarIdentity.AttachVrcDescriptor(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
-
-                fixture.mesh = new Mesh
-                {
-                    vertices = new[]
-                    {
-                        Vector3.zero,
-                        Vector3.right,
-                        Vector3.up,
-                    },
-                };
-                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-                FillInBoundsUvs(fixture.mesh);
-                configureMesh?.Invoke(fixture.mesh);
-
-                var renderer =
-                    fixture.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = fixture.mesh;
-                renderer.sharedMaterials = new[] { fixture.Material };
+                fixture.BuildSingleTriangleMesh(configureMesh);
+                fixture.AttachRenderer(fixture.Material);
 
                 return fixture;
             }
 
-            internal AmusePlatformFinishState Run()
-            {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
+            public override void Dispose()
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
