@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
@@ -197,25 +198,70 @@ namespace Alrauna.Amuse.Tests.Editor
         [UnityTest]
         public IEnumerator MaterialTransformationsFoldoutPaintsRows()
         {
-            // One renderer on the avatar root carries the stand-in
-            // cutout material. Production selection refuses the
-            // stand-in shader by name, so the run completes with a
-            // named renderer row. The host window must keep
-            // repainting until the run reports done, and the editor
-            // must then expose that renderer row.
-            var component = NewHiddenAvatarFixture();
-            yield return RepaintThroughHostWindow(
-                component, DryRunFinished, true);
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
 
-            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
-                _hostedEditor;
-            var rows = editor.DryRun.AvatarRows.Concat(editor.DryRun.RendererRows);
-            Assert.That(
-                rows.Any(
-                    row => row.Kind == Alrauna.Amuse.Editor.DryRun
-                        .MaterialTransformationRowKind.Renderer),
-                Is.True,
-                "the foldout exposed no renderer row");
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var dryRun = ((Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)_hostedEditor).DryRun;
+            Assert.That(dryRun, Is.Not.Null, "dry run must be instantiated");
+            Assert.That(dryRun.RendererRows.Any(r => r.Kind == MaterialTransformationRowKind.Slot),
+                Is.True, "must produce at least one slot row");
+        }
+
+        [UnityTest]
+        public IEnumerator MissingOrNullRendererDrawsSafelyDuringRepaint()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            // Destroy the renderer component so dynamic resolution yields null.
+            UnityEngine.Object.DestroyImmediate(renderer);
+
+            _window.Painted = false;
+            _window.Repaint();
+            for (var frame = 0; frame < 10 && !_window.Painted; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(_window.Painted, Is.True,
+                "the window must paint safely when a renderer is missing");
+        }
+
+        [Test]
+        public void DrawTransformationRowAcceptsAvatarRoot()
+        {
+            var method = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                .GetMethod("DrawTransformationRow", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, "DrawTransformationRow must exist");
+            var parameters = method.GetParameters();
+            Assert.That(parameters.Length, Is.EqualTo(2),
+                "DrawTransformationRow must accept two parameters");
+            Assert.That(parameters[0].ParameterType, Is.EqualTo(typeof(MaterialTransformationRow)));
+            Assert.That(parameters[1].ParameterType, Is.EqualTo(typeof(Transform)));
         }
 
         [UnityTest]
@@ -291,40 +337,6 @@ namespace Alrauna.Amuse.Tests.Editor
             var so = new SerializedObject(component);
             so.FindProperty(propertyPath).boolValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        /// <summary>
-        /// A one-renderer avatar fixture. The component sits on the
-        /// hidden root, and one child renderer carries the stand-in
-        /// cutout material, so the foldout view has a real renderer
-        /// row to compute for.
-        /// </summary>
-        private Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
-            NewHiddenAvatarFixture()
-        {
-            var component = NewHiddenComponent();
-            var shader = Shader.Find(
-                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
-            Assert.That(shader, Is.Not.Null,
-                "the stand-in cutout shader must import");
-            var body = new GameObject("Body");
-            body.hideFlags = HideFlags.HideAndDontSave;
-            body.transform.SetParent(_root.transform, false);
-            var mesh = new Mesh
-            {
-                vertices = new[]
-                {
-                    Vector3.zero, Vector3.right, Vector3.up,
-                },
-                triangles = new[] { 0, 1, 2 },
-            };
-            _scope.Track(mesh);
-            var renderer = body.AddComponent<SkinnedMeshRenderer>();
-            renderer.sharedMesh = mesh;
-            var material = new Material(shader);
-            _scope.Track(material);
-            renderer.sharedMaterials = new[] { material };
-            return component;
         }
 
         /// <summary>

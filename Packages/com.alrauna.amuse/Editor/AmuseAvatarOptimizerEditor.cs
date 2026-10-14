@@ -153,16 +153,17 @@ namespace Alrauna.Amuse.Editor
             // The rows draw from the state this frame's layout pass
             // computed. Nothing below a draw mutates it before the
             // next layout pass.
+            var avatarRoot = ((AmuseAvatarOptimizer)target)?.transform;
             if (_dryRun != null)
             {
                 foreach (var row in _dryRun.AvatarRows)
                 {
-                    DrawTransformationRow(row);
+                    DrawTransformationRow(row, avatarRoot);
                 }
 
                 foreach (var row in _dryRun.RendererRows)
                 {
-                    DrawTransformationRow(row);
+                    DrawTransformationRow(row, avatarRoot);
                 }
             }
 
@@ -193,14 +194,15 @@ namespace Alrauna.Amuse.Editor
         }
 
         /// <summary>
-        /// One display row. A banner row and an errored row draw as
-        /// warnings, because each states why results are missing or
-        /// partial. A slot row indents one level under its renderer,
-        /// so the renderer-to-slot shape the build reports stays
-        /// readable. Every other row draws as a plain line.
+        /// One display row. A banner row, an errored row, and a
+        /// refused renderer row draw as warnings. A slot row renders
+        /// the renderer object field and material object field side by
+        /// side on line one. The second line shows the indented status
+        /// sentence. Every other row draws as a plain line.
         /// </summary>
         private static void DrawTransformationRow(
-            MaterialTransformationRow row)
+            MaterialTransformationRow row,
+            Transform avatarRoot)
         {
             switch (row.Kind)
             {
@@ -208,7 +210,36 @@ namespace Alrauna.Amuse.Editor
                 case MaterialTransformationRowKind.Errored:
                     EditorGUILayout.HelpBox(row.Sentence, MessageType.Warning);
                     return;
+                case MaterialTransformationRowKind.Renderer:
+                    EditorGUILayout.HelpBox(row.Sentence, MessageType.Warning);
+                    return;
                 case MaterialTransformationRowKind.Slot:
+                    Renderer renderer = null;
+                    if (avatarRoot != null)
+                    {
+                        renderer = string.IsNullOrEmpty(row.RendererPath)
+                            ? avatarRoot.GetComponent<Renderer>()
+                            : avatarRoot.Find(row.RendererPath)?.GetComponent<Renderer>();
+                    }
+
+                    Material material = null;
+                    var materials = renderer != null ? renderer.sharedMaterials : null;
+                    if (materials != null && row.SlotIndex >= 0 && row.SlotIndex < materials.Length)
+                    {
+                        material = materials[row.SlotIndex];
+                    }
+
+                    int indentOffset = EditorGUI.indentLevel * 15;
+                    float halfWidth = Mathf.Max(60f, (EditorGUIUtility.currentViewWidth - indentOffset) / 2f - 20f);
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        EditorGUILayout.ObjectField(renderer, typeof(Renderer), true, GUILayout.Width(halfWidth));
+                        int originalIndent = EditorGUI.indentLevel;
+                        EditorGUI.indentLevel = 0;
+                        EditorGUILayout.ObjectField(material, typeof(Material), false);
+                        EditorGUI.indentLevel = originalIndent;
+                    }
+
                     EditorGUI.indentLevel++;
                     EditorGUILayout.LabelField(row.Sentence);
                     EditorGUI.indentLevel--;
