@@ -28,7 +28,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var originalMaterial = NewMaterial();
             var renderer = NewRenderer(originalMesh, originalMaterial);
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var capturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, capturedSlots);
             var originalCapturedMaterial = extraction.Snapshot.Materials[0];
 
             renderer.sharedMesh = Triangle();
@@ -46,7 +47,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             originalMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
             originalMaterial.color = new Color(1f, 1f, 1f, 0f);
 
-            var freshExtraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var replacementCapturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var freshExtraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, replacementCapturedSlots);
             var replacementCapturedMaterial =
                 freshExtraction.Snapshot.Materials[0];
             CapturedAlphaSemantics Resolve(CapturedAlphaMaterial material)
@@ -241,7 +243,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var mesh = Quad();
             var renderer = NewRenderer(mesh, NewMaterial());
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var capturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, capturedSlots);
 
             Assert.That(extraction.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(extraction.Snapshot, Is.Not.Null);
@@ -256,7 +259,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var gameObject = Track(new GameObject("amuse-refused-snapshot-test"));
             var renderer = gameObject.AddComponent<LineRenderer>();
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, Array.Empty<CapturedAlphaMaterial>());
 
             Assert.That(
                 extraction.Refusal,

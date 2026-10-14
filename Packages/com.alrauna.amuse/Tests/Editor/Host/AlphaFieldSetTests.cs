@@ -33,13 +33,17 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void PoisonedReplacementIdentityFailsClosedAtTheConsumerGate()
         {
-            // Build the set through the existing WithField seam, then poison
-            // the id through the ledger, then assert TryGetFor refuses.
+            // Build the set, then poison the id through the ledger,
+            // then assert TryGetFor refuses.
             var sourceId = new TextureSourceId("unity-replacement:poisoned:1");
             var chain = CapturedAlphaFieldBagLevelChainOrNull();
-            var set = AlphaFieldSet.WithField(
-                sourceId, TextureChannel.Alpha, 1f,
-                AlphaPolicyBounds.Inert, chain);
+            var set = new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>
+                {
+                    [new AlphaFieldKey(
+                        sourceId, TextureChannel.Alpha, 1f,
+                        AlphaPolicyBounds.Inert)] = chain,
+                });
             var evidence = AdmittedMaterialStatesTests.EvidenceNamingAlphaSource(sourceId, chain);
             ReplacementTextureIdentity.ClearSession();
             Assert.That(
@@ -126,9 +130,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var source = new TextureSourceId(
                 "amuse-tests:field-set:unasked-channel:1");
             var chain = CapturedAlphaFieldBagLevelChainOrNull();
-            var set = AlphaFieldSet.WithField(
-                source, TextureChannel.Alpha, 0.5f,
-                AlphaPolicyBounds.Inert, chain);
+            var set = new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>
+                {
+                    [new AlphaFieldKey(
+                        source, TextureChannel.Alpha, 0.5f,
+                        AlphaPolicyBounds.Inert)] = chain,
+                });
             var evidence = EvidenceNamingAskedAndUnaskedAlphaSiblings(
                 source, chain);
             var request = new MaterialEvidenceRequest(
@@ -164,9 +172,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var source = new TextureSourceId(
                 "amuse-tests:field-set:malformed:1");
             var chain = CapturedAlphaFieldBagLevelChainOrNull();
-            var set = AlphaFieldSet.WithField(
-                source, TextureChannel.Alpha, 1f,
-                AlphaPolicyBounds.Inert, chain);
+            var set = new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>
+                {
+                    [new AlphaFieldKey(
+                        source, TextureChannel.Alpha, 1f,
+                        AlphaPolicyBounds.Inert)] = chain,
+                });
             var evidence = AdmittedMaterialStatesTests.EvidenceNamingAlphaSource(source, chain);
 
             Assert.That(

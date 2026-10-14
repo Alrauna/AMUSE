@@ -606,6 +606,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             return UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 rendererPath,
                 currentSlots,
+                null,
                 _graph,
                 VRChatPlatformAnimatorBindings.Instance,
                 _bounds,

@@ -739,6 +739,7 @@ namespace Alrauna.Amuse.Editor.Build
                         .CaptureGraphThroughSeams(
                             rendererPath,
                             renderer.sharedMaterials,
+                            null,
                             graph,
                             state.AnimatorBindings,
                             alphaPolicyBounds,

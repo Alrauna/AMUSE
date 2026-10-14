@@ -1134,13 +1134,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
                 alpha[0] = 0;
                 var key = AlphaFieldKey.ForAlpha(assignment);
-                var fields = AlphaFieldSet.WithField(
-                    key.Source,
-                    key.Channel,
-                    key.Threshold,
-                    key.Bounds,
-                    new AlphaMipChain(
-                        new[] { new AlphaTextureData(8, 8, alpha) }));
+                var fields = new AlphaFieldSet(
+                    new Dictionary<AlphaFieldKey, AlphaMipChain>
+                    {
+                        [key] = new AlphaMipChain(
+                            new[] { new AlphaTextureData(8, 8, alpha) }),
+                    });
 
                 var result = AdmittedMaterialStates.ResolveSlot(
                     new CapturedMaterialSlotEvidence(0, new[] { 0 }),
@@ -1275,9 +1274,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 "amuse-tests:admission-policy:b");
             var materialA = SyntheticSampledMaterial(sourceA, chain);
             var materialB = SyntheticSampledMaterial(sourceB, chain);
-            var fields = AlphaFieldSet.WithField(
-                sourceA, TextureChannel.Alpha, 1f,
-                AlphaPolicyBounds.Inert, chain);
+            var fields = new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>
+                {
+                    [new AlphaFieldKey(
+                        sourceA, TextureChannel.Alpha, 1f,
+                        AlphaPolicyBounds.Inert)] = chain,
+                });
             var corner = TriangleAlphaInput.WithUv0(
                 Vector3.zero,
                 Vector3.right,

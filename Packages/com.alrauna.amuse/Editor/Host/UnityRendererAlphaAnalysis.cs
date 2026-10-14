@@ -235,15 +235,8 @@ namespace Alrauna.Amuse.Editor.Host
     {
         internal static RendererAlphaAnalysis Analyze(Renderer renderer)
         {
-            return Analyze(
-                renderer, (RegisteredSourceLookup)null);
-        }
-
-        internal static RendererAlphaAnalysis Analyze(
-            Renderer renderer,
-            RegisteredSourceLookup resolveRegisteredSource)
-        {
-            var extraction = Capture(renderer, resolveRegisteredSource);
+            var extraction = Capture(
+                renderer, null, null, out _, null);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(extraction.Snapshot)
                 : RendererAlphaAnalysis.Refused(extraction.Refusal);
@@ -278,18 +271,6 @@ namespace Alrauna.Amuse.Editor.Host
                 : RendererAlphaAnalysis.Refused(extraction.Refusal);
         }
 
-        internal static UnityRendererAlphaExtraction Capture(Renderer renderer)
-        {
-            return Capture(renderer, null);
-        }
-
-        internal static UnityRendererAlphaExtraction Capture(
-            Renderer renderer,
-            RegisteredSourceLookup resolveRegisteredSource)
-        {
-            return Capture(
-                renderer, null, null, out _, resolveRegisteredSource);
-        }
 
         /// <summary>
         /// Captures only renderer and mesh geometry while carrying forward the
@@ -307,18 +288,6 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return Capture(renderer, null, capturedMaterialSlots, out _);
-        }
-
-        /// <summary>
-        /// Performs the host facts whose named renderer refusal must take
-        /// precedence over animation-evidence closure. Geometry is deliberately
-        /// excluded: runtime-state admission must run before any topology,
-        /// vertex, UV, or index inspection.
-        /// </summary>
-        internal static RendererAnalysisRefusal HostStructuralRefusalFor(
-            Renderer renderer)
-        {
-            return HostStructuralRefusalFor(renderer, out _, out _);
         }
 
         /// <summary>

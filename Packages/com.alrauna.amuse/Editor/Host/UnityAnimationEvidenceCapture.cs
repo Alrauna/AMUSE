@@ -190,76 +190,13 @@ namespace Alrauna.Amuse.Editor.Host
                 observedMaterialMapper,
                 resolveRegisteredSource);
         }
-        // Public-project vendor fixtures exercise verified frontend equations but
-        // intentionally do not publish vendor source assets.
-        internal static CapturedAnimationEvidence CaptureObservedForTests(
-            string rendererPath,
-            IReadOnlyList<LiveClipObservation> observations,
-            IReadOnlyList<Material> currentSlots,
-            CommittedControllerGraphResult graph,
-            AlphaMaterialRequestSelector selectRequest,
-            ClosedAlphaMaterialCapturer capturer,
-            out IReadOnlyList<Material> admittedLiveMaterials,
-            bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
-        {
-            // The closure-mechanics seam stays policy-free: it captures
-            // under the inert bounds, which reproduce the base exact-255
-            // contract. Policy enters at the production entries.
-            return CaptureObserved(
-                rendererPath,
-                observations,
-                currentSlots,
-                graph,
-                AlphaPolicyBounds.Inert,
-                selectRequest,
-                capturer,
-                out admittedLiveMaterials,
-                ignoreOutOfRangeSlots,
-                rendererTypeName,
-                lockedRefusalCheck: null,
-                observedMaterialMapper: null,
-                resolveRegisteredSource: resolveRegisteredSource);
-        }
-
-        internal static CapturedAnimationEvidence CaptureObservedForTests(
-            string rendererPath,
-            IReadOnlyList<LiveClipObservation> observations,
-            IReadOnlyList<Material> currentSlots,
-            CommittedControllerGraphResult graph,
-            bool ignoreOutOfRangeSlots = false,
-            string rendererTypeName = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
-        {
-            ClosedAlphaMaterialCapturer defaultCapturer =
-                DefaultCapturer(resolveRegisteredSource);
-
-            // The closure-mechanics seam stays policy-free: it captures
-            // under the inert bounds, which reproduce the base exact-255
-            // contract. Policy enters at the production entries.
-            return CaptureObserved(
-                rendererPath,
-                observations,
-                currentSlots,
-                graph,
-                AlphaPolicyBounds.Inert,
-                UnityMaterialSemantics.TrySelectAlphaMaterialRequests,
-                defaultCapturer,
-                out _,
-                ignoreOutOfRangeSlots,
-                rendererTypeName,
-                lockedRefusalCheck: null,
-                observedMaterialMapper: null,
-                resolveRegisteredSource: resolveRegisteredSource);
-        }
-
         // The seam-parameterized graph capture. The barrier's fixture
         // route uses it when a selector seam is injected and no animation
         // index is active. The friend test assembly uses it the same way.
         internal static CapturedAnimationEvidence CaptureGraphThroughSeams(
             string rendererPath,
             IReadOnlyList<Material> currentSlots,
+            IReadOnlyList<LiveClipObservation> observations,
             CommittedControllerGraphResult graph,
             IPlatformAnimatorBindings bindings,
             AlphaPolicyBounds bounds,
@@ -272,14 +209,37 @@ namespace Alrauna.Amuse.Editor.Host
             Func<Material, Material> observedMaterialMapper = null,
             RegisteredSourceLookup resolveRegisteredSource = null)
         {
+            var effectiveSelectRequest = selectRequest ??
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests;
+            var effectiveCapturer = capturer ??
+                DefaultCapturer(resolveRegisteredSource);
+
+            if (observations != null)
+            {
+                return CaptureObserved(
+                    rendererPath,
+                    observations,
+                    currentSlots,
+                    graph,
+                    bounds,
+                    effectiveSelectRequest,
+                    effectiveCapturer,
+                    out admittedLiveMaterials,
+                    ignoreOutOfRangeSlots,
+                    rendererTypeName,
+                    lockedRefusalCheck,
+                    observedMaterialMapper,
+                    resolveRegisteredSource);
+            }
+
             return CaptureGraph(
                 rendererPath,
                 currentSlots,
                 graph,
                 bindings,
                 bounds,
-                selectRequest,
-                capturer,
+                effectiveSelectRequest,
+                effectiveCapturer,
                 out admittedLiveMaterials,
                 ignoreOutOfRangeSlots,
                 rendererTypeName,

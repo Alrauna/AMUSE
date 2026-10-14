@@ -131,8 +131,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ObjectRegistry.RegisterReplacedObject(source, clone);
 
                 var renderer = NewSkinned(Quad(), clone);
-                var extraction = UnityRendererAlphaAnalysis.Capture(
-                    renderer, RegisteredSourceIdentity.Resolve);
+                var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                    renderer.sharedMaterials, RegisteredSourceIdentity.Resolve);
+                var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                    renderer, captured);
 
                 Assert.That(
                     extraction.Refusal,
@@ -189,19 +191,21 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "The fixture must attach a real block, or it proves nothing.");
 
             Assert.That(
-                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(renderer),
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
+                    renderer, out _, out _),
                 Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(
                 UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
                     Track(new GameObject("amuse-test-line")
-                        .AddComponent<LineRenderer>())),
+                        .AddComponent<LineRenderer>()),
+                    out _, out _),
                 Is.EqualTo(RendererAnalysisRefusal.UnsupportedRendererType));
             Assert.That(
                 UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
-                    NewSkinned(null, NewMaterial())),
+                    NewSkinned(null, NewMaterial()), out _, out _),
                 Is.EqualTo(RendererAnalysisRefusal.MissingMesh));
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var result = UnityRendererAlphaAnalysis.Analyze(renderer);
 
             Assert.That(
                 renderer.HasPropertyBlock(),
@@ -214,7 +218,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(new Color(1f, 1f, 1f, 0.25f)),
                 "Capture must not attach or alter the block's contents.");
             Assert.That(
-                extraction.Refusal,
+                result.Refusal,
                 Is.EqualTo(RendererAnalysisRefusal.None),
                 "Presence is no longer a refusal: capture proceeds with " +
                 "the materialized effective state.");
@@ -243,7 +247,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "the API here.");
 
             Assert.That(
-                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(renderer),
+                UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
+                    renderer, out _, out _),
                 Is.EqualTo(RendererAnalysisRefusal.None),
                 "Presence is evidence now; the structural layer accepts it.");
         }
@@ -312,7 +317,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var renderer = NewSkinned(TwoSubmeshMesh(), NewMaterial());
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var captured1 = UnityMaterialSemantics.CaptureAlphaMaterials(
+                renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, captured1);
 
             Assert.That(
                 extraction.Refusal,
@@ -331,7 +339,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var renderer = NewSkinned(
                 Quad(), NewMaterial(), NewMaterial());
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var captured2 = UnityMaterialSemantics.CaptureAlphaMaterials(
+                renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, captured2);
 
             Assert.That(
                 extraction.Refusal,
@@ -365,7 +376,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var renderer = NewSkinned(null, NewMaterial());
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var captured3 = UnityMaterialSemantics.CaptureAlphaMaterials(
+                renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, captured3);
 
             Assert.That(
                 extraction.Refusal,
@@ -459,7 +473,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Renderer renderer,
             params int[] supportedSlots)
         {
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, captured);
             Assert.That(
                 extraction.Refusal,
                 Is.EqualTo(RendererAnalysisRefusal.None));

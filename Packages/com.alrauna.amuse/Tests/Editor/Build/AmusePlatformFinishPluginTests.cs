@@ -3030,7 +3030,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Assert.That(
                     UnityAlphaFieldEvidence.TryCapture(
-                        blocked, out _, out var blockedChain),
+                        blocked, TextureChannel.Alpha, 1.0f,
+                        AlphaPolicyBounds.Inert, out _, out var blockedChain, out _),
                     Is.True);
                 Assert.That(
                     blockedChain.Count, Is.EqualTo(blocked.mipmapCount),
@@ -3044,7 +3045,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Assert.That(
                     UnityAlphaFieldEvidence.TryCapture(
-                        control, out _, out var controlChain),
+                        control, TextureChannel.Alpha, 1.0f,
+                        AlphaPolicyBounds.Inert, out _, out var controlChain, out _),
                     Is.True);
                 for (var level = 0; level < controlChain.Count; level++)
                 {
@@ -3410,7 +3412,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "or the quality mode would decide the proof");
             Assert.That(
                 UnityAlphaFieldEvidence.TryCapture(
-                    mixed, out _, out var chain),
+                    mixed, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(
                 chain.Count, Is.EqualTo(mixed.mipmapCount),
@@ -5442,7 +5445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Object.DestroyImmediate(renderer);
 
                 var failure = Assert.Throws<System.ArgumentException>(
-                    () => UnityRendererAlphaAnalysis.Capture(renderer),
+                    () => UnityRendererAlphaAnalysis.Analyze(renderer),
                     "renderer analysis absorbed a destroyed renderer instead of " +
                     "raising it");
                 Assert.That(failure.Message, Does.Contain("destroyed"));
@@ -7289,6 +7292,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AnimationUtility.CalculateTransformPath(
                     renderer.transform, root.transform),
                 renderer.sharedMaterials,
+                null,
                 graph,
                 GenericPlatformAnimatorBindings.Instance,
                 // The runtime-state mechanics seams stay policy-free, so

@@ -1440,7 +1440,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetTexture(MainTextureProperty, texture);
 
             Assert.That(
-                UnityAlphaFieldEvidence.TryCapture(texture, out _, out var chain),
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
             Assert.That(

@@ -229,7 +229,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 renderer, renderer.sharedMaterials, out var effectiveClones);
             try
             {
-                var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+                var capturedSlots =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(effectiveSlots);
+                var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                    renderer, capturedSlots);
                 Assert.That(
                     extraction.Refusal,
                     Is.EqualTo(RendererAnalysisRefusal.None));
@@ -649,7 +652,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 pixels: UniformOpaquePixels(), width: 8, height: 8);
 
             Assert.That(
-                UnityAlphaFieldEvidence.TryCapture(oddBoundary, out _, out var chain),
+                UnityAlphaFieldEvidence.TryCapture(
+                    oddBoundary, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(chain.Count, Is.EqualTo(oddBoundary.mipmapCount));
             Assert.That(

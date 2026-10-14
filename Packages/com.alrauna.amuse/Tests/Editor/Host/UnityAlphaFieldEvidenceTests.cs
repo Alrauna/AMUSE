@@ -1448,8 +1448,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, 1.0f, AlphaPolicyBounds.Inert,
-                    out _, out var gated),
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var gated, out _),
                 Is.True);
             Assert.That(TryChain(texture, out var legacy), Is.True);
 
@@ -1582,8 +1582,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, 1.0f, AlphaPolicyBounds.From(80, 2),
-                    out _, out var chain),
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.From(80, 2),
+                    out _, out var chain, out _),
                 Is.True);
             var field = chain[0];
 
@@ -1654,8 +1654,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(
                 UnityAlphaFieldEvidence.TryCapture(
-                    texture, 1.0f, AlphaPolicyBounds.From(100, 2),
-                    out _, out var chain),
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.From(100, 2),
+                    out _, out var chain, out _),
                 Is.True);
             var field = chain[0];
 
@@ -1912,7 +1912,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Assert.That(
                     UnityTextureEvidence.TryGetSourceId(texture, out _), Is.False);
                 Assert.That(
-                    UnityAlphaFieldEvidence.TryCapture(texture, out _, out var chain),
+                    UnityAlphaFieldEvidence.TryCapture(
+                        texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                        out _, out var chain, out _),
                     Is.False);
                 Assert.That(chain, Is.Null);
             }
@@ -2300,7 +2302,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             copy.requestedMipmapLevel = 0;
 
             var captured = UnityAlphaFieldEvidence.TryCapture(
-                copy, out _, out var chain);
+                copy, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                out _, out var chain, out _);
             var levelZeroHasEvidence = captured && chain != null &&
                 !chain.IsLevelWithoutEvidence(0);
             var levelCount = chain?.Count ?? 0;

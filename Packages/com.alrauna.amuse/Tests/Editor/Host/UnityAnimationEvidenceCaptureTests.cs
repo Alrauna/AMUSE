@@ -312,11 +312,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         new UnityEngine.Object[] { null }),
                 });
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                new[] { swapObservation },
                 new[] { current },
+                new[] { swapObservation },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
+                null,
+                null,
+                out _,
                 rendererTypeName: typeof(SkinnedMeshRenderer).FullName);
 
             Assert.That(evidence.AdmittedMaterials, Has.Count.EqualTo(1));
@@ -790,11 +795,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             firstSwap.SetFloat("_ZWrite", 0.5f);
             secondSwap.SetFloat("_ZWrite", 0.75f);
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                new[] { ObservationWithMaterialSwap(firstSwap, secondSwap) },
                 new[] { current },
+                new[] { ObservationWithMaterialSwap(firstSwap, secondSwap) },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 CaptureFixtureMaterials,
                 out var admittedLiveMaterials);
@@ -1014,6 +1021,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 .CaptureGraphThroughSeams(
                     AnalyzedRendererPath,
                     new[] { initial },
+                    null,
                     graph,
                     new StubBindings(specialClip),
                     AlphaPolicyBounds.Inert,
@@ -1077,11 +1085,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                new[] { ObservationWithMaterialSwap(second) },
                 new[] { first },
+                new[] { ObservationWithMaterialSwap(second) },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 Select,
                 Capture,
                 out _);
@@ -1131,11 +1141,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                Array.Empty<LiveClipObservation>(),
                 new[] { poiyomi },
+                Array.Empty<LiveClipObservation>(),
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 Select,
                 Capture,
                 out _);
@@ -1204,11 +1216,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                new[] { ObservationWithMaterialSwap(lilToon) },
                 new[] { poiyomi },
+                new[] { ObservationWithMaterialSwap(lilToon) },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 Capture,
                 out _);
@@ -1422,11 +1436,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             // Fixture precondition: the capturer fails a batch that admission
             // had already populated with multiple distinct materials.
             Assert.Throws<InvalidOperationException>(() =>
-                UnityAnimationEvidenceCapture.CaptureObservedForTests(
+                UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                     AnalyzedRendererPath,
-                    new[] { ObservationWithMaterialSwap(second) },
                     new[] { first },
+                    new[] { ObservationWithMaterialSwap(second) },
                     EmptyGraph(),
+                    null,
+                    AlphaPolicyBounds.Inert,
                     SelectFixtureRequest,
                     RefuseCapture,
                     out _));
@@ -1451,11 +1467,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     PoiyomiMaterialSemantics.PoiyomiToonShaderName)));
             _fixtureFamilies.Add(poison, CapturedAlphaMaterialFamily.Poiyomi);
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                Array.Empty<LiveClipObservation>(),
                 new[] { healthy, poison },
+                Array.Empty<LiveClipObservation>(),
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 CapturerFailingOrdinals(new[] { 1 }),
                 out var admittedLiveMaterials);
@@ -1488,11 +1506,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var first = NewPoiyomiMaterial();
             var second = NewLilToonMaterial();
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                Array.Empty<LiveClipObservation>(),
                 new[] { first, second },
+                Array.Empty<LiveClipObservation>(),
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 CapturerFailingOrdinals(new[] { 0, 1 }),
                 out _);
@@ -1535,11 +1555,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                new[] { ObservationWithMaterialSwap(unselectable) },
                 new[] { supported },
+                new[] { ObservationWithMaterialSwap(unselectable) },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 Capture,
                 out var admittedLiveMaterials);
@@ -1595,11 +1617,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
-                Array.Empty<LiveClipObservation>(),
                 new[] { supported, unattested },
+                Array.Empty<LiveClipObservation>(),
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 Capture,
                 out var admittedLiveMaterials);
@@ -1740,8 +1764,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
+                new[] { current },
                 new[]
                 {
                     ObservationWithMaterialSwapAt(
@@ -1749,8 +1774,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         "m_Materials.Array.data[0]",
                         foreignSwap),
                 },
-                new[] { current },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 Select,
                 Capture,
                 out _);
@@ -1798,8 +1824,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     materials, families, request, bounds, out captured);
             }
 
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 AnalyzedRendererPath,
+                new[] { current },
                 new[]
                 {
                     ObservationWithMaterialSwapAt(
@@ -1807,8 +1834,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         "m_Materials.Array.data[0]",
                         foreignUnattested),
                 },
-                new[] { current },
                 EmptyGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 Capture,
                 out _);
@@ -1944,11 +1972,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
             var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 "Renderer",
-                new[] { clip },
                 new[] { slotMat },
+                new[] { clip },
                 ValidGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
+                null,
+                null,
+                out _,
                 ignoreOutOfRangeSlots: false);
 
             Assert.That(evidence.SlotClosureFailures, Has.Count.EqualTo(1));
@@ -1969,11 +2002,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
             var slotMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
-            var evidence = UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            var evidence = UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 "Renderer",
-                new[] { clip },
                 new[] { slotMat },
+                new[] { clip },
                 ValidGraph(),
+                null,
+                AlphaPolicyBounds.Inert,
+                null,
+                null,
+                out _,
                 ignoreOutOfRangeSlots: true);
 
 
@@ -2042,11 +2080,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             IReadOnlyList<Material> currentSlots,
             CommittedControllerGraphResult graph)
         {
-            return UnityAnimationEvidenceCapture.CaptureObservedForTests(
+            return UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
                 rendererPath,
-                observations,
                 currentSlots,
+                observations,
                 graph,
+                null,
+                AlphaPolicyBounds.Inert,
                 SelectFixtureRequest,
                 CaptureFixtureMaterials,
                 out _);

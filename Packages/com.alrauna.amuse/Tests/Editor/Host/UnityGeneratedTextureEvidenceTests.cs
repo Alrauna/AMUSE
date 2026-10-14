@@ -93,8 +93,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             var ok = UnityAlphaFieldEvidence.TryCapture(
                 _streamingSubTex,
+                TextureChannel.Alpha,
+                1.0f,
+                AlphaPolicyBounds.Inert,
                 out var source,
-                out var chain);
+                out var chain,
+                out _);
 
             Assert.That(ok, Is.True);
             Assert.That(chain, Is.Not.Null);
