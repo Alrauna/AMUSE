@@ -23,7 +23,7 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// scene, and turns the outcome into display rows. It reads. It never
     /// writes: the capture transients it creates die inside the compute
     /// scope, and the one capture route that writes project assets stays
-    /// unreachable, because the streaming capture entry is never called.
+    /// unreachable, because streaming capture runs under DisallowDiskFallback.
     /// <para>
     /// Begin runs the avatar facts once per open. Step computes one
     /// renderer per call, behind a probe pass and the session cache. An
@@ -87,13 +87,6 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         private int _rendererIndex;
 
-        /// <summary>
-        /// The batch positions the streaming intercept skipped on the
-        /// current compute leg. Their sentinels are the streaming skip,
-        /// not consent subjects, so the consent sweep must exclude them.
-        /// </summary>
-        private readonly HashSet<int> _streamingSkippedOrdinals =
-            new HashSet<int>();
 
         /// <summary>
         /// The inspector sets this so the next draw pass advances. No-op
@@ -491,7 +484,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             var blockState =
                 EffectiveMaterialMaterialization.CaptureBlockState(renderer);
-            _streamingSkippedOrdinals.Clear();
             var evidence = CaptureFor(
                 rendererPath,
                 renderer.sharedMaterials,
@@ -520,6 +512,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 // run keeps the same discipline: the refused slot rows
                 // ride beside the renderer refusal row.
                 var rows = new List<MaterialTransformationRow>();
+                var allDeferred = true;
+                var hasUnresolved = false;
+
                 for (var slotIndex = 0;
                      slotIndex < resolved.SlotResults.Length;
                      slotIndex++)
@@ -529,17 +524,30 @@ namespace Alrauna.Amuse.Editor.DryRun
                         continue;
                     }
 
+                    hasUnresolved = true;
+                    var slotEvidence = slotIndex < slots.Count ? slots[slotIndex] : null;
+                    if (!IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
+                    {
+                        allDeferred = false;
+                    }
+
                     rows.Add(RefusedSlotRow(
+                        renderer,
                         rendererPath,
                         rendererTypeName,
                         resolved.SlotResults[slotIndex],
-                        slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slotEvidence,
+                        slotIndex,
                         renderer.gameObject.name));
                 }
 
-                rows.Insert(0, RendererRefusedRow(
-                    rendererPath, rendererTypeName, resolved.Refusal,
-                    -1, -1, renderer.gameObject.name));
+                if (!hasUnresolved || !allDeferred)
+                {
+                    rows.Insert(0, RendererRefusedRow(
+                        rendererPath, rendererTypeName, resolved.Refusal,
+                        -1, -1, renderer.gameObject.name));
+                }
+
                 return rows;
             }
 
@@ -569,6 +577,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _minimumOpaqueCoveragePercent,
                 _minimumOpaqueCoverageToPreservePercent);
             return BuildRows(
+                renderer,
                 rendererPath,
                 rendererTypeName,
                 verdicts,
@@ -663,7 +672,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                     }
                     else if (IsStreamingMipmap(texture))
                     {
-                        AddNoteOnce(NoteKind.StreamingMipmaps);
+                        if (!CanDecodeInMemory(texture))
+                        {
+                            AddNoteOnce(NoteKind.StreamingMipmaps);
+                        }
                     }
                 }
 
@@ -703,17 +715,13 @@ namespace Alrauna.Amuse.Editor.DryRun
             };
 
         /// <summary>
-        /// The dry run's own effective-materials route: it materializes
-        /// each admitted batch against the renderer's property block, so
-        /// the proof reads the values the renderer actually shows, and it
-        /// destroys every clone in a finally. The inner capturer filters
-        /// streaming-mipmap textures before any dispatch, because reading
-        /// them would write project assets.
+        /// Materializes each admitted batch against property blocks.
+        /// Transients die in the finally block.
+        /// Runs under DisallowDiskFallback to prevent asset creation on disk.
         /// </summary>
         private ClosedAlphaMaterialCapturer RealCapturer(Renderer renderer)
         {
-            var inner = InterceptStreamingTextures(
-                _capturer ?? DefaultInnerCapturer());
+            var inner = _capturer ?? DefaultInnerCapturer();
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
@@ -725,8 +733,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                     .MaterializeAdmitted(renderer, materials, out var clones);
                 try
                 {
-                    return inner(
-                        effective, families, request, bounds, out outcome);
+                    using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+                    {
+                        return inner(
+                            effective, families, request, bounds, out outcome);
+                    }
                 }
                 finally
                 {
@@ -751,92 +762,143 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Partitions the batch: a member whose alpha-relevant textures use
-        /// streaming mipmaps is skipped whole. Its ordinals ride the
-        /// outcome as unattested, so the capture merge records the honest
-        /// sentinel for it and its slot refuses, while every clean member
-        /// captures under its own full request. The production attestation
-        /// and count checks stay intact, and no dispatch reads a streaming
-        /// texture.
+        /// Checks whether a streaming texture can decode in memory from disk.
+        /// Authoring PNG and TGA files can decode directly.
         /// </summary>
-        private ClosedAlphaMaterialCapturer InterceptStreamingTextures(
-            ClosedAlphaMaterialCapturer inner)
+        private static bool CanDecodeInMemory(Texture texture)
         {
-            return (
-                IReadOnlyList<Material> materials,
-                IReadOnlyList<CapturedAlphaMaterialFamily> families,
-                MaterialEvidenceRequest request,
-                AlphaPolicyBounds bounds,
-                out ClosedAlphaCaptureOutcome outcome) =>
+            if (!(texture is Texture2D))
             {
-                var captureMembers = new List<int>();
-                var skippedOrdinals = new List<int>();
-                for (var index = 0; index < materials.Count; index++)
-                {
-                    if (DroppedStreamingProperties(materials[index]).Count > 0)
-                    {
-                        skippedOrdinals.Add(index);
-                        continue;
-                    }
+                return false;
+            }
 
-                    captureMembers.Add(index);
-                }
+            var path = AssetDatabase.GetAssetPath(texture);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return false;
+            }
 
-                _streamingSkippedOrdinals.UnionWith(skippedOrdinals);
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext != ".png" && ext != ".tga")
+            {
+                return false;
+            }
 
-                var captured = new List<CapturedAlphaMaterial>();
-                var unattested = new List<int>(skippedOrdinals);
-                if (captureMembers.Count > 0)
-                {
-                    var groupMaterials = captureMembers
-                        .Select(index => materials[index]).ToList();
-                    var groupFamilies = captureMembers
-                        .Select(index => families[index]).ToList();
-                    if (!inner(
-                            groupMaterials,
-                            groupFamilies,
-                            request,
-                            bounds,
-                            out var groupOutcome))
-                    {
-                        outcome = default;
-                        return false;
-                    }
+            if (AssetImporter.GetAtPath(path) is TextureImporter importer &&
+                importer.alphaSource == TextureImporterAlphaSource.FromGrayScale)
+            {
+                return false;
+            }
 
-                    captured.AddRange(groupOutcome.Captured);
-                    unattested.AddRange(groupOutcome.UnattestedOrdinals
-                        .Select(ordinal => captureMembers[ordinal]));
-                }
-
-                // The outcome partitions the batch positionally, so the
-                // lists sort back into batch order before the merge.
-                unattested.Sort();
-                outcome = new ClosedAlphaCaptureOutcome(captured, unattested);
-                return true;
-            };
+            return true;
         }
 
-        private List<string> DroppedStreamingProperties(Material material)
+        /// <summary>
+        /// Counts triangles for one submesh safely from the shared mesh.
+        /// Returns negative one when the submesh or topology is invalid.
+        /// </summary>
+        private static int SubmeshPolygonCount(Renderer renderer, int slotIndex)
         {
-            var drop = new List<string>();
-            if (material == null ||
-                !EffectiveSelector(
-                    material, out _, out var alphaRequest, out _))
+            Mesh mesh = null;
+            if (renderer is SkinnedMeshRenderer smr)
             {
-                return drop;
+                mesh = smr.sharedMesh;
+            }
+            else if (renderer is MeshRenderer && renderer.TryGetComponent<MeshFilter>(out var filter))
+            {
+                mesh = filter.sharedMesh;
             }
 
-            foreach (var textureProperty in alphaRequest.TextureProperties)
+            if (mesh == null || slotIndex < 0 || slotIndex >= mesh.subMeshCount)
             {
-                if (IsStreamingMipmap(
-                        material.GetTexture(textureProperty.PropertyName)))
+                return -1;
+            }
+
+            if (mesh.GetTopology(slotIndex) != MeshTopology.Triangles)
+            {
+                return -1;
+            }
+
+            return (int)(mesh.GetIndexCount(slotIndex) / 3);
+        }
+
+        /// <summary>
+        /// Checks whether an unresolved slot evaluates at build time.
+        /// Attested locked materials and streaming textures evaluate at build time.
+        /// </summary>
+        private static bool IsSlotDeferred(
+            Renderer renderer,
+            int slotIndex,
+            SlotResolutionResult slotResult,
+            CapturedMaterialSlotEvidence slotEvidence)
+        {
+            if (renderer == null || renderer.sharedMaterials == null)
+            {
+                return false;
+            }
+
+            if (slotIndex < 0 || slotIndex >= renderer.sharedMaterials.Length)
+            {
+                return false;
+            }
+
+            var material = renderer.sharedMaterials[slotIndex];
+            if (material == null)
+            {
+                return false;
+            }
+
+            if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
+                (LockedMaterialIdentity.OriginalShaderAttested(material) ||
+                 IsAttestedOriginalShader(material)))
+            {
+                return true;
+            }
+
+            if (HasStreamingTexture(material))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks whether the original shader tag names a supported shader.
+        /// </summary>
+        private static bool IsAttestedOriginalShader(Material material)
+        {
+            var tag = material.GetTag(
+                LockedMaterialIdentity.OriginalShaderTagName, true, null);
+            return tag == PoiyomiMaterialSemantics.PoiyomiToonShaderName ||
+                   tag == PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName;
+        }
+
+        private static bool HasStreamingTexture(Material material)
+        {
+            if (material == null)
+            {
+                return false;
+            }
+
+            var count = ShaderUtil.GetPropertyCount(material.shader);
+            for (var i = 0; i < count; i++)
+            {
+                if (ShaderUtil.GetPropertyType(material.shader, i) !=
+                    ShaderUtil.ShaderPropertyType.TexEnv)
                 {
-                    drop.Add(textureProperty.PropertyName);
-                    AddNoteOnce(NoteKind.StreamingMipmaps);
+                    continue;
+                }
+
+                var propName = ShaderUtil.GetPropertyName(material.shader, i);
+                var tex = material.GetTexture(propName);
+                if (IsStreamingMipmap(tex))
+                {
+                    return true;
                 }
             }
 
-            return drop;
+            return false;
         }
 
         private static bool IsStreamingMipmap(Texture texture)
@@ -883,7 +945,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 }
 
                 if (captured.Family == CapturedAlphaMaterialFamily.Unsupported
-                    && !_streamingSkippedOrdinals.Contains(index)
                     && index < admittedLive.Count &&
                     EffectiveSelector(
                         admittedLive[index],
@@ -891,7 +952,14 @@ namespace Alrauna.Amuse.Editor.DryRun
                         out _,
                         out _))
                 {
-                    AddNoteOnce(NoteKind.LockedMaterials);
+                    if (HasStreamingTexture(admittedLive[index]))
+                    {
+                        AddNoteOnce(NoteKind.StreamingMipmaps);
+                    }
+                    else
+                    {
+                        AddNoteOnce(NoteKind.LockedMaterials);
+                    }
                 }
             }
         }
@@ -1006,6 +1074,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         // --- Row building -----------------------------------------------------
 
         private IReadOnlyList<MaterialTransformationRow> BuildRows(
+            Renderer renderer,
             string rendererPath,
             string rendererTypeName,
             IReadOnlyList<SlotTransformVerdict> verdicts,
@@ -1019,10 +1088,12 @@ namespace Alrauna.Amuse.Editor.DryRun
                 if (!slotResults[slotIndex].IsResolved)
                 {
                     rows.Add(RefusedSlotRow(
+                        renderer,
                         rendererPath,
                         rendererTypeName,
                         slotResults[slotIndex],
                         slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slotIndex,
                         rendererName));
                     continue;
                 }
@@ -1052,18 +1123,32 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         private static MaterialTransformationRow RefusedSlotRow(
+            Renderer renderer,
             string rendererPath,
             string rendererTypeName,
             SlotResolutionResult result,
             CapturedMaterialSlotEvidence slot,
+            int slotIndex,
             string rendererName)
         {
+            var totalTriangles = SubmeshPolygonCount(renderer, slotIndex);
+            if (IsSlotDeferred(renderer, slotIndex, result, slot))
+            {
+                return MaterialTransformationRow.Slot(
+                    rendererPath,
+                    rendererTypeName,
+                    slotIndex,
+                    0,
+                    totalTriangles,
+                    RowText.DeferredSlotSentence(totalTriangles));
+            }
+
             return MaterialTransformationRow.Slot(
                 rendererPath,
                 rendererTypeName,
-                slot != null ? slot.SlotIndex : -1,
+                slotIndex,
                 -1,
-                -1,
+                totalTriangles,
                 RowText.RefusedSlotSentence());
         }
 

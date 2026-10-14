@@ -864,7 +864,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         [Test]
-        public void StreamingTextureProducesNoteAndSkipsRead()
+        public void StreamingTextureDecodesInMemoryWhenReadable()
         {
             var fixture = NewComputeFixture(255, 0.5f, streaming: true);
             var dryRun = NewDryRun(
@@ -872,17 +872,131 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Run(dryRun);
 
             Assert.That(
-                dryRun.AvatarRows.Any(row => row.Sentence ==
-                    "Some textures use streaming mipmaps. This view does " +
-                    "not read them, because reading would change project " +
-                    "files. A build can prove more for those textures."),
-                Is.True,
-                "the streaming note must be among the avatar rows");
+                dryRun.AvatarRows.Any(row => row.Sentence.Contains("streaming mipmaps")),
+                Is.False,
+                "the streaming note must not be emitted for in-memory decodable textures");
             Assert.That(
                 _captureCalls,
-                Is.EqualTo(0),
-                "the streaming texture must never reach a capture dispatch");
+                Is.GreaterThan(0),
+                "the streaming texture must reach a capture dispatch");
             Assert.That(dryRun.RendererRows, Is.Not.Empty);
+        }
+
+        [Test]
+        public void StreamingPngTextureDecodesInMemoryAndDoesNotRefuse()
+        {
+            var fixture = NewComputeFixture(255, 0.5f, streaming: true);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].Sentence, Does.Not.Contain("Refused"));
+            Assert.That(
+                rows[0].Sentence,
+                Does.Contain("Splittable").Or.Contain("Convertable"));
+            Assert.That(
+                dryRun.AvatarRows.Any(row => row.Sentence.Contains("streaming mipmaps")),
+                Is.False,
+                "note must not be emitted when streaming texture decodes in memory");
+        }
+
+        [Test]
+        public void AttestedLockedMaterialReportsDeferredSentenceWithPolygonCount()
+        {
+            EnsurePoiyomiStandInShader();
+            EnsureLockedPoiyomiStandInShader();
+
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-locked-attested"));
+            var optimizer = AddOptimizer(root);
+            var originalShader = Shader.Find(".poiyomi/Poiyomi Toon");
+            var original = _scope.Track(new Material(originalShader));
+            var locked = _scope.Track(new Material(original));
+            locked.shader = Shader.Find("Hidden/Locked/.poiyomi/Poiyomi Toon");
+            locked.SetFloat("_ShaderOptimizerEnabled", 1f);
+            locked.SetOverrideTag("OriginalShader", ".poiyomi/Poiyomi Toon");
+            var mesh = OneTriangleMesh();
+            AddSkinnedRenderer(root, mesh, locked);
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root,
+                    Optimizer = optimizer,
+                    Renderer = null
+                },
+                null,
+                FixtureSelector(),
+                FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Deferred: 0 of out 1 polygons may be moved (evaluates at build time)"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False,
+                "renderer refusal box must be suppressed when all slots are deferred");
+        }
+
+        [Test]
+        public void TrulyUnsupportedShaderReportsRefusedSentence()
+        {
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-unsupported"));
+            var optimizer = AddOptimizer(root);
+            var shader = Shader.Find("Hidden/InternalErrorShader");
+            var material = _scope.Track(new Material(shader));
+            AddSkinnedRenderer(root, OneTriangleMesh(), material);
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root,
+                    Optimizer = optimizer,
+                    Renderer = null
+                },
+                null,
+                FixtureSelector(),
+                FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Refused: AMUSE currently does not support this material"));
+        }
+
+        private static Shader EnsurePoiyomiStandInShader()
+        {
+            var shader = Shader.Find(".poiyomi/Poiyomi Toon");
+            if (shader == null)
+            {
+                shader = TestShaderWriter.WriteStandInShader(
+                    TempFolder + "/poiyomi_toon.shader",
+                    ".poiyomi/Poiyomi Toon",
+                    "");
+            }
+
+            return shader;
+        }
+
+        private static Shader EnsureLockedPoiyomiStandInShader()
+        {
+            var shader = Shader.Find("Hidden/Locked/.poiyomi/Poiyomi Toon");
+            if (shader == null)
+            {
+                shader = TestShaderWriter.WriteStandInShader(
+                    TempFolder + "/locked_poiyomi_toon.shader",
+                    "Hidden/Locked/.poiyomi/Poiyomi Toon",
+                    "_ShaderOptimizerEnabled (\"Shader Optimizer Enabled\", Float) = 0");
+            }
+
+            return shader;
         }
 
         [Test]
