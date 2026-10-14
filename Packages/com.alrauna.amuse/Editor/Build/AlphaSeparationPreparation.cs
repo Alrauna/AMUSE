@@ -145,24 +145,8 @@ namespace Alrauna.Amuse.Editor.Build
             var foldedEntries = new List<SubmeshSeparationPlan>();
             foreach (var slotEntries in entriesByBindingIndex.Values)
             {
-                var slotQualifies = true;
-                foreach (var entry in slotEntries)
-                {
-                    var totalTriangles =
-                        entry.OpaqueTriangleOrdinals.Count +
-                        entry.TransparentTriangleOrdinals.Count;
-                    if (entry.Disposition !=
-                            SubmeshSeparationDisposition.Split ||
-                        entry.TransparentTriangleOrdinals.Count * 100 >=
-                        minimumOpaqueCoverageToPreservePercent *
-                        totalTriangles)
-                    {
-                        slotQualifies = false;
-                        break;
-                    }
-                }
-
-                if (!slotQualifies)
+                if (!SlotTransformDecision.PreserveSlotQualifies(
+                        slotEntries, minimumOpaqueCoverageToPreservePercent))
                 {
                     continue;
                 }
@@ -355,7 +339,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var slots = AmusePlatformFinishPass.MaterialSlotsFor(
+            var slots = RuntimeStateResolution.MaterialSlotsFor(
                 evidence, rendererPath, rendererTypeName);
             var candidateSlots = new List<PreparedSlotSeparation>(
                 plan.Submeshes.Count);
@@ -374,7 +358,7 @@ namespace Alrauna.Amuse.Editor.Build
 
                 if (submesh.Disposition ==
                         SubmeshSeparationDisposition.Split &&
-                    OpaqueCoverageBelow(
+                    SlotTransformDecision.OpaqueCoverageBelow(
                         minimumOpaqueCoveragePercent, submesh))
                 {
                     var coverageSlotIndex =
@@ -767,24 +751,6 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return false;
-        }
-
-        /// <summary>
-        /// Whether the split's proven-opaque share is strictly below
-        /// the user's minimum. Exact integer arithmetic, and a share
-        /// exactly at the minimum proceeds. Unknown and transparent
-        /// triangles both count in the denominator, because neither is
-        /// proven opaque.
-        /// </summary>
-        private static bool OpaqueCoverageBelow(
-            int minimumOpaqueCoveragePercent,
-            SubmeshSeparationPlan submesh)
-        {
-            var totalTriangles =
-                submesh.OpaqueTriangleOrdinals.Count +
-                submesh.TransparentTriangleOrdinals.Count;
-            return submesh.OpaqueTriangleOrdinals.Count * 100 <
-                   minimumOpaqueCoveragePercent * totalTriangles;
         }
 
         /// <summary>

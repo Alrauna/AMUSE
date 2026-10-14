@@ -5067,7 +5067,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // captured slot facts or the geometry under proof.
                 fixture.Renderer.sharedMaterials = System.Array.Empty<Material>();
 
-                var result = AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                var result = RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
                     path,
                     evidence,
                     snapshot,
@@ -5130,7 +5130,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { 0, 1 }, MeshTopology.Lines, 0);
                 fixture.Renderer.sharedMesh = replacement;
 
-                var result = AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+                var result = RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
                     rendererPath,
                     evidence,
                     extraction.Snapshot,
@@ -7271,7 +7271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // The runtime-state mechanics fixtures stay conservative:
             // acceptance reaches the proof only through the real pass,
             // which captures the policy from the build avatar.
-            return AmusePlatformFinishPass.AnalyzeRuntimeStatesForTests(
+            return RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
                 path, evidence, snapshot,
                 AlphaSamplingPolicy.ConservativeDesktop, VerifiedAlphaOnly);
         }

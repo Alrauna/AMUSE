@@ -5216,7 +5216,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // The named refusal surfaces on the refused slot's own slot
                 // record through the production slot-record construction,
                 // and its reason family resolves on the report surface.
-                var slotRecords = AmusePlatformFinishPass.MaterialSlotsFor(
+                var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
                     prepared.Evidence, prepared.RendererPath);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
@@ -5350,7 +5350,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "on the built avatar");
 
                 var prepared = state.Separation.Renderers.Single();
-                var slotRecords = AmusePlatformFinishPass.MaterialSlotsFor(
+                var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
                     prepared.Evidence, prepared.RendererPath);
 
                 // Both admitted materials of slot 0 carry the same refused

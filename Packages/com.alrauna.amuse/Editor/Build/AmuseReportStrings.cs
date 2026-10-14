@@ -705,6 +705,34 @@ namespace Alrauna.Amuse.Editor.Build
             return Strings.TryGetValue(key, out var value) ? value : "";
         }
 
+        /// <summary>
+        /// The finished sentence for a display row. The console
+        /// substitutes through SimpleError when it emits an error, and
+        /// it keeps that path. The dry run needs the same sentence text
+        /// without an error object, so the substitution lives here.
+        /// This records the deliberate deviation from the spec's
+        /// first-issue wording, corrected in the spec's second revision.
+        /// An unknown key gives the empty string, because the dry run
+        /// guards with Has. A token past the supplied arguments stays
+        /// untouched.
+        /// </summary>
+        internal static string Format(string key, params string[] args)
+        {
+            if (!Has(key))
+            {
+                return "";
+            }
+
+            var sentence = Get(key);
+            for (var index = 0; index < args.Length; index++)
+            {
+                sentence = sentence.Replace(
+                    "{" + index + "}", args[index] ?? "");
+            }
+
+            return sentence;
+        }
+
         internal static string RendererKey(RendererAnalysisRefusal cause)
         {
             return Prefix + "renderer." + cause;

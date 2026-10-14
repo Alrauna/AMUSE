@@ -1410,7 +1410,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // The named refusal surfaces on the refused slot's own slot
                 // record, through the production slot-record construction
                 // the barrier itself uses, and on no sibling record.
-                var slotRecords = AmusePlatformFinishPass.MaterialSlotsFor(
+                var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
                     prepared.Evidence, prepared.RendererPath);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
