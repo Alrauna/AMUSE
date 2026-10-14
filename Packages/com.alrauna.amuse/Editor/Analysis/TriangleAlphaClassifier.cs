@@ -299,15 +299,6 @@ namespace Alrauna.Amuse.Editor.Analysis
         // intersection test decide.
         private const double PreFilterSafeCoordinateBound = 256;
 
-        internal static TriangleAlphaOutcome Classify(
-            TriangleAlphaInput triangle,
-            AlphaTextureData texture,
-            TextureSampling sampling,
-            AlphaUvEnvelope envelope)
-        {
-            return Classify(triangle, texture, sampling, envelope, 0);
-        }
-
         /// <summary>
         /// Classifies with the per-polygon noise density policy. A policy
         /// of zero keeps erasure inert. An erased texel then behaves

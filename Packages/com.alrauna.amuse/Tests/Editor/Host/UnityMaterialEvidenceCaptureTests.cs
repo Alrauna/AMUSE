@@ -278,7 +278,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 triangle,
                 assignment.Texture.AlphaChannel[0],
                 new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp),
-                AlphaUvEnvelope.Zero);
+                AlphaUvEnvelope.Zero, 0);
         }
 
         [Test]

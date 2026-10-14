@@ -69,7 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     var modulus = moduli[modulusIndex];
                     var integerResult = (int)integerOverload.Invoke(null, new object[] { value, modulus });
                     var directResult = ExactUvGeometry.FloorMod(value, modulus);
-                    var bigIntegerResult = ExactUvGeometry.FloorMod(new BigInteger(value), modulus);
+                    var bigIntegerResult = FloorMod(new BigInteger(value), modulus);
 
                     Assert.That(
                         integerResult,
@@ -101,7 +101,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     () => ExactUvGeometry.FloorMod(10, invalidModulus));
 
                 Assert.Throws<ArgumentOutOfRangeException>(
-                    () => ExactUvGeometry.FloorMod(new BigInteger(10), invalidModulus));
+                    () => FloorMod(new BigInteger(10), invalidModulus));
             }
         }
 
@@ -195,6 +195,20 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(new ExactRational(
                     new BigInteger(expectedNumerator),
                     new BigInteger(expectedDenominator))));
+        }
+
+        private static int FloorMod(BigInteger value, int modulus)
+        {
+            if (modulus <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(modulus));
+            }
+            var remainder = value % modulus;
+            if (remainder.Sign < 0)
+            {
+                remainder += modulus;
+            }
+            return (int)remainder;
         }
     }
 }

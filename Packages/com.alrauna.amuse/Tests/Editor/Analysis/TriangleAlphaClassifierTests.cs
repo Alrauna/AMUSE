@@ -29,7 +29,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector3.up);
             var texture = new AlphaTextureData(1, 1, new byte[] { 255 });
 
-            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero));
+            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0));
         }
 
         [TestCase(0, 0, 0)]
@@ -198,7 +198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -241,7 +241,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(1, 2, new byte[] { 255, 0 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -276,7 +276,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var texture = new AlphaTextureData(1, 1, new byte[] { 255 });
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
@@ -378,7 +378,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // units (-8, -8), (10, 10), (-8, 10), so UV units divide by 8.
             var small = TriangleAlphaClassifier.Classify(
                 DiagonalTriangle(-1f, -1f, 1.25f, 1.25f, -1f, 1.25f),
-                texture, sampling, AlphaUvEnvelope.Zero);
+                texture, sampling, AlphaUvEnvelope.Zero, 0);
 
             // Large run: the same shape near plus and minus 16 million texel
             // units, so UV units are the texel units divided by 8.
@@ -394,7 +394,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     -2000000f, -2000000f,
                     2000000.25f, 2000000.25f,
                     -2000000f, 2000000.25f),
-                texture, sampling, AlphaUvEnvelope.Zero);
+                texture, sampling, AlphaUvEnvelope.Zero, 0);
 
             Assert.That(small, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
             Assert.That(large, Is.EqualTo(small));
@@ -411,7 +411,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     -1999998f, -1999998f,
                     2000002.25f, 2000002.25f,
                     -1999998f, 2000002.25f),
-                texture, sampling, AlphaUvEnvelope.Zero);
+                texture, sampling, AlphaUvEnvelope.Zero, 0);
 
             Assert.That(
                 shifted, Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
@@ -440,7 +440,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle, texture,
                     new TextureSampling(
                         TextureFilterMode.Trilinear, TextureWrapMode.Clamp),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -461,7 +461,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle, texture,
                     new TextureSampling(
                         TextureFilterMode.Trilinear, TextureWrapMode.Repeat),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
@@ -489,7 +489,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         TextureFilterMode.Point,
                         TextureWrapMode.Clamp,
                         TextureAnisoMode.Anisotropic),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -517,7 +517,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         TextureFilterMode.Bilinear,
                         TextureWrapMode.Clamp,
                         TextureAnisoMode.Anisotropic),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
@@ -546,7 +546,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         TextureFilterMode.Point,
                         TextureWrapMode.Clamp,
                         TextureAnisoMode.Anisotropic),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -567,8 +567,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(reversed, texture, sampling, AlphaUvEnvelope.Zero),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(forward, texture, sampling, AlphaUvEnvelope.Zero)));
+                TriangleAlphaClassifier.Classify(reversed, texture, sampling, AlphaUvEnvelope.Zero, 0),
+                Is.EqualTo(TriangleAlphaClassifier.Classify(forward, texture, sampling, AlphaUvEnvelope.Zero, 0)));
         }
 
         [Test]
@@ -582,7 +582,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.55f, 0.65f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -597,7 +597,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.1f, 0.5001f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -631,7 +631,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(mode, TextureWrapMode.Repeat);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -649,7 +649,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(-100000f, -100000f));
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero)
+                TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero, 0)
                     .ToString(),
                 Is.EqualTo(expected));
         }
@@ -668,10 +668,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(present, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(present, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(missing, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(missing, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -691,8 +691,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Vector3.zero, Vector3.right, Vector3.up,
                 new Vector2(float.PositiveInfinity, 0f), Vector2.right, Vector2.up);
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => TriangleAlphaClassifier.Classify(finite, texture, new TextureSampling((TextureFilterMode)99, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero));
-            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(nonFiniteUv, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero));
+            Assert.Throws<ArgumentOutOfRangeException>(() => TriangleAlphaClassifier.Classify(finite, texture, new TextureSampling((TextureFilterMode)99, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0));
+            Assert.Throws<ArgumentException>(() => TriangleAlphaClassifier.Classify(nonFiniteUv, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0));
         }
 
         [TestCase("Point")]
@@ -707,7 +707,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(
                     filterMode == "Point" ? TextureFilterMode.Point : TextureFilterMode.Bilinear,
-                    TextureWrapMode.Clamp), AlphaUvEnvelope.Zero),
+                    TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -740,10 +740,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -765,10 +765,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -792,10 +792,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -819,10 +819,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -845,10 +845,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -872,10 +872,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -903,10 +903,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -936,10 +936,10 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
@@ -959,7 +959,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var sampling = new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp);
 
             Assert.That(
-                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8),
+                TriangleAlphaClassifier.Classify(triangle, texture, sampling, HalfUvTexel8x8, 0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
@@ -976,7 +976,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, 0.5f),
                 new Vector2(u2, 0.5f));
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero);
+            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero, 0);
         }
 
         private static TriangleAlphaOutcome ClassifyBilinearClamp(
@@ -992,7 +992,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, 0.5f),
                 new Vector2(u2, 0.5f));
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero);
+            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0);
         }
 
         private static TriangleAlphaOutcome ClassifyPointRepeat(
@@ -1009,7 +1009,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(u1, v),
                 new Vector2(u2, v));
             var texture = new AlphaTextureData(4, 1, new byte[] { 255, 0, 255, 255 });
-            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero);
+            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Repeat), AlphaUvEnvelope.Zero, 0);
         }
 
         private static TriangleAlphaOutcome ClassifyPointClamp(
@@ -1025,7 +1025,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 uv1,
                 uv2);
             var texture = new AlphaTextureData(2, 1, new byte[] { 255, 0 });
-            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero);
+            return TriangleAlphaClassifier.Classify(triangle, texture, new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp), AlphaUvEnvelope.Zero, 0);
         }
 
         // A null density routes the four-argument Classify; a value
@@ -1068,7 +1068,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         sampling,
                         AlphaUvEnvelope.Zero,
                         maxNoiseTexelPercent.Value)
-                    : TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero);
+                    : TriangleAlphaClassifier.Classify(triangle, texture, sampling, AlphaUvEnvelope.Zero, 0);
             }
 
             return results;
@@ -1267,7 +1267,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     texture,
                     new TextureSampling(
                         TextureFilterMode.Point, TextureWrapMode.Clamp),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
@@ -1568,7 +1568,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 triangle,
                 texture,
                 bilinearSampling,
-                bilinearEnvelope);
+                bilinearEnvelope,
+                0);
             Assert.That(
                 bilinearOutcome,
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -1577,7 +1578,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 triangle,
                 texture,
                 pointSampling,
-                pointEnvelope);
+                pointEnvelope,
+                0);
             Assert.That(
                 pointOutcome,
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
@@ -1646,7 +1648,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle,
                     texture,
                     pointSampling,
-                    pointXEnvelope),
+                    pointXEnvelope,
+                    0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
 
             Assert.That(
@@ -1661,7 +1664,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle,
                     texture,
                     pointSampling,
-                    pointYEnvelope),
+                    pointYEnvelope,
+                    0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
 
             Assert.That(
@@ -1682,7 +1686,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle,
                     texture,
                     bilinearSampling,
-                    bilinearXEnvelope),
+                    bilinearXEnvelope,
+                    0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
 
             Assert.That(
@@ -1697,7 +1702,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle,
                     texture,
                     bilinearSampling,
-                    bilinearYEnvelope),
+                    bilinearYEnvelope,
+                    0),
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
 
             Assert.That(
@@ -1996,7 +2002,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     triangle, texture,
                     new TextureSampling(
                         TextureFilterMode.Bilinear, TextureWrapMode.Clamp),
-                    AlphaUvEnvelope.Zero),
+                    AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
     }

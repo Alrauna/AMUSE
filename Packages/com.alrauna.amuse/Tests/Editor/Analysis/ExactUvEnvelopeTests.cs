@@ -26,7 +26,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             long expectedSignificand,
             int expectedExponent)
         {
-            var result = ExactUvGeometry.HalfUlp(
+            var result = HalfUlp(
                 new ExactDyadic(new BigInteger(significand), exponent));
 
             Assert.That(result.Significand, Is.EqualTo(new BigInteger(expectedSignificand)));
@@ -305,9 +305,22 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 ExactRational.Subtract(input, decoded).CompareTo(encoded.Error),
                 Is.EqualTo(0));
             Assert.That(
-                Absolute(encoded.Error).CompareTo(ToRational(ExactUvGeometry.HalfUlp(
+                Absolute(encoded.Error).CompareTo(ToRational(HalfUlp(
                     ExactUvGeometry.DecodeFloat(encoded.Value)))),
                 Is.LessThanOrEqualTo(0));
+        }
+
+        private static ExactDyadic HalfUlp(ExactDyadic value)
+        {
+            if (value.Significand == BigInteger.Zero)
+            {
+                return new ExactDyadic(BigInteger.One, -150);
+            }
+            var magnitude = BigInteger.Abs(value.Significand);
+            var exponent = value.Exponent + ExactUvGeometry.BitLength(magnitude) - 1;
+            return new ExactDyadic(
+                BigInteger.One,
+                exponent < -126 ? -150 : exponent - 24);
         }
 
         private static bool IsInsideCounterClockwiseHull(

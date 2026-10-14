@@ -3253,7 +3253,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    triangle, field, sampling, AlphaUvEnvelope.Zero),
+                    triangle, field, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
                 "fixture precondition: the raw (identity) UV domain must " +
                 "sample the transparent interior, or the transform " +
@@ -3264,7 +3264,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True);
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    transformed, field, sampling, envelope),
+                    transformed, field, sampling, envelope, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
                 "the same triangle's ST-transformed domain must sample " +
                 "the opaque corner");

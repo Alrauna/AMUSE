@@ -259,20 +259,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             };
         }
 
-        internal static ExactDyadic HalfUlp(ExactDyadic value)
-        {
-            if (value.Significand == BigInteger.Zero)
-            {
-                return new ExactDyadic(BigInteger.One, -150);
-            }
-
-            var magnitude = BigInteger.Abs(value.Significand);
-            var exponent = value.Exponent + BitLength(magnitude) - 1;
-            return new ExactDyadic(
-                BigInteger.One,
-                exponent < -126 ? -150 : exponent - 24);
-        }
-
         // Error is the exact input value minus the binary32 value returned.
         internal static (float Value, ExactRational Error) EncodeToNearestFloat(ExactRational value)
         {
@@ -853,20 +839,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
             var quotient = BigInteger.DivRem(value, divisor, out var remainder);
             return remainder.Sign < 0 ? quotient - BigInteger.One : quotient;
-        }
-
-        internal static int FloorMod(BigInteger value, int modulus)
-        {
-            if (modulus <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(modulus));
-            }
-            var remainder = value % modulus;
-            if (remainder.Sign < 0)
-            {
-                remainder += modulus;
-            }
-            return (int)remainder;
         }
 
         internal static int FloorMod(int value, int modulus)
