@@ -27,29 +27,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 {
     public sealed class AmusePlatformFinishPluginTests
     {
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // textures' default anisoLevel 1 as anisotropic, so the
-            // pipeline's triangle proofs refuse every triangle. The Per
-            // Texture mode is the mode these fixtures were written under.
-            // The pin is per test and restores the editor mode on teardown,
-            // which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void RestoreAnisotropicFiltering()
         {
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
+            _filteringPin.Dispose();
         }
 
         [Test]

@@ -28,31 +28,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void BaseSetUp()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads a default anisoLevel 1
-            // texture as anisotropic, which the texture proofs refuse. Every
-            // fixture texture carries a default anisoLevel, so the Per Texture
-            // mode is the mode these equations were written under. The pin is
-            // per test and restores the editor mode on teardown, which NUnit
-            // runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
             _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void BaseTearDown()
         {
+            _filteringPin.Dispose();
             _scope.TearDown();
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
         }
 
         /// <summary>Registers a transient object for teardown destruction.</summary>

@@ -38,7 +38,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         private const int TextureSize = 8;
 
         private TestTransientScope _scope;
-        private UnityEngine.AnisotropicFiltering _savedFiltering;
+        private AnisotropicFilteringPin _filteringPin;
         private readonly List<UnityEngine.Object> _transient =
             new List<UnityEngine.Object>();
 
@@ -50,13 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [SetUp]
         public void SetUp()
         {
-            // The dev editor project persists Forced On anisotropic
-            // filtering. Under Forced On the sampler evidence reads an
-            // anisoLevel 1 texture as anisotropic, and the proofs refuse.
-            // Pin Per Texture, the mode these fixtures were written under.
-            _savedFiltering = UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
 
             _scope = new TestTransientScope(TempFolder);
             _scope.EnsureTempFolder();
@@ -68,8 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         [TearDown]
         public void TearDown()
         {
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedFiltering;
+            _filteringPin.Dispose();
             DryRunCache.Clear();
             foreach (var obj in _transient)
             {
