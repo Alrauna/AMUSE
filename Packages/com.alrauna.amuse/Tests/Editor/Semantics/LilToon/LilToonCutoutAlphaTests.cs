@@ -385,7 +385,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, chain), samplingPolicy, 0);
         }
@@ -430,7 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    CaptureCutoutEvidence(material));
+                    CaptureCutoutEvidence(material), out _);
 
             // Falsifies: an opaque-only constant-1 interpretation and
             // re-deriving the boundary from a > cutoff — the cutout theorem's
@@ -539,7 +539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -605,7 +605,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -852,7 +852,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingForMasked(captured, mainChain, maskChain),
                 samplingPolicy, 0);
@@ -873,7 +873,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingCapturedFields(captured), samplingPolicy, 0);
         }
@@ -934,7 +934,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }
@@ -1078,7 +1078,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -1315,7 +1315,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    CaptureCutoutEvidence(material));
+                    CaptureCutoutEvidence(material), out _);
 
             // The shipped default (0, 0, 0.5, 0.1) is mode zero and inert;
             // only the gate pass is under test here.
@@ -1913,7 +1913,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, UnusedProvider(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }

@@ -16,35 +16,6 @@ namespace Alrauna.Amuse.Editor.Analysis
     /// </summary>
     internal static class RuntimeStateResolution
     {
-        /// <summary>
-        /// Exercises the PlatformFinish-owned runtime-state orchestration with
-        /// already-closed evidence. The proof resolves under the explicitly
-        /// stated sampling policy, exactly as the real pass resolves under
-        /// its captured policy; there is no policy default on this entry.
-        /// The optional resolver is the pre-existing
-        /// verified-frontend seam used by public-package tests whose stand-in
-        /// shader cannot carry vendor source attestation; production calls the
-        /// same core with the real resolver.
-        /// </summary>
-        internal static (RendererAnalysisRefusal Refusal,
-                         int OpaqueCandidateTriangleCount)
-            AnalyzeRuntimeStatesForTests(
-                string rendererPath,
-                CapturedAnimationEvidence evidence,
-                UnityRendererAlphaSnapshot snapshot,
-                AlphaSamplingPolicy samplingPolicy,
-                CapturedAlphaMaterialSemanticsResolver resolveSemantics)
-        {
-            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-            var resolved = ResolveRuntimeStates(
-                rendererPath, evidence, samplingPolicy, resolveSemantics);
-            return resolved.Refusal == RendererAnalysisRefusal.None
-                ? (RendererAnalysisRefusal.None,
-                    ClassifyRuntimeStates(
-                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
-                : (resolved.Refusal, 0);
-        }
-
         internal sealed class ResolvedRuntimeStates
         {
             internal ResolvedRuntimeStates(

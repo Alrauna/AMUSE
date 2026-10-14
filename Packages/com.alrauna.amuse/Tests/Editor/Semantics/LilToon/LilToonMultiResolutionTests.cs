@@ -251,9 +251,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(mode, Is.EqualTo(0));
 
             var multiAlpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                multi);
+                multi, out _);
             var twinAlpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                twin);
+                twin, out _);
             Assert.That(multiAlpha.IsComplete, Is.True);
             Assert.That(twinAlpha.IsComplete, Is.True);
             Assert.That(
@@ -314,9 +314,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(mode, Is.EqualTo(1));
 
             var multiAlpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(multi);
+                .InterpretVerifiedCutoutAlpha(multi, out _);
             var twinAlpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(twin);
+                .InterpretVerifiedCutoutAlpha(twin, out _);
             Assert.That(multiAlpha.IsComplete, Is.True);
             Assert.That(twinAlpha.IsComplete, Is.True);
             Assert.That(
@@ -371,9 +371,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(mode, Is.EqualTo(2));
 
             var multiAlpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(multi);
+                .InterpretVerifiedTransparentAlpha(multi, out _);
             var twinAlpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(twin);
+                .InterpretVerifiedTransparentAlpha(twin, out _);
             Assert.That(multiAlpha.IsComplete, Is.True);
             Assert.That(twinAlpha.IsComplete, Is.True);
             Assert.That(

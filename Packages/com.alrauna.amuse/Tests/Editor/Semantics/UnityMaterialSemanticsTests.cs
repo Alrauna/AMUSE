@@ -76,30 +76,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void NullMaterialIsAllUnknownRatherThanAThrow()
-        {
-            AssertAllUnknown(UnityMaterialSemantics.AnalyzeBaseMaterial(null));
-        }
-
-        [Test]
-        public void DestroyedMaterialIsAllUnknown()
-        {
-            var material = new Material(Shader.Find("Unlit/Color"));
-            UnityEngine.Object.DestroyImmediate(material);
-
-            AssertAllUnknown(UnityMaterialSemantics.AnalyzeBaseMaterial(material));
-        }
-
-        [Test]
-        public void MaterialNeitherFrontendAttestsIsAllUnknown()
-        {
-            _material = new Material(Shader.Find("Unlit/Color"));
-
-            AssertAllUnknown(
-                UnityMaterialSemantics.AnalyzeBaseMaterial(_material));
-        }
-
-        [Test]
         public void AllUnknownIsUnknownInEveryOutput()
         {
             AssertAllUnknown(EvidenceGates.AllUnknown());
@@ -132,9 +108,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "_AlphaForceOpaque", out _));
 
             var poiyomiAlpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                captured[0].Evidence);
+                captured[0].Evidence, out _);
             var lilToonAlpha = LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                captured[1].Evidence);
+                captured[1].Evidence, out _);
             Assert.That(poiyomiAlpha.IsComplete, Is.True);
             Assert.That(
                 poiyomiAlpha.GetCompleteValue().GetConstantValue(), Is.EqualTo(1f));
@@ -1028,7 +1004,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 var routed = UnityMaterialSemantics.AnalyzeAlphaMaterial(
                     material);
                 var cutout = LilToonCutoutMaterialSemantics
-                    .InterpretVerifiedCutoutAlpha(material.Evidence);
+                    .InterpretVerifiedCutoutAlpha(material.Evidence, out _);
 
                 Assert.That(
                     routed.Semantics.Alpha.IsComplete &&

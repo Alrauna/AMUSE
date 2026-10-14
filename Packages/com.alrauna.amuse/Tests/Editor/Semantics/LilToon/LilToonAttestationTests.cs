@@ -426,7 +426,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 new LilToonActivatorOccurrence(
                     2,
                     "LIL_FEATURE_LTCGI",
-                    "#define LIL_FEATURE_LTCGI",
                     false),
             };
             var analysis = new LilToonCanonicalizationAnalysis(

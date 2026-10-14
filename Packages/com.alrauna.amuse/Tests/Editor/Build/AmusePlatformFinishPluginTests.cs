@@ -5043,12 +5043,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // captured slot facts or the geometry under proof.
                 fixture.Renderer.sharedMaterials = System.Array.Empty<Material>();
 
-                var result = RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
+                var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     path,
                     evidence,
-                    snapshot,
                     AlphaSamplingPolicy.ConservativeDesktop,
                     VerifiedAlphaOnly);
+                (RendererAnalysisRefusal Refusal, int OpaqueCandidateTriangleCount) result =
+                    resolved.Refusal == RendererAnalysisRefusal.None
+                        ? (RendererAnalysisRefusal.None,
+                            RuntimeStateResolution.ClassifyRuntimeStates(
+                                snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                        : (resolved.Refusal, 0);
 
                 Assert.That(result.Refusal,
                     Is.EqualTo(RendererAnalysisRefusal.None),
@@ -5106,12 +5111,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { 0, 1 }, MeshTopology.Lines, 0);
                 fixture.Renderer.sharedMesh = replacement;
 
-                var result = RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
+                var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath,
                     evidence,
-                    extraction.Snapshot,
                     AlphaSamplingPolicy.ConservativeDesktop,
                     VerifiedAlphaOnly);
+                (RendererAnalysisRefusal Refusal, int OpaqueCandidateTriangleCount) result =
+                    resolved.Refusal == RendererAnalysisRefusal.None
+                        ? (RendererAnalysisRefusal.None,
+                            RuntimeStateResolution.ClassifyRuntimeStates(
+                                extraction.Snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                        : (resolved.Refusal, 0);
 
                 Assert.That(result.Refusal,
                     Is.EqualTo(RendererAnalysisRefusal.None));
@@ -7247,9 +7257,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // The runtime-state mechanics fixtures stay conservative:
             // acceptance reaches the proof only through the real pass,
             // which captures the policy from the build avatar.
-            return RuntimeStateResolution.AnalyzeRuntimeStatesForTests(
-                path, evidence, snapshot,
-                AlphaSamplingPolicy.ConservativeDesktop, VerifiedAlphaOnly);
+            var resolved = RuntimeStateResolution.ResolveRuntimeStates(
+                path, evidence, AlphaSamplingPolicy.ConservativeDesktop, VerifiedAlphaOnly);
+            return resolved.Refusal == RendererAnalysisRefusal.None
+                ? (RendererAnalysisRefusal.None,
+                    RuntimeStateResolution.ClassifyRuntimeStates(
+                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                : (resolved.Refusal, 0);
         }
 
         private static UnityRendererAlphaSnapshot CaptureRuntimeStateGeometry(

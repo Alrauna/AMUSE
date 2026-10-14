@@ -141,13 +141,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue>
             InterpretVerifiedTransparentAlpha(
-                CapturedMaterialEvidence evidence)
-        {
-            return InterpretVerifiedTransparentAlpha(evidence, out _);
-        }
-
-        internal static SemanticOutput<ScalarSemanticValue>
-            InterpretVerifiedTransparentAlpha(
                 CapturedMaterialEvidence evidence,
                 out AlphaUnknownReason unknownReason)
         {

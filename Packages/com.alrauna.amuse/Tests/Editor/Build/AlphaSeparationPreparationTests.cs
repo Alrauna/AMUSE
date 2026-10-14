@@ -8905,7 +8905,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new MaterialSemantics(
                             SemanticOutput<ColorSemanticValue>.Unknown(),
                             LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                                captured.Evidence),
+                                captured.Evidence, out _),
                             SemanticOutput<ColorSemanticValue>.Unknown(),
                             SemanticOutput<NormalSemanticValue>.Unknown()),
                         null);

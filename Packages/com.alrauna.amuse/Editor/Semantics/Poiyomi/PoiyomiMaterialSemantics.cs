@@ -906,12 +906,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// evidence is required.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
-            CapturedMaterialEvidence evidence)
-        {
-            return InterpretVerifiedAlpha(evidence, out _);
-        }
-
-        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence,
             out AlphaUnknownReason unknownReason)
         {
@@ -932,12 +926,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <c>_AlphaForceOpaque2</c>, so the second-family reads below are
         /// evidence-backed rather than unrequested.
         /// </summary>
-        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
-            CapturedMaterialEvidence evidence)
-        {
-            return InterpretVerifiedTwoPassAlpha(evidence, out _);
-        }
-
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedTwoPassAlpha(
             CapturedMaterialEvidence evidence,
             out AlphaUnknownReason unknownReason)

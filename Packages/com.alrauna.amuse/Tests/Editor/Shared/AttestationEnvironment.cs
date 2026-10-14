@@ -47,8 +47,9 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
             string source,
             params (string RelativePath, string Stamp)[] additionalIncludes)
         {
-            return LilToonSourceAttestation.Canonicalize(
-                source, ShaderDir, ProjectRoot, Tree(additionalIncludes));
+            return LilToonSourceAttestation.AnalyzeCanonicalization(
+                source, ShaderDir, ProjectRoot, Tree(additionalIncludes))
+                .CanonicalSource;
         }
     }
 }

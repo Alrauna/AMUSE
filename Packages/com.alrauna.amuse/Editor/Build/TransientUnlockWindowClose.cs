@@ -57,15 +57,6 @@ namespace Alrauna.Amuse.Editor.Build
         internal const string PassName = "AMUSE transient unlock window close";
 
         /// <summary>
-        /// Alternate entry name for the close pass.
-        /// It calls Execute directly.
-        /// </summary>
-        internal static void ExecuteClose(BuildContext context)
-        {
-            Execute(context);
-        }
-
-        /// <summary>
         /// The production entry and the only close. The close never
         /// submits any material to the vendor on any path: every pair
         /// reverts to its locked original through the fallback
@@ -452,32 +443,6 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Convenience overload enumerating graph and clips for one pair.
-        /// </summary>
-        internal static bool CurveInversionWasComplete(
-            BuildContext context,
-            TransientUnlockWindowState.SwappedPair pair)
-        {
-            if (context == null)
-            {
-                return false;
-            }
-
-            var bindings = context
-                .GetState<AmusePlatformFinishState>().AnimatorBindings;
-            if (bindings == null || context.AvatarRootObject == null)
-            {
-                return false;
-            }
-
-            var graph = CommittedControllerGraph.Enumerate(
-                context.AvatarRootObject, bindings);
-            var committedClips = CommittedClips(context).ToList();
-            return CurveInversionWasComplete(
-                context, pair, committedClips, graph);
         }
 
         /// <summary>

@@ -505,12 +505,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// fragments rather than change the value.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
-            CapturedMaterialEvidence evidence)
-        {
-            return InterpretVerifiedAlpha(evidence, out _);
-        }
-
-        internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(
             CapturedMaterialEvidence evidence,
             out AlphaUnknownReason unknownReason)
         {

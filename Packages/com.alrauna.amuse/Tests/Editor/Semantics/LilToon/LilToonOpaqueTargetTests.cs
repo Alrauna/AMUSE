@@ -907,17 +907,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     source,
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
             })[0];
-            var target = Shader.Find(OpaqueConversionShaderName);
-            Assert.That(target, Is.Not.Null);
+            try
+            {
+                var target = ImportTempShader(
+                    "lilToon.shader",
+                    ValidStandInLilToonSource(TestOnlyStandInGuid));
+                Assert.That(target, Is.Not.Null);
 
-            var targetEvidence =
-                LilToonSourceAttestation.GatherOpaqueTargetSourceEvidence(
-                    target, captured);
+                Assert.That(
+                    LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                        target, captured, out var targetEvidence, out _),
+                    Is.True);
 
-            Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
-            Assert.That(
-                targetEvidence.ShaderName,
-                Is.Not.EqualTo(captured.ShaderName));
+                Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
+                Assert.That(
+                    targetEvidence.ShaderName,
+                    Is.Not.EqualTo(captured.ShaderName));
+            }
+            finally
+            {
+                DeleteConversionTempFolder();
+            }
         }
 
         /// <summary>
@@ -1186,8 +1196,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                         .ConversionEvidenceRequest),
             })[0];
 
-            var evidence = LilToonSourceAttestation
-                .GatherOpaqueTargetSourceEvidence(target, captured);
+            Assert.That(
+                LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                    target, captured, out var evidence, out _),
+                Is.True);
             Assert.That(
                 LilToonSourceAttestation.TryVerifyIdentityForShaderName(
                     evidence, out var diagnostic),

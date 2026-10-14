@@ -292,7 +292,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     {
         internal int LineIndex { get; }
         internal string Identifier { get; }
-        internal string Text { get; }
 
         /// <summary>
         /// True when the occurrence sits in a slot the generator is proven
@@ -305,13 +304,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal LilToonActivatorOccurrence(
             int lineIndex,
             string identifier,
-            string text,
             bool provenSlot)
         {
             LineIndex = lineIndex;
             Identifier = identifier
                 ?? throw new ArgumentNullException(nameof(identifier));
-            Text = text ?? throw new ArgumentNullException(nameof(text));
             ProvenSlot = provenSlot;
         }
     }
@@ -957,16 +954,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// blank lines, and every valued define — is retained, so any hand edit
         /// or custom-shader injection changes the digest.
         /// </summary>
-        internal static string Canonicalize(
-            string rawShaderSource,
-            string shaderDirectory,
-            string projectRoot,
-            LilToonIncludeTree includeTree)
-        {
-            return AnalyzeCanonicalization(
-                rawShaderSource, shaderDirectory, projectRoot, includeTree)
-                .CanonicalSource;
-        }
 
         internal static LilToonCanonicalizationAnalysis AnalyzeCanonicalization(
             string rawShaderSource,
@@ -1105,7 +1092,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             ShadowSlotAnchor,
                             StringComparison.Ordinal));
                 activators.Add(new LilToonActivatorOccurrence(
-                    i, identifier, trimmed, proven));
+                    i, identifier, proven));
             }
 
             var builder = new StringBuilder(rawShaderSource.Length);
@@ -2372,7 +2359,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             MultiContainerProfiles =
             {
                 // Measured on 2026-10-01 through the production
-                // Canonicalize + ComputeNormalizedSourceHash from two real
+                // AnalyzeCanonicalization + ComputeNormalizedSourceHash from two real
                 // installed settings shapes of a scratch 2.3.4 project
                 // (default import, then vertex-light and anisotropy
                 // settings applied): both shapes produce one digest per
@@ -2431,20 +2418,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence)
         {
             return Gather(shader, evidence, TransparentProfile);
-        }
-
-        /// <summary>
-        /// Gathers the pinned opaque target profile using the target shader's
-        /// own live name rather than the cutout source name stored in the
-        /// material evidence. The captured evidence supplies only the pinned
-        /// shader-format version scalar.
-        /// </summary>
-        internal static LilToonSourceEvidence GatherOpaqueTargetSourceEvidence(
-            Shader shader,
-            CapturedMaterialEvidence evidence)
-        {
-            if (shader == null) throw new ArgumentNullException(nameof(shader));
-            return Gather(shader, evidence, OpaqueProfile, shader.name);
         }
 
         /// <summary>

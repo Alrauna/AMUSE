@@ -97,12 +97,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Poiyomi frontends).
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue>
-            InterpretVerifiedCutoutAlpha(CapturedMaterialEvidence evidence)
-        {
-            return InterpretVerifiedCutoutAlpha(evidence, out _);
-        }
-
-        internal static SemanticOutput<ScalarSemanticValue>
             InterpretVerifiedCutoutAlpha(
                 CapturedMaterialEvidence evidence,
                 out AlphaUnknownReason unknownReason)

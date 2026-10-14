@@ -64,16 +64,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             Versions.AdmittedVersions;
 
         /// <summary>
-        /// Forwarded seam. Kept for parity with the sibling attestation's
-        /// seam; currently addressed by no test.
-        /// </summary>
-        internal static void SetAdmittedVersionsForTests(
-            params string[] versions)
-        {
-            Versions.SetAdmittedVersionsForTests(versions);
-        }
-
-        /// <summary>
         /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests,
         /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
         /// UnityAlphaFieldEvidenceTests, UnityGeneratedTextureEvidenceTests,

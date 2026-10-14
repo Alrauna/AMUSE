@@ -185,35 +185,6 @@ namespace Alrauna.Amuse.Editor.Semantics
                 textureProperties:
                     Array.Empty<TexturePropertyEvidenceRequest>());
 
-        /// <summary>
-        /// Analyzes the current values of one supplied base material. It makes
-        /// no claim about later animation, material swaps, property blocks, or
-        /// modifier processing. A material no frontend attests is all-Unknown,
-        /// which is the conservative answer and never a refusal to answer.
-        /// </summary>
-        internal static MaterialSemantics AnalyzeBaseMaterial(Material material)
-        {
-            // The frontends throw for these; the correct answer is Unknown, and
-            // an unassigned or destroyed slot is an ordinary input. Unity's
-            // overloaded equality reports a destroyed object as null.
-            if (material == null || material.shader == null)
-            {
-                return AllUnknown();
-            }
-
-            var poiyomi = PoiyomiMaterialSemantics.AnalyzeBaseMaterial(material);
-            if (poiyomi.IsSupportedMaterial)
-            {
-                return poiyomi.Semantics;
-            }
-
-            // An unsupported lilToon result is itself all-Unknown, which is
-            // exactly the answer for a material neither frontend attests.
-            return LilToonMaterialSemantics
-                .AnalyzeBaseMaterial(material)
-                .Semantics;
-        }
-
         internal static IReadOnlyList<CapturedAlphaMaterial> CaptureAlphaMaterials(
             IReadOnlyList<Material> materials,
             RegisteredSourceLookup resolveRegisteredSource = null)

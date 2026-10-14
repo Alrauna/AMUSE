@@ -223,7 +223,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // first with its own Unknown.
             var evidence = Capture(material, productionPredicate: true);
             var alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                evidence);
+                evidence, out _);
             Assert.That(
                 alpha.IsComplete, Is.True,
                 "the fade material's chain equation stays provable");
@@ -476,7 +476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var evidence = Capture(material, productionPredicate: true);
             var alpha = PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                evidence);
+                evidence, out _);
             Assert.That(
                 alpha.IsComplete, Is.True,
                 "the cutout equation completes. Diagnostics: " +

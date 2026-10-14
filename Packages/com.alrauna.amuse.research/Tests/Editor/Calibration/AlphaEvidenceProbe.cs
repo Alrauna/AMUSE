@@ -58,7 +58,6 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
     /// </summary>
     internal sealed class AlphaProbeLevel
     {
-        internal int Mip { get; }
         internal int Width { get; }
         internal int Height { get; }
 
@@ -68,9 +67,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         /// </summary>
         internal bool[] ExactlyOne { get; }
 
-        internal AlphaProbeLevel(int mip, int width, int height, bool[] exactlyOne)
+        internal AlphaProbeLevel(int width, int height, bool[] exactlyOne)
         {
-            Mip = mip;
             Width = width;
             Height = height;
             ExactlyOne = exactlyOne;
@@ -237,7 +235,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     exactlyOne[index] = value == byte.MaxValue;
                 }
 
-                return new AlphaProbeLevel(mip, width, height, exactlyOne);
+                return new AlphaProbeLevel(width, height, exactlyOne);
             }
             finally
             {

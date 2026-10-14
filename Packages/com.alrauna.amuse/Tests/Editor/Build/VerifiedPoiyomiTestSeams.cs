@@ -123,7 +123,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 new MaterialSemantics(
                     SemanticOutput<ColorSemanticValue>.Unknown(),
                     PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        material.Evidence),
+                        material.Evidence, out _),
                     SemanticOutput<ColorSemanticValue>.Unknown(),
                     SemanticOutput<NormalSemanticValue>.Unknown()),
                 null);
