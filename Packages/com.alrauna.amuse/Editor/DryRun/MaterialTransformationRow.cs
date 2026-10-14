@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Alrauna.Amuse.Editor.Build;
 
 namespace Alrauna.Amuse.Editor.DryRun
@@ -159,6 +160,13 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal static string RefusedSlotSentence()
         {
             return "Refused: AMUSE currently does not support this material";
+        }
+
+        internal static string DeferredSlotSentence(int total)
+        {
+            return "Deferred: 0 of out " +
+                total.ToString(CultureInfo.InvariantCulture) +
+                " polygons may be moved (evaluates at build time)";
         }
 
         internal static string UntouchableSlotSentence(int total)

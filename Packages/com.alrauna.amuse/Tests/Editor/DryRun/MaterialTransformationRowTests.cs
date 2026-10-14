@@ -267,6 +267,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 RowText.UntouchableSlotSentence(100),
                 RowText.SplittableSlotSentence(40, 100),
                 RowText.ConvertableSlotSentence(100),
+                RowText.DeferredSlotSentence(100),
             };
 
             foreach (var sentence in sentences)
@@ -323,6 +324,24 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 RowText.ConvertableSlotSentence(0),
                 Is.EqualTo("Convertable: 0 out of 0 polygons may be moved"));
+        }
+
+        [Test]
+        public void DeferredSlotSentenceFormatsWithTotalCount()
+        {
+            var sentence = RowText.DeferredSlotSentence(1234);
+            Assert.That(
+                sentence,
+                Is.EqualTo("Deferred: 0 of out 1234 polygons may be moved (evaluates at build time)"));
+        }
+
+        [Test]
+        public void DeferredSlotSentenceHandlesZeroCount()
+        {
+            var sentence = RowText.DeferredSlotSentence(0);
+            Assert.That(
+                sentence,
+                Is.EqualTo("Deferred: 0 of out 0 polygons may be moved (evaluates at build time)"));
         }
     }
 }
