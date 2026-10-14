@@ -776,7 +776,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ".poiyomi/Old Versions/9.0/Poiyomi Toon",
                 PoiyomiStandInProperties());
             var assigned = new Material(legacyShader);
-            var mesh = TriangleMesh();
+            var mesh = AlphaSeparationTestLifecycle.SingleTriangleMesh();
             var root = new GameObject("AMUSE unverified poi consent fixture");
             var renderer = root.AddComponent<SkinnedMeshRenderer>();
             renderer.sharedMesh = mesh;
@@ -812,19 +812,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "Shader \"" + shaderName + "\"\n" +
                 "{\n    Properties\n    {" + properties +
                 "\n    }\n    SubShader { Pass {} }\n}\n");
-        }
-
-        private static Mesh TriangleMesh()
-        {
-            var mesh = new Mesh();
-            mesh.vertices = new[]
-            {
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-            };
-            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-            return mesh;
         }
 
         private static Mesh TwoSubmeshTriangleMesh()
@@ -2070,7 +2057,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2128,7 +2115,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 Application.logMessageReceived -= Capture;
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2187,7 +2174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2244,7 +2231,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2298,7 +2285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2344,7 +2331,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 DestroyControllerGraph(controller);
             }
@@ -2402,7 +2389,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (swap != null) Object.DestroyImmediate(swap);
                 if (clip != null) Object.DestroyImmediate(clip);
@@ -2468,7 +2455,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (locked != null) Object.DestroyImmediate(locked);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -2543,7 +2530,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (locked != null) Object.DestroyImmediate(locked);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -2776,7 +2763,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (locked != null) Object.DestroyImmediate(locked);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -2838,7 +2825,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (stale != null) Object.DestroyImmediate(stale);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -2907,8 +2894,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DisposeAnalyzableRenderer(controlFixture);
                 DisposeAnalyzableRenderer(swappedFixture);
                 if (transparent != null) Object.DestroyImmediate(transparent);
-                DestroyCommittedClone(control, controlController);
-                DestroyCommittedClone(swapped, swappedController);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(control, controlController);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(swapped, swappedController);
                 Object.DestroyImmediate(control);
                 Object.DestroyImmediate(swapped);
                 if (controlClip != null) Object.DestroyImmediate(controlClip);
@@ -2989,7 +2976,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (swapped != null) Object.DestroyImmediate(swapped);
                 if (clip != null) Object.DestroyImmediate(clip);
@@ -3100,7 +3087,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (mesh != null) Object.DestroyImmediate(mesh);
                 if (blockedMaterial != null) Object.DestroyImmediate(blockedMaterial);
@@ -3211,7 +3198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 UnityEngine.QualitySettings.anisotropicFiltering =
                     savedFiltering;
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
                 if (mesh != null) Object.DestroyImmediate(mesh);
                 if (material != null) Object.DestroyImmediate(material);
@@ -3315,7 +3302,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 UnityEngine.QualitySettings.anisotropicFiltering = savedFiltering;
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
                 if (mesh != null) Object.DestroyImmediate(mesh);
                 if (material != null) Object.DestroyImmediate(material);
@@ -3519,7 +3506,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -3594,7 +3581,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -3647,7 +3634,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (opaque != null) Object.DestroyImmediate(opaque);
                 if (clip != null) Object.DestroyImmediate(clip);
@@ -3704,7 +3691,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (opaque != null) Object.DestroyImmediate(opaque);
                 if (clip != null) Object.DestroyImmediate(clip);
@@ -3784,7 +3771,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 DisposeAnalyzableRenderer(refused);
                 DisposeAnalyzableRenderer(later);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -3847,7 +3834,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -4310,7 +4297,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (refusedTexture != null)
                 {
@@ -4435,7 +4422,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (swap != null) Object.DestroyImmediate(swap);
                 if (clip != null) Object.DestroyImmediate(clip);
@@ -4538,7 +4525,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -6065,7 +6052,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DisposeAnalyzableRenderer(fixtureA);
                 DisposeAnalyzableRenderer(fixtureB);
                 if (swapped != null) Object.DestroyImmediate(swapped);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -6238,7 +6225,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 DisposeAnalyzableRenderer(fixture);
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
             }
         }
@@ -6304,7 +6291,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 DisposeAnalyzableRenderer(fixture);
                 if (second != null) Object.DestroyImmediate(second);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -6379,7 +6366,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (slotOneCurrent != null)
                     Object.DestroyImmediate(slotOneCurrent);
                 if (offender != null) Object.DestroyImmediate(offender);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (clip != null) Object.DestroyImmediate(clip);
                 if (controller != null) DestroyControllerGraph(controller);
@@ -6485,7 +6472,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (refusing != null) Object.DestroyImmediate(refusing);
                 if (resolving != null) Object.DestroyImmediate(resolving);
@@ -6551,7 +6538,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
                 if (resolving != null) Object.DestroyImmediate(resolving);
                 if (unattested != null) Object.DestroyImmediate(unattested);
@@ -6642,7 +6629,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (refusing != null) Object.DestroyImmediate(refusing);
                 if (resolving != null) Object.DestroyImmediate(resolving);
@@ -6718,7 +6705,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (failed != null) Object.DestroyImmediate(failed);
                 if (resolving != null) Object.DestroyImmediate(resolving);
@@ -6775,7 +6762,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
                 if (resolving != null) Object.DestroyImmediate(resolving);
             }
@@ -6833,7 +6820,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
             }
         }
@@ -6886,7 +6873,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, null);
                 Object.DestroyImmediate(root);
                 if (resolving != null) Object.DestroyImmediate(resolving);
             }
@@ -7022,7 +7009,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 if (mesh != null) Object.DestroyImmediate(mesh);
-                DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
                 Object.DestroyImmediate(root);
                 if (first != null) Object.DestroyImmediate(first);
                 if (second != null) Object.DestroyImmediate(second);
@@ -7351,32 +7338,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             if (fixture.Mesh != null) Object.DestroyImmediate(fixture.Mesh);
             if (fixture.Material != null) Object.DestroyImmediate(fixture.Material);
-        }
-
-
-        /// <summary>
-        /// NDMF virtualizes and commits animator controllers whenever an active
-        /// extension deactivates, so the Animator ends the build holding a clone
-        /// rather than the fixture's own controller. Nothing else owns that clone
-        /// under a null temporary-asset directory.
-        /// </summary>
-        private static void DestroyCommittedClone(
-            GameObject root, AnimatorController original)
-        {
-            var animator = root.GetComponent<Animator>();
-            if (animator == null) return;
-
-            var committed = animator.runtimeAnimatorController;
-            if (committed == null || ReferenceEquals(committed, original)) return;
-
-            animator.runtimeAnimatorController = null;
-            if (committed is AnimatorController controller)
-            {
-                DestroyControllerGraph(controller);
-                return;
-            }
-
-            Object.DestroyImmediate(committed);
         }
 
         private static void DestroyControllerGraph(AnimatorController controller)

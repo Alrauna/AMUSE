@@ -376,155 +376,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
-        private static SkinnedMeshRenderer AddRenderer(
-            GameObject root,
-            string name,
-            Mesh mesh,
-            params Material[] materials)
-        {
-            var child = new GameObject(name);
-            child.transform.SetParent(root.transform, false);
-            var renderer = child.AddComponent<SkinnedMeshRenderer>();
-            renderer.sharedMesh = mesh;
-            renderer.sharedMaterials = materials;
-            return renderer;
-        }
-
-        private static AnimationClip NewSwapClip(
-            string name,
-            string rendererPath,
-            int slotIndex,
-            params (float time, Material value)[] keys)
-        {
-            var clip = new AnimationClip { name = name };
-            var keyframes = new ObjectReferenceKeyframe[keys.Length];
-            for (var index = 0; index < keys.Length; index++)
-            {
-                keyframes[index] = new ObjectReferenceKeyframe
-                {
-                    time = keys[index].time,
-                    value = keys[index].value,
-                };
-            }
-
-            AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath,
-                    typeof(SkinnedMeshRenderer),
-                    "m_Materials.Array.data[" + slotIndex + "]"),
-                keyframes);
-            return clip;
-        }
-
-        private static AnimatorController NewController(
-            GameObject root,
-            string name,
-            params AnimationClip[] clips)
-        {
-            var controller = new AnimatorController { name = name };
-            controller.AddLayer("L0");
-            for (var index = 0; index < clips.Length; index++)
-            {
-                controller.layers[0].stateMachine
-                    .AddState("S" + index).motion = clips[index];
-            }
-
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-            return controller;
-        }
-
-        private static IEnumerable<AnimationClip> CommittedClips(
-            GameObject avatarRoot)
-        {
-            var seen = new HashSet<AnimationClip>();
-            foreach (var animator in avatarRoot
-                         .GetComponentsInChildren<Animator>(true))
-            {
-                if (!(animator.runtimeAnimatorController is
-                        AnimatorController controller))
-                {
-                    continue;
-                }
-
-                foreach (var layer in controller.layers)
-                {
-                    foreach (var child in layer.stateMachine.states)
-                    {
-                        if (child.state.motion is AnimationClip clip &&
-                            seen.Add(clip))
-                        {
-                            yield return clip;
-                        }
-                    }
-                }
-            }
-        }
-
-        private static AnimationClip CommittedClipCarrying(
-            GameObject root,
-            string rendererPath,
-            string propertyName)
-        {
-            return CommittedClips(root).SingleOrDefault(clip =>
-                AnimationUtility.GetObjectReferenceCurveBindings(clip).Any(
-                    binding => binding.path == rendererPath &&
-                               binding.propertyName == propertyName));
-        }
-
-        private static void DestroyCommittedClone(
-            GameObject root,
-            AnimatorController original)
-        {
-            var animator = root.GetComponent<Animator>();
-            if (animator == null)
-            {
-                return;
-            }
-
-            var committed = animator.runtimeAnimatorController;
-            if (committed == null || ReferenceEquals(committed, original))
-            {
-                return;
-            }
-
-            animator.runtimeAnimatorController = null;
-            if (committed is AnimatorController controller)
-            {
-                foreach (var layer in controller.layers)
-                {
-                    UnityEngine.Object.DestroyImmediate(layer.stateMachine);
-                }
-            }
-
-            UnityEngine.Object.DestroyImmediate(committed);
-        }
-
-        private static void DestroyGenerated(AmusePlatformFinishState state)
-        {
-            if (state?.Separation == null)
-            {
-                return;
-            }
-
-            foreach (var clone in state.Separation.CreatedClones)
-            {
-                if (clone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(clone);
-                }
-            }
-
-            foreach (var prepared in state.Separation.Renderers)
-            {
-                if (prepared.MeshClone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
-                }
-            }
-        }
-
         // --- Falsifier 2: the mixed split slot -------------------------------
 
         [Test]
@@ -545,7 +396,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(SplitAlphaMaterial(texture));
                     var transparent = Track(VerifiedTransparentMaterial());
                     var sourceMesh = Track(CreateSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, split, transparent);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -632,7 +483,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -659,7 +510,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var splitRefused = Track(SplitAlphaMaterial(texture));
                     splitRefused.SetFloat("_ZTest", 8f);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, opaque, splitRefused);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -721,7 +572,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -766,7 +617,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var splitOutlines = Track(SplitAlphaMaterial(texture));
                     splitOutlines.SetFloat("_EnableOutlines", 1f);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, opaque, splitOutlines);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -788,7 +639,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -814,7 +665,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     splitOutlines.SetFloat("_EnableOutlines", 1f);
                     splitOutlines.SetTexture("_OutlineTexture", outlineTexture);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, opaque, splitOutlines);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -841,7 +692,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -867,7 +718,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(SplitAlphaMaterial(texture));
                     var transparent = Track(VerifiedTransparentMaterial());
                     var sourceMesh = Track(CreateSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, split, transparent);
                     Assert.That(
                         renderer.sharedMesh.bounds,
@@ -923,7 +774,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -959,9 +810,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     secondSwap.name = "amuse split second swap";
 
                     var sourceMesh = Track(CreateTwoSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, first, second, transparent);
-                    var decoyRenderer = AddRenderer(
+                    var decoyRenderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "decoy", Track(CreateSplitSourceMesh()),
                         transparent, transparent);
 
@@ -989,7 +840,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var authoredSecond = CurveDescription.DescribeAuthoredCurve(
                         secondClip, "body", "m_Materials.Array.data[1]");
 
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE indices graph",
                         firstClip, secondClip);
 
@@ -1038,7 +889,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     // The committed clone of the FIRST same-named clip is the
                     // only one carrying the new appended binding data[3].
-                    var committedFirst = CommittedClipCarrying(
+                    var committedFirst = AlphaSeparationTestLifecycle.CommittedClipCarryingExactlyOne(
                         root, "body", "m_Materials.Array.data[3]");
                     Assert.That(committedFirst, Is.Not.Null,
                         "no committed clip carried the first appended " +
@@ -1069,7 +920,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // The committed clone of the SECOND same-named clip is
                     // the only one carrying data[4]. Association is by
                     // binding identity, never by the colliding display name.
-                    var committedSecond = CommittedClipCarrying(
+                    var committedSecond = AlphaSeparationTestLifecycle.CommittedClipCarryingExactlyOne(
                         root, "body", "m_Materials.Array.data[4]");
                     Assert.That(committedSecond, Is.Not.Null,
                         "no committed clip carried the second appended " +
@@ -1133,8 +984,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }

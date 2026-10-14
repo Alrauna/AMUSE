@@ -101,7 +101,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -153,7 +153,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -196,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(null);
+                AlphaSeparationTestLifecycle.DestroyGenerated(null);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -259,7 +259,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -299,7 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -340,7 +340,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(baseline);
+                AlphaSeparationTestLifecycle.DestroyGenerated(baseline);
                 if (baselineMesh != null)
                     UnityEngine.Object.DestroyImmediate(baselineMesh);
                 UnityEngine.Object.DestroyImmediate(baselineRoot);
@@ -372,7 +372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 refusedClip = NewFloatClip(
                     "AMUSE zwrite to zero", string.Empty,
                     "material._ZWrite", 0f);
-                refusedController = NewController(
+                refusedController = AlphaSeparationTestLifecycle.NewController(
                     refusedRoot, "AMUSE zwrite to zero graph", refusedClip);
 
                 refused = RunBarrier(refusedRoot);
@@ -395,8 +395,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(refused);
-                DestroyControllerGraph(refusedRoot, refusedController);
+                AlphaSeparationTestLifecycle.DestroyGenerated(refused);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(refusedRoot, refusedController);
                 if (refusedMesh != null)
                     UnityEngine.Object.DestroyImmediate(refusedMesh);
                 UnityEngine.Object.DestroyImmediate(refusedRoot);
@@ -425,7 +425,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 preparedClip = NewFloatClip(
                     "AMUSE zwrite to one", string.Empty,
                     "material._ZWrite", 1f);
-                preparedController = NewController(
+                preparedController = AlphaSeparationTestLifecycle.NewController(
                     preparedRoot, "AMUSE zwrite to one graph", preparedClip);
 
                 prepared = RunBarrier(preparedRoot);
@@ -446,8 +446,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(prepared);
-                DestroyControllerGraph(preparedRoot, preparedController);
+                AlphaSeparationTestLifecycle.DestroyGenerated(prepared);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(preparedRoot, preparedController);
                 if (preparedMesh != null)
                     UnityEngine.Object.DestroyImmediate(preparedMesh);
                 UnityEngine.Object.DestroyImmediate(preparedRoot);
@@ -501,7 +501,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite indexed prefix", string.Empty,
                     "material[0]._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE unrecognized binding graph", clip);
 
                 amuse = RunBarrier(root);
@@ -534,8 +534,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -573,7 +573,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite under additive layer", string.Empty,
                     "material._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE additive conversion graph", clip);
                 var layers = controller.layers;
                 layers[0].blendingMode =
@@ -610,8 +610,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -653,7 +653,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite under direct tree", string.Empty,
                     "material._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE direct conversion graph", clip);
                 controller.AddParameter(
                     "Blend", AnimatorControllerParameterType.Float);
@@ -706,8 +706,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -749,9 +749,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 lilToon = LilToonFixtureTestBase.CreateVerifiedMaterial();
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE mixed swap", string.Empty, 0, (0f, lilToon));
-                var controllerLocal = NewController(
+                var controllerLocal = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE mixed graph", clip);
                 controller = controllerLocal;
 
@@ -805,7 +805,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -834,9 +834,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 unsupported = new Material(Shader.Find("Unlit/Color"));
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE unconverted swap", string.Empty, 0, (0f, unsupported));
-                controller = NewController(root, "AMUSE unconverted graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE unconverted graph", clip);
 
                 var amuse = RunBarrier(
                     root,
@@ -892,7 +892,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -934,10 +934,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 unsupported.name = "AMUSE partial refusing material";
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE partial refusal swap", string.Empty, 0,
                     (0f, unsupported));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE partial refusal graph", clip);
 
                 var reports = ErrorReport.CaptureErrors(
@@ -1053,8 +1053,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -1114,10 +1114,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AddSingleTriangleRenderer(root, firstRefused, out mesh);
                 FillInBoundsUvs(mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE all-fail swap", string.Empty, 0,
                     (0f, lastRefused));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE all-fail graph", clip);
 
                 var reports = ErrorReport.CaptureErrors(
@@ -1178,8 +1178,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 fixtures.BaseTearDown();
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (firstRefused != null)
@@ -1284,7 +1284,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -1445,7 +1445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1552,7 +1552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1652,7 +1652,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1726,7 +1726,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1821,7 +1821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1862,7 +1862,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE cutoff to default", string.Empty,
                     "material._Cutoff", 0.5f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE cutoff graph", clip);
 
                 VerifiedPoiyomiConversion conversion =
@@ -1926,8 +1926,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1975,7 +1975,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE cutoff on body B", "bodyB",
                     "material._Cutoff", 0.5f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE shared source graph", clip);
 
                 amuse = RunBarrier(root);
@@ -2039,8 +2039,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
                 if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -2178,7 +2178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2285,7 +2285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseA);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseA);
                 if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
                 UnityEngine.Object.DestroyImmediate(rootA);
                 if (materialA != null)
@@ -2351,7 +2351,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseB);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseB);
                 if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
                 UnityEngine.Object.DestroyImmediate(rootB);
                 if (materialB != null)
@@ -2462,7 +2462,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2570,7 +2570,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2624,10 +2624,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     rendererA.sharedMesh = meshA;
                     rendererA.sharedMaterials = new[] { splitA };
 
-                    markedClipA = NewSwapClip(
+                    markedClipA = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE marked folded swap", string.Empty, 0,
                         (0f, swapA));
-                    controllerA = NewController(
+                    controllerA = AlphaSeparationTestLifecycle.NewController(
                         rootA, "AMUSE forced marker graph", markedClipA);
 
                     var reportsA = ErrorReport.CaptureErrors(
@@ -2662,8 +2662,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseA);
-                DestroyControllerGraph(rootA, controllerA);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseA);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(rootA, controllerA);
                 if (markedClipA != null)
                 {
                     UnityEngine.Object.DestroyImmediate(markedClipA);
@@ -2711,10 +2711,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     rendererB.sharedMesh = meshB;
                     rendererB.sharedMaterials = new[] { splitB };
 
-                    markedClipB = NewSwapClip(
+                    markedClipB = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE marked folded swap", string.Empty, 0,
                         (0f, swapB));
-                    controllerB = NewController(
+                    controllerB = AlphaSeparationTestLifecycle.NewController(
                         rootB, "AMUSE forced marker graph", markedClipB);
 
                     var reportsB = ErrorReport.CaptureErrors(
@@ -2758,8 +2758,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseB);
-                DestroyControllerGraph(rootB, controllerB);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseB);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(rootB, controllerB);
                 if (markedClipB != null)
                 {
                     UnityEngine.Object.DestroyImmediate(markedClipB);
@@ -2863,7 +2863,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3359,7 +3359,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -3443,7 +3443,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -3500,7 +3500,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE poiyomi st default", string.Empty,
                     "material._MainTex_ST.x", 2f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE poiyomi st default graph", clip);
 
                 amuse = RunBarrier(root);
@@ -3526,8 +3526,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3580,7 +3580,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE poiyomi st non singleton", string.Empty,
                     "material._MainTex_ST.x", 3f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE poiyomi st non singleton graph", clip);
 
                 amuse = RunBarrier(root);
@@ -3602,8 +3602,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3703,7 +3703,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -4743,7 +4743,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -5639,7 +5639,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -6153,7 +6153,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     scenario.clip = NewFloatClip(
                         scenario.root.name + " clip", string.Empty,
                         "material._UseDither", 1f);
-                    scenario.controller = NewController(
+                    scenario.controller = AlphaSeparationTestLifecycle.NewController(
                         scenario.root, scenario.root.name + " graph",
                         scenario.clip);
                 }
@@ -6215,10 +6215,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -6566,7 +6566,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (PoiyomiMaterial != null)
                 {
@@ -6712,7 +6712,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     }
                     finally
                     {
-                        DestroyGenerated(amuse);
+                        AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                         if (mesh != null)
                         {
                             UnityEngine.Object.DestroyImmediate(mesh);
@@ -7201,10 +7201,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     swapRenderer.sharedMesh = swapMesh;
                     swapRenderer.sharedMaterials = new[] { convertible };
 
-                    swapClip = NewSwapClip(
+                    swapClip = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE depth policy swap clip",
                         string.Empty, 0, (0f, divergent));
-                    swapController = NewController(
+                    swapController = AlphaSeparationTestLifecycle.NewController(
                         swapRoot, "AMUSE depth policy swap graph",
                         swapClip);
 
@@ -7254,7 +7254,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyControllerGraph(swapRoot, swapController);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(swapRoot, swapController);
                     if (swapMesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(swapMesh);
@@ -7772,7 +7772,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     fixture.clip = NewFloatClip(
                         rootName + " clip", string.Empty,
                         animatedBinding, animatedValue ?? 0f);
-                    fixture.controller = NewController(
+                    fixture.controller = AlphaSeparationTestLifecycle.NewController(
                         fixture.root, rootName + " graph", fixture.clip);
                 }
 
@@ -7795,10 +7795,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -7942,7 +7942,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (Material != null)
                 {
@@ -8361,7 +8361,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (meshFirst != null)
                         UnityEngine.Object.DestroyImmediate(meshFirst);
                     if (meshSecond != null)
@@ -8492,7 +8492,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (convertibleMesh != null)
                     UnityEngine.Object.DestroyImmediate(convertibleMesh);
                 if (bareMesh != null)
@@ -8603,7 +8603,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null)
@@ -8654,10 +8654,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AddSingleTriangleRenderer(root, cutout, out mesh);
                 FillInBoundsUvs(mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE mixed poiyomi cutout swap", string.Empty, 0,
                     (0f, poiyomi), (1f, cutout));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE mixed poiyomi cutout graph", clip);
 
                 amuse = RunBarrier(root);
@@ -8702,8 +8702,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null)
@@ -8864,7 +8864,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (blockedMesh != null)
                     UnityEngine.Object.DestroyImmediate(blockedMesh);
                 if (supportedMesh != null)
@@ -9378,7 +9378,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     fixture.clip = NewFloatClip(
                         rootName + " clip", string.Empty,
                         animatedBinding, animatedValue ?? 0f);
-                    fixture.controller = NewController(
+                    fixture.controller = AlphaSeparationTestLifecycle.NewController(
                         fixture.root, rootName + " graph", fixture.clip);
                 }
 
@@ -9395,10 +9395,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -9903,7 +9903,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -9982,7 +9982,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10061,7 +10061,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10171,7 +10171,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (splitMaterial != null)
@@ -10277,7 +10277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10374,7 +10374,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10493,7 +10493,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (foldedMesh != null)
                 {
                     UnityEngine.Object.DestroyImmediate(foldedMesh);
@@ -10602,58 +10602,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static void DestroyGenerated(AmusePlatformFinishState amuse)
-        {
-            if (amuse?.Separation == null)
-            {
-                return;
-            }
-
-            foreach (var clone in amuse.Separation.CreatedClones)
-            {
-                if (clone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(clone);
-                }
-            }
-
-            foreach (var prepared in amuse.Separation.Renderers)
-            {
-                if (prepared.MeshClone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
-                }
-            }
-        }
-
-        private static void DestroyControllerGraph(
-            GameObject root,
-            AnimatorController original)
-        {
-            var animator = root.GetComponent<Animator>();
-            if (animator == null)
-            {
-                return;
-            }
-
-            var committed = animator.runtimeAnimatorController;
-            if (committed == null || ReferenceEquals(committed, original))
-            {
-                return;
-            }
-
-            animator.runtimeAnimatorController = null;
-            if (committed is AnimatorController controller)
-            {
-                foreach (var layer in controller.layers)
-                {
-                    UnityEngine.Object.DestroyImmediate(layer.stateMachine);
-                }
-            }
-
-            UnityEngine.Object.DestroyImmediate(committed);
-        }
-
         private static void DestroyControllerGraph(AnimatorController source)
         {
             if (source == null)
@@ -10748,33 +10696,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return renderer;
         }
 
-        private static AnimationClip NewSwapClip(
-            string name,
-            string rendererPath,
-            int slotIndex,
-            params (float time, Material value)[] keys)
-        {
-            var clip = new AnimationClip { name = name };
-            var keyframes = new ObjectReferenceKeyframe[keys.Length];
-            for (var index = 0; index < keys.Length; index++)
-            {
-                keyframes[index] = new ObjectReferenceKeyframe
-                {
-                    time = keys[index].time,
-                    value = keys[index].value,
-                };
-            }
-
-            AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath,
-                    typeof(SkinnedMeshRenderer),
-                    "m_Materials.Array.data[" + slotIndex + "]"),
-                keyframes);
-            return clip;
-        }
-
         private static AnimationClip NewFloatClip(
             string name,
             string rendererPath,
@@ -10790,24 +10711,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     propertyName),
                 AnimationCurve.Constant(0f, 1f, value));
             return clip;
-        }
-
-        private static AnimatorController NewController(
-            GameObject root,
-            string name,
-            params AnimationClip[] clips)
-        {
-            var controller = new AnimatorController { name = name };
-            controller.AddLayer("L0");
-            for (var index = 0; index < clips.Length; index++)
-            {
-                controller.layers[0].stateMachine
-                    .AddState("S" + index).motion = clips[index];
-            }
-
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-            return controller;
         }
 
         private static Material VerifiedOpaqueMaterial()
@@ -10985,7 +10888,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, null);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (material != null)
