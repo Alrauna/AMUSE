@@ -10,6 +10,7 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 using UnityEditor;
 using UnityEngine;
 using TextureWrapMode = UnityEngine.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -192,17 +193,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             };
         }
 
-        /// <summary>Nondegenerate lower-left corner triangle.</summary>
-        private static TriangleAlphaInput CornerTriangle()
-        {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
-        }
 
         /// <summary>
         /// Hull stops at u = 0.7 in a 4-wide texture: inside texel column 2
@@ -672,12 +662,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 .InterpretVerifiedTransparentAlpha(captured);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
-                (TextureSourceId source, TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return false;
-                }, AlphaSamplingPolicy.ConservativeDesktop,
+                ProvidingNothing(),
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(alpha.IsComplete, Is.True);
@@ -1420,12 +1406,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 .InterpretVerifiedTransparentAlpha(captured);
             return AlphaSemanticsResolver.Resolve(
                 alpha,
-                (TextureSourceId source, TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return false;
-                }, AlphaSamplingPolicy.ConservativeDesktop, 0);
+                ProvidingNothing(),
+                AlphaSamplingPolicy.ConservativeDesktop,
+                0);
         }
 
         /// <summary>

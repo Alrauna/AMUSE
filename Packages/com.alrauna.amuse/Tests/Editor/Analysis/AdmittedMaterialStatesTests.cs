@@ -1130,10 +1130,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var assignment = admitted[0].Evidence.Textures.Single(
                     texture => texture.HasSourceIdentity);
                 var alpha = new byte[8 * 8];
-                for (var index = 0; index < alpha.Length; index++)
-                {
-                    alpha[index] = 255;
-                }
+                Array.Fill(alpha, (byte)255);
 
                 alpha[0] = 0;
                 var key = AlphaFieldKey.ForAlpha(assignment);
@@ -1199,7 +1196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         /// exact under the inert bounds, so the field gate's own lookup
         /// answers with that field for exactly this evidence.
         /// </summary>
-        private static CapturedMaterialEvidence
+        internal static CapturedMaterialEvidence
             EvidenceNamingAlphaSource(
                 TextureSourceId source, AlphaMipChain chain)
         {

@@ -56,6 +56,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return renderer;
         }
 
+        private (Renderer renderer, Material[] slots) NewTwoSlotFixture()
+        {
+            var first = NewFixtureMaterial();
+            var second = NewFixtureMaterial();
+            var renderer = NewTwoSlotRenderer(first, second);
+            return (renderer, renderer.sharedMaterials);
+        }
+
         private Material[] Materialize(Renderer renderer, out List<Material> clones)
         {
             var slots = renderer.sharedMaterials;
@@ -72,10 +80,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void NoBlockReturnsTheSameArrayWithNoClones()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
 
             var result = EffectiveMaterialMaterialization.Materialize(
                 renderer, slots, out var clones);
@@ -86,10 +91,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void ScalarAndColorOverridesDoNotCreateClones()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var block = new MaterialPropertyBlock();
             block.SetFloat("_AlphaForceOpaque", 1f);
             block.SetFloat("_Cutoff", 0.25f);
@@ -106,10 +108,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void RendererWideFloatOverrideLandsInBlockStateSnapshot()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var block = new MaterialPropertyBlock();
             block.SetFloat("_AlphaForceOpaque", 1f);
             renderer.SetPropertyBlock(block);
@@ -128,9 +127,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void PerIndexBlockOverridesRendererWideInBlockStateSnapshot()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
+            var (renderer, _) = NewTwoSlotFixture();
             var wide = new MaterialPropertyBlock();
             wide.SetFloat("_Cutoff", 0.5f);
             renderer.SetPropertyBlock(wide);
@@ -149,10 +146,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void IntAndColorAndVectorAndTextureEntriesCopy()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var overrideTexture = Track(
                 new Texture2D(2, 2, TextureFormat.RGBA32, false));
             var block = new MaterialPropertyBlock();
@@ -194,10 +188,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void UndeclaredKeysChangeNothing()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var block = new MaterialPropertyBlock();
             block.SetFloat("AMUSE_Undeclared_Key", 3f);
             renderer.SetPropertyBlock(block);
@@ -218,10 +209,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void OriginalsAreNeverMutated()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var beforeMainTex0 = slots[0].GetTexture("_MainTex");
             var beforeMainTex1 = slots[1].GetTexture("_MainTex");
             var wide = new MaterialPropertyBlock();
@@ -269,10 +257,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void MatrixEntriesAreIgnoredBecauseNoShaderCanDeclareAMatrixProperty()
         {
-            var first = NewFixtureMaterial();
-            var second = NewFixtureMaterial();
-            var renderer = NewTwoSlotRenderer(first, second);
-            var slots = renderer.sharedMaterials;
+            var (renderer, slots) = NewTwoSlotFixture();
             var block = new MaterialPropertyBlock();
             block.SetMatrix("AMUSE_Undeclared_Matrix", Matrix4x4.identity);
             renderer.SetPropertyBlock(block);

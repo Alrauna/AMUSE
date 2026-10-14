@@ -1720,7 +1720,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// deliberately odd-aligned so it does not survive halving: source texel
         /// x = 4 is exactly one at mip 0, while the mip-1 texel covering it is not.
         /// </summary>
-        private static Color32[] OddBoundaryPixels()
+        internal static Color32[] OddBoundaryPixels()
         {
             var pixels = new Color32[64];
             for (var y = 0; y < 8; y++)

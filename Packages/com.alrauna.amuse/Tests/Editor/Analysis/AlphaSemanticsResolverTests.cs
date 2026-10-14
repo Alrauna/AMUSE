@@ -131,7 +131,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
         }
 
-        private static AlphaFieldProvider ProvidingNothing()
+        internal static AlphaFieldProvider ProvidingNothing()
         {
             return (TextureSourceId source, TextureChannel channel,
                 out AlphaMipChain result) =>
@@ -141,10 +141,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
         }
 
-        /// <summary>
-        /// A nondegenerate triangle covering the lower-left quarter of UV space.
-        /// </summary>
-        private static TriangleAlphaInput OpaqueCornerTriangle()
+        /// <summary>Nondegenerate lower-left corner triangle.</summary>
+        internal static TriangleAlphaInput CornerTriangle()
         {
             return TriangleAlphaInput.WithUv0(
                 Vector3.zero,
@@ -154,6 +152,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.45f, 0.05f),
                 new Vector2(0.05f, 0.45f));
         }
+
+        private static TriangleAlphaInput OpaqueCornerTriangle() => CornerTriangle();
 
         /// <summary>
         /// The same shape in the upper half of UV space.

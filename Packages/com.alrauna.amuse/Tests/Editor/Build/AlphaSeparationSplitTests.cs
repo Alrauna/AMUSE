@@ -1,4 +1,5 @@
 using Alrauna.Amuse.Tests.Editor.Shared;
+using static Alrauna.Amuse.Tests.Editor.Host.MeshCloneFinalizationCharacterizationTests;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -109,16 +110,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
-        /// <summary>Authored mesh bounds, unrelated to the geometry.</summary>
-        internal static readonly Bounds AuthoredMeshBounds =
-            new Bounds(new Vector3(10f, 20f, 30f), new Vector3(40f, 50f, 60f));
-
-        internal static Bounds AuthoredSubmeshBounds(int submesh)
-        {
-            return new Bounds(
-                new Vector3(100 + submesh, 200 + submesh, 300 + submesh),
-                new Vector3(2f, 2f, 2f));
-        }
 
         /// <summary>
         /// Adversarial vertex data for the split fixtures: deterministic

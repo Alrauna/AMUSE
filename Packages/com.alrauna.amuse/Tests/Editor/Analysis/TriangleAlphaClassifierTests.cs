@@ -362,10 +362,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaTextureData EightByEightOneWitnessTexture()
         {
             var bytes = new byte[64];
-            for (var index = 0; index < bytes.Length; index++)
-            {
-                bytes[index] = 255;
-            }
+            Array.Fill(bytes, (byte)255);
             bytes[27] = 0;
             return new AlphaTextureData(8, 8, bytes);
         }

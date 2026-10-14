@@ -1,4 +1,5 @@
 using System;
+using Alrauna.Amuse.Tests.Editor.Analysis;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
@@ -39,7 +40,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var set = AlphaFieldSet.WithField(
                 sourceId, TextureChannel.Alpha, 1f,
                 AlphaPolicyBounds.Inert, chain);
-            var evidence = EvidenceNamingAlphaSource(sourceId, chain);
+            var evidence = AdmittedMaterialStatesTests.EvidenceNamingAlphaSource(sourceId, chain);
             ReplacementTextureIdentity.ClearSession();
             Assert.That(
                 set.TryGetFor(
@@ -166,7 +167,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var set = AlphaFieldSet.WithField(
                 source, TextureChannel.Alpha, 1f,
                 AlphaPolicyBounds.Inert, chain);
-            var evidence = EvidenceNamingAlphaSource(source, chain);
+            var evidence = AdmittedMaterialStatesTests.EvidenceNamingAlphaSource(source, chain);
 
             Assert.That(
                 () => set.TryGetFor(
@@ -192,41 +193,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             });
         }
 
-        /// <summary>
-        /// Evidence whose only texture assignment names
-        /// <paramref name="source"/> with an alpha chain captured exact
-        /// under the inert bounds, so the gate's own lookup would answer
-        /// with the field when no guard refuses first.
-        /// </summary>
-        private static CapturedMaterialEvidence EvidenceNamingAlphaSource(
-            TextureSourceId source, AlphaMipChain chain)
-        {
-            var texture = new CapturedTextureEvidence(
-                true, source, 1f, AlphaPolicyBounds.Inert,
-                false, default(TextureSampling),
-                false, default(TextureColorInterpretation),
-                false, false,
-                false, true, chain,
-                TextureCaptureRefusalReason.None,
-                false, null,
-                TextureCaptureRefusalReason.None);
-            var assignment = new CapturedTextureAssignment(
-                true, TextureEvidenceKinds.AlphaChannel,
-                false, Vector2.one, Vector2.zero,
-                texture, Array.Empty<TextureCaptureRefusal>());
-            return new CapturedMaterialEvidence(
-                false, null, false, default(ColorSpace),
-                Array.Empty<CapturedMaterialEvidence.PresenceEntry>(),
-                Array.Empty<CapturedMaterialEvidence.ScalarEntry>(),
-                Array.Empty<CapturedMaterialEvidence.ColorEntry>(),
-                Array.Empty<CapturedMaterialEvidence.VectorEntry>(),
-                new[]
-                {
-                    new CapturedMaterialEvidence.TextureEntry(
-                        "_MainTex", true, assignment),
-                },
-                new[] { texture });
-        }
 
         /// <summary>
         /// Evidence whose two deciding texture assignments name

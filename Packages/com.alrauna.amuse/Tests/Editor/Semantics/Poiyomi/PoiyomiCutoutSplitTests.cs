@@ -9,6 +9,7 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
@@ -453,17 +454,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             };
         }
 
-        /// <summary>Nondegenerate lower-left corner triangle.</summary>
-        private static TriangleAlphaInput CornerTriangle()
-        {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
-        }
 
         private static void AssertProven(Material material)
         {

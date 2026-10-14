@@ -583,24 +583,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result.Plan.HasAnyOpaqueCandidates, Is.True);
         }
 
-        /// <summary>
-        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
-        /// boundary does not survive halving.
-        /// </summary>
-        private static Color32[] OddBoundaryPixels()
-        {
-            var pixels = new Color32[64];
-            for (var y = 0; y < 8; y++)
-            {
-                for (var x = 0; x < 8; x++)
-                {
-                    pixels[y * 8 + x] =
-                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
-                }
-            }
-
-            return pixels;
-        }
 
         private static Color32[] UniformOpaquePixels()
         {
@@ -661,7 +643,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var oddBoundary = ImportTexture(
                 "odd_boundary", readable: false, mipmapped: true,
-                pixels: OddBoundaryPixels(), width: 8, height: 8);
+                pixels: UnityAlphaFieldEvidenceTests.OddBoundaryPixels(), width: 8, height: 8);
             var uniform = ImportTexture(
                 "uniform_opaque", readable: false, mipmapped: true,
                 pixels: UniformOpaquePixels(), width: 8, height: 8);

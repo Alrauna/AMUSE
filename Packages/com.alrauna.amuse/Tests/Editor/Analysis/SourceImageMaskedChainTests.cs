@@ -1,3 +1,4 @@
+using System;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using NUnit.Framework;
@@ -10,10 +11,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static byte[] Uniform(int count, byte value)
         {
             var bytes = new byte[count];
-            for (var i = 0; i < count; i++)
-            {
-                bytes[i] = value;
-            }
+            Array.Fill(bytes, value);
             return bytes;
         }
 

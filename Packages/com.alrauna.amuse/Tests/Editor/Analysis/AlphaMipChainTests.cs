@@ -14,10 +14,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private static AlphaTextureData Level(int width, int height, byte value)
         {
             var bytes = new byte[width * height];
-            for (var index = 0; index < bytes.Length; index++)
-            {
-                bytes[index] = value;
-            }
+            Array.Fill(bytes, value);
 
             return new AlphaTextureData(width, height, bytes);
         }

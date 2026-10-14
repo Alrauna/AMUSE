@@ -85,14 +85,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// Authored per-submesh bounds, unrelated to the geometry so that any
         /// implicit recalculation is visible.
         /// </summary>
-        private static Bounds AuthoredSubmeshBounds(int submesh)
+        internal static Bounds AuthoredSubmeshBounds(int submesh)
         {
             return new Bounds(
                 new Vector3(100 + submesh, 200 + submesh, 300 + submesh),
                 new Vector3(2f, 2f, 2f));
         }
 
-        private static readonly Bounds AuthoredMeshBounds = new Bounds(
+        internal static readonly Bounds AuthoredMeshBounds = new Bounds(
             new Vector3(10f, 20f, 30f), new Vector3(40f, 50f, 60f));
 
         /// <summary>

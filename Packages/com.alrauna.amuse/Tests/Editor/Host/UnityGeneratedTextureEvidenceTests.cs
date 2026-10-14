@@ -43,9 +43,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             _streamingSubTex.Apply(false, false);
-            _streamingSubTex.name = "MainTex (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(_streamingSubTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(_streamingSubTex, "MainTex (AAO UV Packed)");
         }
 
         [TearDown]
@@ -60,6 +58,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 AssetDatabase.DeleteAsset(ArbitraryContainerPath);
             }
+        }
+
+        private static Texture2D AddContainerTexture(Texture2D texture, string name)
+        {
+            texture.name = name;
+            AssetDatabase.AddObjectToAsset(texture, ContainerPath);
+            AssetDatabase.SaveAssets();
+            return texture;
         }
 
         [Test]
@@ -126,10 +132,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void UncharacterizedSubAsset_ReturnsFalse()
         {
-            var uncharacterized = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            uncharacterized.name = "RegularSubAsset";
-            AssetDatabase.AddObjectToAsset(uncharacterized, ContainerPath);
-            AssetDatabase.SaveAssets();
+            var uncharacterized = AddContainerTexture(
+                new Texture2D(4, 4, TextureFormat.RGBA32, false),
+                "RegularSubAsset");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 uncharacterized,
@@ -155,9 +160,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             redTexture.SetPixels32(pixels);
             redTexture.Apply(false, false);
-            redTexture.name = "AAO Monotone Red";
-            AssetDatabase.AddObjectToAsset(redTexture, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(redTexture, "AAO Monotone Red");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 redTexture,
@@ -184,9 +187,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             halfAlphaTexture.SetPixels32(pixels);
             halfAlphaTexture.Apply(false, false);
-            halfAlphaTexture.name = "AlphaMask (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(halfAlphaTexture, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(halfAlphaTexture, "AlphaMask (AAO UV Packed)");
 
             // Threshold 0.6 is higher than 0.502 -> texels become transparent.
             var okHigh = UnityGeneratedTextureEvidence.TryCapture(
@@ -230,9 +231,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             multiMipTex.Apply(false, false);
-            multiMipTex.name = "MipIsolation (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(multiMipTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(multiMipTex, "MipIsolation (AAO UV Packed)");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 multiMipTex,
@@ -278,9 +277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             multiMipTex.Apply(false, false);
-            multiMipTex.name = "MipResidency (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(multiMipTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(multiMipTex, "MipResidency (AAO UV Packed)");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 multiMipTex,
@@ -333,9 +330,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             texture.Apply(false, false);
-            texture.name = "CacheKey (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(texture, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(texture, "CacheKey (AAO UV Packed)");
 
             var limitedOk = UnityGeneratedTextureEvidence.TryCapture(
                 texture,
@@ -376,10 +371,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             boundaryTex.SetPixels32(pixels);
             boundaryTex.Apply(false, false);
-            boundaryTex.name = "BoundaryCutoff (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(boundaryTex, ContainerPath);
-            AssetDatabase.SaveAssets();
-
+            AddContainerTexture(boundaryTex, "BoundaryCutoff (AAO UV Packed)");
             // Threshold 0.502f is strictly greater than 128 / 255f.
             // Texels must be non-opaque.
             var okAbove = UnityGeneratedTextureEvidence.TryCapture(
@@ -451,9 +443,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 texture.SetPixels32(mipPixels, m);
             }
             texture.Apply(false, false);
-            texture.name = "MutatedCacheKey (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(texture, _container);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(texture, "MutatedCacheKey (AAO UV Packed)");
 
             Assert.That(
                 UnityGeneratedTextureEvidence.TryCapture(
@@ -491,9 +481,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             deltaTex.SetPixels32(pixels);
             deltaTex.Apply(false, false);
-            deltaTex.name = "DeltaCutoff (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(deltaTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(deltaTex, "DeltaCutoff (AAO UV Packed)");
 
             // Cutoff 0.501960f is slightly below 128/255. Texels must be opaque.
             var okBelow = UnityGeneratedTextureEvidence.TryCapture(
@@ -660,9 +648,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
 
             strayTex.Apply(false, false);
-            strayTex.name = "AlphaMask (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(strayTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(strayTex, "AlphaMask (AAO UV Packed)");
 
             var okInert = UnityGeneratedTextureEvidence.TryCapture(
                 strayTex,
@@ -718,9 +704,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             midTex.SetPixels32(pixels);
             midTex.Apply(false, false);
-            midTex.name = "AlphaMask (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(midTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(midTex, "AlphaMask (AAO UV Packed)");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 midTex,
@@ -757,9 +741,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             nearTex.SetPixels32(pixels);
             nearTex.Apply(false, false);
-            nearTex.name = "AlphaMask (AAO UV Packed)";
-            AssetDatabase.AddObjectToAsset(nearTex, ContainerPath);
-            AssetDatabase.SaveAssets();
+            AddContainerTexture(nearTex, "AlphaMask (AAO UV Packed)");
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 nearTex,
