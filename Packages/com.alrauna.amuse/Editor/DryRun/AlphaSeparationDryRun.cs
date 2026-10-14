@@ -23,7 +23,7 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// scene, and turns the outcome into display rows. It reads. It never
     /// writes: the capture transients it creates die inside the compute
     /// scope, and the one capture route that writes project assets stays
-    /// unreachable, because the streaming capture entry is never called.
+    /// unreachable, because streaming capture runs under DisallowDiskFallback.
     /// <para>
     /// Begin runs the avatar facts once per open. Step computes one
     /// renderer per call, behind a probe pass and the session cache. An
@@ -87,13 +87,6 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         private int _rendererIndex;
 
-        /// <summary>
-        /// The batch positions the streaming intercept skipped on the
-        /// current compute leg. Their sentinels are the streaming skip,
-        /// not consent subjects, so the consent sweep must exclude them.
-        /// </summary>
-        private readonly HashSet<int> _streamingSkippedOrdinals =
-            new HashSet<int>();
 
         /// <summary>
         /// The inspector sets this so the next draw pass advances. No-op
@@ -491,7 +484,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             var blockState =
                 EffectiveMaterialMaterialization.CaptureBlockState(renderer);
-            _streamingSkippedOrdinals.Clear();
             var evidence = CaptureFor(
                 rendererPath,
                 renderer.sharedMaterials,
@@ -520,6 +512,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 // run keeps the same discipline: the refused slot rows
                 // ride beside the renderer refusal row.
                 var rows = new List<MaterialTransformationRow>();
+                var allDeferred = true;
+                var hasUnresolved = false;
+
                 for (var slotIndex = 0;
                      slotIndex < resolved.SlotResults.Length;
                      slotIndex++)
@@ -529,17 +524,30 @@ namespace Alrauna.Amuse.Editor.DryRun
                         continue;
                     }
 
+                    hasUnresolved = true;
+                    var slotEvidence = slotIndex < slots.Count ? slots[slotIndex] : null;
+                    if (!IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
+                    {
+                        allDeferred = false;
+                    }
+
                     rows.Add(RefusedSlotRow(
+                        renderer,
                         rendererPath,
                         rendererTypeName,
                         resolved.SlotResults[slotIndex],
-                        slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slotEvidence,
+                        slotIndex,
                         renderer.gameObject.name));
                 }
 
-                rows.Insert(0, RendererRefusedRow(
-                    rendererPath, rendererTypeName, resolved.Refusal,
-                    -1, -1, renderer.gameObject.name));
+                if (!hasUnresolved || !allDeferred)
+                {
+                    rows.Insert(0, RendererRefusedRow(
+                        rendererPath, rendererTypeName, resolved.Refusal,
+                        -1, -1, renderer.gameObject.name));
+                }
+
                 return rows;
             }
 
@@ -569,6 +577,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _minimumOpaqueCoveragePercent,
                 _minimumOpaqueCoverageToPreservePercent);
             return BuildRows(
+                renderer,
                 rendererPath,
                 rendererTypeName,
                 verdicts,
@@ -663,7 +672,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                     }
                     else if (IsStreamingMipmap(texture))
                     {
-                        AddNoteOnce(NoteKind.StreamingMipmaps);
+                        if (!CanDecodeInMemory(texture))
+                        {
+                            AddNoteOnce(NoteKind.StreamingMipmaps);
+                        }
                     }
                 }
 
@@ -703,17 +715,13 @@ namespace Alrauna.Amuse.Editor.DryRun
             };
 
         /// <summary>
-        /// The dry run's own effective-materials route: it materializes
-        /// each admitted batch against the renderer's property block, so
-        /// the proof reads the values the renderer actually shows, and it
-        /// destroys every clone in a finally. The inner capturer filters
-        /// streaming-mipmap textures before any dispatch, because reading
-        /// them would write project assets.
+        /// Materializes each admitted batch against property blocks.
+        /// Transients die in the finally block.
+        /// Runs under DisallowDiskFallback to prevent asset creation on disk.
         /// </summary>
         private ClosedAlphaMaterialCapturer RealCapturer(Renderer renderer)
         {
-            var inner = InterceptStreamingTextures(
-                _capturer ?? DefaultInnerCapturer());
+            var inner = _capturer ?? DefaultInnerCapturer();
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
@@ -725,8 +733,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                     .MaterializeAdmitted(renderer, materials, out var clones);
                 try
                 {
-                    return inner(
-                        effective, families, request, bounds, out outcome);
+                    using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+                    {
+                        return inner(
+                            effective, families, request, bounds, out outcome);
+                    }
                 }
                 finally
                 {
@@ -751,92 +762,137 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Partitions the batch: a member whose alpha-relevant textures use
-        /// streaming mipmaps is skipped whole. Its ordinals ride the
-        /// outcome as unattested, so the capture merge records the honest
-        /// sentinel for it and its slot refuses, while every clean member
-        /// captures under its own full request. The production attestation
-        /// and count checks stay intact, and no dispatch reads a streaming
-        /// texture.
+        /// Checks whether a streaming texture can decode in memory from disk.
+        /// Authoring PNG and TGA files can decode directly.
         /// </summary>
-        private ClosedAlphaMaterialCapturer InterceptStreamingTextures(
-            ClosedAlphaMaterialCapturer inner)
+        private static bool CanDecodeInMemory(Texture texture)
         {
-            return (
-                IReadOnlyList<Material> materials,
-                IReadOnlyList<CapturedAlphaMaterialFamily> families,
-                MaterialEvidenceRequest request,
-                AlphaPolicyBounds bounds,
-                out ClosedAlphaCaptureOutcome outcome) =>
+            if (!(texture is Texture2D))
             {
-                var captureMembers = new List<int>();
-                var skippedOrdinals = new List<int>();
-                for (var index = 0; index < materials.Count; index++)
-                {
-                    if (DroppedStreamingProperties(materials[index]).Count > 0)
-                    {
-                        skippedOrdinals.Add(index);
-                        continue;
-                    }
+                return false;
+            }
 
-                    captureMembers.Add(index);
-                }
+            var path = AssetDatabase.GetAssetPath(texture);
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return false;
+            }
 
-                _streamingSkippedOrdinals.UnionWith(skippedOrdinals);
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext != ".png" && ext != ".tga")
+            {
+                return false;
+            }
 
-                var captured = new List<CapturedAlphaMaterial>();
-                var unattested = new List<int>(skippedOrdinals);
-                if (captureMembers.Count > 0)
-                {
-                    var groupMaterials = captureMembers
-                        .Select(index => materials[index]).ToList();
-                    var groupFamilies = captureMembers
-                        .Select(index => families[index]).ToList();
-                    if (!inner(
-                            groupMaterials,
-                            groupFamilies,
-                            request,
-                            bounds,
-                            out var groupOutcome))
-                    {
-                        outcome = default;
-                        return false;
-                    }
+            if (AssetImporter.GetAtPath(path) is TextureImporter importer &&
+                importer.alphaSource == TextureImporterAlphaSource.FromGrayScale)
+            {
+                return false;
+            }
 
-                    captured.AddRange(groupOutcome.Captured);
-                    unattested.AddRange(groupOutcome.UnattestedOrdinals
-                        .Select(ordinal => captureMembers[ordinal]));
-                }
-
-                // The outcome partitions the batch positionally, so the
-                // lists sort back into batch order before the merge.
-                unattested.Sort();
-                outcome = new ClosedAlphaCaptureOutcome(captured, unattested);
-                return true;
-            };
+            return true;
         }
 
-        private List<string> DroppedStreamingProperties(Material material)
+        /// <summary>
+        /// Counts triangles for one submesh safely from the shared mesh.
+        /// Returns negative one when the submesh or topology is invalid.
+        /// </summary>
+        private static int SubmeshPolygonCount(Renderer renderer, int slotIndex)
         {
-            var drop = new List<string>();
+            Mesh mesh = null;
+            if (renderer is SkinnedMeshRenderer smr)
+            {
+                mesh = smr.sharedMesh;
+            }
+            else if (renderer is MeshRenderer && renderer.TryGetComponent<MeshFilter>(out var filter))
+            {
+                mesh = filter.sharedMesh;
+            }
+
+            if (mesh == null || slotIndex < 0 || slotIndex >= mesh.subMeshCount)
+            {
+                return -1;
+            }
+
+            if (mesh.GetTopology(slotIndex) != MeshTopology.Triangles)
+            {
+                return -1;
+            }
+
+            return (int)(mesh.GetIndexCount(slotIndex) / 3);
+        }
+
+        /// <summary>
+        /// Checks whether an unresolved slot evaluates at build time.
+        /// Attested locked materials and streaming textures evaluate at build time.
+        /// </summary>
+        private static bool IsSlotDeferred(
+            Renderer renderer,
+            int slotIndex,
+            SlotResolutionResult slotResult,
+            CapturedMaterialSlotEvidence slotEvidence)
+        {
+            if (renderer == null || renderer.sharedMaterials == null)
+            {
+                return false;
+            }
+
+            if (slotIndex < 0 || slotIndex >= renderer.sharedMaterials.Length)
+            {
+                return false;
+            }
+
+            var material = renderer.sharedMaterials[slotIndex];
+            if (material == null)
+            {
+                return false;
+            }
+
+            if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
+                (LockedMaterialIdentity.OriginalShaderAttested(material) ||
+                 IsAttestedOriginalShader(material)))
+            {
+                return true;
+            }
+
+            if (HasUnreadableAlphaStreamingTexture(material))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks whether the original shader tag names a supported shader.
+        /// </summary>
+        private static bool IsAttestedOriginalShader(Material material)
+        {
+            var tag = material.GetTag(
+                LockedMaterialIdentity.OriginalShaderTagName, true, null);
+            return tag == PoiyomiMaterialSemantics.PoiyomiToonShaderName ||
+                   tag == PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName;
+        }
+
+        private static bool HasUnreadableAlphaStreamingTexture(Material material)
+        {
             if (material == null ||
-                !EffectiveSelector(
+                !UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
                     material, out _, out var alphaRequest, out _))
             {
-                return drop;
+                return false;
             }
 
             foreach (var textureProperty in alphaRequest.TextureProperties)
             {
-                if (IsStreamingMipmap(
-                        material.GetTexture(textureProperty.PropertyName)))
+                var tex = material.GetTexture(textureProperty.PropertyName);
+                if (IsStreamingMipmap(tex) && !CanDecodeInMemory(tex))
                 {
-                    drop.Add(textureProperty.PropertyName);
-                    AddNoteOnce(NoteKind.StreamingMipmaps);
+                    return true;
                 }
             }
 
-            return drop;
+            return false;
         }
 
         private static bool IsStreamingMipmap(Texture texture)
@@ -883,7 +939,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 }
 
                 if (captured.Family == CapturedAlphaMaterialFamily.Unsupported
-                    && !_streamingSkippedOrdinals.Contains(index)
                     && index < admittedLive.Count &&
                     EffectiveSelector(
                         admittedLive[index],
@@ -891,7 +946,14 @@ namespace Alrauna.Amuse.Editor.DryRun
                         out _,
                         out _))
                 {
-                    AddNoteOnce(NoteKind.LockedMaterials);
+                    if (HasUnreadableAlphaStreamingTexture(admittedLive[index]))
+                    {
+                        AddNoteOnce(NoteKind.StreamingMipmaps);
+                    }
+                    else
+                    {
+                        AddNoteOnce(NoteKind.LockedMaterials);
+                    }
                 }
             }
         }
@@ -1006,6 +1068,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         // --- Row building -----------------------------------------------------
 
         private IReadOnlyList<MaterialTransformationRow> BuildRows(
+            Renderer renderer,
             string rendererPath,
             string rendererTypeName,
             IReadOnlyList<SlotTransformVerdict> verdicts,
@@ -1014,47 +1077,31 @@ namespace Alrauna.Amuse.Editor.DryRun
             string rendererName)
         {
             var rows = new List<MaterialTransformationRow>();
-            var moved = 0;
-            var proven = 0;
-            var total = 0;
-            var foldContributed = false;
-            var resolvedSlots = 0;
             for (var slotIndex = 0; slotIndex < slotResults.Length; slotIndex++)
             {
                 if (!slotResults[slotIndex].IsResolved)
                 {
                     rows.Add(RefusedSlotRow(
+                        renderer,
                         rendererPath,
                         rendererTypeName,
                         slotResults[slotIndex],
-                        slots[slotIndex],
+                        slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slotIndex,
                         rendererName));
                     continue;
                 }
 
-                resolvedSlots++;
                 if (slotIndex >= verdicts.Count)
                 {
                     continue;
                 }
 
                 var verdict = verdicts[slotIndex];
-                proven += verdict.ProvenTriangles;
-                total += verdict.TotalTriangles;
-                var sentence = SlotSentence(verdict, rendererName);
+                var sentence = SlotSentence(verdict);
                 if (sentence == null)
                 {
                     continue;
-                }
-
-                if (verdict.Outcome == SlotTransformOutcome.Split)
-                {
-                    moved += verdict.ProvenTriangles;
-                }
-                else if (verdict.Outcome == SlotTransformOutcome.Fold)
-                {
-                    moved += verdict.FoldedUnprovenTriangles;
-                    foldContributed = true;
                 }
 
                 rows.Add(MaterialTransformationRow.Slot(
@@ -1063,193 +1110,67 @@ namespace Alrauna.Amuse.Editor.DryRun
                     verdict.SlotIndex,
                     verdict.ProvenTriangles,
                     verdict.TotalTriangles,
-                    sentence +
-                    CaptureRefusalSuffix(slotIndex < slots.Count
-                        ? slots[slotIndex]
-                        : null)));
+                    sentence));
             }
 
-            // An unresolved slot has no triangles to sum. The summary's
-            // proven and total shares stay over the slots the proof ran
-            // on, which is what the sentence words.
-            var refusedSlots = slotResults.Length - resolvedSlots;
-            string summary;
-            if (moved > 0 || refusedSlots > 0)
-            {
-                summary = RowText.RendererSummarySentence(
-                    rendererPath,
-                    rendererTypeName,
-                    moved,
-                    proven,
-                    total,
-                    refusedSlots,
-                    slots.Count,
-                    foldContributed);
-            }
-            else if (proven > 0)
-            {
-                summary = RowText.RendererNoMovementSentence(
-                    rendererPath, rendererTypeName, proven, total);
-            }
-            else
-            {
-                summary = RowText.RendererNoChangeSentence(
-                    rendererPath, rendererTypeName);
-            }
-
-            rows.Insert(0, MaterialTransformationRow.Renderer(
-                rendererPath, rendererTypeName, moved, proven, total,
-                refusedSlots, slots.Count, summary));
             return rows;
         }
 
-        /// <summary>
-        /// One refused slot row per unresolved slot result, through the
-        /// shared slot-analysis sentence the build reports from, with the
-        /// material named path-first and the slot's texture capture facts
-        /// folded in.
-        /// </summary>
         private static MaterialTransformationRow RefusedSlotRow(
+            Renderer renderer,
             string rendererPath,
             string rendererTypeName,
             SlotResolutionResult result,
             CapturedMaterialSlotEvidence slot,
+            int slotIndex,
             string rendererName)
         {
-            var key = AmuseReportStrings.SlotAnalysisKey(result.Refusal);
-            if (!AmuseReportStrings.Has(key))
+            var totalTriangles = SubmeshPolygonCount(renderer, slotIndex);
+            if (IsSlotDeferred(renderer, slotIndex, result, slot))
             {
-                throw new InvalidOperationException(
-                    "The report string table has no sentence for key '"
-                    + key + "'.");
+                return MaterialTransformationRow.Slot(
+                    rendererPath,
+                    rendererTypeName,
+                    slotIndex,
+                    0,
+                    totalTriangles,
+                    RowText.DeferredSlotSentence(totalTriangles));
             }
 
-            var sentence = RowText.RefusedRowSentence(
-                slot.SlotIndex,
-                key,
-                slot.SlotIndex.ToString(CultureInfo.InvariantCulture),
-                result.Refusal.ToString(),
-                rendererName,
-                MaterialDescription(result.Offender),
-                "");
             return MaterialTransformationRow.Slot(
                 rendererPath,
                 rendererTypeName,
-                slot.SlotIndex,
+                slotIndex,
                 -1,
-                -1,
-                sentence + CaptureRefusalSuffix(slot));
+                totalTriangles,
+                RowText.RefusedSlotSentence());
         }
 
-        private static string SlotSentence(
-            SlotTransformVerdict verdict, string rendererName)
+        private static string SlotSentence(SlotTransformVerdict verdict)
         {
             switch (verdict.Outcome)
             {
                 case SlotTransformOutcome.Split:
-                    return RowText.SplitRowSentence(
-                        verdict.SlotIndex,
-                        verdict.ProvenTriangles,
-                        verdict.TotalTriangles);
+                    if (verdict.TotalTriangles > 0 && verdict.ProvenTriangles == verdict.TotalTriangles)
+                    {
+                        return RowText.ConvertableSlotSentence(verdict.TotalTriangles);
+                    }
+                    if (verdict.ProvenTriangles > 0)
+                    {
+                        return RowText.SplittableSlotSentence(
+                            verdict.ProvenTriangles, verdict.TotalTriangles);
+                    }
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.Fold:
-                    return RowText.FoldRowSentence(verdict.SlotIndex);
+                    return RowText.ConvertableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.AlreadyOpaque:
-                    return RowText.AlreadyOpaqueRowSentence(
-                        verdict.SlotIndex);
                 case SlotTransformOutcome.CoverageBelowMinimum:
-                    return RowText.UnchangedRowSentence(
-                        verdict.SlotIndex,
-                        verdict.ProvenTriangles,
-                        verdict.TotalTriangles);
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.AnisotropyDifferences:
-                    // The arguments follow the shared slot-refusal
-                    // contract: slot, reason, renderer name, offender,
-                    // extras. The base sentence reads slot and renderer.
-                    return RowText.RefusedRowSentence(
-                        verdict.SlotIndex,
-                        "amuse.slotSeparation.AnisotropyDifferences",
-                        verdict.SlotIndex.ToString(
-                            CultureInfo.InvariantCulture),
-                        SlotTransformOutcome.AnisotropyDifferences
-                            .ToString(),
-                        rendererName,
-                        "",
-                        "");
+                    return RowText.RefusedSlotSentence();
                 default:
-                    // A slot with no plan entry and no flag states no
-                    // outcome, so it draws no row.
-                    return null;
+                    return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
             }
-        }
-
-        /// <summary>
-        /// The slot's texture capture refusals fold into their slot row
-        /// through the existing texture capture strings, once per reason,
-        /// with the Has guard the shared table contract demands. A
-        /// resolved slot's proof may still have lost a texture field, and
-        /// a refused slot's row carries its own facts.
-        /// </summary>
-        private static string CaptureRefusalSuffix(
-            CapturedMaterialSlotEvidence slot)
-        {
-            if (slot == null || slot.CaptureRefusals.Count == 0)
-            {
-                return "";
-            }
-
-            var seen = new HashSet<TextureCaptureRefusalReason>();
-            var sentences = new List<string>();
-            foreach (var refusal in slot.CaptureRefusals)
-            {
-                if (!seen.Add(refusal.Reason))
-                {
-                    continue;
-                }
-
-                var key = AmuseReportStrings.TextureCaptureKey(
-                    refusal.Reason);
-                if (!AmuseReportStrings.Has(key))
-                {
-                    throw new InvalidOperationException(
-                        "The report string table has no sentence for key '"
-                        + key + "'.");
-                }
-
-                sentences.Add(AmuseReportStrings.Format(
-                    key,
-                    slot.SlotIndex.ToString(
-                        CultureInfo.InvariantCulture)));
-            }
-
-            return sentences.Count == 0
-                ? ""
-                : " " + string.Join(" ", sentences);
-        }
-
-        /// <summary>
-        /// The refused slot's material, named path-first, the same shape
-        /// the console entry uses: the project asset path when the capture
-        /// recorded one, else the material name, else a plain word.
-        /// </summary>
-        private static string MaterialDescription(
-            CapturedAlphaMaterial offender)
-        {
-            if (offender == null)
-            {
-                return "an unknown material";
-            }
-
-            if (!string.IsNullOrEmpty(offender.MaterialPath))
-            {
-                return "'" + offender.MaterialPath + "'";
-            }
-
-            if (!string.IsNullOrEmpty(offender.MaterialName))
-            {
-                return offender.MaterialName;
-            }
-
-            return "an unknown material";
         }
 
         private static MaterialTransformationRow RendererRefusedRow(

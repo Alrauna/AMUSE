@@ -75,8 +75,7 @@ version 2 acceptance values you want.
 
 ### Show Material Transformations
 
-Open the Show Material Transformations foldout on the AMUSE component to see what the Alpha Separator would do on this avatar. The nested Alpha Separation view runs the same proof on the avatar in the scene. It shows, per renderer and per material slot, what would move, what would fold, what stays, and what is refused with a reason.
-
+Open the Show Material Transformations foldout on the AMUSE component to see what the Alpha Separator would do on this avatar. The nested Alpha Separation view runs the same proof on the avatar in the scene. Each material slot displays as two lines: the top line displays the target mesh renderer and source material side by side, and the bottom line reports the transformation status.
 The view reads the scene state. Other tools can change the avatar later during a build, and some tools add animations the build must obey. This view cannot see those changes. A run in Play mode or an upload shows the true result. The first open measures textures on the GPU. It can take a moment. The Refresh button recomputes everything.
 
 ## Reading the console reports

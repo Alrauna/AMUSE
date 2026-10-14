@@ -18,136 +18,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         private const string Path = "Body";
         private const string TypeName = "SkinnedMeshRenderer";
 
-        // --- Falsifier 3: total-instead-of-proven ---
-
-        [Test]
-        public void SplitSentenceShowsProvenTrianglesFirst()
-        {
-            // A swapped ordinal pair draws the counts backwards and the
-            // reader cannot tell which share the proof covered.
-            Assert.That(
-                RowText.SplitRowSentence(2, 12, 40),
-                Is.EqualTo("slot 2: would split. Triangles proven: 12 of 40."));
-        }
-
-        [Test]
-        public void FullyUnprovenSlotNeverClaimsSplit()
-        {
-            // A builder that reads the total where the proven count
-            // belongs would claim a split for a slot with nothing
-            // proven. The spec words that case as the unchanged row.
-            Assert.That(
-                RowText.SplitRowSentence(2, 0, 40),
-                Is.EqualTo(
-                    "slot 2: unchanged. Triangles proven: 0 of 40. " +
-                    "The share is below the convert setting."));
-        }
-
-        [Test]
-        public void FoldRowNamesThePreserveSetting()
-        {
-            Assert.That(
-                RowText.FoldRowSentence(3),
-                Is.EqualTo(
-                    "slot 3: would fold onto the opaque copy. " +
-                    "The unproven share is below the preserve setting."));
-        }
-
-        [Test]
-        public void AlreadyOpaqueRowKeepsTheSlotAsItIs()
-        {
-            Assert.That(
-                RowText.AlreadyOpaqueRowSentence(1),
-                Is.EqualTo("slot 1: already opaque. It stays as it is."));
-        }
-
-        [Test]
-        public void UnchangedRowShowsTheProvenShare()
-        {
-            Assert.That(
-                RowText.UnchangedRowSentence(4, 5, 100),
-                Is.EqualTo(
-                    "slot 4: unchanged. Triangles proven: 5 of 100. " +
-                    "The share is below the convert setting."));
-        }
-
-        [Test]
-        public void RefusedSlotRowUsesTheTableSentence()
-        {
-            // The refusal text lives in the shared table, so the row
-            // builder formats the key the capture records.
-            var key = "amuse.texture.UnsupportedFormat";
-            Assert.That(
-                RowText.RefusedRowSentence(0, key),
-                Is.EqualTo(
-                    "slot 0: refused. " +
-                    AmuseReportStrings.Format(key)));
-        }
-
-        [Test]
-        public void RefusedSlotRowThrowsOnUnknownKey()
-        {
-            // The dry run guards with Has before it renders. A builder
-            // that renders an empty refusal instead of throwing hides a
-            // broken table behind a blank inspector row.
-            Assert.Throws<InvalidOperationException>(
-                () => RowText.RefusedRowSentence(0, "amuse.no.such.key"));
-        }
-
-        [Test]
-        public void RendererSummaryShowsCountsAndRefusedSlots()
-        {
-            // The mixed-refusal summary: movement, proof, and the
-            // refused share stay visible as one line, so missing slot
-            // rows read as a difference against the real slot count.
-            Assert.That(
-                RowText.RendererSummarySentence(
-                    Path, TypeName,
-                    moved: 300, proven: 120, total: 400,
-                    refusedSlots: 1, slotCount: 4,
-                    foldContributed: false),
-                Is.EqualTo(
-                    "Body (SkinnedMeshRenderer): " +
-                    "Triangles moved: 300. Triangles proven: 120 of 400. " +
-                    "1 of 4 slots refused."));
-        }
-
-        [Test]
-        public void RendererSummaryAppendsFoldSentenceWhenFoldContributed()
-        {
-            // A fold moves unproven triangles, so the row must name the
-            // policy that moves them.
-            Assert.That(
-                RowText.RendererSummarySentence(
-                    Path, TypeName,
-                    moved: 300, proven: 120, total: 400,
-                    refusedSlots: 1, slotCount: 4,
-                    foldContributed: true),
-                Is.EqualTo(
-                    "Body (SkinnedMeshRenderer): " +
-                    "Triangles moved: 300. Triangles proven: 120 of 400. " +
-                    "1 of 4 slots refused. " +
-                    "The preserve policy moves the rest."));
-        }
-
-        [Test]
-        public void RendererNoMovementShowsTheProvenShare()
-        {
-            Assert.That(
-                RowText.RendererNoMovementSentence(Path, TypeName, 90, 400),
-                Is.EqualTo(
-                    "Body (SkinnedMeshRenderer): no movement. " +
-                    "Triangles proven: 90 of 400."));
-        }
-
-        [Test]
-        public void RendererNoChangeShowsNothingProven()
-        {
-            Assert.That(
-                RowText.RendererNoChangeSentence("Hair", "MeshRenderer"),
-                Is.EqualTo("Hair (MeshRenderer): no change. Nothing proven."));
-        }
-
         [Test]
         public void RendererRefusedRowUsesTheTableSentence()
         {
@@ -384,20 +254,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // inspector a blank row, whatever the counts say.
             var sentences = new[]
             {
-                RowText.SplitRowSentence(2, 0, 40),
-                RowText.SplitRowSentence(2, 12, 40),
-                RowText.FoldRowSentence(3),
-                RowText.AlreadyOpaqueRowSentence(1),
-                RowText.UnchangedRowSentence(4, 5, 100),
-                RowText.RefusedRowSentence(0, "amuse.texture.UnsupportedFormat"),
-                RowText.RendererSummarySentence(
-                    Path, TypeName, 300, 120, 400, 1, 4, false),
-                RowText.RendererSummarySentence(
-                    Path, TypeName, 300, 120, 400, 1, 4, true),
-                RowText.RendererNoMovementSentence(Path, TypeName, 90, 400),
-                RowText.RendererNoChangeSentence(Path, TypeName),
-                RowText.RendererRefusedSentence(
-                    Path, TypeName, "amuse.renderer.MissingMesh"),
                 RowText.StructuralRowSentence("", "avatar refusal"),
                 RowText.BannerSentence(BannerKind.AmuseOff),
                 RowText.BannerSentence(BannerKind.NoSamplingPolicy),
@@ -407,12 +263,85 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 RowText.DisclosureSentence(1),
                 RowText.ErroredSentence(Path, TypeName),
                 RowText.NoRenderersSentence(),
+                RowText.RefusedSlotSentence(),
+                RowText.UntouchableSlotSentence(100),
+                RowText.SplittableSlotSentence(40, 100),
+                RowText.ConvertableSlotSentence(100),
+                RowText.DeferredSlotSentence(100),
             };
 
             foreach (var sentence in sentences)
             {
                 Assert.That(sentence, Is.Not.Null.And.Not.Empty);
             }
+        }
+
+        // --- Simplified transformation sentence tests ---
+
+        [Test]
+        public void RefusedSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.RefusedSlotSentence(),
+                Is.EqualTo("Refused: AMUSE currently does not support this material"));
+        }
+
+        [Test]
+        public void UntouchableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.UntouchableSlotSentence(100),
+                Is.EqualTo("Untouchable: 0 of out 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void UntouchableSlotSentenceHandlesZeroPolygons()
+        {
+            Assert.That(
+                RowText.UntouchableSlotSentence(0),
+                Is.EqualTo("Untouchable: 0 of out 0 polygons may be moved"));
+        }
+
+        [Test]
+        public void SplittableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.SplittableSlotSentence(40, 100),
+                Is.EqualTo("Splittable: 40 of out 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void ConvertableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.ConvertableSlotSentence(100),
+                Is.EqualTo("Convertable: 100 out of 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void ConvertableSlotSentenceHandlesZeroPolygons()
+        {
+            Assert.That(
+                RowText.ConvertableSlotSentence(0),
+                Is.EqualTo("Convertable: 0 out of 0 polygons may be moved"));
+        }
+
+        [Test]
+        public void DeferredSlotSentenceFormatsWithTotalCount()
+        {
+            var sentence = RowText.DeferredSlotSentence(1234);
+            Assert.That(
+                sentence,
+                Is.EqualTo("Deferred: 0 of out 1234 polygons may be moved (evaluates at build time)"));
+        }
+
+        [Test]
+        public void DeferredSlotSentenceHandlesZeroCount()
+        {
+            var sentence = RowText.DeferredSlotSentence(0);
+            Assert.That(
+                sentence,
+                Is.EqualTo("Deferred: 0 of out 0 polygons may be moved (evaluates at build time)"));
         }
     }
 }

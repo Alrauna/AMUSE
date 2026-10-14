@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Alrauna.Amuse.Editor.Build;
 
 namespace Alrauna.Amuse.Editor.DryRun
@@ -156,77 +157,31 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// </summary>
     internal static class RowText
     {
-        internal static string SplitRowSentence(int slotIndex, int proven, int total)
+        internal static string RefusedSlotSentence()
         {
-            // A slot with nothing proven cannot claim a split. A
-            // swapped ordinal pair would otherwise draw a split claim
-            // for a fully unproven slot, so the row falls back to the
-            // unchanged share sentence the spec words for that case.
-            if (proven <= 0)
-            {
-                return UnchangedRowSentence(slotIndex, proven, total);
-            }
-
-            return "slot " + slotIndex + ": would split. Triangles proven: "
-                + proven + " of " + total + ".";
+            return "Refused: AMUSE currently does not support this material";
         }
 
-        internal static string FoldRowSentence(int slotIndex)
+        internal static string DeferredSlotSentence(int total)
         {
-            return "slot " + slotIndex
-                + ": would fold onto the opaque copy. "
-                + "The unproven share is below the preserve setting.";
+            return "Deferred: 0 of out " +
+                total.ToString(CultureInfo.InvariantCulture) +
+                " polygons may be moved (evaluates at build time)";
         }
 
-        internal static string AlreadyOpaqueRowSentence(int slotIndex)
+        internal static string UntouchableSlotSentence(int total)
         {
-            return "slot " + slotIndex + ": already opaque. It stays as it is.";
+            return "Untouchable: 0 of out " + total + " polygons may be moved";
         }
 
-        internal static string UnchangedRowSentence(int slotIndex, int proven, int total)
+        internal static string SplittableSlotSentence(int proven, int total)
         {
-            return "slot " + slotIndex + ": unchanged. Triangles proven: "
-                + proven + " of " + total + "."
-                + " The share is below the convert setting.";
+            return "Splittable: " + proven + " of out " + total + " polygons may be moved";
         }
 
-        internal static string RefusedRowSentence(
-            int slotIndex, string refusalKey, params string[] args)
+        internal static string ConvertableSlotSentence(int total)
         {
-            return "slot " + slotIndex + ": refused. "
-                + TableSentence(refusalKey, args);
-        }
-
-        internal static string RendererSummarySentence(
-            string path, string typeName, int moved, int proven, int total,
-            int refusedSlots, int slotCount, bool foldContributed)
-        {
-            var sentence = RendererPrefix(path, typeName)
-                + "Triangles moved: " + moved + "."
-                + " Triangles proven: " + proven + " of " + total + "."
-                + " " + refusedSlots + " of " + slotCount + " slots refused.";
-
-            // A fold moves unproven triangles, so the row must name
-            // the policy that moves them whenever a fold contributed
-            // to the moved count.
-            if (foldContributed)
-            {
-                sentence += " The preserve policy moves the rest.";
-            }
-
-            return sentence;
-        }
-
-        internal static string RendererNoMovementSentence(
-            string path, string typeName, int proven, int total)
-        {
-            return RendererPrefix(path, typeName) + "no movement."
-                + " Triangles proven: " + proven + " of " + total + ".";
-        }
-
-        internal static string RendererNoChangeSentence(string path, string typeName)
-        {
-            return RendererPrefix(path, typeName) + "no change. Nothing proven.";
+            return "Convertable: " + total + " out of " + total + " polygons may be moved";
         }
 
         internal static string RendererRefusedSentence(

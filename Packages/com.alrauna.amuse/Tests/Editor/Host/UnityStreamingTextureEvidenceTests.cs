@@ -308,5 +308,44 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(ok, Is.False, "a non-main-asset must refuse");
             Assert.That(chain, Is.Null);
         }
+
+        [Test]
+        public void DisallowDiskFallbackScopeRestoresStateAndBlocksClone()
+        {
+            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
+            using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+            {
+                Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.False);
+            }
+            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
+        }
+
+        [Test]
+        public void DisallowingDiskFallbackReturnsFalseWhenSourceImageFailsWithoutWritingAssets()
+        {
+            var texture = ImportExrStreamingBandTexture("unreadable_streaming_for_guard");
+            try
+            {
+                using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+                {
+                    var ok = UnityStreamingTextureEvidence.TryCapture(
+                        texture,
+                        TextureChannel.Alpha,
+                        1.0f,
+                        AlphaPolicyBounds.Inert,
+                        out var chain);
+                    Assert.That(ok, Is.False);
+                    Assert.That(chain, Is.Null);
+                }
+                Assert.That(
+                    AssetDatabase.IsValidFolder("Assets/Amuse.StreamingReadback"),
+                    Is.False,
+                    "disallowing disk fallback must not create the temporary streaming folder");
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
     }
 }
