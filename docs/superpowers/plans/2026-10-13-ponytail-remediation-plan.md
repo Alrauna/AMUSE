@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Execute the 54 selected ponytail audit findings as behavior-identical deletions, consolidations, and shrinks.
+**Goal:** Execute the 51 selected ponytail audit findings as behavior-identical deletions, consolidations, and shrinks.
 
-**Architecture:** Four classes of change in sequence: test consolidation (D3), dead-symbol deletion (D1), production shrink (D4), dead-flexibility cut (D2). No behavior change. The existing suites are the whole regression guard.
+**Architecture:** Three classes of change in sequence: test consolidation (D3), dead-symbol deletion (D1), production shrink (D4). No behavior change. The existing suites are the whole regression guard.
 
 **Tech Stack:** Unity 2022.3.22f1, EditMode NUnit through the Unity Test Runner, one editor assembly plus two test assemblies. No CLI test path.
 
 **Spec:** `docs/superpowers/specs/2026-10-13-ponytail-remediation-design.md`
 
-**Audit:** `docs/superpowers/audits/2026-10-13-ponytail-audit.md` (56 findings; this round executes all except 7 and 9)
+**Audit:** `docs/superpowers/audits/2026-10-13-ponytail-audit.md` (56 findings; this round executes all except 1, 4, 7, 9, and 13)
 
-Revision note: first issue 2026-10-13. Five adversarial reviews ran the same day: accuracy against the spec, accuracy against the repository, safety and security, architectural purity and ponytail adherence, and latent bugs. They found a critical whole-file deletion that would have destroyed kept alpha tests, a spec decision 8 clause that could not compile, a finding 35 carrier-file gap, a wrong fixture-file name, a false finding 36 premise, and several rewiring and count corrections. This revision incorporates every confirmed fix. The finding 36 drop and the subject-based test dispositions in Tasks 16 and 17 are the load-bearing changes.
+Revision note: first issue 2026-10-13. Five adversarial reviews ran the same day against the first issue: accuracy against the spec, accuracy against the repository, safety and security, architectural purity and ponytail adherence, and latent bugs. They found a critical whole-file deletion that would have destroyed kept alpha tests, a spec decision 8 clause that could not compile, a finding 35 carrier-file gap, a wrong fixture-file name, a false finding 36 premise, and several rewiring and count corrections. This revision incorporates every confirmed fix. The finding 36 drop and the subject-based test dispositions were the load-bearing changes. In the owner's review the same day, the owner declined findings 1, 4, and 13. This revision removes the finding 1 and finding 4 tasks, strips the finding 13 content from the display-chain task, and rescopes the round to 51 findings. Four parallel scouts then audited all 51 remaining findings for future-work debt at the owner's request. All returned keep. This revision folds their adjustments: Task 9 gains the two production call-site files of finding 11, Task 11 gains the finding 45 doc-comment correction and the finding 51 prose-comment note, Task 10 gains the vision-future-home note, Task 12 gains the finding 10 rescope note, and Task 14 gains the finding 50 vocabulary note.
 
 ## Global Constraints
 
@@ -382,7 +382,7 @@ git commit -m "refactor: consolidate analysis and host test fixture helpers"
 
 **Files:**
 
-- Modify: `Editor/Host/UnityAnimationEvidenceCapture.cs`, `Editor/Host/UnityAlphaFieldEvidence.cs`, `Editor/Host/UnityRendererAlphaAnalysis.cs`, `Editor/Host/AlphaFieldSet.cs`
+- Modify: `Editor/Host/UnityAnimationEvidenceCapture.cs`, `Editor/Host/UnityAlphaFieldEvidence.cs`, `Editor/Host/UnityRendererAlphaAnalysis.cs`, `Editor/Host/AlphaFieldSet.cs`, `Editor/Build/AmusePlatformFinishPlugin.cs`, `Editor/DryRun/AlphaSeparationDryRun.cs`
 - Modify: `Tests/Editor/Host/UnityAnimationEvidenceCaptureTests.cs`, `CapturedAlphaFieldBag.cs`, `UnityAlphaFieldEvidenceTests.cs`, `AlphaEvidenceClassifierIntegrationTests.cs`, `RendererAlphaAnalysisIntegrationTests.cs`, `UnityGeneratedTextureEvidenceTests.cs`, `LilToonCutoutAlphaTests.cs` (its `TryCapture` call), `UnityRendererAlphaAnalysisTests.cs`, `UnityRendererAlphaSnapshotTests.cs`, `AmusePlatformFinishPluginTests.cs`, `Tests/Editor/Analysis/AdmittedMaterialStatesTests.cs`, `AlphaFieldSetTests.cs`, `Tests/Editor/Build/AaoMergedConsumptionTests.cs`
 
 **Interfaces:**
@@ -395,7 +395,7 @@ Bare-token greps per spec decision 6: `CaptureObservedForTests`, `TryCapture` sh
 
 - [ ] **Step 2: Execute the four deletions**
 
-Finding 11: delete both `CaptureObservedForTests` wrappers; add the observations parameter to `CaptureGraphThroughSeams`. Rewire every former wrapper call site to one exact shape: observations inserted after `currentSlots`, bounds pinned to `AlphaPolicyBounds.Inert` at every site, `lockedRefusalCheck` and `observedMaterialMapper` left null, and `out _` where the wrapper discarded the admitted set. The wrappers' doc comments pin the policy-free closure seam, so a positional slip that changes capture policy is a defect, not a compile error. Finding 14: delete the three convenience `TryCapture` overloads. Re-express each deleted-overload call site with exactly the arguments the deleted overload forwarded: the two channel-less overloads' call sites pass `TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert` explicitly, and `CapturedAlphaFieldBag.cs` keeps its per-request `channel` variable, calling `TryCapture(texture, channel, 1.0f, AlphaPolicyBounds.Inert, out source, out chain, out _)`, because the channel is part of its dictionary key. Finding 19: delete `Analyze(Renderer, RegisteredSourceLookup)`, `Capture(Renderer)`, `Capture(Renderer, RegisteredSourceLookup)`, and one-argument `HostStructuralRefusalFor`; fold `Analyze(Renderer)` onto the private capture core; rewire the named test sites to the kept forms. Finding 32: delete `AlphaFieldSet.WithField` and `AlphaFieldSet.Count`; rewire the five `WithField` test sites to the constructor-over-dictionary pattern the same files already use, and rewire `AaoMergedConsumptionTests.cs:216` to fold the count into a local before building the assertion message.
+Finding 11: delete both `CaptureObservedForTests` wrappers; add the observations parameter to `CaptureGraphThroughSeams`. Rewire every former wrapper call site to one exact shape: observations inserted after `currentSlots`, bounds pinned to `AlphaPolicyBounds.Inert` at every site, `lockedRefusalCheck` and `observedMaterialMapper` left null, and `out _` where the wrapper discarded the admitted set. The wrappers' doc comments pin the policy-free closure seam, so a positional slip that changes capture policy is a defect, not a compile error. The parameter shift touches the two production callers, `AmusePlatformFinishPlugin.cs:739` and `AlphaSeparationDryRun.cs:606`; add the null observations argument there. The compiler catches both sites. The landed dry run deliberately uses the production-shaped entry with real policy bounds, and this cut does not change that. Finding 14: delete the three convenience `TryCapture` overloads. Re-express each deleted-overload call site with exactly the arguments the deleted overload forwarded: the two channel-less overloads' call sites pass `TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert` explicitly, and `CapturedAlphaFieldBag.cs` keeps its per-request `channel` variable, calling `TryCapture(texture, channel, 1.0f, AlphaPolicyBounds.Inert, out source, out chain, out _)`, because the channel is part of its dictionary key. Finding 19: delete `Analyze(Renderer, RegisteredSourceLookup)`, `Capture(Renderer)`, `Capture(Renderer, RegisteredSourceLookup)`, and one-argument `HostStructuralRefusalFor`; fold `Analyze(Renderer)` onto the private capture core; rewire the named test sites to the kept forms. Finding 32: delete `AlphaFieldSet.WithField` and `AlphaFieldSet.Count`; rewire the five `WithField` test sites to the constructor-over-dictionary pattern the same files already use, and rewire `AaoMergedConsumptionTests.cs:216` to fold the count into a local before building the assertion message.
 
 - [ ] **Step 3: Run the touched suites**
 
@@ -421,6 +421,8 @@ git commit -m "refactor: delete test-only host capture and analysis seams"
 **Interfaces:**
 
 - Consumes: nothing. Produces: `TriangleAlphaClassifier.Classify` in one five-argument form; `ExactUvGeometry` without `HalfUlp` and without `FloorMod(BigInteger, int)`.
+
+Execution note from the future-work audit: `ExactUvGeometry` is the file the vision names as the future home of UV-island, atlas, and texture-generation work. Both deleted helpers are trivially re-addable in whatever shape that future work needs, and no plan dated 2026-10 or later touches the file. Record in the execution note that a future atlas round should expect to grow this file.
 
 - [ ] **Step 1: Verify the premises**
 
@@ -460,7 +462,7 @@ Bare-token greps for all eleven names across the three roots. Confirm: `AnalyzeR
 
 - [ ] **Step 2: Execute the deletions**
 
-Finding 27: delete the method; the three test sites compose `ResolveRuntimeStates` + `ClassifyRuntimeStates` directly. Finding 31: delete the dispatcher and its three test calls. Finding 34: delete the two-argument overload. Finding 35: delete the five no-out overloads, which live in `LilToonMaterialSemantics.cs:507`, `LilToonCutoutMaterialSemantics.cs:100`, `LilToonTransparentMaterialSemantics.cs:143`, and `PoiyomiMaterialSemantics.cs:908` and :935; each test site appends `out _`. Finding 43: delete `SupportedAssumption`, its constructor parameter, and the built string; fix the one test assertion. Finding 44: delete the method; `LilToonOpaqueTargetTests` rewires to `TryGatherSourceEvidenceForShaderName`. Finding 45: delete the forwarded seam. Finding 51: delete `Canonicalize`; `AttestationEnvironment` appends `.CanonicalSource` on the analysis form. Finding 52: delete `ExecuteClose`. Finding 54: delete `LilToonActivatorOccurrence.Text` and its constructor assignments. Finding 55: delete the `Mip` property and the `mip` constructor parameter, dropping the argument at the single `new AlphaProbeLevel` construction site; `TryCaptureLevel(texture, mip)` keeps its parameter.
+Finding 27: delete the method; the three test sites compose `ResolveRuntimeStates` + `ClassifyRuntimeStates` directly. Finding 31: delete the dispatcher and its three test calls. Finding 34: delete the two-argument overload. Finding 35: delete the five no-out overloads, which live in `LilToonMaterialSemantics.cs:507`, `LilToonCutoutMaterialSemantics.cs:100`, `LilToonTransparentMaterialSemantics.cs:143`, and `PoiyomiMaterialSemantics.cs:908` and :935; each test site appends `out _`. Finding 43: delete `SupportedAssumption`, its constructor parameter, and the built string; fix the one test assertion. Finding 44: delete the method; `LilToonOpaqueTargetTests` rewires to `TryGatherSourceEvidenceForShaderName`. Finding 45: delete the forwarded seam. Its doc comment at `AaoAtlasTextureAttestation.cs:61` claims a test addresses it; the bare-token verification will flag that stale comment, so correct the comment in the same task. Finding 51: delete `Canonicalize`; `AttestationEnvironment` appends `.CanonicalSource` on the analysis form. The bare-token grep also hits the prose comment at `LilToonSourceAttestation.cs:2374-2375` and the `Canonicalize_`-named tests. Reword the comment, and keep the test names while rewiring their bodies to the analysis form. The landed ltcgi regression matrix reaches canonicalization through that shared helper, so its outcomes are untouched. Finding 52: delete `ExecuteClose`. Finding 54: delete `LilToonActivatorOccurrence.Text` and its constructor assignments. Finding 55: delete the `Mip` property and the `mip` constructor parameter, dropping the argument at the single `new AlphaProbeLevel` construction site; `TryCaptureLevel(texture, mip)` keeps its parameter.
 
 - [ ] **Step 3: Run the touched suites**
 
@@ -476,39 +478,7 @@ git commit -m "refactor: delete dead production symbols and test seams"
 
 ---
 
-### Task 12: Proof core witness predicates (finding 4)
-
-**Files:**
-
-- Modify: `Editor/Analysis/TriangleAlphaClassifier.cs`
-- Modify: `Tests/Editor/Analysis/TriangleAlphaClassifierTests.cs`
-
-**Interfaces:**
-
-- Consumes: the four `Classify*` mapped walks, unchanged. Produces: each `HasMappedWitness*` body replaced by `return Classify<Filter><Wrap>(triangle, texture, envelope, 0) != TriangleAlphaOutcome.ProvenOpaque;` — same signatures, same call sites, zero body duplication.
-
-- [ ] **Step 1: Verify the premise**
-
-Read the four witness walks and the four `Classify*` walks side by side at the base state. Confirm the audit's identical-bodies-under-policy-0 claim, including the over-budget `MaxSupportRegions` early-out equivalence. Any mismatch beyond the audit's description: drop the finding and record it.
-
-- [ ] **Step 2: Replace the four bodies**
-
-One-line delegation per walk. No signature, caller, or outcome change. The density policy 0 constant is the audit's stated equivalence.
-
-- [ ] **Step 3: Run the classifier matrix**
-
-Run `TriangleAlphaClassifierTests` in full, plus `AlphaSemanticsResolverTests` and the fixture-matrix suites that exercise mapped classification (`AlphaSeparationPreparationTests`, `UnityMaterialEvidenceCaptureTests`). Expected: green, unchanged totals, recorded counts. A single changed classification outcome is a stop condition.
-
-- [ ] **Step 4: Sweep and commit**
-
-```bash
-git add Editor/Analysis/TriangleAlphaClassifier.cs Tests/Editor/Analysis/TriangleAlphaClassifierTests.cs
-git commit -m "refactor: delegate mapped witness walks to classify walks"
-```
-
----
-
-### Task 13: Build production shrinks (findings 10 rescoped, 18, 28, 29)
+### Task 12: Build production shrinks (findings 10 rescoped, 18, 28, 29)
 
 **Files:**
 
@@ -521,7 +491,7 @@ git commit -m "refactor: delegate mapped witness walks to classify walks"
 
 - [ ] **Step 1: Verify the premises**
 
-Bare-token greps: the seven wrapper names (string-literal reflection sites count as callers — spec decision 6), the eleven `RecordSlotRefusal` plus `SlotSeparationRefusal` two-step sites, `Availability`, `HasAnyUnknownOutcome`. Confirm the rescope: exactly the four wrappers lack reflection callers.
+Bare-token greps: the seven wrapper names (string-literal reflection sites count as callers — spec decision 6), the eleven `RecordSlotRefusal` plus `SlotSeparationRefusal` two-step sites, `Availability`, `HasAnyUnknownOutcome`. Confirm the rescope: exactly the four wrappers lack reflection callers. Execution note from the future-work audit: the rescope is load-bearing. The landed show-material-transformations plan declares that its reflection tests keep passing through the three wrappers by name, and those tests pin wiring-time inertness, defensive clamping, and the density wiring-time throw. Do not widen the cut back to seven wrappers.
 
 - [ ] **Step 2: Execute the four shrinks**
 
@@ -541,7 +511,7 @@ git commit -m "refactor: shrink build barrier policy and refusal plumbing"
 
 ---
 
-### Task 14: Attestation gather dedup (finding 15)
+### Task 13: Attestation gather dedup (finding 15)
 
 **Files:**
 
@@ -572,7 +542,7 @@ git commit -m "refactor: deduplicate lilToon attestation gather front half"
 
 ---
 
-### Task 15: Dry run display chain (findings 13, 50, 33, 46, 49, in sequence)
+### Task 14: Dry run display chain (findings 50, 33, 46, 49, in sequence)
 
 **Files:**
 
@@ -581,15 +551,15 @@ git commit -m "refactor: deduplicate lilToon attestation gather front half"
 
 **Interfaces:**
 
-- Produces: `MaterialTransformationRow` with exactly `Kind` and `Sentence` and builders reduced to those two arguments; no `Disclosure` kind; `AmuseAvatarOptimizerEditor.TransformationRows` replaced by a one-line internal test seam or removed with the two test sites concat'ing `AvatarRows`/`RendererRows`; no `DryRunFingerprint.Renderer` wrapper; `DryRunCache` avatar slot as one nullable field plus `storedAvatarKey`, one `Clear` method.
+- Produces: no `Disclosure` kind on `MaterialTransformationRow`. The eight row data fields and the widened builders stay exactly as they are, per the owner's decision on finding 13. `AmuseAvatarOptimizerEditor.TransformationRows` replaced by a one-line internal test seam or removed with the two test sites concat'ing `AvatarRows`/`RendererRows`; no `DryRunFingerprint.Renderer` wrapper; `DryRunCache` avatar slot as one nullable field plus `storedAvatarKey`, one `Clear` method.
 
 - [ ] **Step 1: Verify the premises**
 
-Bare-token greps: each of the eight field names, `Disclosure`, `TransformationRows`, `DryRunFingerprint.Renderer`. Confirm the drawer reads only `Kind` and `Sentence` and the decision 3 test-reader facts.
+Bare-token greps: `Disclosure`, `TransformationRows`, `DryRunFingerprint.Renderer`. Confirm no emitter produces a `Disclosure` row, the drawer's kind switch has no Disclosure case, the two disclosure sentences render as editor labels through `RowText.DisclosureSentence`, and the decision 9 caller facts hold.
 
-- [ ] **Step 2: Row shape (findings 13, 50)**
+- [ ] **Step 2: Unused disclosure kind (finding 50)**
 
-Delete the eight fields, the widened constructor parameters, and the `Disclosure` kind plus builder. Reduce the six builders to `Kind` plus `Sentence`. Test-side edits, all sanctioned by subject: delete the sentinel-pin tests in `MaterialTransformationRowTests` whose subject was the fields; rewrite `ProvenTriangleDisplaysAsWouldSplit` to sentence-based assertion only, because the sentence already encodes the slot index and the proven and total counts; rewrite `AvatarLevelFactoriesCarryNoRendererCounts` (:303-317) to a Banner and Note kind round-trip plus sentence non-empty, dropping its `Disclosure` construction and its field loop; drop the `Disclosure(null)` throws case (:384-385) from the empty-sentence guard test, whose surviving guard coverage stays. Run `MaterialTransformationRowTests`, `AlphaSeparationDryRunTests`. Expected: green with the recorded delta, recorded counts.
+Delete the `Disclosure` member, its builder, and the `Disclosure`-shaped test touches whose subject is the kind: `AvatarLevelFactoriesCarryNoRendererCounts` (:303-317) drops its `Disclosure` construction and its field loop and becomes a Banner and Note kind round-trip plus sentence non-empty, and the `Disclosure(null)` throws case (:384-385) drops from the empty-sentence guard test, whose surviving guard coverage stays. The eight data fields, the sentinel pins, and `ProvenTriangleDisplaysAsWouldSplit` stay untouched. Execution note from the future-work audit: the landed feature design declares five row kinds with disclosure rows always present, but the landed code meets that contract through the two editor labels, so the code's row-kind count becomes four. Record that vocabulary divergence in the execution note. Run `MaterialTransformationRowTests`, `AlphaSeparationDryRunTests`. Expected: green with the recorded delta, recorded counts.
 
 - [ ] **Step 3: Property seam (finding 33)**
 
@@ -604,91 +574,22 @@ Delete `DryRunFingerprint.Renderer`; `AlphaSeparationDryRun.cs:424` uses its loc
 Stage exactly the files listed under **Files** above. Then:
 
 ```bash
-git commit -m "refactor: cut dry run row fields and cache wrapper surface"
+git commit -m "refactor: cut dry run disclosure kind and cache wrapper surface"
 ```
 
 ---
 
-### Task 16: lilToon non-alpha pipeline cut (finding 1, lilToon half)
-
-**Files:**
-
-- Modify: `Editor/Semantics/LilToon/LilToonMaterialSemantics.cs`, `LilToonCutoutMaterialSemantics.cs`, `LilToonTransparentMaterialSemantics.cs`, `LilToonAlphaInterpreter.cs` (only if it carries non-alpha members), `LilToonMultiResolution.cs` and `LilToonMultiModeGate.cs` (only members the interpret pipeline alone uses — verify before cutting)
-- Delete: `Tests/Editor/Semantics/LilToon/LilToonBaseColorTests.cs`, `LilToonEmissionTests.cs`, `LilToonNormalTests.cs` and their `.meta` files
-- Modify: `Tests/Editor/Semantics/LilToon/LilToonAdversarialTests.cs`, `LilToonMultiResolutionTests.cs`, any suite asserting the three outputs' completion flags
-
-**Interfaces:**
-
-- Consumes: the decision 2 preservation list: `MaterialSemantics` four slots, `ColorSemanticValue`, `NormalSemanticValue`, `TextureSample`, identity attestation, `IsSupportedMaterial`, the alpha interpreters and their tests. Produces: lilToon frontends whose base-color, emission, and normal interpret code and diagnostics members are gone; the three outputs stay constant Unknown.
-
-- [ ] **Step 1: Verify the premise and the preservation list**
-
-Grep `InterpretBaseColor|InterpretEmission|InterpretNormal` and `SemanticOutput<LilToon...>` members in the lilToon folder. List the interpret members and their exclusive private helpers. Enumerate the diagnostics members only those interpreters produce. Confirm `CensusShaderFamily` needs only `AnalyzeBaseMaterial(...).IsSupportedMaterial`. Confirm `LilToonMultiModeGate` and `LilToonMultiResolution` members have alpha-path callers before any cut there.
-
-- [ ] **Step 2: Execute the cut**
-
-Delete the three interpret pipelines and their exclusive helpers and diagnostics members. Keep every identity, attestation, alpha, gate, and resolution member with a kept caller. Spec decision 2's preservation list binds this task: do not delete the `MaterialSemantics` slots, the `ColorSemanticValue`, `NormalSemanticValue`, or `TextureSample` records, or any identity or attestation member, even where a grep suggests they are producer-less. Subject-based test inventory before deleting each doomed file: `LilToonBaseColorTests.cs` hosts `FullMaterialEvidenceRequest_MatchesTheIndependentExactSchema` (:399), which pins the `FullMaterialEvidenceRequest` schema the kept `AnalyzeBaseMaterial` consumes. Relocate that test into a surviving lilToon semantics suite and delete the rest of the file. Verify `LilToonEmissionTests.cs` and `LilToonNormalTests.cs` the same way before deletion. Trim `LilToonAdversarialTests` assertions on the three completion flags to the kept outputs. No attestation value changes.
-
-- [ ] **Step 3: Run the lilToon suites**
-
-Run the remaining lilToon suites and `SharedEvidenceAgreementTests` (which may move to Task 17 with the Poiyomi half if it compares families pair-wise). Expected: green, with the recorded delta equal to the deleted tests' counts.
-
-- [ ] **Step 4: Sweep and commit**
-
-Stage exactly the files listed under **Files** above, including deleted files' `.meta` files via `git add` (which records deletions) or `git rm`. Then:
-
-```bash
-git commit -m "refactor: cut lilToon base color emission normal interpret pipelines"
-```
-
----
-
-### Task 17: Poiyomi non-alpha pipeline cut and dispatcher (findings 1 Poiyomi half; 31 already done in Task 11)
-
-**Files:**
-
-- Modify: `Editor/Semantics/Poiyomi/PoiyomiMaterialSemantics.cs`, `Editor/Semantics/Poiyomi/PoiyomiOpaqueConversion.cs` (only non-alpha members, verify first)
-- Modify: `Tests/Editor/Semantics/Poiyomi/PoiyomiBaseColorAlphaTests.cs`: this file hosts two classes. Delete the `PoiyomiBaseColorTests` class (:18), whose subject is the base-color pipeline. Keep `PoiyomiAlphaTests` (:398) whole; its alpha-gate tests are kept surface.
-- Delete: `Tests/Editor/Semantics/Poiyomi/PoiyomiEmissionTests.cs`, `PoiyomiNormalTests.cs` and their `.meta` files, after the same subject inventory Task 16 applies
-- Modify: `Tests/Editor/Semantics/Poiyomi/PoiyomiAdversarialTests.cs`, `PoiyomiMaterialSemanticsTests.cs`, `PoiyomiTextureEvidenceTests.cs` (its `IsCanonicalNormalMapImport` call sites stay; that member is kept), `PoiyomiFixtureTestBase.cs` (the output-completion switch), `Tests/Editor/Semantics/Characterization/*`, `SharedEvidenceAgreementTests.cs` (its trim list includes the `IsCanonicalNormalMapImport` fact arm and its Normal routing)
-
-**Interfaces:**
-
-- Consumes: the same preservation list as Task 16. Produces: Poiyomi frontend with the three interpret pipelines and their diagnostics members gone.
-
-- [ ] **Step 1: Verify the premise**
-
-Grep `InterpretBaseColor|InterpretEmission|InterpretNormal` and the `SemanticOutput<...>` construction sites in `Editor/Semantics/Poiyomi/`. List the interpret members, their exclusive private helpers, and the diagnostics members only they produce. Confirm `CensusShaderFamily` in the research package needs only `PoiyomiMaterialSemantics.AnalyzeBaseMaterial(...).IsSupportedMaterial`. Confirm `PoiyomiOpaqueConversion` members have kept alpha-path callers before any cut there.
-
-- [ ] **Step 2: Execute the cut**
-
-Delete the three interpret pipelines, their exclusive helpers, their exclusive diagnostics members, and the test dispositions the Files section states. Spec decision 2's preservation list binds this task, as in Task 16. Keep `PoiyomiMaterialSemantics.IsCanonicalNormalMapImport`: its production caller is the deleted `InterpretNormal` (:2451), but it is a thin seam over kept `UnityTextureEvidence` behavior that four test sites consume, so it stays. Trim `PoiyomiAdversarialTests`, `PoiyomiMaterialSemanticsTests`, the `PoiyomiFixtureTestBase` output-completion switch, `SharedEvidenceAgreementTests` (including the `IsCanonicalNormalMapImport` fact arm and its Normal routing), and the `Characterization` suites to the kept outputs. No attestation value changes.
-
-- [ ] **Step 3: D2 checkpoint: full assemblies**
-
-Refresh Unity. Run the full product assembly, then the full research assembly. Expected: zero failures; totals equal the pre-round baselines minus the recorded deleted-test deltas; observed counts recorded. Any other delta is a stop condition.
-
-- [ ] **Step 4: Sweep and commit**
-
-Stage exactly the files listed under **Files** above, including deleted files' `.meta` files. Then:
-
-```bash
-git commit -m "refactor: cut poiyomi base color emission normal interpret pipelines"
-```
-
----
-
-### Task 18: Full validation
+### Task 15: Full validation
 
 **Files:** none. Validation only.
 
 - [ ] **Step 1: Acceptance sweep**
 
-Verify each spec acceptance criterion: the executed list against the decision 1 list (54 findings, with decision 13's rescope and any recorded drops); the new test helper types at their decision 8 paths; the deletion greps by symbol class (criterion 3); the `LilToonSourceAttestation.cs` diff shows moved lines only; the working tree holds only this round's changes plus the user-owned untracked temp meta files.
+Verify each spec acceptance criterion: the executed list against the decision 1 list (51 findings, with decision 13's finding 10 rescope and any recorded drops); the new test helper types at their decision 8 paths; the deletion greps by symbol class (criterion 3); the `LilToonSourceAttestation.cs` diff shows moved lines only; the working tree holds only this round's changes plus the user-owned untracked temp meta files.
 
 - [ ] **Step 2: Full assemblies**
 
-Refresh Unity. Run the full `Alrauna.Amuse.Tests.Editor` assembly, then `Alrauna.Amuse.Research.Tests.Editor`. Record observed counts and compare with the Task 8 and Task 17 checkpoints. Expected: zero failures.
+Refresh Unity. Run the full `Alrauna.Amuse.Tests.Editor` assembly, then `Alrauna.Amuse.Research.Tests.Editor`. Record observed counts and compare with the Task 8 checkpoint and the per-task focused-suite baselines. Expected: zero failures.
 
 - [ ] **Step 3: Tree hygiene**
 
