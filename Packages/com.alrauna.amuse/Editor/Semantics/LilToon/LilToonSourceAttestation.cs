@@ -292,7 +292,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     {
         internal int LineIndex { get; }
         internal string Identifier { get; }
-        internal string Text { get; }
 
         /// <summary>
         /// True when the occurrence sits in a slot the generator is proven
@@ -305,13 +304,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal LilToonActivatorOccurrence(
             int lineIndex,
             string identifier,
-            string text,
             bool provenSlot)
         {
             LineIndex = lineIndex;
             Identifier = identifier
                 ?? throw new ArgumentNullException(nameof(identifier));
-            Text = text ?? throw new ArgumentNullException(nameof(text));
             ProvenSlot = provenSlot;
         }
     }
@@ -957,16 +954,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// blank lines, and every valued define — is retained, so any hand edit
         /// or custom-shader injection changes the digest.
         /// </summary>
-        internal static string Canonicalize(
-            string rawShaderSource,
-            string shaderDirectory,
-            string projectRoot,
-            LilToonIncludeTree includeTree)
-        {
-            return AnalyzeCanonicalization(
-                rawShaderSource, shaderDirectory, projectRoot, includeTree)
-                .CanonicalSource;
-        }
 
         internal static LilToonCanonicalizationAnalysis AnalyzeCanonicalization(
             string rawShaderSource,
@@ -1105,7 +1092,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             ShadowSlotAnchor,
                             StringComparison.Ordinal));
                 activators.Add(new LilToonActivatorOccurrence(
-                    i, identifier, trimmed, proven));
+                    i, identifier, proven));
             }
 
             var builder = new StringBuilder(rawShaderSource.Length);
@@ -2372,7 +2359,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             MultiContainerProfiles =
             {
                 // Measured on 2026-10-01 through the production
-                // Canonicalize + ComputeNormalizedSourceHash from two real
+                // AnalyzeCanonicalization + ComputeNormalizedSourceHash from two real
                 // installed settings shapes of a scratch 2.3.4 project
                 // (default import, then vertex-light and anisotropy
                 // settings applied): both shapes produce one digest per
@@ -2434,30 +2421,49 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// Gathers the pinned opaque target profile using the target shader's
-        /// own live name rather than the cutout source name stored in the
-        /// material evidence. The captured evidence supplies only the pinned
-        /// shader-format version scalar.
+        /// Evidence common to every lilToon shader gather.
         /// </summary>
-        internal static LilToonSourceEvidence GatherOpaqueTargetSourceEvidence(
-            Shader shader,
-            CapturedMaterialEvidence evidence)
+        private readonly struct GatherFrontHalf
         {
-            if (shader == null) throw new ArgumentNullException(nameof(shader));
-            return Gather(shader, evidence, OpaqueProfile, shader.name);
+            internal readonly string AssetGuid;
+            internal readonly bool HasVersion;
+            internal readonly float Version;
+            internal readonly UnityEditor.PackageManager.PackageInfo Package;
+            internal readonly string ProjectRoot;
+            internal readonly LilToonIncludeTree IncludeTree;
+            internal readonly string IncludeDigest;
+            internal readonly LilToonCanonicalizationAnalysis ShaderAnalysis;
+            internal readonly string ShaderDigest;
+
+            internal GatherFrontHalf(
+                string assetGuid,
+                bool hasVersion,
+                float version,
+                UnityEditor.PackageManager.PackageInfo package,
+                string projectRoot,
+                LilToonIncludeTree includeTree,
+                string includeDigest,
+                LilToonCanonicalizationAnalysis shaderAnalysis,
+                string shaderDigest)
+            {
+                AssetGuid = assetGuid;
+                HasVersion = hasVersion;
+                Version = version;
+                Package = package;
+                ProjectRoot = projectRoot;
+                IncludeTree = includeTree;
+                IncludeDigest = includeDigest;
+                ShaderAnalysis = shaderAnalysis;
+                ShaderDigest = shaderDigest;
+            }
         }
 
         /// <summary>
-        /// The gather, parameterized by profile: only the pass asset the
-        /// profile names is resolved. Purely mechanical; every read, fallback,
-        /// and omission rule is exactly the one the opaque path has always
-        /// applied.
+        /// Gathers identity evidence common to both standard and Multi container lilToon shaders.
         /// </summary>
-        private static LilToonSourceEvidence Gather(
+        private static GatherFrontHalf GatherSharedFrontHalf(
             Shader shader,
-            CapturedMaterialEvidence evidence,
-            LilToonSourceProfile profile,
-            string shaderNameOverride = null)
+            CapturedMaterialEvidence evidence)
         {
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
@@ -2500,6 +2506,32 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 ? null
                 : NormalizedSourceHash.Compute(shaderAnalysis.CanonicalSource);
 
+            return new GatherFrontHalf(
+                assetGuid,
+                hasVersion,
+                version,
+                package,
+                projectRoot,
+                includeTree,
+                includeDigest,
+                shaderAnalysis,
+                shaderDigest);
+        }
+
+        /// <summary>
+        /// The gather, parameterized by profile: only the pass asset the
+        /// profile names is resolved. Purely mechanical; every read, fallback,
+        /// and omission rule is exactly the one the opaque path has always
+        /// applied.
+        /// </summary>
+        private static LilToonSourceEvidence Gather(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            LilToonSourceProfile profile,
+            string shaderNameOverride = null)
+        {
+            var frontHalf = GatherSharedFrontHalf(shader, evidence);
+
             var passShader = Shader.Find(profile.PassShaderName);
             string passGuid = null;
             string passDigest = null;
@@ -2511,7 +2543,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     passShader, out passGuid, out long _);
 
                 var passFullPath = ToAbsolute(
-                    projectRoot, AssetDatabase.GetAssetPath(passShader));
+                    frontHalf.ProjectRoot, AssetDatabase.GetAssetPath(passShader));
                 passText = ReadTextOrNull(passFullPath);
                 if (passText != null)
                 {
@@ -2520,8 +2552,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     passAnalysis = AnalyzeCanonicalization(
                         passText,
                         Path.GetDirectoryName(passFullPath),
-                        projectRoot,
-                        includeTree);
+                        frontHalf.ProjectRoot,
+                        frontHalf.IncludeTree);
                     passDigest = NormalizedSourceHash.Compute(passAnalysis.CanonicalSource);
                 }
             }
@@ -2531,20 +2563,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return new LilToonSourceEvidence(
                 shaderNameOverride ??
                     (evidence.HasShaderName ? evidence.ShaderName : null),
-                assetGuid?.ToLowerInvariant(),
-                hasVersion,
-                version,
-                package != null,
-                package?.name,
-                package?.version,
+                frontHalf.AssetGuid?.ToLowerInvariant(),
+                frontHalf.HasVersion,
+                frontHalf.Version,
+                frontHalf.Package != null,
+                frontHalf.Package?.name,
+                frontHalf.Package?.version,
                 passGuid?.ToLowerInvariant(),
-                shaderDigest,
+                frontHalf.ShaderDigest,
                 passDigest,
-                includeDigest,
+                frontHalf.IncludeDigest,
                 hasRenderMode,
                 renderMode,
                 ScanCompiledFeatures(passText),
-                shaderAnalysis,
+                frontHalf.ShaderAnalysis,
                 passAnalysis);
         }
 
@@ -2560,63 +2592,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             Shader shader,
             CapturedMaterialEvidence evidence)
         {
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                shader, out var assetGuid, out long _);
-
-            var hasVersion = evidence.TryGetScalar(
-                ShaderFormatVersionProperty, out var version);
-            if (!hasVersion)
-            {
-                version = float.NaN;
-            }
-
-            // Project-relative: Unity asset APIs consume this form directly.
-            var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
-            var package = UnityEditor.PackageManager.PackageInfo
-                .FindForAssetPath(shaderAssetPath);
-
-            // Absolute: every System.IO call below uses this form only.
-            var projectRoot = TryGetProjectRoot();
-            var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
-            var shaderDirectory = shaderFullPath == null
-                ? null
-                : Path.GetDirectoryName(shaderFullPath);
-            var includeFolder = shaderDirectory == null
-                ? null
-                : Path.Combine(shaderDirectory, IncludeFolderName);
-
-            var includeTree = LilToonIncludeTree.Enumerate(
-                includeFolder, ReadTextOrNull, ComputeNormalizedSourceHash);
-
-            var includeDigest = includeTree.Files.Count == 0
-                ? null
-                : ComputeIncludeTreeDigest(includeTree.Files);
-
-            var shaderText = ReadTextOrNull(shaderFullPath);
-            var shaderAnalysis = shaderText == null
-                ? null
-                : AnalyzeCanonicalization(
-                    shaderText, shaderDirectory, projectRoot, includeTree);
-            var shaderDigest = shaderAnalysis == null
-                ? null
-                : NormalizedSourceHash.Compute(shaderAnalysis.CanonicalSource);
+            var frontHalf = GatherSharedFrontHalf(shader, evidence);
 
             return new LilToonSourceEvidence(
                 evidence.HasShaderName ? evidence.ShaderName : null,
-                assetGuid?.ToLowerInvariant(),
-                hasVersion,
-                version,
-                package != null,
-                package?.name,
-                package?.version,
+                frontHalf.AssetGuid?.ToLowerInvariant(),
+                frontHalf.HasVersion,
+                frontHalf.Version,
+                frontHalf.Package != null,
+                frontHalf.Package?.name,
+                frontHalf.Package?.version,
                 null, // No pass asset: no pass identity exists to resolve.
-                shaderDigest,
+                frontHalf.ShaderDigest,
                 null,
-                includeDigest,
+                frontHalf.IncludeDigest,
                 false, // No LIL_RENDER scan: the mode gate owns the mode half.
                 0,
                 ScanCompiledFeatures(null), // No pass text: no pass features.
-                shaderAnalysis,
+                frontHalf.ShaderAnalysis,
                 null);
         }
 

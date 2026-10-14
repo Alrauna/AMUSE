@@ -9,6 +9,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using TextureWrapMode = UnityEngine.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -246,16 +247,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return Chain(Field(2, 2, 255), Field(1, 1, 0));
         }
 
-        private static AlphaFieldProvider ProvidingNothing()
-        {
-            return (TextureSourceId source, TextureChannel channel,
-                out AlphaMipChain result) =>
-            {
-                result = null;
-                return false;
-            };
-        }
-
         /// <summary>
         /// Keys the synthetic chain on the captured source identity, so the
         /// resolver is only ever fed the field that belongs to the texture the
@@ -310,17 +301,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return new AlphaTextureData(4, 4, bytes);
         }
 
-        /// <summary>Nondegenerate lower-left corner triangle.</summary>
-        private static TriangleAlphaInput CornerTriangle()
-        {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
-        }
 
         /// <summary>
         /// The corner triangle regarded against a part-black mask: its hull
@@ -405,7 +385,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, chain), samplingPolicy, 0);
         }
@@ -450,7 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    CaptureCutoutEvidence(material));
+                    CaptureCutoutEvidence(material), out _);
 
             // Falsifies: an opaque-only constant-1 interpretation and
             // re-deriving the boundary from a > cutoff — the cutout theorem's
@@ -559,7 +539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -625,7 +605,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -872,7 +852,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingForMasked(captured, mainChain, maskChain),
                 samplingPolicy, 0);
@@ -893,7 +873,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingCapturedFields(captured), samplingPolicy, 0);
         }
@@ -954,15 +934,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureCutoutEvidence(material);
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured);
+                .InterpretVerifiedCutoutAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
-                alpha,
-                (TextureSourceId source, TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return false;
-                }, AlphaSamplingPolicy.ConservativeDesktop, 0);
+                alpha, ProvidingNothing(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }
 
 
@@ -1104,7 +1078,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, AllOpaqueChain()), AlphaSamplingPolicy.ConservativeDesktop, 0);
 
@@ -1341,7 +1315,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    CaptureCutoutEvidence(material));
+                    CaptureCutoutEvidence(material), out _);
 
             // The shipped default (0, 0, 0.5, 0.1) is mode zero and inert;
             // only the gate pass is under test here.
@@ -1466,7 +1440,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             material.SetTexture(MainTextureProperty, texture);
 
             Assert.That(
-                UnityAlphaFieldEvidence.TryCapture(texture, out _, out var chain),
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
             Assert.That(
@@ -1937,7 +1913,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var captured = CaptureCutoutEvidence(material);
             var alpha =
                 LilToonCutoutMaterialSemantics.InterpretVerifiedCutoutAlpha(
-                    captured);
+                    captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, UnusedProvider(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }

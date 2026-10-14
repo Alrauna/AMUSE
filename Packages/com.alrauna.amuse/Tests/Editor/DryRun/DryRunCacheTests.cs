@@ -64,7 +64,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // share the same renderer body here.
             var avatarOneInputs = Inputs();
             var avatarOneKey = DryRunFingerprint.Avatar(avatarOneInputs);
-            var rendererKey = DryRunFingerprint.Renderer(avatarOneInputs);
+            var rendererKey = avatarOneInputs.RendererFingerprintBody;
             var rowsOne = RowsOne();
             DryRunCache.StoreRenderer(avatarOneKey, rendererKey, rowsOne);
 
@@ -91,7 +91,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // computed under the old slider after the user moves it.
             var beforeInputs = Inputs();
             var beforeAvatarKey = DryRunFingerprint.Avatar(beforeInputs);
-            var rendererKey = DryRunFingerprint.Renderer(beforeInputs);
+            var rendererKey = beforeInputs.RendererFingerprintBody;
             DryRunCache.StoreRenderer(beforeAvatarKey, rendererKey, RowsOne());
 
             // Guard: the unchanged composite hits, so the miss below

@@ -56,5 +56,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " to run them.");
 #endif
         }
+
+        /// <summary>
+        /// Creates a fixture avatar root opted into the optimizer: the
+        /// AmuseAvatarOptimizer component, the platform descriptor, and
+        /// the pinned proof size policy, exactly as production avatars
+        /// carry them. Callers track the returned root with their own
+        /// destruction scope.
+        /// </summary>
+        internal static GameObject CreateOptedRoot(string name)
+        {
+            RequireVrcDescriptorSupport();
+            var root = new GameObject(name);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            AttachVrcDescriptor(root);
+            FixtureProofScope.PinAllSizes(root);
+            return root;
+        }
     }
 }

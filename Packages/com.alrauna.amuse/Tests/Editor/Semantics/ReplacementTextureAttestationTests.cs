@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
@@ -32,45 +31,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         private ObjectRegistryGuard RegistryGuard { get; set; }
-
-        /// <summary>
-        /// Imports a real texture asset so the source side of a
-        /// registration is asset-backed, the shape the attestation
-        /// demands of every admitted copy. Kept local: the deferred
-        /// (non-forced) import and the identity asserts do not fit the
-        /// WritePng callback shape.
-        /// </summary>
-        private static Texture2D ImportSourceAsset(string marker)
-        {
-            if (!AssetDatabase.IsValidFolder(FixtureFolder))
-            {
-                AssetDatabase.CreateFolder("Assets", Path.GetFileName(FixtureFolder));
-            }
-            var path = $"{FixtureFolder}/{marker}.png";
-            var pixels = new Color32[4 * 4];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(255, 0, 0, 255);
-            }
-            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            texture.SetPixels32(pixels);
-            texture.Apply();
-            File.WriteAllBytes(path, texture.EncodeToPNG());
-            UnityEngine.Object.DestroyImmediate(texture);
-            AssetDatabase.ImportAsset(path);
-            var imported = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            Assert.That(imported, Is.Not.Null, "the fixture import must yield a texture");
-            Assert.That(
-                AssetDatabase.GetAssetPath(imported), Is.EqualTo(path));
-            Assert.That(
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    imported, out var guid, out long fileId),
-                Is.True,
-                "the fixture source must be asset-backed");
-            Assert.That(guid, Is.Not.Empty);
-            Assert.That(fileId, Is.Not.EqualTo(0L));
-            return imported;
-        }
 
         private static Texture2D MakeAdmittedCopy(Texture2D source)
         {
@@ -193,7 +153,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
             ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
-            var source = ImportSourceAsset("admitted");
+            var source = ReplacementTextureIdentityTests.ImportSourceAsset("admitted", FixtureFolder);
             var copy = MakeAdmittedCopy(source);
             try
             {
@@ -215,7 +175,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void UnsuffixedRegisteredCopyIsRefused()
         {
             // --- Falsifier 2: a registered copy without the suffix refuses. ---
-            var source = ImportSourceAsset("nosuffix");
+            var source = ReplacementTextureIdentityTests.ImportSourceAsset("nosuffix", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name;
             try
@@ -236,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void SuffixedUnregisteredCopyIsRefused()
         {
             // --- Falsifier 1: the suffix alone never admits. ---
-            var source = ImportSourceAsset("lonely");
+            var source = ReplacementTextureIdentityTests.ImportSourceAsset("lonely", FixtureFolder);
             var copy = MakeAdmittedCopy(source);
             try
             {
@@ -279,7 +239,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             // --- Falsifier 3: registration plus suffix without the version
             // conjunct refuses. ---
-            var source = ImportSourceAsset("noversion");
+            var source = ReplacementTextureIdentityTests.ImportSourceAsset("noversion", FixtureFolder);
             var copy = MakeAdmittedCopy(source);
             try
             {
@@ -311,7 +271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             // No-op guard: the fixture itself must be asset-backed, or this test
             // proves nothing.
-            var source = ImportSourceAsset("guarded");
+            var source = ReplacementTextureIdentityTests.ImportSourceAsset("guarded", FixtureFolder);
             Assert.That(AssetDatabase.GetAssetPath(source), Is.Not.Empty);
             Assert.That(
                 ReplacementTextureAttestation.TryIdentifyReplacement(

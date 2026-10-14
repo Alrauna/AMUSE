@@ -113,14 +113,12 @@ namespace Alrauna.Amuse.Editor.Build
         private HostLifecycleCapability(
             bool mayUsePositiveMutation,
             HostLifecycleRefusal refusal,
-            string supportedAssumption,
             AmuseBuildPath buildPath,
             bool consentRequired = false,
             IReadOnlyList<string> consentSubjects = null)
         {
             MayUsePositiveMutation = mayUsePositiveMutation;
             Refusal = refusal;
-            SupportedAssumption = supportedAssumption;
             BuildPath = buildPath;
             ConsentRequired = consentRequired;
             ConsentSubjects = consentSubjects
@@ -133,7 +131,6 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>The build path this verdict decided on, carried so the
         /// inspector status can name the run kind.</summary>
         internal AmuseBuildPath BuildPath { get; }
-        internal string SupportedAssumption { get; }
 
         /// <summary>
         /// True when the version is range-admitted but newer than the last
@@ -231,10 +228,6 @@ namespace Alrauna.Amuse.Editor.Build
             return new HostLifecycleCapability(
                 true,
                 HostLifecycleRefusal.None,
-                "Unity 2022.3.22f1 or newer 2022.3 f-release; NDMF 1.14.4 to any 1.x below 2.0.0, " +
-                "no prerelease; VRChat SDK Base/Avatars 3.10.4 to any 3.x below 4.0.0, no prerelease; " +
-                "NDMF platform nadena.dev.ndmf.vrchat.avatar3; NDMF build (upload, Build & Test, " +
-                "or Apply on Play).",
                 facts.BuildPath,
                 subjects.Count > 0,
                 subjects);
@@ -290,7 +283,7 @@ namespace Alrauna.Amuse.Editor.Build
             HostLifecycleRefusal refusal,
             AmuseBuildPath buildPath)
         {
-            return new HostLifecycleCapability(false, refusal, null, buildPath);
+            return new HostLifecycleCapability(false, refusal, buildPath);
         }
 
         /// <summary>

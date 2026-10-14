@@ -38,8 +38,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(result.MayUsePositiveMutation, Is.True);
             Assert.That(result.Refusal, Is.EqualTo(HostLifecycleRefusal.None));
-            StringAssert.Contains("Unity 2022.3.22f1", result.SupportedAssumption);
-            StringAssert.Contains("NDMF 1.14.4", result.SupportedAssumption);
         }
 
         [Test]

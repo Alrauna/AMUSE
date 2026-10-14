@@ -32,33 +32,6 @@ namespace Alrauna.Amuse.Editor.Build
     internal static class TransientUnlockSwapIn
     {
         /// <summary>
-        /// The machine-side availability the swap-in consults: the restore
-        /// delegate. Production builds it from <see
-        /// cref="TransientUnlockAvailability"/>. No vendor-shaped answer
-        /// exists on this gate.
-        /// </summary>
-        internal sealed class Availability
-        {
-            internal TransientUnlockRestoreDelegate Restore { get; }
-
-            /// <summary>
-            /// The production availability. Production consults no vendor
-            /// answer: the restore reconstructs in memory, so the window
-            /// opens on the original-shader attestation gates alone.
-            /// </summary>
-            internal static Availability FromProduction()
-            {
-                return new Availability(
-                    TransientUnlockAvailability.CreateProductionRestore());
-            }
-
-            internal Availability(TransientUnlockRestoreDelegate restore)
-            {
-                Restore = restore;
-            }
-        }
-
-        /// <summary>
         /// What one swap-in did, in counts a caller can observe without
         /// touching live objects. The counts are the falsifier surface:
         /// clones created, slots swapped, and the slots that took a named
@@ -87,7 +60,7 @@ namespace Alrauna.Amuse.Editor.Build
         internal static Summary SwapIn(
             BuildContext context,
             TransientUnlockWindowState window,
-            Availability availability,
+            TransientUnlockRestoreDelegate restore,
             Func<Material, bool> originalShaderAttested = null)
         {
             if (context == null)
@@ -99,12 +72,6 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 throw new ArgumentNullException(nameof(window));
             }
-
-            if (availability == null)
-            {
-                throw new ArgumentNullException(nameof(availability));
-            }
-
             var summary = new Summary();
             if (!window.ConsentGranted)
             {
@@ -114,10 +81,10 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             // The machine-side gate comes before any clone step by
-            // contract: an availability without a restore delegate opens
+            // contract: an invocation without a restore delegate opens
             // nothing at all. No vendor-shaped answer remains on this
             // gate.
-            if (availability.Restore == null)
+            if (restore == null)
             {
                 return summary;
             }
@@ -225,7 +192,7 @@ namespace Alrauna.Amuse.Editor.Build
                 if (pair.UnlockedClone == null)
                 {
                     var clone = ClonePersistRestoreVerify(
-                        context, entry.Locked, availability, attests,
+                        context, entry.Locked, restore, attests,
                         out var mismatchReason);
                     summary.ClonesCreated++;
                     if (clone == null)
@@ -280,7 +247,7 @@ namespace Alrauna.Amuse.Editor.Build
         private static Material ClonePersistRestoreVerify(
             BuildContext context,
             Material locked,
-            Availability availability,
+            TransientUnlockRestoreDelegate restore,
             Func<Material, bool> attests,
             out string mismatchReason)
         {
@@ -292,7 +259,7 @@ namespace Alrauna.Amuse.Editor.Build
             clone.name = locked.name;
             context.AssetSaver.SaveAsset(clone);
 
-            var outcome = availability.Restore(clone);
+            var outcome = restore(clone);
             mismatchReason = RestoreMismatchReason(locked, clone, attests);
             if (outcome == TransientUnlockRestoreOutcome.Succeeded &&
                 mismatchReason == null)
@@ -545,10 +512,11 @@ namespace Alrauna.Amuse.Editor.Build
             AlphaSeparationSlotRefusal cause,
             string detail = null)
         {
-            finishState.RecordSlotRefusal(cause);
-            AmuseReports.SlotSeparationRefusal(
-                renderer, slotIndex, cause,
-                renderer != null ? renderer.gameObject.name : null,
+            AmuseReports.RecordRefusal(
+                finishState,
+                renderer,
+                slotIndex,
+                cause,
                 detail: detail);
         }
 

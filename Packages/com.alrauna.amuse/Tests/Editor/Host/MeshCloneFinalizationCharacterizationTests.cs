@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -40,12 +41,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     /// </summary>
     public sealed class MeshCloneFinalizationCharacterizationTests
     {
-        private readonly List<Object> tracked = new List<Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         private T Track<T>(T value) where T : Object
         {
-            tracked.Add(value);
-            return value;
+            return _scope.Track(value);
         }
 
         [TearDown]
@@ -53,15 +54,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             // Runs after a failing assertion too, so no synthetic mesh survives
             // a red test.
-            for (var index = tracked.Count - 1; index >= 0; index--)
-            {
-                if (tracked[index] != null)
-                {
-                    Object.DestroyImmediate(tracked[index]);
-                }
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
         }
 
         private const int VertexCount = 9;
@@ -92,14 +85,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// Authored per-submesh bounds, unrelated to the geometry so that any
         /// implicit recalculation is visible.
         /// </summary>
-        private static Bounds AuthoredSubmeshBounds(int submesh)
+        internal static Bounds AuthoredSubmeshBounds(int submesh)
         {
             return new Bounds(
                 new Vector3(100 + submesh, 200 + submesh, 300 + submesh),
                 new Vector3(2f, 2f, 2f));
         }
 
-        private static readonly Bounds AuthoredMeshBounds = new Bounds(
+        internal static readonly Bounds AuthoredMeshBounds = new Bounds(
             new Vector3(10f, 20f, 30f), new Vector3(40f, 50f, 60f));
 
         /// <summary>

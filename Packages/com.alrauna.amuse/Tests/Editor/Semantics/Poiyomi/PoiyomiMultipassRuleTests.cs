@@ -32,7 +32,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             };
             var evidence = UnityMaterialEvidenceCapture.Capture(inputs);
             return PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                evidence[0]);
+                evidence[0], out _);
         }
 
         /// <summary>

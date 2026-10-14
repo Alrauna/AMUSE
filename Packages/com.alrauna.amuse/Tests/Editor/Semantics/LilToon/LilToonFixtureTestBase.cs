@@ -43,31 +43,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void BaseSetUp()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads a default anisoLevel 1
-            // texture as anisotropic, which the footprint and wrap proofs
-            // refuse. Every fixture texture carries a default anisoLevel, so
-            // the Per Texture mode is the mode these equations were written
-            // under. The pin is per test and restores the editor mode on
-            // teardown, which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
             _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void BaseTearDown()
         {
+            _filteringPin.Dispose();
             _scope.TearDown();
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
         }
 
         protected T Track<T>(T obj) where T : UnityEngine.Object
@@ -97,7 +86,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
         internal static Material CreateVerifiedMaterial()
         {
-            return CreateFixtureMaterial(FixtureShaderName);
+            return TestShaderWriter.CreateMaterial(FixtureShaderName);
         }
 
         /// <summary>
@@ -107,7 +96,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         internal static Material CreateCutoutConversionMaterial()
         {
-            return CreateFixtureMaterial(CutoutConversionShaderName);
+            return TestShaderWriter.CreateMaterial(CutoutConversionShaderName);
         }
 
         /// <summary>
@@ -117,7 +106,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         internal static Material CreateTransparentConversionMaterial()
         {
-            return CreateFixtureMaterial(TransparentConversionShaderName);
+            return TestShaderWriter.CreateMaterial(
+                TransparentConversionShaderName);
         }
 
         /// <summary>
@@ -127,7 +117,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         internal static Material CreateOpaqueConversionMaterial()
         {
-            return CreateFixtureMaterial(OpaqueConversionShaderName);
+            return TestShaderWriter.CreateMaterial(OpaqueConversionShaderName);
         }
 
         /// <summary>
@@ -302,16 +292,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             return material;
         }
 
-        private static Material CreateFixtureMaterial(string shaderName)
-        {
-            var shader = Shader.Find(shaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{shaderName}' must import.");
-            return new Material(shader);
-        }
-
         /// <summary>
         /// Interprets with linear colour space and every feature compiled in,
         /// the configuration under which the traced equations hold.
@@ -359,23 +339,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Action<TextureImporter> configure = null,
             bool sourceHasAlpha = true)
         {
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(128, 64, 32, 200);
-            }
-
-            return TestTextureImport.WritePng(
-                TempFolder + "/" + name + ".png",
-                4,
-                4,
-                pixels,
-                importer =>
-                {
-                    importer.mipmapEnabled = false;
-                    configure?.Invoke(importer);
-                },
-                alpha: sourceHasAlpha);
+            return TestTextureImport.ImportTexture(
+                TempFolder, name, configure, sourceHasAlpha);
         }
 
         /// <summary>
@@ -499,8 +464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         protected Texture2D CreateNativeTextureAsset(string name)
         {
-            return TestTextureImport.ImportNative(
-                TempFolder + "/" + name + ".asset");
+            return TestTextureImport.ImportNativeAsset(TempFolder, name);
         }
     }
 }

@@ -141,51 +141,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         // --- Clone preparation and validation --------------------------------
 
         /// <summary>
-        /// Every float-valued property the shader declares, plus the two
-        /// non-property facts. Used to prove the source is untouched.
-        /// </summary>
-        private static Dictionary<string, float> SnapshotFloats(Material material)
-        {
-            var snapshot = new Dictionary<string, float>();
-            var count = ShaderUtil.GetPropertyCount(material.shader);
-            for (var index = 0; index < count; index++)
-            {
-                var type = ShaderUtil.GetPropertyType(material.shader, index);
-                if (type != ShaderUtil.ShaderPropertyType.Float &&
-                    type != ShaderUtil.ShaderPropertyType.Range)
-                {
-                    continue;
-                }
-
-                var name = ShaderUtil.GetPropertyName(material.shader, index);
-                snapshot[name] = material.GetFloat(name);
-            }
-
-            return snapshot;
-        }
-
-        private static void AssertUnchanged(
-            Material material,
-            Dictionary<string, float> before,
-            int queueBefore,
-            string renderTypeBefore)
-        {
-            var after = SnapshotFloats(material);
-            CollectionAssert.AreEquivalent(before.Keys, after.Keys);
-            foreach (var entry in before)
-            {
-                Assert.That(
-                    after[entry.Key],
-                    Is.EqualTo(entry.Value),
-                    $"Source property '{entry.Key}' was mutated.");
-            }
-
-            Assert.That(material.renderQueue, Is.EqualTo(queueBefore));
-            Assert.That(
-                material.GetTag("RenderType", false), Is.EqualTo(renderTypeBefore));
-        }
-
-        /// <summary>
         /// Writes a distinct junk value (101..118, in recipe order) into every
         /// recipe property and non-canonical queue/tag, so a clone that
         /// inherited or half-rewrote the source cannot pass read-back.
@@ -269,7 +224,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void PreparedClone_SwapsTheShaderToTheAttestedTarget()
         {
             var source = NewCutoutFixtureMaterial();
-            var before = SnapshotFloats(source);
+            var before = PropertySnapshot.SnapshotFloats(source);
             var queueBefore = source.renderQueue;
             var tagBefore = source.GetTag("RenderType", false);
             var target = Shader.Find(OpaqueConversionShaderName);
@@ -302,7 +257,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(clone.renderQueue, Is.EqualTo(2000));
             Assert.That(clone.GetTag("RenderType", false), Is.EqualTo("Opaque"));
             Assert.That(clone.name, Is.Empty);
-            AssertUnchanged(source, before, queueBefore, tagBefore);
+            PropertySnapshot.AssertUnchanged(source, before, queueBefore, tagBefore);
         }
 
         // --- Mode keyword normalization on regular conversions ---------------
@@ -376,7 +331,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var source = ConversionEligibleStandIn();
             Scramble(source);
-            var before = SnapshotFloats(source);
+            var before = PropertySnapshot.SnapshotFloats(source);
             var queueBefore = source.renderQueue;
             var tagBefore = source.GetTag("RenderType", false);
             var shaderBefore = source.shader;
@@ -384,7 +339,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
                 source, source.shader));
 
-            AssertUnchanged(source, before, queueBefore, tagBefore);
+            PropertySnapshot.AssertUnchanged(source, before, queueBefore, tagBefore);
             for (var index = 0; index < ExpectedCanonicalTuple.Length; index++)
             {
                 Assert.That(
@@ -952,17 +907,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     source,
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
             })[0];
-            var target = Shader.Find(OpaqueConversionShaderName);
-            Assert.That(target, Is.Not.Null);
+            try
+            {
+                var target = ImportTempShader(
+                    "lilToon.shader",
+                    ValidStandInLilToonSource(TestOnlyStandInGuid));
+                Assert.That(target, Is.Not.Null);
 
-            var targetEvidence =
-                LilToonSourceAttestation.GatherOpaqueTargetSourceEvidence(
-                    target, captured);
+                Assert.That(
+                    LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                        target, captured, out var targetEvidence, out _),
+                    Is.True);
 
-            Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
-            Assert.That(
-                targetEvidence.ShaderName,
-                Is.Not.EqualTo(captured.ShaderName));
+                Assert.That(targetEvidence.ShaderName, Is.EqualTo(target.name));
+                Assert.That(
+                    targetEvidence.ShaderName,
+                    Is.Not.EqualTo(captured.ShaderName));
+            }
+            finally
+            {
+                DeleteConversionTempFolder();
+            }
         }
 
         /// <summary>
@@ -1231,8 +1196,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                         .ConversionEvidenceRequest),
             })[0];
 
-            var evidence = LilToonSourceAttestation
-                .GatherOpaqueTargetSourceEvidence(target, captured);
+            Assert.That(
+                LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                    target, captured, out var evidence, out _),
+                Is.True);
             Assert.That(
                 LilToonSourceAttestation.TryVerifyIdentityForShaderName(
                     evidence, out var diagnostic),

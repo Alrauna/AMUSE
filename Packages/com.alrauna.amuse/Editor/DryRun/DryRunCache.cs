@@ -76,16 +76,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Returns the renderer body verbatim. The body already joins
-        /// path, type, mesh, materials, and textures, and the composite
-        /// prefixes the avatar key, so no renderer fact is missing.
-        /// </summary>
-        internal static string Renderer(in DryRunFingerprintInputs inputs)
-        {
-            return inputs.RendererFingerprintBody;
-        }
-
-        /// <summary>
         /// Joins the avatar key and the renderer key into one composite
         /// string. The cache keys renderer rows by this string, so a
         /// renderer fact alone can never resolve a stored row.
@@ -108,9 +98,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>The single stored avatar key. Null when empty.</summary>
         private static string storedAvatarKey;
 
-        private static readonly Dictionary<string, IReadOnlyList<MaterialTransformationRow>> AvatarRows =
-            new Dictionary<string, IReadOnlyList<MaterialTransformationRow>>();
-
+        private static IReadOnlyList<MaterialTransformationRow> storedAvatarRows;
         private static readonly Dictionary<string, IReadOnlyList<MaterialTransformationRow>> RendererRows =
             new Dictionary<string, IReadOnlyList<MaterialTransformationRow>>();
 
@@ -118,16 +106,14 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         /// <summary>
         /// Returns the rows stored for this avatar key. A key outside
-        /// the single slot is a miss by definition, so a null lookup
-        /// can never reach the dictionary.
+        /// the single slot is a miss by definition.
         /// </summary>
         internal static bool TryGetAvatar(
             string avatarKey, out IReadOnlyList<MaterialTransformationRow> rows)
         {
-            if (avatarKey != null && avatarKey == storedAvatarKey
-                && AvatarRows.TryGetValue(avatarKey, out var stored))
+            if (avatarKey != null && avatarKey == storedAvatarKey && storedAvatarRows != null)
             {
-                rows = stored;
+                rows = storedAvatarRows;
                 return true;
             }
 
@@ -148,11 +134,11 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             if (avatarKey != storedAvatarKey)
             {
-                ClearAll();
+                Clear();
                 storedAvatarKey = avatarKey;
             }
 
-            AvatarRows[avatarKey] = rows;
+            storedAvatarRows = rows;
         }
 
         /// <summary>
@@ -188,7 +174,7 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             if (avatarKey != storedAvatarKey)
             {
-                ClearAll();
+                Clear();
                 storedAvatarKey = avatarKey;
             }
 
@@ -215,14 +201,8 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>Drops every row, mark, and the avatar slot.</summary>
         internal static void Clear()
         {
-            ClearAll();
-        }
-
-        /// <summary>Resets all state. The slot returns to null.</summary>
-        private static void ClearAll()
-        {
             storedAvatarKey = null;
-            AvatarRows.Clear();
+            storedAvatarRows = null;
             RendererRows.Clear();
             ErroredKeys.Clear();
         }

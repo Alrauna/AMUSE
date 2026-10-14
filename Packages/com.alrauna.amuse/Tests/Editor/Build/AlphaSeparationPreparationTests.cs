@@ -37,29 +37,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class AlphaSeparationPreparationTests
     {
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // textures' default anisoLevel 1 as anisotropic, so the
-            // pipeline's triangle proofs refuse every triangle. The Per
-            // Texture mode is the mode these fixtures were written under.
-            // The pin is per test and restores the editor mode on teardown,
-            // which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void RestoreAnisotropicFiltering()
         {
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
+            _filteringPin.Dispose();
         }
 
         [Test]
@@ -76,7 +65,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -112,7 +101,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -138,7 +127,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
                 var originalMaterials = renderer.sharedMaterials;
 
@@ -164,7 +153,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -184,7 +173,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedTransparentMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
                 var amuse = RunBarrier(root);
@@ -207,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(null);
+                AlphaSeparationTestLifecycle.DestroyGenerated(null);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -270,7 +259,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -293,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -310,7 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -351,7 +340,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(baseline);
+                AlphaSeparationTestLifecycle.DestroyGenerated(baseline);
                 if (baselineMesh != null)
                     UnityEngine.Object.DestroyImmediate(baselineMesh);
                 UnityEngine.Object.DestroyImmediate(baselineRoot);
@@ -383,7 +372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 refusedClip = NewFloatClip(
                     "AMUSE zwrite to zero", string.Empty,
                     "material._ZWrite", 0f);
-                refusedController = NewController(
+                refusedController = AlphaSeparationTestLifecycle.NewController(
                     refusedRoot, "AMUSE zwrite to zero graph", refusedClip);
 
                 refused = RunBarrier(refusedRoot);
@@ -406,8 +395,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(refused);
-                DestroyControllerGraph(refusedRoot, refusedController);
+                AlphaSeparationTestLifecycle.DestroyGenerated(refused);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(refusedRoot, refusedController);
                 if (refusedMesh != null)
                     UnityEngine.Object.DestroyImmediate(refusedMesh);
                 UnityEngine.Object.DestroyImmediate(refusedRoot);
@@ -436,7 +425,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 preparedClip = NewFloatClip(
                     "AMUSE zwrite to one", string.Empty,
                     "material._ZWrite", 1f);
-                preparedController = NewController(
+                preparedController = AlphaSeparationTestLifecycle.NewController(
                     preparedRoot, "AMUSE zwrite to one graph", preparedClip);
 
                 prepared = RunBarrier(preparedRoot);
@@ -457,8 +446,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(prepared);
-                DestroyControllerGraph(preparedRoot, preparedController);
+                AlphaSeparationTestLifecycle.DestroyGenerated(prepared);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(preparedRoot, preparedController);
                 if (preparedMesh != null)
                     UnityEngine.Object.DestroyImmediate(preparedMesh);
                 UnityEngine.Object.DestroyImmediate(preparedRoot);
@@ -512,7 +501,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite indexed prefix", string.Empty,
                     "material[0]._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE unrecognized binding graph", clip);
 
                 amuse = RunBarrier(root);
@@ -545,8 +534,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -584,7 +573,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite under additive layer", string.Empty,
                     "material._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE additive conversion graph", clip);
                 var layers = controller.layers;
                 layers[0].blendingMode =
@@ -621,8 +610,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -664,7 +653,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE zwrite under direct tree", string.Empty,
                     "material._ZWrite", 0f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE direct conversion graph", clip);
                 controller.AddParameter(
                     "Blend", AnimatorControllerParameterType.Float);
@@ -717,8 +706,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null)
                     UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -756,13 +745,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 lilToon = LilToonFixtureTestBase.CreateVerifiedMaterial();
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE mixed swap", string.Empty, 0, (0f, lilToon));
-                var controllerLocal = NewController(
+                var controllerLocal = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE mixed graph", clip);
                 controller = controllerLocal;
 
@@ -816,7 +805,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -841,13 +830,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 unsupported = new Material(Shader.Find("Unlit/Color"));
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE unconverted swap", string.Empty, 0, (0f, unsupported));
-                controller = NewController(root, "AMUSE unconverted graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE unconverted graph", clip);
 
                 var amuse = RunBarrier(
                     root,
@@ -903,7 +892,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -940,15 +929,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 unsupported = new Material(Shader.Find("Unlit/Color"));
                 unsupported.name = "AMUSE partial refusing material";
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE partial refusal swap", string.Empty, 0,
                     (0f, unsupported));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE partial refusal graph", clip);
 
                 var reports = ErrorReport.CaptureErrors(
@@ -1064,8 +1053,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -1125,10 +1114,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AddSingleTriangleRenderer(root, firstRefused, out mesh);
                 FillInBoundsUvs(mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE all-fail swap", string.Empty, 0,
                     (0f, lastRefused));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE all-fail graph", clip);
 
                 var reports = ErrorReport.CaptureErrors(
@@ -1189,8 +1178,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 fixtures.BaseTearDown();
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (firstRefused != null)
@@ -1233,7 +1222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 lilToon = LilToonFixtureTestBase.CreateVerifiedMaterial();
                 var renderer = AddTwoTriangleRenderer(
                     root, poiyomi, lilToon, out mesh);
@@ -1295,7 +1284,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null) UnityEngine.Object.DestroyImmediate(poiyomi);
@@ -1456,7 +1445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1563,7 +1552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1663,7 +1652,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (refusedMaterial != null)
@@ -1696,7 +1685,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 AddTwoTriangleRenderer(root, material, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -1737,7 +1726,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1832,7 +1821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1859,7 +1848,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 Assert.That(
                     material.GetFloat("_Cutoff"), Is.EqualTo(0.5f),
                     "fixture precondition: the material's serialized " +
@@ -1873,7 +1862,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE cutoff to default", string.Empty,
                     "material._Cutoff", 0.5f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE cutoff graph", clip);
 
                 VerifiedPoiyomiConversion conversion =
@@ -1937,8 +1926,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
@@ -1974,7 +1963,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // animation paths. Renderer A animates nothing; renderer B
                 // animates a canonical recipe property to its own serialized
                 // default, which admits but violates the canonical value.
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 Assert.That(
                     material.GetFloat("_Cutoff"), Is.EqualTo(0.5f),
                     "fixture precondition: the source's serialized _Cutoff " +
@@ -1986,7 +1975,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE cutoff on body B", "bodyB",
                     "material._Cutoff", 0.5f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE shared source graph", clip);
 
                 amuse = RunBarrier(root);
@@ -2050,8 +2039,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
                 if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -2189,7 +2178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2296,7 +2285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseA);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseA);
                 if (meshA != null) UnityEngine.Object.DestroyImmediate(meshA);
                 UnityEngine.Object.DestroyImmediate(rootA);
                 if (materialA != null)
@@ -2362,7 +2351,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseB);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseB);
                 if (meshB != null) UnityEngine.Object.DestroyImmediate(meshB);
                 UnityEngine.Object.DestroyImmediate(rootB);
                 if (materialB != null)
@@ -2473,7 +2462,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2581,7 +2570,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -2629,16 +2618,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .ImportSplitAlphaTexture("forced_fold_marker");
                     splitA = AlphaSeparationSplitTests.SplitAlphaMaterial(
                         texture);
-                    swapA = VerifiedOpaqueMaterial();
+                    swapA = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                     meshA = TwoTriangleSplitMesh();
                     var rendererA = rootA.AddComponent<SkinnedMeshRenderer>();
                     rendererA.sharedMesh = meshA;
                     rendererA.sharedMaterials = new[] { splitA };
 
-                    markedClipA = NewSwapClip(
+                    markedClipA = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE marked folded swap", string.Empty, 0,
                         (0f, swapA));
-                    controllerA = NewController(
+                    controllerA = AlphaSeparationTestLifecycle.NewController(
                         rootA, "AMUSE forced marker graph", markedClipA);
 
                     var reportsA = ErrorReport.CaptureErrors(
@@ -2673,8 +2662,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseA);
-                DestroyControllerGraph(rootA, controllerA);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseA);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(rootA, controllerA);
                 if (markedClipA != null)
                 {
                     UnityEngine.Object.DestroyImmediate(markedClipA);
@@ -2716,16 +2705,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .ImportSplitAlphaTexture("forced_fold_marker");
                     splitB = AlphaSeparationSplitTests.SplitAlphaMaterial(
                         texture);
-                    swapB = VerifiedOpaqueMaterial();
+                    swapB = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                     meshB = TwoTriangleSplitMesh();
                     var rendererB = rootB.AddComponent<SkinnedMeshRenderer>();
                     rendererB.sharedMesh = meshB;
                     rendererB.sharedMaterials = new[] { splitB };
 
-                    markedClipB = NewSwapClip(
+                    markedClipB = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE marked folded swap", string.Empty, 0,
                         (0f, swapB));
-                    controllerB = NewController(
+                    controllerB = AlphaSeparationTestLifecycle.NewController(
                         rootB, "AMUSE forced marker graph", markedClipB);
 
                     var reportsB = ErrorReport.CaptureErrors(
@@ -2769,8 +2758,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuseB);
-                DestroyControllerGraph(rootB, controllerB);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuseB);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(rootB, controllerB);
                 if (markedClipB != null)
                 {
                     UnityEngine.Object.DestroyImmediate(markedClipB);
@@ -2874,7 +2863,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3264,7 +3253,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    triangle, field, sampling, AlphaUvEnvelope.Zero),
+                    triangle, field, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
                 "fixture precondition: the raw (identity) UV domain must " +
                 "sample the transparent interior, or the transform " +
@@ -3275,7 +3264,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True);
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    transformed, field, sampling, envelope),
+                    transformed, field, sampling, envelope, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
                 "the same triangle's ST-transformed domain must sample " +
                 "the opaque corner");
@@ -3370,7 +3359,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -3454,7 +3443,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -3511,7 +3500,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE poiyomi st default", string.Empty,
                     "material._MainTex_ST.x", 2f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE poiyomi st default graph", clip);
 
                 amuse = RunBarrier(root);
@@ -3537,8 +3526,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3591,7 +3580,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip = NewFloatClip(
                     "AMUSE poiyomi st non singleton", string.Empty,
                     "material._MainTex_ST.x", 3f);
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE poiyomi st non singleton graph", clip);
 
                 amuse = RunBarrier(root);
@@ -3613,8 +3602,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -3714,7 +3703,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -4754,7 +4743,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (material != null) UnityEngine.Object.DestroyImmediate(material);
                 UnityEngine.Object.DestroyImmediate(root);
@@ -5052,11 +5041,98 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// One parameterized single-triangle policy arm over one optimizer
+        /// component. The serialized policy hook writes the arm's fields
+        /// before the shared apply, the material factory builds the arm's
+        /// material and its main texture (importing from the cutout
+        /// conversion fixtures when the arm owns the fixture scope), and
+        /// the barrier runs through the production entry over the given
+        /// verified seams. Arms with the fixture scope also run under the
+        /// temporary-directory override and tear the fixtures down with
+        /// the arm.
+        /// <para>
+        /// The serialized writes must land before the acceptance helper
+        /// runs. This SerializedObject caches the component as it was
+        /// before that helper stores its acceptance, so applying it
+        /// afterwards replays the stale cache and restores the stored
+        /// acceptance to false. The optional post-serialized hook is where
+        /// an arm grants that acceptance.
+        /// </para>
+        /// </summary>
+        private static AmusePlatformFinishState RunPolicyArm(
+            string rootName,
+            Func<LilToonCutoutConversionFixtures, Material> createMaterial,
+            Action<SerializedObject> writeSerializedPolicy = null,
+            Action<GameObject> postSerializedPolicy = null,
+            bool withFixtureScope = false,
+            AlphaMaterialRequestSelector selectRequest = null,
+            ClosedAlphaMaterialCapturer capturer = null,
+            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
+            VerifiedLilToonConversion lilToonConversion = null)
+        {
+            using var assets = withFixtureScope
+                ? new OverrideTemporaryDirectoryScope(null)
+                : null;
+            var fixtures = withFixtureScope
+                ? new LilToonCutoutConversionFixtures()
+                : null;
+            fixtures?.BaseSetUp();
+            var root = new GameObject(rootName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var serialized = new SerializedObject(component);
+            writeSerializedPolicy?.Invoke(serialized);
+            // These numeric writes must land before the acceptance helper
+            // runs. This SerializedObject caches the component as it was
+            // before that helper stores its acceptance, so applying it
+            // afterwards replays the stale cache and restores the stored
+            // acceptance to false.
+            serialized.ApplyModifiedProperties();
+            postSerializedPolicy?.Invoke(root);
+
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = createMaterial(fixtures);
+                AddSingleTriangleRenderer(root, material, out mesh);
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: selectRequest,
+                    capturer: capturer,
+                    resolveSemantics: resolveSemantics,
+                    lilToonConversion: lilToonConversion);
+            }
+            finally
+            {
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures?.BaseTearDown();
+            }
+
+            return amuse;
+        }
+
+        /// <summary>
         /// One single-triangle cutout arm over the stray chain, with the
         /// optimizer component's three alpha policy fields set through
-        /// serialized properties. Mirrors <see cref="RunAlphaPolicyArm"/>
-        /// with the cutout fixture material, whose shader cutoff the
-        /// capture declares.
+        /// serialized properties. Uses the cutout fixture material, whose
+        /// shader cutoff the capture declares.
         /// </summary>
         private static AmusePlatformFinishState RunCutoutPolicyArm(
             int opaquePercent,
@@ -5064,71 +5140,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int polygonCoveragePercent,
             string armName)
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var fixtures = new LilToonCutoutConversionFixtures();
-            fixtures.BaseSetUp();
-            var root = new GameObject("AMUSE cutout policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                .intValue = opaquePercent;
-            serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                .intValue = polygonClampPercent;
-            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
-                .intValue = polygonCoveragePercent;
-            serialized.ApplyModifiedProperties();
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                var texture = fixtures.ImportStrayTexelTexture(
-                    "cutout_policy_stray_" + armName);
-                material =
-                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
-                material.SetTexture("_MainTex", texture);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE cutout policy " + armName,
+                fixtures =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var texture = fixtures.ImportStrayTexelTexture(
+                        "cutout_policy_stray_" + armName);
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    material.SetTexture("_MainTex", texture);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-
-                UnityEngine.Object.DestroyImmediate(root);
-                fixtures.BaseTearDown();
-            }
-
-            return amuse;
+                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                        .intValue = opaquePercent;
+                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                        .intValue = polygonClampPercent;
+                    serialized.FindProperty(
+                            "_polygonMinimumOpaqueCoveragePercent")
+                        .intValue = polygonCoveragePercent;
+                },
+                withFixtureScope: true,
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly);
         }
 
         /// <summary>
         /// One single-triangle cutout arm over the given main texture, with
         /// the optimizer component's serialized mip cap and minimum
         /// size set when requested.
-        /// Follows the streaming-clone arm's shape: verified seams, manual
-        /// teardown, and the barrier run through the production entry.
         /// </summary>
         private static AmusePlatformFinishState RunMipPolicyArm(
             Texture2D mainTex,
@@ -5136,72 +5182,45 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int? maxMipLevel,
             int? minTextureSize = null)
         {
-            var root = new GameObject("AMUSE mip policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            if (maxMipLevel.HasValue)
-            {
-                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
-                    .intValue = maxMipLevel.Value;
-            }
-
-            if (minTextureSize.HasValue)
-            {
-                serialized.FindProperty("_preserveTransparencyMinTextureSize")
-                    .intValue = minTextureSize.Value;
-            }
-
-            serialized.ApplyModifiedProperties();
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                material =
-                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
-                material.SetTexture("_MainTex", mainTex);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE mip policy " + armName,
+                _ =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    material.SetTexture("_MainTex", mainTex);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
+                    if (maxMipLevel.HasValue)
+                    {
+                        serialized.FindProperty(
+                                "_preserveTransparencyMaxMipLevel")
+                            .intValue = maxMipLevel.Value;
+                    }
 
-                UnityEngine.Object.DestroyImmediate(root);
-            }
-
-            return amuse;
+                    if (minTextureSize.HasValue)
+                    {
+                        serialized.FindProperty(
+                                "_preserveTransparencyMinTextureSize")
+                            .intValue = minTextureSize.Value;
+                    }
+                },
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly);
         }
 
         /// <summary>
         /// One single-triangle transparent (fade-eligible) arm over a
         /// procedural 4x4 chain whose alpha bytes are all 255 except one
         /// texel at 3, with the optimizer component's three alpha policy
-        /// fields set through serialized properties. Mirrors
-        /// <see cref="RunMipPolicyArm"/>: verified seams, manual teardown,
-        /// and the barrier run through the production entry. The chain is
+        /// fields set through serialized properties. The chain is
         /// authored at runtime and stored as an asset, so it carries a
         /// project identity and capture routes through the direct GPU
         /// path and its policy-aware predicate shader.
@@ -5214,80 +5233,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             byte? uniformAlpha = null,
             bool acceptDesktopDifferences = false)
         {
-            using var assets = new OverrideTemporaryDirectoryScope(null);
-            var fixtures = new LilToonCutoutConversionFixtures();
-            fixtures.BaseSetUp();
-            var root = new GameObject("AMUSE alpha policy " + armName);
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            var component =
-                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureProofScope.PinAllSizes(root);
-            var serialized = new SerializedObject(component);
-            serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                .intValue = opaquePercent;
-            serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                .intValue = polygonClampPercent;
-            serialized.FindProperty("_polygonMinimumOpaqueCoveragePercent")
-                .intValue = polygonCoveragePercent;
-            // These numeric writes must land before the acceptance helper
-            // runs. This SerializedObject caches the component as it was
-            // before that helper stores its acceptance, so applying it
-            // afterwards replays the stale cache and restores the stored
-            // acceptance to false.
-            serialized.ApplyModifiedProperties();
-            if (acceptDesktopDifferences)
-            {
-                // The arm's local footprint proof resolves only under the
-                // accepted non-anisotropic policy; the caller states that
-                // per arm, and no default grants it.
-                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
-            }
-
-            Material material = null;
-            Mesh mesh = null;
-            AmusePlatformFinishState amuse = null;
-            try
-            {
-                var texture = uniformAlpha.HasValue
-                    ? fixtures.ImportUniformAlphaTexture(
-                        "alpha_policy_uniform_" + armName,
-                        uniformAlpha.Value)
-                    : fixtures.ImportStrayTexelTexture(
-                        "alpha_policy_stray_" + armName);
-                material =
-                    LilToonFixtureTestBase.CreateTransparentConversionMaterial();
-                material.SetTexture("_MainTex", texture);
-                AddSingleTriangleRenderer(root, material, out mesh);
-                mesh.uv = new[]
+            return RunPolicyArm(
+                "AMUSE alpha policy " + armName,
+                fixtures =>
                 {
-                    new Vector2(0.25f, 0.25f),
-                    new Vector2(0.75f, 0.25f),
-                    new Vector2(0.25f, 0.75f),
-                };
-
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics:
-                        VerifiedLilToonTestSeams.VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-            }
-            finally
-            {
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
-                if (material != null)
+                    var texture = uniformAlpha.HasValue
+                        ? fixtures.ImportUniformAlphaTexture(
+                            "alpha_policy_uniform_" + armName,
+                            uniformAlpha.Value)
+                        : fixtures.ImportStrayTexelTexture(
+                            "alpha_policy_stray_" + armName);
+                    var material =
+                        LilToonFixtureTestBase
+                            .CreateTransparentConversionMaterial();
+                    material.SetTexture("_MainTex", texture);
+                    return material;
+                },
+                serialized =>
                 {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-
-                UnityEngine.Object.DestroyImmediate(root);
-                fixtures.BaseTearDown();
-            }
-
-            return amuse;
+                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                        .intValue = opaquePercent;
+                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                        .intValue = polygonClampPercent;
+                    serialized.FindProperty(
+                            "_polygonMinimumOpaqueCoveragePercent")
+                        .intValue = polygonCoveragePercent;
+                },
+                root =>
+                {
+                    if (acceptDesktopDifferences)
+                    {
+                        // The arm's local footprint proof resolves only
+                        // under the accepted non-anisotropic policy; the
+                        // caller states that per arm, and no default
+                        // grants it.
+                        FixtureProofScope
+                            .AcceptDesktopAnisotropyDifferences(root);
+                    }
+                },
+                withFixtureScope: true,
+                selectRequest: VerifiedLilToonTestSeams
+                    .SelectVerifiedFixtureRequest,
+                capturer: VerifiedLilToonTestSeams
+                    .CaptureVerifiedFixtureMaterials,
+                resolveSemantics: VerifiedLilToonTestSeams
+                    .VerifiedAlphaOnly,
+                lilToonConversion: VerifiedFamilyConversion);
         }
 
 
@@ -5650,7 +5641,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (mesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(mesh);
@@ -6164,7 +6155,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     scenario.clip = NewFloatClip(
                         scenario.root.name + " clip", string.Empty,
                         "material._UseDither", 1f);
-                    scenario.controller = NewController(
+                    scenario.controller = AlphaSeparationTestLifecycle.NewController(
                         scenario.root, scenario.root.name + " graph",
                         scenario.clip);
                 }
@@ -6226,10 +6217,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -6484,17 +6475,89 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Shared base of the barrier arms: the arm root, its mesh, its
+        /// captured finish state, the one barrier run every arm uses, and
+        /// the create skeleton the arm fixtures build on. Subclasses add
+        /// only their own materials, policy writes, mesh shape, and
+        /// cleanup.
+        /// </summary>
+        private abstract class ArmFixture : IDisposable
+        {
+            protected GameObject root;
+            protected Mesh mesh;
+            protected AmusePlatformFinishState amuse;
+
+            /// <summary>
+            /// Creates the arm root over its optimizer component.
+            /// </summary>
+            protected Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
+                CreateArmRoot(string rootName)
+            {
+                root = new GameObject(rootName);
+                return root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            }
+
+            /// <summary>
+            /// Builds the in-bounds single-triangle mesh the one-slot arms
+            /// share; the optional hook runs after the UV fill.
+            /// </summary>
+            protected void BuildSingleTriangleMesh(
+                Action<Mesh> configureMesh = null)
+            {
+                mesh = new Mesh
+                {
+                    vertices = new[]
+                    {
+                        Vector3.zero,
+                        Vector3.right,
+                        Vector3.up,
+                    },
+                };
+                mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+                FillInBoundsUvs(mesh);
+                configureMesh?.Invoke(mesh);
+            }
+
+            /// <summary>
+            /// Attaches the arm's skinned renderer over the given
+            /// materials and returns it.
+            /// </summary>
+            protected SkinnedMeshRenderer AttachRenderer(
+                params Material[] materials)
+            {
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = materials;
+                return renderer;
+            }
+
+            internal AmusePlatformFinishState Run()
+            {
+                amuse = RunBarrier(
+                    root,
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: VerifiedFamilyConversion);
+                return amuse;
+            }
+
+            public abstract void Dispose();
+        }
+
+        /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
         /// through the real barrier with the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class LocalityArmFixture : IDisposable
+        private sealed class LocalityArmFixture : ArmFixture
         {
             private readonly LilToonTransparentConversionFixtures fixtures;
-            private GameObject root;
-            private Mesh mesh;
-            private AmusePlatformFinishState amuse;
 
             internal Material PoiyomiMaterial { get; private set; }
             internal Material CutoutMaterial { get; private set; }
@@ -6511,17 +6574,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Texture opaqueTexture,
                 Action<Material> configureTransparent)
             {
-                var arm = new LocalityArmFixture(fixtures)
-                {
-                    root = new GameObject("AMUSE transparent locality"),
-                    PoiyomiMaterial = VerifiedOpaqueMaterial(),
-                    CutoutMaterial =
-                        LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
-                    TransparentMaterial =
-                        LilToonFixtureTestBase
-                            .CreateTransparentConversionMaterial(),
-                };
-                arm.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var arm = new LocalityArmFixture(fixtures);
+                arm.CreateArmRoot("AMUSE transparent locality");
+                arm.PoiyomiMaterial = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                arm.CutoutMaterial =
+                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                arm.TransparentMaterial =
+                    LilToonFixtureTestBase
+                        .CreateTransparentConversionMaterial();
                 FixtureProofScope.PinAllSizes(arm.root);
                 arm.CutoutMaterial.SetTexture("_MainTex", opaqueTexture);
                 arm.TransparentMaterial.SetTexture(
@@ -6549,35 +6609,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 arm.mesh.SetTriangles(new[] { 6, 7, 8 }, 2);
                 FillInBoundsUvs(arm.mesh);
 
-                var renderer = arm.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = arm.mesh;
-                renderer.sharedMaterials = new[]
-                {
+                arm.AttachRenderer(
                     arm.PoiyomiMaterial,
                     arm.CutoutMaterial,
-                    arm.TransparentMaterial,
-                };
+                    arm.TransparentMaterial);
 
                 return arm;
             }
 
-            internal AmusePlatformFinishState Run()
+            public override void Dispose()
             {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
-            {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (PoiyomiMaterial != null)
                 {
@@ -6723,7 +6765,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     }
                     finally
                     {
-                        DestroyGenerated(amuse);
+                        AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                         if (mesh != null)
                         {
                             UnityEngine.Object.DestroyImmediate(mesh);
@@ -7212,10 +7254,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     swapRenderer.sharedMesh = swapMesh;
                     swapRenderer.sharedMaterials = new[] { convertible };
 
-                    swapClip = NewSwapClip(
+                    swapClip = AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE depth policy swap clip",
                         string.Empty, 0, (0f, divergent));
-                    swapController = NewController(
+                    swapController = AlphaSeparationTestLifecycle.NewController(
                         swapRoot, "AMUSE depth policy swap graph",
                         swapClip);
 
@@ -7265,7 +7307,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyControllerGraph(swapRoot, swapController);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(swapRoot, swapController);
                     if (swapMesh != null)
                     {
                         UnityEngine.Object.DestroyImmediate(swapMesh);
@@ -7728,13 +7770,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// transparent stand-in material and the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class TransparentArmFixture : IDisposable
+        private sealed class TransparentArmFixture : ArmFixture
         {
-            private GameObject root;
-            private Mesh mesh;
             private AnimationClip clip;
             private AnimatorController controller;
-            private AmusePlatformFinishState amuse;
 
             private TransparentArmFixture() { }
 
@@ -7751,65 +7790,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new TransparentArmFixture
                 {
-                    root = new GameObject(rootName),
                     Material = LilToonFixtureTestBase
                         .CreateTransparentConversionMaterial(),
                 };
-                fixture.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                fixture.CreateArmRoot(rootName);
                 FixtureProofScope.PinAllSizes(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
-
-                fixture.mesh = new Mesh
-                {
-                    vertices = new[]
-                    {
-                        Vector3.zero,
-                        Vector3.right,
-                        Vector3.up,
-                    },
-                };
-                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-                FillInBoundsUvs(fixture.mesh);
-
-                var renderer =
-                    fixture.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = fixture.mesh;
-                renderer.sharedMaterials = new[] { fixture.Material };
-                fixture.Renderer = renderer;
+                fixture.BuildSingleTriangleMesh();
+                fixture.Renderer = fixture.AttachRenderer(fixture.Material);
 
                 if (animatedBinding != null)
                 {
                     fixture.clip = NewFloatClip(
                         rootName + " clip", string.Empty,
                         animatedBinding, animatedValue ?? 0f);
-                    fixture.controller = NewController(
+                    fixture.controller = AlphaSeparationTestLifecycle.NewController(
                         fixture.root, rootName + " graph", fixture.clip);
                 }
 
                 return fixture;
             }
 
-            internal AmusePlatformFinishState Run()
+            public override void Dispose()
             {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
-            {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -7870,12 +7878,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// through the real barrier with the family-routing conversion
         /// seam.
         /// </summary>
-        private sealed class DepthTestPolicyArmFixture : IDisposable
+        private sealed class DepthTestPolicyArmFixture : ArmFixture
         {
-            private GameObject root;
-            private Mesh mesh;
-            private AmusePlatformFinishState amuse;
-
             internal Material Material { get; private set; }
 
             internal static DepthTestPolicyArmFixture Create(
@@ -7888,12 +7892,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new DepthTestPolicyArmFixture
                 {
-                    root = new GameObject(rootName),
                     Material = LilToonFixtureTestBase
                         .CreateTransparentConversionMaterial(),
                 };
-                var component = fixture.root.AddComponent<
-                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var component = fixture.CreateArmRoot(rootName);
                 if (!allowDepthTestChange)
                 {
                     var serialized = new SerializedObject(component);
@@ -7915,45 +7917,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 FixtureAvatarIdentity.AttachVrcDescriptor(fixture.root);
                 fixture.Material.SetTexture("_MainTex", mainTex);
                 configure?.Invoke(fixture.Material);
-
-                fixture.mesh = new Mesh
-                {
-                    vertices = new[]
-                    {
-                        Vector3.zero,
-                        Vector3.right,
-                        Vector3.up,
-                    },
-                };
-                fixture.mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-                FillInBoundsUvs(fixture.mesh);
-                configureMesh?.Invoke(fixture.mesh);
-
-                var renderer =
-                    fixture.root.AddComponent<SkinnedMeshRenderer>();
-                renderer.sharedMesh = fixture.mesh;
-                renderer.sharedMaterials = new[] { fixture.Material };
+                fixture.BuildSingleTriangleMesh(configureMesh);
+                fixture.AttachRenderer(fixture.Material);
 
                 return fixture;
             }
 
-            internal AmusePlatformFinishState Run()
+            public override void Dispose()
             {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
-                return amuse;
-            }
-
-            public void Dispose()
-            {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (Material != null)
                 {
@@ -8372,7 +8344,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
                 finally
                 {
-                    DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (meshFirst != null)
                         UnityEngine.Object.DestroyImmediate(meshFirst);
                     if (meshSecond != null)
@@ -8503,7 +8475,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (convertibleMesh != null)
                     UnityEngine.Object.DestroyImmediate(convertibleMesh);
                 if (bareMesh != null)
@@ -8548,7 +8520,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 cutout.SetTexture(
                     "_MainTex", fixtures.ImportFullyOpaqueMipmap(
@@ -8614,7 +8586,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null)
@@ -8657,7 +8629,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 cutout.SetTexture(
                     "_MainTex", fixtures.ImportFullyOpaqueMipmap(
@@ -8665,10 +8637,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AddSingleTriangleRenderer(root, cutout, out mesh);
                 FillInBoundsUvs(mesh);
 
-                clip = NewSwapClip(
+                clip = AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE mixed poiyomi cutout swap", string.Empty, 0,
                     (0f, poiyomi), (1f, cutout));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE mixed poiyomi cutout graph", clip);
 
                 amuse = RunBarrier(root);
@@ -8713,8 +8685,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
-                DestroyControllerGraph(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (poiyomi != null)
@@ -8875,7 +8847,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (blockedMesh != null)
                     UnityEngine.Object.DestroyImmediate(blockedMesh);
                 if (supportedMesh != null)
@@ -8933,7 +8905,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new MaterialSemantics(
                             SemanticOutput<ColorSemanticValue>.Unknown(),
                             LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                                captured.Evidence),
+                                captured.Evidence, out _),
                             SemanticOutput<ColorSemanticValue>.Unknown(),
                             SemanticOutput<NormalSemanticValue>.Unknown()),
                         null);
@@ -9389,7 +9361,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     fixture.clip = NewFloatClip(
                         rootName + " clip", string.Empty,
                         animatedBinding, animatedValue ?? 0f);
-                    fixture.controller = NewController(
+                    fixture.controller = AlphaSeparationTestLifecycle.NewController(
                         fixture.root, rootName + " graph", fixture.clip);
                 }
 
@@ -9406,10 +9378,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (root != null)
                 {
-                    DestroyControllerGraph(root, controller);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 }
 
                 if (controller != null)
@@ -9914,7 +9886,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -9993,7 +9965,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10072,7 +10044,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10118,7 +10090,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             AlphaSeparationSplitTests.ImportSplitAlphaTexture(
                                 "preserve_fold_unchanged"));
-                    transparentMaterial = VerifiedTransparentMaterial();
+                    transparentMaterial = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
                     mesh = SplitPlusTransparentTwoSubmeshMesh();
                     var renderer = root.AddComponent<SkinnedMeshRenderer>();
                     renderer.sharedMesh = mesh;
@@ -10182,7 +10154,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (splitMaterial != null)
@@ -10288,7 +10260,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10385,7 +10357,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (material != null)
@@ -10504,7 +10476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                 if (foldedMesh != null)
                 {
                     UnityEngine.Object.DestroyImmediate(foldedMesh);
@@ -10613,58 +10585,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static void DestroyGenerated(AmusePlatformFinishState amuse)
-        {
-            if (amuse?.Separation == null)
-            {
-                return;
-            }
-
-            foreach (var clone in amuse.Separation.CreatedClones)
-            {
-                if (clone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(clone);
-                }
-            }
-
-            foreach (var prepared in amuse.Separation.Renderers)
-            {
-                if (prepared.MeshClone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
-                }
-            }
-        }
-
-        private static void DestroyControllerGraph(
-            GameObject root,
-            AnimatorController original)
-        {
-            var animator = root.GetComponent<Animator>();
-            if (animator == null)
-            {
-                return;
-            }
-
-            var committed = animator.runtimeAnimatorController;
-            if (committed == null || ReferenceEquals(committed, original))
-            {
-                return;
-            }
-
-            animator.runtimeAnimatorController = null;
-            if (committed is AnimatorController controller)
-            {
-                foreach (var layer in controller.layers)
-                {
-                    UnityEngine.Object.DestroyImmediate(layer.stateMachine);
-                }
-            }
-
-            UnityEngine.Object.DestroyImmediate(committed);
-        }
-
         private static void DestroyControllerGraph(AnimatorController source)
         {
             if (source == null)
@@ -10759,33 +10679,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return renderer;
         }
 
-        private static AnimationClip NewSwapClip(
-            string name,
-            string rendererPath,
-            int slotIndex,
-            params (float time, Material value)[] keys)
-        {
-            var clip = new AnimationClip { name = name };
-            var keyframes = new ObjectReferenceKeyframe[keys.Length];
-            for (var index = 0; index < keys.Length; index++)
-            {
-                keyframes[index] = new ObjectReferenceKeyframe
-                {
-                    time = keys[index].time,
-                    value = keys[index].value,
-                };
-            }
-
-            AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath,
-                    typeof(SkinnedMeshRenderer),
-                    "m_Materials.Array.data[" + slotIndex + "]"),
-                keyframes);
-            return clip;
-        }
-
         private static AnimationClip NewFloatClip(
             string name,
             string rendererPath,
@@ -10803,32 +10696,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return clip;
         }
 
-        private static AnimatorController NewController(
-            GameObject root,
-            string name,
-            params AnimationClip[] clips)
-        {
-            var controller = new AnimatorController { name = name };
-            controller.AddLayer("L0");
-            for (var index = 0; index < clips.Length; index++)
-            {
-                controller.layers[0].stateMachine
-                    .AddState("S" + index).motion = clips[index];
-            }
-
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-            return controller;
-        }
-
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
-            return material;
-        }
-
         /// <summary>
         /// The convertible opaque stand-in with a canonical serialized
         /// <c>_ZWrite</c> default, for the conversion-animation fixture that
@@ -10838,18 +10705,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static Material VerifiedOpaqueZWriteDefaultMaterial()
         {
-            var material = VerifiedOpaqueMaterial();
+            var material = PoiyomiFixtureTestBase
+                .CreateVerifiedOpaqueMaterial();
             material.SetFloat("_ZWrite", 1f);
-            return material;
-        }
-
-        private static Material VerifiedTransparentMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 0f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 
@@ -10996,7 +10854,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyControllerGraph(root, null);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, null);
                 UnityEngine.Object.DestroyImmediate(root);
                 if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
                 if (material != null)
@@ -11035,11 +10893,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             var path = UnverifiedPoiyomiTempFolder + "/" + fileName;
-            var shader = TestShaderWriter.WriteTestShader(
-                path,
-                "Shader \"" + shaderName + "\"\n" +
-                "{\n    Properties\n    {" + properties +
-                "\n    }\n    SubShader { Pass {} }\n}\n");
+            var shader = TestShaderWriter.WriteStandInShader(
+                path, shaderName, properties);
             return new Material(shader);
         }
 

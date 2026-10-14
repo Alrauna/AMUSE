@@ -209,11 +209,28 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     out chain);
             var resolution = AlphaSemanticsResolver.Resolve(
                 semantics.Semantics.Alpha, provider, AlphaSamplingPolicy.ConservativeDesktop, 0);
+            var fieldsCount = 0;
+            foreach (var admitted in evidence.AdmittedMaterials)
+            {
+                foreach (var tex in admitted.Evidence.Textures)
+                {
+                    if (fields.TryGetFor(
+                            admitted.Evidence,
+                            UnityMaterialSemantics.AlphaRequestForFamily(admitted.Family),
+                            tex.SourceIdentity,
+                            TextureChannel.Alpha,
+                            out _))
+                    {
+                        fieldsCount++;
+                    }
+                }
+            }
+
             Assert.That(
                 resolution.Failure,
                 Is.EqualTo(AlphaResolutionFailure.None),
                 "the in-build resolution pipeline failed: fields="
-                + fields.Count
+                + fieldsCount
                 + " alphaComplete=" + semantics.Semantics.Alpha.IsComplete
                 + " alphaKind=" + (semantics.Semantics.Alpha.IsComplete
                     ? semantics.Semantics.Alpha.GetCompleteValue().Kind.ToString()

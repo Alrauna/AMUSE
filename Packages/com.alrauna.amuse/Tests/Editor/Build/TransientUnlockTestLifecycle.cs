@@ -190,15 +190,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     context.GetState<TransientUnlockWindowState>();
                 window.ConsentGranted =
                     TransientUnlockTestKnobs.ConsentGranted;
-                var availability =
-                    new TransientUnlockSwapIn.Availability(
-                        TransientUnlockAvailability
-                            .CreateProductionRestore());
+                var restore =
+                    TransientUnlockAvailability.CreateProductionRestore();
                 TransientUnlockTestKnobs.LastSwapSummary =
                     TransientUnlockSwapIn.SwapIn(
                         context,
                         window,
-                        availability,
+                        restore,
                         TransientUnlockTestKnobs.OriginalAttestation ??
                             (_ => true));
                 TransientUnlockTestKnobs.Window = window;
@@ -403,6 +401,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         internal const string TempFolder =
             "Assets/AmuseTests_TransientUnlock";
+
+        /// <summary>Deletes the temp folder the lifecycle created, if present.</summary>
+        internal static void DeleteTempFolder()
+        {
+            if (TempFolder != null && UnityEditor.AssetDatabase.IsValidFolder(TempFolder))
+            {
+                UnityEditor.AssetDatabase.DeleteAsset(TempFolder);
+            }
+        }
 
         internal static HostLifecycleFacts SupportedFacts()
         {
@@ -786,6 +793,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             UnityEngine.Object.DestroyImmediate(controller);
+        }
+
+        /// <summary>
+        /// The clip the build committed back onto the avatar's animator.
+        /// Virtualization may commit a clone rather than the authored
+        /// instance, so curve assertions must read through the animator,
+        /// never through the fixture's original clip reference. Blend tree
+        /// states are descended, because a material swap can live there.
+        /// </summary>
+        internal static AnimationClip CommittedClip(GameObject root)
+        {
+            var animator = root.GetComponentInChildren<Animator>();
+            var controller =
+                animator.runtimeAnimatorController as AnimatorController;
+            if (controller == null)
+            {
+                return null;
+            }
+
+            foreach (var layer in controller.layers)
+            {
+                foreach (var state in layer.stateMachine.states)
+                {
+                    var clip = ClipInMotion(state.state.motion);
+                    if (clip != null)
+                    {
+                        return clip;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static AnimationClip ClipInMotion(Motion motion)
+        {
+            if (motion is AnimationClip clip)
+            {
+                return clip;
+            }
+
+            if (motion is BlendTree blendTree)
+            {
+                foreach (var child in blendTree.children)
+                {
+                    var found = ClipInMotion(child.motion);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+            }
+
+            return null;
         }
     }
 }

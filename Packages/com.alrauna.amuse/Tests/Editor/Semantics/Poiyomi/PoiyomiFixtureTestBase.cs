@@ -28,31 +28,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void BaseSetUp()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads a default anisoLevel 1
-            // texture as anisotropic, which the texture proofs refuse. Every
-            // fixture texture carries a default anisoLevel, so the Per Texture
-            // mode is the mode these equations were written under. The pin is
-            // per test and restores the editor mode on teardown, which NUnit
-            // runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
             _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void BaseTearDown()
         {
+            _filteringPin.Dispose();
             _scope.TearDown();
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
         }
 
         /// <summary>Registers a transient object for teardown destruction.</summary>
@@ -92,12 +81,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         internal static Material CreateVerifiedMaterial()
         {
-            var shader = Shader.Find(FixtureShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{FixtureShaderName}' must import.");
-            return new Material(shader);
+            return TestShaderWriter.CreateMaterial(FixtureShaderName);
         }
 
         /// <summary>
@@ -121,6 +105,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetOverrideTag("RenderType", "Transparent");
         }
 
+        /// <summary>
+        /// The verified opaque Poiyomi stand-in the alpha-separation
+        /// fixtures use: an unlocked, schema-complete material with the
+        /// force-opaque flag at one and the convertible Fade render state
+        /// applied. The render state keeps it convertible instead of
+        /// AlreadyOpaque, so its conversion produces the real canonical
+        /// opaque clone. The caller owns destruction.
+        /// </summary>
+        internal static Material CreateVerifiedOpaqueMaterial()
+        {
+            var material = CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// The verified transparent Poiyomi stand-in: force-opaque off,
+        /// the alpha mask mode at its declared default, a half-alpha white
+        /// color, and the convertible Fade render state applied. The
+        /// caller owns destruction.
+        /// </summary>
+        internal static Material CreateVerifiedTransparentMaterial()
+        {
+            var material = CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            ApplyConvertibleRenderState(material);
+            return material;
+        }
+
         protected Material NewTwoPassFixtureMaterial()
         {
             return Track(CreateTwoPassVerifiedMaterial());
@@ -132,12 +148,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </summary>
         internal static Material CreateTwoPassVerifiedMaterial()
         {
-            var shader = Shader.Find(TwoPassFixtureShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                $"Test fixture shader '{TwoPassFixtureShaderName}' must import.");
-            return new Material(shader);
+            return TestShaderWriter.CreateMaterial(TwoPassFixtureShaderName);
         }
 
         /// <summary>
@@ -151,23 +162,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Action<TextureImporter> configure = null,
             bool sourceHasAlpha = true)
         {
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(128, 64, 32, 200);
-            }
-
-            return TestTextureImport.WritePng(
-                TempFolder + "/" + name + ".png",
-                4,
-                4,
-                pixels,
-                importer =>
-                {
-                    importer.mipmapEnabled = false;
-                    configure?.Invoke(importer);
-                },
-                alpha: sourceHasAlpha);
+            return TestTextureImport.ImportTexture(
+                TempFolder, name, configure, sourceHasAlpha);
         }
 
         /// <summary>
@@ -178,8 +174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// </summary>
         protected Texture2D NewNativeTextureAsset(string name)
         {
-            return TestTextureImport.ImportNative(
-                TempFolder + "/" + name + ".asset");
+            return TestTextureImport.ImportNativeAsset(TempFolder, name);
         }
 
         protected static string ExpectedToken(Texture texture)

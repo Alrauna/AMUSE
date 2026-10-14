@@ -82,8 +82,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal int Remaining;
         }
 
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
         protected readonly Dictionary<string, AuthoredTriangle> authored =
             new Dictionary<string, AuthoredTriangle>();
 
@@ -115,49 +115,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         protected T Track<T>(T asset) where T : UnityEngine.Object
         {
-            tracked.Add(asset);
-            return asset;
+            return _scope.Track(asset);
         }
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // texture's default anisoLevel 1 as anisotropic, so the
-            // pipeline's triangle proofs refuse every triangle. The Per
-            // Texture mode is the mode these fixtures were written under.
-            // The pin is per test and restores the editor mode on teardown,
-            // which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void TearDown()
         {
+            _filteringPin.Dispose();
             OptimizerMergeObservation.Reset();
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
-            foreach (var asset in tracked)
-            {
-                if (asset == null) continue;
-                if (AssetDatabase.Contains(asset))
-                {
-                    // Persistent assets go with the temp folder deletion
-                    // below; DestroyImmediate refuses them without the
-                    // asset flag and logs an error per object.
-                    continue;
-                }
-
-                UnityEngine.Object.DestroyImmediate(asset);
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
             authored.Clear();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {

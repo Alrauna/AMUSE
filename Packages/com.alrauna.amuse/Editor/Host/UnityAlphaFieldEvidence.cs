@@ -73,58 +73,6 @@ namespace Alrauna.Amuse.Editor.Host
             "Packages/com.alrauna.amuse/Editor/Host/Shaders/AmuseRedExactOne.shader";
 
         /// <summary>
-        /// Captures the complete immutable alpha field for one supported
-        /// texture. The friend test assemblies are its consumer, and the
-        /// full overload with explicit policy is the production route. It
-        /// captures under the inert bounds, which reproduce the base
-        /// exact-255 contract.
-        /// </summary>
-        internal static bool TryCapture(
-            Texture texture,
-            out TextureSourceId source,
-            out AlphaMipChain chain)
-        {
-            return TryCapture(
-                texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
-                out source, out chain, out _);
-        }
-
-        /// <summary>
-        /// Captures the alpha channel under the caller's cutoff threshold
-        /// and bounds. The friend test assemblies are its consumer, and
-        /// the full overload with explicit policy is the production
-        /// route.
-        /// </summary>
-        internal static bool TryCapture(
-            Texture texture,
-            float cutoffThreshold,
-            AlphaPolicyBounds bounds,
-            out TextureSourceId source,
-            out AlphaMipChain chain)
-        {
-            return TryCapture(
-                texture, TextureChannel.Alpha, cutoffThreshold, bounds,
-                out source, out chain, out _);
-        }
-
-        /// <summary>
-        /// Captures under the inert bounds, which reproduce the base
-        /// exact-255 contract. The friend test assemblies are its
-        /// consumer, and the full overload with explicit policy is the
-        /// production route.
-        /// </summary>
-        internal static bool TryCapture(
-            Texture texture,
-            TextureChannel channel,
-            out TextureSourceId source,
-            out AlphaMipChain chain)
-        {
-            return TryCapture(
-                texture, channel, 1.0f, AlphaPolicyBounds.Inert,
-                out source, out chain, out _);
-        }
-
-        /// <summary>
         /// Captures the complete field of one requested channel for one
         /// supported texture. Every validation predicate belongs here so
         /// lookup never needs to touch a Unity object after construction.

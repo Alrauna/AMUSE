@@ -131,7 +131,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
         }
 
-        private static AlphaFieldProvider ProvidingNothing()
+        internal static AlphaFieldProvider ProvidingNothing()
         {
             return (TextureSourceId source, TextureChannel channel,
                 out AlphaMipChain result) =>
@@ -141,10 +141,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
         }
 
-        /// <summary>
-        /// A nondegenerate triangle covering the lower-left quarter of UV space.
-        /// </summary>
-        private static TriangleAlphaInput OpaqueCornerTriangle()
+        /// <summary>Nondegenerate lower-left corner triangle.</summary>
+        internal static TriangleAlphaInput CornerTriangle()
         {
             return TriangleAlphaInput.WithUv0(
                 Vector3.zero,
@@ -154,6 +152,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.45f, 0.05f),
                 new Vector2(0.05f, 0.45f));
         }
+
+        private static TriangleAlphaInput OpaqueCornerTriangle() => CornerTriangle();
 
         /// <summary>
         /// The same shape in the upper half of UV space.
@@ -361,7 +361,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(resolution.IsResolved, Is.True);
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero)));
+                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero, 0)));
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
@@ -473,7 +473,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     {
                         Assert.That(
                             resolution.Classify(triangle),
-                            Is.EqualTo(TriangleAlphaClassifier.Classify(triangle, field, expected, AlphaUvEnvelope.Zero)),
+                            Is.EqualTo(TriangleAlphaClassifier.Classify(triangle, field, expected, AlphaUvEnvelope.Zero, 0)),
                             filter + "/" + wrap);
                     }
                 }
@@ -634,7 +634,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(
                 resolution.Classify(triangle),
                 Is.EqualTo(TriangleAlphaClassifier.Classify(
-                    triangle, field, sampling, AlphaUvEnvelope.Zero)));
+                    triangle, field, sampling, AlphaUvEnvelope.Zero, 0)));
         }
 
         [Test]
@@ -730,11 +730,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    transformed, mipZero, sampling, AlphaUvEnvelope.Zero),
+                    transformed, mipZero, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    transformed, lowerMip, sampling, envelope),
+                    transformed, lowerMip, sampling, envelope, 0),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
             // Fixture precondition: the untransformed triangle with a zero
             // envelope proves the same mixed mip opaque, so the resolver-level
@@ -742,7 +742,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // reaching every mip.
             Assert.That(
                 TriangleAlphaClassifier.Classify(
-                    triangle, lowerMip, sampling, AlphaUvEnvelope.Zero),
+                    triangle, lowerMip, sampling, AlphaUvEnvelope.Zero, 0),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(
                 ResolveSample(
@@ -823,7 +823,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
-                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero)));
+                Is.EqualTo(TriangleAlphaClassifier.Classify(OpaqueCornerTriangle(), field, sampling, AlphaUvEnvelope.Zero, 0)));
             Assert.That(
                 resolution.Classify(OpaqueCornerTriangle()),
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));

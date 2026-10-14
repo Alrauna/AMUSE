@@ -46,59 +46,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class AlphaSeparationApplyTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
         }
 
-        private GameObject CreateAvatarRoot(string name)
-        {
-            // Installed optimizer packages resolve a fixture without a
-            // VRCAvatarDescriptor as a Generic avatar and process it with
-            // assumptions production avatars never see. Every fixture root
-            // carries the descriptor, as production avatars do.
-            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
-            var root = Track(new GameObject(name));
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            FixtureProofScope.PinAllSizes(root);
-            return root;
-        }
-
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // textures' default anisoLevel 1 as anisotropic, so the
-            // pipeline's triangle proofs refuse every triangle. The Per
-            // Texture mode is the mode these fixtures were written under.
-            // The pin is per test and restores the editor mode on teardown,
-            // which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void TearDown()
         {
+            _filteringPin.Dispose();
             AlphaSeparationSplitTests.DeleteSplitFolder();
             AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
             DestroyTracked();
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
         }
 
         [Test]
@@ -166,15 +141,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private void DestroyTracked()
         {
-            for (var index = tracked.Count - 1; index >= 0; index--)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
         }
 
         // --- Test-local plugins, platforms and the seam probe --------------
@@ -576,24 +543,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             binding.path + "|" +
                             binding.type.FullName + "|" +
                             binding.propertyName + "|" +
-                            DescribeCurve(clip.GetObjectCurve(binding)));
+                            AlphaSeparationTestLifecycle.DescribeCurve(clip.GetObjectCurve(binding)));
                     }
                 }
             }
 
             return string.Join(";;", parts);
-        }
-
-        private static string DescribeCurve(ObjectReferenceKeyframe[] curve)
-        {
-            if (curve == null)
-            {
-                return "<null>";
-            }
-
-            return string.Join("|", curve.Select(key =>
-                key.time.ToString("R") + "=>" + DescribeObject(
-                    key.value as UnityEngine.Object)));
         }
 
         private static string DescribeObject(UnityEngine.Object obj)
@@ -605,183 +560,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         // --- Fixture helpers -----------------------------------------------
 
-        private static SkinnedMeshRenderer AddRenderer(
-            GameObject root,
-            string name,
-            Mesh mesh,
-            params Material[] materials)
-        {
-            var child = new GameObject(name);
-            child.transform.SetParent(root.transform, false);
-            var renderer = child.AddComponent<SkinnedMeshRenderer>();
-            renderer.sharedMesh = mesh;
-            if (mesh != null && materials != null && materials.Length > 0 &&
-                materials.Length < mesh.subMeshCount)
-            {
-                var padded = new Material[mesh.subMeshCount];
-                for (var index = 0; index < mesh.subMeshCount; index++)
-                {
-                    padded[index] =
-                        materials[Math.Min(index, materials.Length - 1)];
-                }
-
-                renderer.sharedMaterials = padded;
-            }
-            else
-            {
-                renderer.sharedMaterials = materials;
-            }
-
-            return renderer;
-        }
-
-        private static AnimationClip NewSwapClip(
-            string name,
-            string rendererPath,
-            int slotIndex,
-            params (float time, Material value)[] keys)
-        {
-            var clip = new AnimationClip { name = name };
-            var keyframes = new ObjectReferenceKeyframe[keys.Length];
-            for (var index = 0; index < keys.Length; index++)
-            {
-                keyframes[index] = new ObjectReferenceKeyframe
-                {
-                    time = keys[index].time,
-                    value = keys[index].value,
-                };
-            }
-
-            AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    rendererPath,
-                    typeof(SkinnedMeshRenderer),
-                    "m_Materials.Array.data[" + slotIndex + "]"),
-                keyframes);
-            return clip;
-        }
-
-        private static AnimatorController NewController(
-            GameObject root,
-            string name,
-            params AnimationClip[] clips)
-        {
-            var controller = new AnimatorController { name = name };
-            controller.AddLayer("L0");
-            for (var index = 0; index < clips.Length; index++)
-            {
-                controller.layers[0].stateMachine
-                    .AddState("S" + index).motion = clips[index];
-            }
-
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-            return controller;
-        }
-
-        private static AnimationClip CommittedClipWithObjectBinding(
-            GameObject root,
-            string rendererPath,
-            string propertyName)
-        {
-            foreach (var animator in root
-                         .GetComponentsInChildren<Animator>(true))
-            {
-                if (!(animator.runtimeAnimatorController is
-                        AnimatorController controller))
-                {
-                    continue;
-                }
-
-                foreach (var layer in controller.layers)
-                {
-                    foreach (var child in layer.stateMachine.states)
-                    {
-                        if (!(child.state.motion is AnimationClip clip))
-                        {
-                            continue;
-                        }
-
-                        foreach (var binding in AnimationUtility
-                                     .GetObjectReferenceCurveBindings(clip))
-                        {
-                            if (binding.path == rendererPath &&
-                                binding.propertyName == propertyName)
-                            {
-                                return clip;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
         private static string CommittedCurve(
             GameObject root,
             string rendererPath,
             string propertyName)
         {
-            var committed = CommittedClipWithObjectBinding(
+            var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                 root, rendererPath, propertyName);
             Assert.That(committed, Is.Not.Null,
                 "no committed clip carried the binding under test");
             return CurveDescription.DescribeAuthoredCurve(committed, rendererPath,
                 propertyName);
-        }
-
-        private static void DestroyGenerated(AmusePlatformFinishState state)
-        {
-            if (state?.Separation == null)
-            {
-                return;
-            }
-
-            foreach (var clone in state.Separation.CreatedClones)
-            {
-                if (clone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(clone);
-                }
-            }
-
-            foreach (var prepared in state.Separation.Renderers)
-            {
-                if (prepared.MeshClone != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(prepared.MeshClone);
-                }
-            }
-        }
-
-        private static void DestroyCommittedClone(
-            GameObject root,
-            AnimatorController original)
-        {
-            var animator = root.GetComponent<Animator>();
-            if (animator == null)
-            {
-                return;
-            }
-
-            var committed = animator.runtimeAnimatorController;
-            if (committed == null || ReferenceEquals(committed, original))
-            {
-                return;
-            }
-
-            animator.runtimeAnimatorController = null;
-            if (committed is AnimatorController controller)
-            {
-                foreach (var layer in controller.layers)
-                {
-                    UnityEngine.Object.DestroyImmediate(layer.stateMachine);
-                }
-            }
-
-            UnityEngine.Object.DestroyImmediate(committed);
         }
 
         private static void AssertNoFeatureRefusals(
@@ -809,24 +598,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     state.SlotRefusalCount(admittedReason), Is.EqualTo(1),
                     "expected feature refusal bucket " + admittedReason);
             }
-        }
-
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            ApplyVendorFadeRenderState(material);
-            return material;
-        }
-
-        private static Material VerifiedTransparentMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 0f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
-            ApplyVendorFadeRenderState(material);
-            return material;
         }
 
         /// <summary>
@@ -866,28 +637,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
-        private static Mesh SingleTriangleMesh()
-        {
-            var mesh = new Mesh
-            {
-                vertices = new[]
-                {
-                    Vector3.zero, Vector3.right, Vector3.up,
-                },
-            };
-            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
-            return mesh;
-        }
-
         /// <summary>
         /// A single triangle carrying one constant UV inside a texel, so a
         /// texture-backed proof can map the triangle into texel space.
-        /// <see cref="SingleTriangleMesh"/> alone has no UV channel and
-        /// can only back constant-material proofs.
+        /// <see cref="AlphaSeparationTestLifecycle.SingleTriangleMesh"/>
+        /// alone has no UV channel and can only back constant-material
+        /// proofs.
         /// </summary>
         private static Mesh TexturedSingleTriangleMesh()
         {
-            var mesh = SingleTriangleMesh();
+            var mesh = AlphaSeparationTestLifecycle.SingleTriangleMesh();
             mesh.uv = new[]
             {
                 new Vector2(0.25f, 0.25f),
@@ -927,9 +686,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedOpaqueMaterial());
-                var mesh = Track(SingleTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, material);
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, ApplyTestPlatform.Instance);
@@ -957,7 +716,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -982,9 +741,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedTransparentMaterial());
-                var mesh = Track(SingleTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, material);
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
                 var block = new MaterialPropertyBlock();
                 block.SetFloat("_AlphaForceOpaque", 1f);
@@ -1027,7 +786,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1052,9 +811,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedOpaqueMaterial());
-                var mesh = Track(SingleTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, material);
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
                 BuildContext context;
                 using (new ProbeScope(_ =>
@@ -1091,7 +850,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1157,19 +916,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var cutout = Track(NewCutoutConversionMaterial(mipTexture));
                 var swap = Track(
                     LilToonFixtureTestBase.CreateVerifiedMaterial());
-                var mesh = Track(SingleTriangleMesh());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 mesh.uv = new[]
                 {
                     new Vector2(0.25f, 0.25f),
                     new Vector2(0.75f, 0.25f),
                     new Vector2(0.25f, 0.75f),
                 };
-                var renderer = AddRenderer(root, "body", mesh, cutout);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
 
-                var clip = Track(NewSwapClip(
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE revoked acceptance swap", "body", 0,
                     (0f, cutout), (1f, swap)));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE revoked acceptance graph", clip);
 
                 BuildContext context;
@@ -1268,7 +1027,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AppliedRendererCount, Is.EqualTo(0),
                     "A stale policy must not produce an applied write.");
 
-                var committed = CommittedClipWithObjectBinding(
+                var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                     root, "body", "m_Materials.Array.data[0]");
                 Assert.That(committed, Is.Not.Null,
                     "the committed clip must still carry the slot binding");
@@ -1305,8 +1064,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
@@ -1358,19 +1117,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var cutout = Track(NewCutoutConversionMaterial(mipTexture));
                 var swap = Track(
                     LilToonFixtureTestBase.CreateVerifiedMaterial());
-                var mesh = Track(SingleTriangleMesh());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 mesh.uv = new[]
                 {
                     new Vector2(0.25f, 0.25f),
                     new Vector2(0.75f, 0.25f),
                     new Vector2(0.25f, 0.75f),
                 };
-                var renderer = AddRenderer(root, "body", mesh, cutout);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
 
-                var clip = Track(NewSwapClip(
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE mismatched target swap", "body", 0,
                     (0f, cutout), (1f, swap)));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE mismatched target graph", clip);
 
                 BuildContext context;
@@ -1466,7 +1225,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "A mismatched captured target must not produce an " +
                     "applied write.");
 
-                var committed = CommittedClipWithObjectBinding(
+                var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                     root, "body", "m_Materials.Array.data[0]");
                 Assert.That(committed, Is.Not.Null,
                     "the committed clip must still carry the slot binding");
@@ -1503,8 +1262,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
@@ -1524,10 +1283,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var mesh = Track(SingleTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, first);
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first);
 
                 var clip = new AnimationClip { name = "AMUSE swap" };
                 AnimationUtility.SetObjectReferenceCurve(
@@ -1551,7 +1310,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             time = 1.5f, value = first,
                         },
                     });
-                controller = NewController(root, "AMUSE swap graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE swap graph", clip);
 
                 var context = AvatarProcessor.ProcessAvatar(
                     root, ApplyTestPlatform.Instance);
@@ -1570,7 +1329,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "distinct clones");
 
                 var committedCurve = AnimationUtility.GetObjectReferenceCurve(
-                    CommittedClipWithObjectBinding(
+                    AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[0]"),
                     EditorCurveBinding.PPtrCurve(
                         "body",
@@ -1604,8 +1363,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1624,11 +1383,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var swapTarget = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var swapTarget = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, first, second);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
                 var clip = Track(new AnimationClip { name = "AMUSE swaps" });
                 AnimationUtility.SetObjectReferenceCurve(
@@ -1643,9 +1402,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             time = 0f, value = swapTarget,
                         },
                     });
-                controller = NewController(root, "AMUSE swaps graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE swaps graph", clip);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(_ =>
                 {
                     renderer.sharedMaterials = new[] { first, foreign };
@@ -1700,15 +1459,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "0=>" + slotZero.OpaqueOfAdmitted[swapTarget].name),
                     "the surviving slot's curve must be rewritten");
                 Assert.That(
-                    CommittedClipWithObjectBinding(
+                    AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[1]"),
                     Is.Null,
                     "no curve edit may appear for the refused slot");
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1717,7 +1476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void NullAndEmptyObjectCurvesAreSkippedBySlotValidation()
         {
-            var source = Track(VerifiedOpaqueMaterial());
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
             var plan = new SubmeshSeparationPlan(
                 0,
                 0,
@@ -1784,21 +1543,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var markedCurrent = Track(VerifiedOpaqueMaterial());
-                var markedSwap = Track(VerifiedOpaqueMaterial());
-                var ordinaryCurrent = Track(VerifiedOpaqueMaterial());
-                var ordinarySwap = Track(VerifiedOpaqueMaterial());
+                var markedCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var markedSwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var ordinaryCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var ordinarySwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
-                var renderer = AddRenderer(
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     root, "marked", mesh, markedCurrent, ordinaryCurrent);
 
-                var markedClip = Track(NewSwapClip(
+                var markedClip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE marked swap", "marked", 0,
                     (0f, markedSwap)));
-                var ordinaryClip = Track(NewSwapClip(
+                var ordinaryClip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE ordinary swap", "marked", 1,
                     (0f, ordinarySwap)));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE marker graph", markedClip, ordinaryClip);
 
                 var authoredMarked = CurveDescription.DescribeAuthoredCurve(
@@ -1859,8 +1618,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1878,12 +1637,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, first, second);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(_ =>
                 {
                     renderer.sharedMaterials = new[] { first, foreign };
@@ -1916,7 +1675,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -1933,11 +1692,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var other = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var other = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, first, second);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
                 var clip = Track(new AnimationClip { name = "AMUSE swap" });
                 AnimationUtility.SetObjectReferenceCurve(
@@ -1956,7 +1715,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             time = 1f, value = other,
                         },
                     });
-                controller = NewController(root, "AMUSE swap graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE swap graph", clip);
 
                 using (new ProbeScope(_ =>
                 {
@@ -2003,8 +1762,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2031,17 +1790,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "late_invalidated"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
                     Assert.That(
                         mesh.GetSubMesh(0).baseVertex, Is.EqualTo(4),
                         "fixture precondition: the split submesh must carry " +
                         "a nonzero base vertex");
 
-                    var foreign = Track(VerifiedOpaqueMaterial());
+                    var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     using (new ProbeScope(_ =>
                     {
                         renderer.sharedMaterials = new[] { foreign,
@@ -2092,7 +1851,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2119,10 +1878,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "in_place_edit"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     using (new ProbeScope(_ =>
@@ -2171,7 +1930,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2200,7 +1959,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var alone = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     shared.name = "amuse sweep shared";
                     alone.name = "amuse sweep alone";
 
@@ -2208,12 +1967,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     var secondMesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    var survivingRenderer = AddRenderer(
+                    var survivingRenderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "surviving", firstMesh, shared, transparent);
-                    var refusedRenderer = AddRenderer(
+                    var refusedRenderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "refused", secondMesh, alone, transparent);
 
-                    var foreign = Track(VerifiedOpaqueMaterial());
+                    var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     using (new ProbeScope(_ =>
                     {
                         refusedRenderer.sharedMaterials =
@@ -2280,7 +2039,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2300,11 +2059,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var swap = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var swap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
-                var renderer = AddRenderer(root, "body", mesh, first, second);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
                 var clip = Track(new AnimationClip { name = "AMUSE slot swap" });
                 AnimationUtility.SetObjectReferenceCurve(
@@ -2319,9 +2078,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             time = 0f, value = swap,
                         },
                     });
-                controller = NewController(root, "AMUSE coverage graph", clip);
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE coverage graph", clip);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(context =>
                 {
                     // Slot 0: an unmapped current material, refusing with
@@ -2331,7 +2090,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // Slot 1: a binding of a different type at the same path
                     // and slot, absent from the captured evidence, refusing
                     // with SlotBindingAbsentFromEvidence.
-                    var committed = CommittedClipWithObjectBinding(
+                    var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[1]");
                     Assert.That(committed, Is.Not.Null,
                         "fixture precondition: a committed clip must carry " +
@@ -2400,8 +2159,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2431,10 +2190,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var clip = Track(new AnimationClip
@@ -2457,7 +2216,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 1f, value = other,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE identity graph", clip);
 
                     using (new ConversionOverrideScope(
@@ -2530,8 +2289,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2558,10 +2317,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var clip = Track(new AnimationClip
@@ -2584,7 +2343,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 1f, value = other,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE partial graph", clip);
 
                     Material generatedClone = null;
@@ -2652,8 +2411,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2683,10 +2442,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "ignored_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var clip = Track(new AnimationClip
@@ -2705,7 +2464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 0f, value = split,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE ignored graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -2729,8 +2488,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2760,10 +2519,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "closure_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var clip = Track(new AnimationClip
@@ -2782,7 +2541,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 0f, value = split,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE closure phantom graph", clip);
 
                     // The live curve is deleted between capture and apply:
@@ -2794,7 +2553,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // and fails this test.
                     using (new ProbeScope(context =>
                     {
-                        var committed = CommittedClipWithObjectBinding(
+                        var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                             root, "split", "m_Materials.Array.data[2]");
                         Assert.That(committed, Is.Not.Null,
                             "fixture precondition: the committed clip " +
@@ -2833,8 +2592,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2861,16 +2620,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "closure_sibling_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "splitA", mesh, split, transparent);
 
-                    failedCurrent = Track(VerifiedOpaqueMaterial());
-                    var second = Track(VerifiedOpaqueMaterial());
+                    failedCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var failedMesh = Track(TwoTriangleMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "failed", failedMesh, failedCurrent, second);
 
                     var clip = Track(new AnimationClip
@@ -2889,7 +2648,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 0f, value = null,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE closure sibling graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -2955,8 +2714,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -2984,10 +2743,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var validClip = Track(new AnimationClip
@@ -3031,7 +2790,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 time = 1f, value = other,
                             },
                         });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE cross-avatar graph", validClip, inertClip);
                     using (new ConversionOverrideScope(
                         (Material live, CapturedMaterialEvidence derived,
@@ -3077,8 +2836,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3111,10 +2870,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     // Mirror the ignored-slot test's controller setup.
@@ -3124,7 +2883,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     {
                         name = "AMUSE coverage empty",
                     });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE coverage graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -3150,8 +2909,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3187,17 +2946,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, split, transparent);
 
                     var clip = Track(new AnimationClip
                     {
                         name = "AMUSE coverage empty",
                     });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE coverage at graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -3222,8 +2981,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3261,18 +3020,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // The fixture contract: submesh 0 is the uniformly
                     // opaque candidate on a constant opaque material,
                     // submesh 1 the mixed split over the split texture.
-                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var opaque = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
-                    AddRenderer(
+                    AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", mesh, opaque, split);
 
                     var clip = Track(new AnimationClip
                     {
                         name = "AMUSE coverage empty",
                     });
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE wholly opaque coverage graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -3298,8 +3057,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(probe?.State);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3442,14 +3201,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             texture));
                     var mesh = Track(TwoTriangleSplitSourceMesh());
-                    var renderer = AddRenderer(root, "body", mesh, split);
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, split);
 
                     // The clip's key is the converting source itself, so
                     // the rewrite maps a real value and the committed
                     // curve names the opaque result.
-                    var clip = Track(NewSwapClip(
+                    var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE folded swap", "body", 0, (0f, split)));
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE folded apply graph", clip);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -3490,7 +3249,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         state.Separation.Renderers[0].MeshClone, Is.Null,
                         "a fully folded renderer creates no mesh clone");
 
-                    var committedClip = CommittedClipWithObjectBinding(
+                    var committedClip = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[0]");
                     Assert.That(committedClip, Is.Not.Null,
                         "fixture precondition: the committed clip must " +
@@ -3520,8 +3279,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3561,7 +3320,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             texture));
                     var mesh = Track(
                         FoldedAndSurvivingSplitTwoSubmeshMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "body", mesh, folded, surviving);
 
                     var context = AvatarProcessor.ProcessAvatar(
@@ -3639,7 +3398,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
             }
@@ -3659,12 +3418,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void
             AppliedOpaqueTriangleCountAccumulatesAcrossOneSlotsFoldedSubmeshes()
         {
-            var source = Track(VerifiedOpaqueMaterial());
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
             var clone = Track(new Material(source.shader));
             var rendererObj = Track(new GameObject(
                 "AMUSE folded counter renderer"));
             var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
-            var mesh = Track(SingleTriangleMesh());
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
             renderer.sharedMesh = mesh;
             renderer.sharedMaterials = new[] { source };
 
@@ -3792,7 +3551,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "body", sourceMesh,
                         wholeMaterial, splitMaterial);
 
@@ -3967,7 +3726,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.False,
                     "the test-owned persistence directory must be deleted " +
                     "even when an assertion fails");
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 fixtures.BaseTearDown();
             }
         }
@@ -4010,16 +3769,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         NewCutoutSplitMaterial(splitTexture));
                     var swap = Track(
                         LilToonFixtureTestBase.CreateVerifiedMaterial());
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
-                    var renderer = AddRenderer(
+                    var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "split", sourceMesh, cutout, transparent);
 
-                    var clip = Track(NewSwapClip(
+                    var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE cutout appended swap", "split", 0,
                         (0f, cutout), (1f, swap)));
-                    controller = NewController(
+                    controller = AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE cutout appended graph", clip);
                     var authoredOwn = CurveDescription.DescribeAuthoredCurve(
                         clip, "split", "m_Materials.Array.data[0]");
@@ -4054,7 +3813,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var clone = state.Separation.OpaqueBySource[cutout];
 
                     // The Split slot's own binding stays authored.
-                    var committedOwn = CommittedClipWithObjectBinding(
+                    var committedOwn = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "split", "m_Materials.Array.data[0]");
                     Assert.That(committedOwn, Is.Not.Null,
                         "fixture precondition: the committed clip must " +
@@ -4070,7 +3829,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     // The appended binding: identical times, every value
                     // mapped.
-                    var appendedClip = CommittedClipWithObjectBinding(
+                    var appendedClip = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "split", "m_Materials.Array.data[2]");
                     Assert.That(appendedClip, Is.Not.Null,
                         "two live slots means the appended opaque slot is " +
@@ -4148,8 +3907,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -4184,19 +3943,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var cutout = Track(NewCutoutConversionMaterial(mipTexture));
                 var swap = Track(
                     LilToonFixtureTestBase.CreateVerifiedMaterial());
-                var mesh = Track(SingleTriangleMesh());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 mesh.uv = new[]
                 {
                     new Vector2(0.25f, 0.25f),
                     new Vector2(0.75f, 0.25f),
                     new Vector2(0.25f, 0.75f),
                 };
-                var renderer = AddRenderer(root, "body", mesh, cutout);
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
 
-                var clip = Track(NewSwapClip(
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE cutout map to self swap", "body", 0,
                     (0f, cutout), (1f, swap)));
-                controller = NewController(
+                controller = AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE cutout map to self graph", clip);
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -4230,7 +3989,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the avatar-wide mapping must carry the identity for " +
                     "the attested opaque value");
 
-                var committed = CommittedClipWithObjectBinding(
+                var committed = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                     root, "body", "m_Materials.Array.data[0]");
                 Assert.That(committed, Is.Not.Null,
                     "fixture precondition: the committed clip must carry " +
@@ -4257,8 +4016,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -4393,17 +4152,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void SharedMaterialAcrossMultipleRenderersRegistersReplacementWithoutDuplication()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = CreateAvatarRoot("shared-material-avatar");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("shared-material-avatar"));
             FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
-            var texture = Track(AlphaSeparationSplitTests.CreateSplitTexture());
+            AlphaSeparationSplitTests.EnsureSplitFolder();
+            var texture = Track(
+                AlphaSeparationSplitTests.ImportSplitAlphaTexture("split"));
             var split = Track(
                 AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
             var meshA = Track(
                 AlphaSeparationSplitTests.CreateSplitSourceMesh());
             var meshB = Track(
                 AlphaSeparationSplitTests.CreateSplitSourceMesh());
-            AddRenderer(root, "rendererA", meshA, split);
-            AddRenderer(root, "rendererB", meshB, split);
+            AlphaSeparationTestLifecycle.AddRendererPadded(root, "rendererA", meshA, split);
+            AlphaSeparationTestLifecycle.AddRendererPadded(root, "rendererB", meshB, split);
 
             var context = AvatarProcessor.ProcessAvatar(
                 root, SeamTestPlatform.Instance);
@@ -4436,7 +4197,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyGenerated(State);
+                AlphaSeparationTestLifecycle.DestroyGenerated(State);
                 if (Root != null)
                 {
                     UnityEngine.Object.DestroyImmediate(Root);
@@ -4461,7 +4222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Action<Texture2D> assertTexturePreconditions = null)
         {
             var run = new ConversionRun();
-            run.Root = CreateAvatarRoot(rootName);
+            run.Root = Track(FixtureAvatarIdentity.CreateOptedRoot(rootName));
             if (acceptDesktopDifferences)
             {
                 FixtureProofScope.AcceptDesktopAnisotropyDifferences(run.Root);
@@ -4476,7 +4237,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 assertTexturePreconditions?.Invoke(texture);
                 run.SourceMaterial = Track(newSourceMaterial(texture));
                 run.SourceMesh = Track(newMesh());
-                run.Renderer = AddRenderer(
+                run.Renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     run.Root, "body", run.SourceMesh, run.SourceMaterial);
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -4791,7 +4552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 UnityEngine.QualitySettings.anisotropicFiltering =
                     UnityEngine.AnisotropicFiltering.ForceEnable;
-                root = CreateAvatarRoot("AMUSE mesh renderer split");
+                root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE mesh renderer split"));
                 FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var texture = Track(AmusePlatformFinishPluginTests
                     .ImportMixedHalfTexture(
@@ -4851,7 +4612,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 if (root != null)
                 {
                     UnityEngine.Object.DestroyImmediate(root);
@@ -5143,7 +4904,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.25f),
                     new Vector2(0.25f, 0.25f),
                 };
-                var renderer = AddRenderer(
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     root, "body", mesh, refusedMaterial, convertedMaterial);
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -5248,7 +5009,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
@@ -5308,12 +5069,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.25f),
                     new Vector2(0.25f, 0.25f),
                 };
-                var renderer = AddRenderer(
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     root, "body", mesh, liveRefused, convertedMaterial);
-                var clip = Track(NewSwapClip(
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
                     "AMUSE refused swap", "body", 0,
                     (0f, liveRefused), (1f, swapRefused)));
-                controller = Track(NewController(
+                controller = Track(AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE refused swap graph", clip));
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -5371,7 +5132,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // keeps both original keys at their authored times.
                 var committedCurve = AnimationUtility
                     .GetObjectReferenceCurve(
-                        CommittedClipWithObjectBinding(
+                        AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                             root, "body", "m_Materials.Array.data[0]"),
                         EditorCurveBinding.PPtrCurve(
                             "body",
@@ -5394,8 +5155,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
@@ -5411,8 +5172,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private sealed class TransparentParityResult : IDisposable
         {
-            private readonly List<UnityEngine.Object> owned =
-                new List<UnityEngine.Object>();
+            private readonly TestTransientScope _scope =
+                new TestTransientScope(allowDestroyingAssets: true);
 
             private GameObject root;
             private AnimationClip clip;
@@ -5435,7 +5196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 if (obj != null)
                 {
-                    owned.Add(obj);
+                    _scope.Track(obj);
                 }
 
                 return obj;
@@ -5470,18 +5231,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         NewCutoutSplitMaterial(splitTexture));
                     var swap = Own(
                         LilToonFixtureTestBase.CreateVerifiedMaterial());
-                    var poiyomi = Own(VerifiedOpaqueMaterial());
+                    var poiyomi = Own(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
 
                     var sourceMesh = Own(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
-                    var cutoutRenderer = AddRenderer(
+                    var cutoutRenderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "cutoutBody", sourceMesh, poiyomi, cutout);
 
-                    clip = Own(NewSwapClip(
+                    clip = Own(AlphaSeparationTestLifecycle.NewSwapClip(
                         "AMUSE parity swap", "cutoutBody", 1,
                         (0f, cutout), (1f, swap)));
-                    controller = Own(NewController(
+                    controller = Own(AlphaSeparationTestLifecycle.NewController(
                         root, "AMUSE parity graph", clip));
 
                     if (withTransparentSibling)
@@ -5490,7 +5251,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             NewTransparentConversionMaterial(
                                 fixtures.ImportFullyOpaqueMipmap(
                                     "parity_transparent")));
-                        var transparentMesh = Own(SingleTriangleMesh());
+                        var transparentMesh = Own(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                         transparentMesh.uv = new[]
                         {
                             new Vector2(0.25f, 0.25f),
@@ -5500,7 +5261,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                         // Added last, so registration order keeps the
                         // control artifacts' retention names stable.
-                        AddRenderer(
+                        AlphaSeparationTestLifecycle.AddRendererPadded(
                             root, "transparentBody",
                             transparentMesh, transparent);
                         TransparentMaterial = transparent;
@@ -5535,7 +5296,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AppliedOpaqueTriangleCount =
                         state.AppliedOpaqueTriangleCount;
 
-                    var appendedClip = CommittedClipWithObjectBinding(
+                    var appendedClip = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "cutoutBody",
                         "m_Materials.Array.data[2]");
                     CutoutOwnCurve = CurveDescription.DescribeAuthoredCurve(
@@ -5554,18 +5315,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             public void Dispose()
             {
-                DestroyCommittedClone(root, controller);
-                DestroyGenerated(state);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
-                for (var index = owned.Count - 1; index >= 0; index--)
-                {
-                    if (owned[index] != null)
-                    {
-                        UnityEngine.Object.DestroyImmediate(owned[index]);
-                    }
-                }
-
-                owned.Clear();
+                _scope.TearDown();
             }
         }
 

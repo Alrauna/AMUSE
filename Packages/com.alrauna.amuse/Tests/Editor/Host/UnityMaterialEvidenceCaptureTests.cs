@@ -29,7 +29,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private const string LilToonCutoutConversionShader =
             "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
 
-        private readonly List<Material> _materials = new List<Material>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
         private bool _ownsTempFolder;
 
         [SetUp]
@@ -49,15 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TearDown]
         public void TearDown()
         {
-            foreach (var material in _materials)
-            {
-                if (material != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(material);
-                }
-            }
-
-            _materials.Clear();
+            _scope.TearDown();
             if (_ownsTempFolder && AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
@@ -285,7 +278,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 triangle,
                 assignment.Texture.AlphaChannel[0],
                 new TextureSampling(TextureFilterMode.Point, TextureWrapMode.Clamp),
-                AlphaUvEnvelope.Zero);
+                AlphaUvEnvelope.Zero, 0);
         }
 
         [Test]
@@ -1134,7 +1127,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var mask = TestTextureImport.WritePng(
                 Path.Combine(TempFolder, "red_seam_mask.png"), 4, 4, pixels);
             var material = NewMaterial(LilToonCutoutConversionShader);
-            _materials.Add(material);
+            _scope.Track(material);
             material.SetTexture("_AlphaMask", mask);
 
             var active = UnityMaterialEvidenceCapture.Capture(
@@ -1197,7 +1190,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Path.Combine(TempFolder, "red_near_white_mask.png"), 4, 4,
                 pixels);
             var material = NewMaterial(LilToonCutoutConversionShader);
-            _materials.Add(material);
+            _scope.Track(material);
             material.SetTexture("_AlphaMask", mask);
 
             var active = UnityMaterialEvidenceCapture.Capture(
@@ -1272,7 +1265,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var shader = Shader.Find(shaderName);
             Assert.That(shader, Is.Not.Null, shaderName);
             var material = new Material(shader);
-            _materials.Add(material);
+            _scope.Track(material);
             return material;
         }
 

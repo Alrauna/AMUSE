@@ -10,6 +10,7 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 using UnityEditor;
 using UnityEngine;
 using TextureWrapMode = UnityEngine.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
@@ -192,17 +193,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             };
         }
 
-        /// <summary>Nondegenerate lower-left corner triangle.</summary>
-        private static TriangleAlphaInput CornerTriangle()
-        {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
-        }
 
         /// <summary>
         /// Hull stops at u = 0.7 in a 4-wide texture: inside texel column 2
@@ -270,7 +260,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingFor(captured, chain), samplingPolicy, 0);
         }
@@ -486,7 +476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
@@ -515,7 +505,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
@@ -543,7 +533,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
@@ -572,7 +562,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
@@ -614,7 +604,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
             });
             var alpha = LilToonCutoutMaterialSemantics
-                .InterpretVerifiedCutoutAlpha(captured[0]);
+                .InterpretVerifiedCutoutAlpha(captured[0], out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
                 ProvidingLayeredFor(
@@ -669,15 +659,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
 
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             var resolution = AlphaSemanticsResolver.Resolve(
                 alpha,
-                (TextureSourceId source, TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return false;
-                }, AlphaSamplingPolicy.ConservativeDesktop,
+                ProvidingNothing(),
+                AlphaSamplingPolicy.ConservativeDesktop,
                 0);
 
             Assert.That(alpha.IsComplete, Is.True);
@@ -782,7 +768,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
 
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             Assert.That(
                 alpha.IsComplete,
                 Is.False,
@@ -823,7 +809,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
 
             Assert.That(
                 alpha.IsComplete,
@@ -1403,7 +1389,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, ProvidingForMasked(captured, mainChain, maskChain),
                 samplingPolicy, 0);
@@ -1417,15 +1403,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha,
-                (TextureSourceId source, TextureChannel channel,
-                    out AlphaMipChain chain) =>
-                {
-                    chain = null;
-                    return false;
-                }, AlphaSamplingPolicy.ConservativeDesktop, 0);
+                ProvidingNothing(),
+                AlphaSamplingPolicy.ConservativeDesktop,
+                0);
         }
 
         /// <summary>
@@ -1443,7 +1426,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             var captured = CaptureTransparentEvidence(material);
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
 
             Assert.That(
                 alpha.IsComplete,
@@ -2229,7 +2212,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(assignment.IsAssigned, Is.False);
 
             var alpha = LilToonTransparentMaterialSemantics
-                .InterpretVerifiedTransparentAlpha(captured);
+                .InterpretVerifiedTransparentAlpha(captured, out _);
             return AlphaSemanticsResolver.Resolve(
                 alpha, UnusedProvider(), AlphaSamplingPolicy.ConservativeDesktop, 0);
         }

@@ -43,54 +43,28 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest";
         private const int Size = 4;
 
-        private readonly List<Object> _transient = new List<Object>();
+        private TestTransientScope _scope;
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void SetUp()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // textures' default anisoLevel 1 as anisotropic, so the proofs
-            // collapse to Unknown. Pin Per Texture for the test. Restore in
-            // teardown, which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
-
-            if (!AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.CreateFolder(
-                    "Assets", "AmuseTests_RendererIntegration");
-            }
+            _filteringPin = new AnisotropicFilteringPin();
+            _scope = new TestTransientScope(TempFolder);
+            _scope.EnsureTempFolder();
         }
 
         [TearDown]
         public void TearDown()
         {
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
-            foreach (var obj in _transient)
-            {
-                if (obj != null)
-                {
-                    Object.DestroyImmediate(obj);
-                }
-            }
-
-            _transient.Clear();
-            if (AssetDatabase.IsValidFolder(TempFolder))
-            {
-                AssetDatabase.DeleteAsset(TempFolder);
-            }
+            _filteringPin.Dispose();
+            _scope.TearDown();
         }
 
         private T Track<T>(T obj) where T : Object
         {
-            _transient.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         /// <summary>
@@ -255,7 +229,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 renderer, renderer.sharedMaterials, out var effectiveClones);
             try
             {
-                var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+                var capturedSlots =
+                    UnityMaterialSemantics.CaptureAlphaMaterials(effectiveSlots);
+                var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                    renderer, capturedSlots);
                 Assert.That(
                     extraction.Refusal,
                     Is.EqualTo(RendererAnalysisRefusal.None));
@@ -330,7 +307,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                             new MaterialSemantics(
                                 SemanticOutput<ColorSemanticValue>.Unknown(),
                                 PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                                    material.Evidence),
+                                    material.Evidence, out _),
                                 SemanticOutput<ColorSemanticValue>.Unknown(),
                                 SemanticOutput<NormalSemanticValue>.Unknown()),
                             null)
@@ -609,24 +586,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(result.Plan.HasAnyOpaqueCandidates, Is.True);
         }
 
-        /// <summary>
-        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
-        /// boundary does not survive halving.
-        /// </summary>
-        private static Color32[] OddBoundaryPixels()
-        {
-            var pixels = new Color32[64];
-            for (var y = 0; y < 8; y++)
-            {
-                for (var x = 0; x < 8; x++)
-                {
-                    pixels[y * 8 + x] =
-                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
-                }
-            }
-
-            return pixels;
-        }
 
         private static Color32[] UniformOpaquePixels()
         {
@@ -687,13 +646,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var oddBoundary = ImportTexture(
                 "odd_boundary", readable: false, mipmapped: true,
-                pixels: OddBoundaryPixels(), width: 8, height: 8);
+                pixels: UnityAlphaFieldEvidenceTests.OddBoundaryPixels(), width: 8, height: 8);
             var uniform = ImportTexture(
                 "uniform_opaque", readable: false, mipmapped: true,
                 pixels: UniformOpaquePixels(), width: 8, height: 8);
 
             Assert.That(
-                UnityAlphaFieldEvidence.TryCapture(oddBoundary, out _, out var chain),
+                UnityAlphaFieldEvidence.TryCapture(
+                    oddBoundary, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(chain.Count, Is.EqualTo(oddBoundary.mipmapCount));
             Assert.That(

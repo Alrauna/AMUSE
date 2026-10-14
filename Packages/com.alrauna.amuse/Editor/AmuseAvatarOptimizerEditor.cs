@@ -97,34 +97,8 @@ namespace Alrauna.Amuse.Editor
             }
         }
 
-        /// <summary>
-        /// The rows the foldout draws, avatar rows before renderer
-        /// rows. The property exists for the verified editor tests:
-        /// they paint through a utility window and can read no drawn
-        /// widget, so they assert on the row set the painter
-        /// consumed.
-        /// </summary>
-        internal IReadOnlyList<MaterialTransformationRow> TransformationRows
-        {
-            get
-            {
-                if (_dryRun == null)
-                {
-                    return Array.Empty<MaterialTransformationRow>();
-                }
-
-                if (_dryRun.AvatarRows.Count == 0)
-                {
-                    return _dryRun.RendererRows;
-                }
-
-                var rows = new List<MaterialTransformationRow>(
-                    _dryRun.AvatarRows.Count + _dryRun.RendererRows.Count);
-                rows.AddRange(_dryRun.AvatarRows);
-                rows.AddRange(_dryRun.RendererRows);
-                return rows;
-            }
-        }
+        /// <summary>The dry run driver, exposed internally for verified tests.</summary>
+        internal AlphaSeparationDryRun DryRun => _dryRun;
 
         /// <summary>
         /// The Show Material Transformations foldout with the nested

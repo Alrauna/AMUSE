@@ -119,32 +119,6 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// One field under one explicit predicate. The test seam for a
-        /// synthetic chain answering one captured texture assignment.
-        /// </summary>
-        internal static AlphaFieldSet WithField(
-            TextureSourceId source,
-            TextureChannel channel,
-            float threshold,
-            AlphaPolicyBounds bounds,
-            AlphaMipChain chain)
-        {
-            if (chain == null)
-            {
-                throw new ArgumentNullException(nameof(chain));
-            }
-
-            return new AlphaFieldSet(
-                new Dictionary<AlphaFieldKey, AlphaMipChain>
-                {
-                    [new AlphaFieldKey(source, channel, threshold, bounds)] =
-                        chain,
-                });
-        }
-
-        internal int Count => _fields.Count;
-
-        /// <summary>
         /// Returns the field this evidence's own captured predicate names
         /// for the source and channel. <paramref name="predicateRequest"/>
         /// is the material's own family alpha request: the closed batch

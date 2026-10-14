@@ -29,20 +29,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private const string TempFolder = "Assets/AmuseTests_AlphaIntegration";
         private const int Size = 4;
 
-        private UnityEngine.AnisotropicFiltering _savedAnisotropicFiltering;
+        private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
         public void SetUp()
         {
-            // The dev editor project persists Forced On anisotropic filtering.
-            // Under Forced On the sampler evidence reads the fixture
-            // textures' default anisoLevel 1 as anisotropic, so the proofs
-            // collapse to Unknown. Pin Per Texture for the test. Restore in
-            // teardown, which NUnit runs even for a failed test.
-            _savedAnisotropicFiltering =
-                UnityEngine.QualitySettings.anisotropicFiltering;
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                UnityEngine.AnisotropicFiltering.Enable;
+            _filteringPin = new AnisotropicFilteringPin();
 
             if (!AssetDatabase.IsValidFolder(TempFolder))
             {
@@ -53,8 +45,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [TearDown]
         public void TearDown()
         {
-            UnityEngine.QualitySettings.anisotropicFiltering =
-                _savedAnisotropicFiltering;
+            _filteringPin.Dispose();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.DeleteAsset(TempFolder);
@@ -223,25 +214,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(AlphaResolutionFailure.MissingTextureEvidence));
         }
 
-        /// <summary>
-        /// 8x8, alpha 255 where x &lt; 5 and 200 otherwise. Odd-aligned so the
-        /// boundary does not survive halving: source texel x = 4 is exactly one at
-        /// mip 0, and the mip-1 texel covering it is not.
-        /// </summary>
-        private static Color32[] OddBoundaryPixels()
-        {
-            var pixels = new Color32[64];
-            for (var y = 0; y < 8; y++)
-            {
-                for (var x = 0; x < 8; x++)
-                {
-                    pixels[y * 8 + x] =
-                        new Color32(64, 32, 16, x < 5 ? (byte)255 : (byte)200);
-                }
-            }
-
-            return pixels;
-        }
 
         /// <summary>
         /// A mipmapped, non-readable 8x8 fixture with the Point/Clamp sampling the
@@ -252,7 +224,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             var path = TempFolder + "/" + name + ".png";
             return TestTextureImport.WritePng(
-                path, 8, 8, OddBoundaryPixels(), importer =>
+                path, 8, 8, UnityAlphaFieldEvidenceTests.OddBoundaryPixels(), importer =>
                 {
                     importer.mipmapEnabled = true;
                     importer.isReadable = false;
@@ -285,7 +257,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var texture = ImportMippedOddBoundary("classifier_odd_boundary");
 
             Assert.That(
-                UnityAlphaFieldEvidence.TryCapture(texture, out _, out var chain),
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f,
+                    AlphaPolicyBounds.Inert, out _, out var chain, out _),
                 Is.True);
             Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
             Assert.That(

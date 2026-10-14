@@ -4,6 +4,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using nadena.dev.ndmf.platform;
@@ -29,15 +30,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockTransformationTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [SetUp]
         public void SetUp()
         {
             TransientUnlockTestKnobs.Reset();
             TransientUnlockTransformationTestPlugin.ResetProbeState();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
             TransientUnlockTestLifecycle.OpenFixtureScene();
@@ -47,59 +48,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
-            DestroyTracked();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
             TransientUnlockTransformationTestPlugin.ResetProbeState();
-            DeleteTempFolder();
-        }
-
-        /// <summary>
-        /// Deletes the test-owned persistence folder if present. The
-        /// window's clone persistence is load-bearing, so a container left
-        /// by an earlier build must never leak into the next one.
-        /// </summary>
-        internal static void DeleteTempFolder()
-        {
-            if (AssetDatabase.IsValidFolder(
-                    TransientUnlockTestLifecycle.TempFolder))
-            {
-                AssetDatabase.DeleteAsset(
-                    TransientUnlockTestLifecycle.TempFolder);
-            }
+            TransientUnlockTestLifecycle.DeleteTempFolder();
         }
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
-        }
-
-        private void DestroyTracked()
-        {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
-        }
-
-        private GameObject BuildAvatarRoot(string name)
-        {
-            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
-            var root = Track(new GameObject(name));
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            FixtureProofScope.PinAllSizes(root);
-            return root;
         }
 
         /// <summary>
@@ -114,35 +77,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             material.SetFloat("_AlphaForceOpaque", 1f);
             PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
-        }
-
-        /// <summary>
-        /// The committed clip the build shipped, read through the animator
-        /// because virtualization may commit a clone of the authored
-        /// instance.
-        /// </summary>
-        private static AnimationClip CommittedClip(GameObject root)
-        {
-            var animator = root.GetComponentInChildren<Animator>();
-            var controller =
-                animator.runtimeAnimatorController as AnimatorController;
-            if (controller == null)
-            {
-                return null;
-            }
-
-            foreach (var layer in controller.layers)
-            {
-                foreach (var state in layer.stateMachine.states)
-                {
-                    if (state.state.motion is AnimationClip clip)
-                    {
-                        return clip;
-                    }
-                }
-            }
-
-            return null;
         }
 
         private static List<Material> CurveMaterials(AnimationClip clip)
@@ -189,7 +123,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE pipeline window fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE pipeline window fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "PipelineCape",
@@ -314,7 +248,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // committed curve references the canonical material derived
             // from U, through the L to U mapping composed with the
             // existing canonical mapping.
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             var curveMaterials = CurveMaterials(clip);
@@ -343,7 +277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE vendorless non-play fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE vendorless non-play fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "VendorlessCape",
@@ -447,7 +381,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE mixed closed set fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE mixed closed set fixture"));
             var failing = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("MismatchCape"));
             // The scripted vendor restore mode is superseded: the restore
@@ -517,7 +451,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE mismatch report fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE mismatch report fixture"));
             var failing = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("ReportCape"));
             // The member fails verification for real: the recorded
@@ -592,7 +526,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE suffixed binding fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE suffixed binding fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("ParityCape"));
             var sibling = Track(VerifiedOpaqueFixtureMaterial());
@@ -634,7 +568,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The suffixed binding survives the whole cycle: same
             // property, same constant value.
-            var committed = CommittedClip(root);
+            var committed = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(committed, Is.Not.Null,
                 "the committed animator must hold a clip");
             var bodyPath = AnimationUtility.CalculateTransformPath(
@@ -674,7 +608,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE slot scoped refusal fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE slot scoped refusal fixture"));
             var failing = Track(
                 TransientUnlockTestLifecycle.LockedMaterial("OwnSlotCape"));
             // The scripted vendor restore mode is superseded: the restore
@@ -762,7 +696,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE clip only lock fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE clip only lock fixture"));
             var slotLocked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "SlotCape",
@@ -822,7 +756,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The clip-only reference remapped to the same one U, and the
             // transformation then mapped it to the canonical of U.
-            var committed = CommittedClip(root);
+            var committed = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(committed, Is.Not.Null,
                 "the committed animator must hold a clip");
             var curveMaterials = CurveMaterials(committed);
@@ -857,8 +791,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot(
-                "AMUSE swept output fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE swept output fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "SweptOutputCape",
@@ -921,7 +855,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "close must preserve the mesh that replaced the prepared mesh");
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
                 "the untransformed pair reverts to the locked original");
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             Assert.That(CurveMaterials(clip), Has.All.EqualTo(locked),
@@ -962,8 +896,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot(
-                "AMUSE retained copies fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE retained copies fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "RetainedCopiesCape",
@@ -1052,7 +986,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // close cannot know what it names. It names the shipped
             // canonical, and the clone stays alive only because the
             // close cannot prove otherwise.
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             var curveMaterials = CurveMaterials(clip);
@@ -1101,8 +1035,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot(
-                "AMUSE close refusal report fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE close refusal report fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "CloseRefusalReportCape",
@@ -1210,7 +1144,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE slot-less pair fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE slot-less pair fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedMaterial(
                     "SlotLessCape"));
@@ -1396,8 +1330,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot(
-                "AMUSE barrier refused close fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE barrier refused close fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "BarrierRefusedCloseCape",
@@ -1498,7 +1432,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE play close purity fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE play close purity fixture"));
             var locked = Track(
                 TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
                     "PurityCape",
@@ -1563,7 +1497,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(renderer.sharedMaterials[0],
                 Is.EqualTo(canonicalOutput),
                 "the transformed slot keeps apply's recorded write");
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             var curveMaterials = CurveMaterials(clip);

@@ -8,6 +8,7 @@ using Alrauna.Amuse.Editor.Semantics;
 using TextureWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -311,21 +312,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
         private const string RendererPath = "Body";
 
-        private readonly List<UnityEngine.Object> _owned =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void DestroyOwnedFixtureObjects()
         {
-            foreach (var value in _owned)
-            {
-                if (value != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(value);
-                }
-            }
-
-            _owned.Clear();
+            _scope.TearDown();
         }
 
         private static MaterialEvidenceRequest Relevance
@@ -341,7 +334,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new MaterialSemantics(
                     SemanticOutput<ColorSemanticValue>.Unknown(),
                     PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        material.Evidence),
+                        material.Evidence, out _),
                     SemanticOutput<ColorSemanticValue>.Unknown(),
                     SemanticOutput<NormalSemanticValue>.Unknown()),
                 null);
@@ -350,7 +343,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private Material NewFixtureMaterial()
         {
             var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            _owned.Add(material);
+            _scope.Track(material);
             return material;
         }
 
@@ -389,7 +382,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         private Material MaterialWithoutRequestedProperties()
         {
             var material = new Material(Shader.Find("Unlit/Color"));
-            _owned.Add(material);
+            _scope.Track(material);
             return material;
         }
 
@@ -1137,20 +1130,16 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 var assignment = admitted[0].Evidence.Textures.Single(
                     texture => texture.HasSourceIdentity);
                 var alpha = new byte[8 * 8];
-                for (var index = 0; index < alpha.Length; index++)
-                {
-                    alpha[index] = 255;
-                }
+                Array.Fill(alpha, (byte)255);
 
                 alpha[0] = 0;
                 var key = AlphaFieldKey.ForAlpha(assignment);
-                var fields = AlphaFieldSet.WithField(
-                    key.Source,
-                    key.Channel,
-                    key.Threshold,
-                    key.Bounds,
-                    new AlphaMipChain(
-                        new[] { new AlphaTextureData(8, 8, alpha) }));
+                var fields = new AlphaFieldSet(
+                    new Dictionary<AlphaFieldKey, AlphaMipChain>
+                    {
+                        [key] = new AlphaMipChain(
+                            new[] { new AlphaTextureData(8, 8, alpha) }),
+                    });
 
                 var result = AdmittedMaterialStates.ResolveSlot(
                     new CapturedMaterialSlotEvidence(0, new[] { 0 }),
@@ -1206,7 +1195,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         /// exact under the inert bounds, so the field gate's own lookup
         /// answers with that field for exactly this evidence.
         /// </summary>
-        private static CapturedMaterialEvidence
+        internal static CapturedMaterialEvidence
             EvidenceNamingAlphaSource(
                 TextureSourceId source, AlphaMipChain chain)
         {
@@ -1285,9 +1274,13 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 "amuse-tests:admission-policy:b");
             var materialA = SyntheticSampledMaterial(sourceA, chain);
             var materialB = SyntheticSampledMaterial(sourceB, chain);
-            var fields = AlphaFieldSet.WithField(
-                sourceA, TextureChannel.Alpha, 1f,
-                AlphaPolicyBounds.Inert, chain);
+            var fields = new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>
+                {
+                    [new AlphaFieldKey(
+                        sourceA, TextureChannel.Alpha, 1f,
+                        AlphaPolicyBounds.Inert)] = chain,
+                });
             var corner = TriangleAlphaInput.WithUv0(
                 Vector3.zero,
                 Vector3.right,

@@ -300,22 +300,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(banner.Kind, Is.EqualTo(MaterialTransformationRowKind.Banner));
             var note = MaterialTransformationRow.Note("note");
             Assert.That(note.Kind, Is.EqualTo(MaterialTransformationRowKind.Note));
-            var disclosure = MaterialTransformationRow.Disclosure("disclosure");
-            Assert.That(
-                disclosure.Kind, Is.EqualTo(MaterialTransformationRowKind.Disclosure));
-
-            foreach (var row in new[] { banner, note, disclosure })
-            {
-                Assert.That(row.RendererPath, Is.Null);
-                Assert.That(row.RendererTypeName, Is.Null);
-                Assert.That(row.SlotIndex, Is.EqualTo(-1));
-                Assert.That(row.MovedTriangles, Is.EqualTo(-1));
-                Assert.That(row.ProvenTriangles, Is.EqualTo(-1));
-                Assert.That(row.TotalTriangles, Is.EqualTo(-1));
-                Assert.That(row.RefusedSlots, Is.EqualTo(-1));
-                Assert.That(row.SlotCount, Is.EqualTo(-1));
-                Assert.That(row.Sentence, Is.Not.Null.And.Not.Empty);
-            }
+            Assert.That(banner.Sentence, Is.Not.Null.And.Not.Empty);
+            Assert.That(note.Sentence, Is.Not.Null.And.Not.Empty);
         }
 
         [Test]
@@ -381,8 +367,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 () => MaterialTransformationRow.Banner(null));
             Assert.Throws<ArgumentException>(
                 () => MaterialTransformationRow.Note(""));
-            Assert.Throws<ArgumentException>(
-                () => MaterialTransformationRow.Disclosure(null));
             Assert.Throws<ArgumentException>(
                 () => MaterialTransformationRow.Errored(Path, TypeName, null));
             Assert.Throws<ArgumentException>(

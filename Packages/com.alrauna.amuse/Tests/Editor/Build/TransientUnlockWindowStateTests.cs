@@ -2,6 +2,7 @@ using System;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -72,26 +73,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
-            _tracked.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
-        private readonly System.Collections.Generic.List<UnityEngine.Object>
-            _tracked =
-                new System.Collections.Generic.List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var obj in _tracked)
-            {
-                if (obj != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(obj);
-                }
-            }
-
-            _tracked.Clear();
+            _scope.TearDown();
         }
     }
 }

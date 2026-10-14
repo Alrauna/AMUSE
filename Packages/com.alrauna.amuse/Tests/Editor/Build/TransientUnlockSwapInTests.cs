@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using UnityEditor;
 
@@ -20,14 +20,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockSwapInTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [SetUp]
         public void SetUp()
         {
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
             TransientUnlockTestLifecycle.OpenFixtureScene();
@@ -37,60 +37,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
-            DestroyTracked();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
         }
-
-        /// <summary>
-        /// Deletes the test-owned persistence folder if present. Called
-        /// from SetUp and TearDown: a container left by an earlier build
-        /// must never leak into the next build's asset-saver state.
-        /// </summary>
-        internal static void DeleteTempFolder()
-        {
-            if (AssetDatabase.IsValidFolder(
-                    TransientUnlockTestLifecycle.TempFolder))
-            {
-                AssetDatabase.DeleteAsset(
-                    TransientUnlockTestLifecycle.TempFolder);
-            }
-        }
-
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
-        }
-
-        private void DestroyTracked()
-        {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(
-                        tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
-        }
-
-        private GameObject BuildAvatarRoot(string name)
-        {
-            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
-            var root = Track(new GameObject(name));
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            FixtureProofScope.PinAllSizes(root);
-            return root;
         }
 
         /// <summary>
@@ -109,7 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE no-op restore fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE no-op restore fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "NoOpCape"));
             // The scripted vendor restore mode is superseded: the restore
@@ -163,7 +123,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE partial restore fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE partial restore fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "PartialCape"));
             // The scripted vendor restore mode is superseded: the restore
@@ -216,7 +176,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE untouched original fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE untouched original fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "UntouchedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -289,7 +249,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE stale tags fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE stale tags fixture"));
             var stale = Track(
                 TransientUnlockTestLifecycle.StaleTaggedUnlockedMaterial());
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -329,10 +289,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             TransientUnlockTestKnobs.BuildPath =
                 AmuseBuildPath.ApplyOnPlay;
 
-            var availability =
-                TransientUnlockSwapIn.Availability.FromProduction();
+            var restore =
+                TransientUnlockAvailability.CreateProductionRestore();
 
-            Assert.That(availability.Restore, Is.Not.Null,
+            Assert.That(restore, Is.Not.Null,
                 "the resolved availability must carry the in-memory " +
                 "restore, with no vendor-shaped gate left to refuse it");
         }
@@ -350,7 +310,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE persisted clone fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE persisted clone fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "PersistedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -386,7 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE name parity fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE name parity fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "ParityCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -412,7 +372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE one clone fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE one clone fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "SharedCape"));
             var firstMesh =
@@ -470,7 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             TransientUnlockTestKnobs.ConsentGranted = false;
             TransientUnlockTestKnobs.SkipClose = true;
 
-            var root = BuildAvatarRoot("AMUSE consent gate fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE consent gate fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "UngrantedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());

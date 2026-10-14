@@ -46,7 +46,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             foreach (var (texture, channel) in requests)
             {
                 if (!UnityAlphaFieldEvidence.TryCapture(
-                        texture, channel, out var source, out var chain))
+                        texture, channel, 1.0f, AlphaPolicyBounds.Inert,
+                        out var source, out var chain, out _))
                 {
                     continue;
                 }

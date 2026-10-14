@@ -4,6 +4,7 @@ using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -11,21 +12,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 {
     public sealed class UnityRendererAlphaSnapshotTests
     {
-        private readonly List<UnityEngine.Object> _transient =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void TearDown()
         {
-            foreach (var value in _transient)
-            {
-                if (value != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(value);
-                }
-            }
-
-            _transient.Clear();
+            _scope.TearDown();
         }
 
         [Test]
@@ -35,7 +28,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var originalMaterial = NewMaterial();
             var renderer = NewRenderer(originalMesh, originalMaterial);
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var capturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, capturedSlots);
             var originalCapturedMaterial = extraction.Snapshot.Materials[0];
 
             renderer.sharedMesh = Triangle();
@@ -53,7 +47,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             originalMesh.SetTriangles(new[] { 0, 1, 2 }, 0);
             originalMaterial.color = new Color(1f, 1f, 1f, 0f);
 
-            var freshExtraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var replacementCapturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var freshExtraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, replacementCapturedSlots);
             var replacementCapturedMaterial =
                 freshExtraction.Snapshot.Materials[0];
             CapturedAlphaSemantics Resolve(CapturedAlphaMaterial material)
@@ -248,7 +243,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var mesh = Quad();
             var renderer = NewRenderer(mesh, NewMaterial());
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var capturedSlots = UnityMaterialSemantics.CaptureAlphaMaterials(renderer.sharedMaterials);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(renderer, capturedSlots);
 
             Assert.That(extraction.Refusal, Is.EqualTo(RendererAnalysisRefusal.None));
             Assert.That(extraction.Snapshot, Is.Not.Null);
@@ -263,7 +259,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var gameObject = Track(new GameObject("amuse-refused-snapshot-test"));
             var renderer = gameObject.AddComponent<LineRenderer>();
 
-            var extraction = UnityRendererAlphaAnalysis.Capture(renderer);
+            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                renderer, Array.Empty<CapturedAlphaMaterial>());
 
             Assert.That(
                 extraction.Refusal,
@@ -423,8 +420,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private T Track<T>(T value) where T : UnityEngine.Object
         {
-            _transient.Add(value);
-            return value;
+            return _scope.Track(value);
         }
     }
 }
