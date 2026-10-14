@@ -53,6 +53,22 @@ namespace Alrauna.Amuse.Editor.Host
                     TextureChannel channel, int cutoffBits,
                     AlphaPolicyBounds bounds), AlphaMipChain> Cache = new();
 
+        internal static bool AllowDiskFallback { get; set; } = true;
+
+        internal readonly struct DisallowDiskFallbackScope : IDisposable
+        {
+            private readonly bool _previous;
+            internal DisallowDiskFallbackScope(bool previous) => _previous = previous;
+            public void Dispose() => AllowDiskFallback = _previous;
+        }
+
+        internal static DisallowDiskFallbackScope DisallowDiskFallback()
+        {
+            var prev = AllowDiskFallback;
+            AllowDiskFallback = false;
+            return new DisallowDiskFallbackScope(prev);
+        }
+
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
@@ -100,7 +116,10 @@ namespace Alrauna.Amuse.Editor.Host
                 Cache[key] = chain;
                 return true;
             }
-
+            if (!AllowDiskFallback)
+            {
+                return false;
+            }
 
             // A texture that is not its file's main asset (a sub-asset, or a
             // texture inside a scene or model file) has no source the
