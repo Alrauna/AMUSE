@@ -110,6 +110,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetOverrideTag("RenderType", "Transparent");
         }
 
+        /// <summary>
+        /// The verified opaque Poiyomi stand-in the alpha-separation
+        /// fixtures use: an unlocked, schema-complete material with the
+        /// force-opaque flag at one and the convertible Fade render state
+        /// applied. The render state keeps it convertible instead of
+        /// AlreadyOpaque, so its conversion produces the real canonical
+        /// opaque clone. The caller owns destruction.
+        /// </summary>
+        internal static Material CreateVerifiedOpaqueMaterial()
+        {
+            var material = CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// The verified transparent Poiyomi stand-in: force-opaque off,
+        /// the alpha mask mode at its declared default, a half-alpha white
+        /// color, and the convertible Fade render state applied. The
+        /// caller owns destruction.
+        /// </summary>
+        internal static Material CreateVerifiedTransparentMaterial()
+        {
+            var material = CreateVerifiedMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            ApplyConvertibleRenderState(material);
+            return material;
+        }
+
         protected Material NewTwoPassFixtureMaterial()
         {
             return Track(CreateTwoPassVerifiedMaterial());

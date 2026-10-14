@@ -55,70 +55,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return obj;
         }
 
-        private GameObject BuildAvatarRoot(string name)
-        {
-            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
-            var root = Track(new GameObject(name));
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            FixtureProofScope.PinAllSizes(root);
-            return root;
-        }
-
-        /// <summary>
-        /// The clip the build committed back onto the avatar's animator.
-        /// Virtualization may commit a clone rather than the authored
-        /// instance, so curve assertions must read through the animator,
-        /// never through the fixture's original clip reference. Blend tree
-        /// states are descended, because a material swap can live there.
-        /// </summary>
-        private static AnimationClip CommittedClip(GameObject root)
-        {
-            var animator = root.GetComponentInChildren<Animator>();
-            var controller =
-                animator.runtimeAnimatorController as AnimatorController;
-            if (controller == null)
-            {
-                return null;
-            }
-
-            foreach (var layer in controller.layers)
-            {
-                foreach (var state in layer.stateMachine.states)
-                {
-                    var clip = ClipInMotion(state.state.motion);
-                    if (clip != null)
-                    {
-                        return clip;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static AnimationClip ClipInMotion(Motion motion)
-        {
-            if (motion is AnimationClip clip)
-            {
-                return clip;
-            }
-
-            if (motion is BlendTree blendTree)
-            {
-                foreach (var child in blendTree.children)
-                {
-                    var found = ClipInMotion(child.motion);
-                    if (found != null)
-                    {
-                        return found;
-                    }
-                }
-            }
-
-            return null;
-        }
-
         /// <summary>
         /// Every material keyframe on the given clip, in binding order.
         /// The real clip is read back after the build, so the assertion
@@ -159,7 +95,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE close reversion fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE close reversion fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "RevertedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -193,7 +129,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(cloneRef == null, Is.True,
                 "the close destroys U only after the inversion, and the " +
                 "reversion is the primary path");
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
             var curveMaterials = CurveMaterials(clip);
@@ -227,7 +163,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE impostor pair fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE impostor pair fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "ImpostorCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -274,7 +210,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE reversion fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE reversion fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "FallbackCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -295,7 +231,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
             var state = context.GetState<AmusePlatformFinishState>();
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
 
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
@@ -338,7 +274,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE blend tree reversion fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE blend tree reversion fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "TreeCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -358,7 +294,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
 
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
@@ -436,7 +372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE retained clone fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE retained clone fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "RetainedCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -465,7 +401,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
             var state = context.GetState<AmusePlatformFinishState>();
-            var clip = CommittedClip(root);
+            var clip = TransientUnlockTestLifecycle.CommittedClip(root);
 
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
@@ -508,7 +444,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE foreign slot fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE foreign slot fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "ForeignSlotCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -563,7 +499,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE fallback survival fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE fallback survival fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "SurvivorCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -598,7 +534,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipSwapIn = true;
 
-            var root = BuildAvatarRoot("AMUSE empty window fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE empty window fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
                 "UncycledCape"));
             var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
@@ -631,7 +567,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE round trip fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE round trip fixture"));
             var body = Track(new GameObject("Body"));
             body.transform.SetParent(root.transform, false);
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
@@ -649,7 +585,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
-            clip = CommittedClip(root);
+            clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
 
@@ -728,7 +664,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE virtualized child clip fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE virtualized child clip fixture"));
             var innateClip = Track(new AnimationClip { name = "InnateClip" });
             var innateController = Track(
                 new AnimatorController { name = "InnateController" });
@@ -778,7 +714,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE sub-state blend tree fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE sub-state blend tree fixture"));
             var sharedClip = Track(new AnimationClip { name = "SharedClip" });
             var subClip = Track(new AnimationClip { name = "SubClip" });
             var blendClip = Track(new AnimationClip { name = "BlendClip" });
@@ -843,7 +779,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE unrecorded path fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE unrecorded path fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
             var clone = Track(Object.Instantiate(locked));
             clone.name = locked.name + "_AmuseUnlockedClone";
@@ -903,7 +839,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE asymmetric renderer fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE asymmetric renderer fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
             var clone = Track(Object.Instantiate(locked));
             clone.name = locked.name + "_AmuseUnlockedClone";
@@ -964,7 +900,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE explicit list fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE explicit list fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
             var clone = Track(Object.Instantiate(locked));
             clone.name = locked.name + "_AmuseUnlockedClone";
@@ -1034,7 +970,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE retain clone reference fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE retain clone reference fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
             var clone = Track(Object.Instantiate(locked));
             clone.name = locked.name + "_AmuseUnlockedClone";
@@ -1088,7 +1024,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE refused graph fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE refused graph fixture"));
             var locked = Track(TransientUnlockTestLifecycle.LockedMaterial("LockedMat"));
             var clone = Track(Object.Instantiate(locked));
             clone.name = locked.name + "_AmuseUnlockedClone";
@@ -1178,7 +1114,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
-            var root = BuildAvatarRoot("AMUSE shared blend tree across layers fixture");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE shared blend tree across layers fixture"));
             var sharedClip = Track(new AnimationClip { name = "SharedAcrossLayersClip" });
 
             var sharedTree = Track(new BlendTree

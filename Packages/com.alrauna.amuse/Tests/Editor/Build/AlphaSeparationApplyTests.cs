@@ -59,20 +59,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return obj;
         }
 
-        private GameObject CreateAvatarRoot(string name)
-        {
-            // Installed optimizer packages resolve a fixture without a
-            // VRCAvatarDescriptor as a Generic avatar and process it with
-            // assumptions production avatars never see. Every fixture root
-            // carries the descriptor, as production avatars do.
-            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
-            var root = Track(new GameObject(name));
-            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
-            FixtureProofScope.PinAllSizes(root);
-            return root;
-        }
-
         private AnisotropicFilteringPin _filteringPin;
 
         [SetUp]
@@ -614,24 +600,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            ApplyVendorFadeRenderState(material);
-            return material;
-        }
-
-        private static Material VerifiedTransparentMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 0f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
-            ApplyVendorFadeRenderState(material);
-            return material;
-        }
-
         /// <summary>
         /// Writes the pinned Poiyomi 9.3.64 Fade preset's render state onto
         /// the stand-in, so the fixture converts instead of classifying
@@ -718,7 +686,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedOpaqueMaterial());
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
@@ -773,7 +741,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedTransparentMaterial());
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
@@ -843,7 +811,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(VerifiedOpaqueMaterial());
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
@@ -1315,8 +1283,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first);
 
@@ -1415,9 +1383,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var swapTarget = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var swapTarget = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
@@ -1436,7 +1404,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     });
                 controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE swaps graph", clip);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(_ =>
                 {
                     renderer.sharedMaterials = new[] { first, foreign };
@@ -1508,7 +1476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void NullAndEmptyObjectCurvesAreSkippedBySlotValidation()
         {
-            var source = Track(VerifiedOpaqueMaterial());
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
             var plan = new SubmeshSeparationPlan(
                 0,
                 0,
@@ -1575,10 +1543,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var markedCurrent = Track(VerifiedOpaqueMaterial());
-                var markedSwap = Track(VerifiedOpaqueMaterial());
-                var ordinaryCurrent = Track(VerifiedOpaqueMaterial());
-                var ordinarySwap = Track(VerifiedOpaqueMaterial());
+                var markedCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var markedSwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var ordinaryCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var ordinarySwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     root, "marked", mesh, markedCurrent, ordinaryCurrent);
@@ -1669,12 +1637,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishState state = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(_ =>
                 {
                     renderer.sharedMaterials = new[] { first, foreign };
@@ -1724,9 +1692,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var other = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var other = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
@@ -1822,7 +1790,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "late_invalidated"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -1832,7 +1800,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the split submesh must carry " +
                         "a nonzero base vertex");
 
-                    var foreign = Track(VerifiedOpaqueMaterial());
+                    var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     using (new ProbeScope(_ =>
                     {
                         renderer.sharedMaterials = new[] { foreign,
@@ -1910,7 +1878,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "in_place_edit"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -1991,7 +1959,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var alone = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     shared.name = "amuse sweep shared";
                     alone.name = "amuse sweep alone";
 
@@ -2004,7 +1972,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var refusedRenderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "refused", secondMesh, alone, transparent);
 
-                    var foreign = Track(VerifiedOpaqueMaterial());
+                    var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     using (new ProbeScope(_ =>
                     {
                         refusedRenderer.sharedMaterials =
@@ -2091,9 +2059,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AnimatorController controller = null;
             try
             {
-                var first = Track(VerifiedOpaqueMaterial());
-                var second = Track(VerifiedOpaqueMaterial());
-                var swap = Track(VerifiedOpaqueMaterial());
+                var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var swap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 var mesh = Track(TwoTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, first, second);
 
@@ -2112,7 +2080,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     });
                 controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE coverage graph", clip);
 
-                var foreign = Track(VerifiedOpaqueMaterial());
+                var foreign = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                 using (new ProbeScope(context =>
                 {
                     // Slot 0: an unmapped current material, refusing with
@@ -2222,7 +2190,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2349,7 +2317,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2474,7 +2442,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "ignored_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2551,7 +2519,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "closure_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2652,14 +2620,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "closure_sibling_split"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "splitA", mesh, split, transparent);
 
-                    failedCurrent = Track(VerifiedOpaqueMaterial());
-                    var second = Track(VerifiedOpaqueMaterial());
+                    failedCurrent = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var failedMesh = Track(TwoTriangleMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
                         root, "failed", failedMesh, failedCurrent, second);
@@ -2775,7 +2743,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
                     var other = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2902,7 +2870,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -2978,7 +2946,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -3052,7 +3020,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // The fixture contract: submesh 0 is the uniformly
                     // opaque candidate on a constant opaque material,
                     // submesh 1 the mixed split over the split texture.
-                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var opaque = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var mesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
@@ -3450,7 +3418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void
             AppliedOpaqueTriangleCountAccumulatesAcrossOneSlotsFoldedSubmeshes()
         {
-            var source = Track(VerifiedOpaqueMaterial());
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
             var clone = Track(new Material(source.shader));
             var rendererObj = Track(new GameObject(
                 "AMUSE folded counter renderer"));
@@ -3801,7 +3769,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         NewCutoutSplitMaterial(splitTexture));
                     var swap = Track(
                         LilToonFixtureTestBase.CreateVerifiedMaterial());
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -4184,9 +4152,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void SharedMaterialAcrossMultipleRenderersRegistersReplacementWithoutDuplication()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = CreateAvatarRoot("shared-material-avatar");
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("shared-material-avatar"));
             FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
-            var texture = Track(AlphaSeparationSplitTests.CreateSplitTexture());
+            AlphaSeparationSplitTests.EnsureSplitFolder();
+            var texture = Track(
+                AlphaSeparationSplitTests.ImportSplitAlphaTexture("split"));
             var split = Track(
                 AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
             var meshA = Track(
@@ -4252,7 +4222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Action<Texture2D> assertTexturePreconditions = null)
         {
             var run = new ConversionRun();
-            run.Root = CreateAvatarRoot(rootName);
+            run.Root = Track(FixtureAvatarIdentity.CreateOptedRoot(rootName));
             if (acceptDesktopDifferences)
             {
                 FixtureProofScope.AcceptDesktopAnisotropyDifferences(run.Root);
@@ -4582,7 +4552,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 UnityEngine.QualitySettings.anisotropicFiltering =
                     UnityEngine.AnisotropicFiltering.ForceEnable;
-                root = CreateAvatarRoot("AMUSE mesh renderer split");
+                root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE mesh renderer split"));
                 FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
                 var texture = Track(AmusePlatformFinishPluginTests
                     .ImportMixedHalfTexture(
@@ -5261,7 +5231,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         NewCutoutSplitMaterial(splitTexture));
                     var swap = Own(
                         LilToonFixtureTestBase.CreateVerifiedMaterial());
-                    var poiyomi = Own(VerifiedOpaqueMaterial());
+                    var poiyomi = Own(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
 
                     var sourceMesh = Own(
                         AlphaSeparationSplitTests

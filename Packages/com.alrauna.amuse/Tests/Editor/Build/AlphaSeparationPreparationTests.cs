@@ -65,7 +65,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -127,7 +127,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
                 var originalMaterials = renderer.sharedMaterials;
 
@@ -173,7 +173,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedTransparentMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
                 var amuse = RunBarrier(root);
@@ -282,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -745,7 +745,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 lilToon = LilToonFixtureTestBase.CreateVerifiedMaterial();
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
@@ -830,7 +830,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 unsupported = new Material(Shader.Find("Unlit/Color"));
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
 
@@ -929,7 +929,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 unsupported = new Material(Shader.Find("Unlit/Color"));
                 unsupported.name = "AMUSE partial refusing material";
                 AddSingleTriangleRenderer(root, poiyomi, out mesh);
@@ -1222,7 +1222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 lilToon = LilToonFixtureTestBase.CreateVerifiedMaterial();
                 var renderer = AddTwoTriangleRenderer(
                     root, poiyomi, lilToon, out mesh);
@@ -1685,7 +1685,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 AddTwoTriangleRenderer(root, material, material, out mesh);
 
                 amuse = RunBarrier(root);
@@ -1848,7 +1848,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 Assert.That(
                     material.GetFloat("_Cutoff"), Is.EqualTo(0.5f),
                     "fixture precondition: the material's serialized " +
@@ -1963,7 +1963,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // animation paths. Renderer A animates nothing; renderer B
                 // animates a canonical recipe property to its own serialized
                 // default, which admits but violates the canonical value.
-                material = VerifiedOpaqueMaterial();
+                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 Assert.That(
                     material.GetFloat("_Cutoff"), Is.EqualTo(0.5f),
                     "fixture precondition: the source's serialized _Cutoff " +
@@ -2618,7 +2618,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .ImportSplitAlphaTexture("forced_fold_marker");
                     splitA = AlphaSeparationSplitTests.SplitAlphaMaterial(
                         texture);
-                    swapA = VerifiedOpaqueMaterial();
+                    swapA = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                     meshA = TwoTriangleSplitMesh();
                     var rendererA = rootA.AddComponent<SkinnedMeshRenderer>();
                     rendererA.sharedMesh = meshA;
@@ -2705,7 +2705,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .ImportSplitAlphaTexture("forced_fold_marker");
                     splitB = AlphaSeparationSplitTests.SplitAlphaMaterial(
                         texture);
-                    swapB = VerifiedOpaqueMaterial();
+                    swapB = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                     meshB = TwoTriangleSplitMesh();
                     var rendererB = rootB.AddComponent<SkinnedMeshRenderer>();
                     rendererB.sharedMesh = meshB;
@@ -6576,7 +6576,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var arm = new LocalityArmFixture(fixtures);
                 arm.CreateArmRoot("AMUSE transparent locality");
-                arm.PoiyomiMaterial = VerifiedOpaqueMaterial();
+                arm.PoiyomiMaterial = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 arm.CutoutMaterial =
                     LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 arm.TransparentMaterial =
@@ -8520,7 +8520,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 cutout.SetTexture(
                     "_MainTex", fixtures.ImportFullyOpaqueMipmap(
@@ -8629,7 +8629,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                poiyomi = VerifiedOpaqueMaterial();
+                poiyomi = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
                 cutout = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
                 cutout.SetTexture(
                     "_MainTex", fixtures.ImportFullyOpaqueMipmap(
@@ -10090,7 +10090,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.SplitAlphaMaterial(
                             AlphaSeparationSplitTests.ImportSplitAlphaTexture(
                                 "preserve_fold_unchanged"));
-                    transparentMaterial = VerifiedTransparentMaterial();
+                    transparentMaterial = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
                     mesh = SplitPlusTransparentTwoSubmeshMesh();
                     var renderer = root.AddComponent<SkinnedMeshRenderer>();
                     renderer.sharedMesh = mesh;
@@ -10696,14 +10696,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return clip;
         }
 
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
-            return material;
-        }
-
         /// <summary>
         /// The convertible opaque stand-in with a canonical serialized
         /// <c>_ZWrite</c> default, for the conversion-animation fixture that
@@ -10713,18 +10705,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static Material VerifiedOpaqueZWriteDefaultMaterial()
         {
-            var material = VerifiedOpaqueMaterial();
+            var material = PoiyomiFixtureTestBase
+                .CreateVerifiedOpaqueMaterial();
             material.SetFloat("_ZWrite", 1f);
-            return material;
-        }
-
-        private static Material VerifiedTransparentMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 0f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
             return material;
         }
 

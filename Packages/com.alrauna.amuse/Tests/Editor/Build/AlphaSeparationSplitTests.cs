@@ -87,15 +87,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Creates and imports a temporary split-alpha texture for tests.
-        /// </summary>
-        internal static Texture2D CreateSplitTexture(string name = "split")
-        {
-            EnsureSplitFolder();
-            return ImportSplitAlphaTexture(name);
-        }
-
-        /// <summary>
         /// A verified Poiyomi fixture material whose alpha comes from the
         /// split texture. Full colour alpha is set explicitly to pin the
         /// semantic precondition and stay aligned with the existing green
@@ -358,24 +349,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             _scope.TearDown();
         }
 
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
-            return material;
-        }
-
-        private static Material VerifiedTransparentMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 0f);
-            material.SetFloat("_MainAlphaMaskMode", 0f);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
-            return material;
-        }
-
         // --- Falsifier 2: the mixed split slot -------------------------------
 
         [Test]
@@ -394,7 +367,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     var texture = Track(ImportSplitAlphaTexture("triples"));
                     var split = Track(SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var sourceMesh = Track(CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, split, transparent);
@@ -506,7 +479,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 try
                 {
                     var texture = Track(ImportSplitAlphaTexture("sibling"));
-                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var opaque = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var splitRefused = Track(SplitAlphaMaterial(texture));
                     splitRefused.SetFloat("_ZTest", 8f);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
@@ -613,7 +586,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 try
                 {
                     var texture = Track(ImportSplitAlphaTexture("splitOutlineProven"));
-                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var opaque = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var splitOutlines = Track(SplitAlphaMaterial(texture));
                     splitOutlines.SetFloat("_EnableOutlines", 1f);
                     var sourceMesh = Track(CreateOpaqueAndSplitSourceMesh());
@@ -660,7 +633,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     var texture = Track(ImportSplitAlphaTexture("splitBase"));
                     var outlineTexture = Track(ImportSplitHollowTexture("splitOutlineHoley"));
-                    var opaque = Track(VerifiedOpaqueMaterial());
+                    var opaque = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var splitOutlines = Track(SplitAlphaMaterial(texture));
                     splitOutlines.SetFloat("_EnableOutlines", 1f);
                     splitOutlines.SetTexture("_OutlineTexture", outlineTexture);
@@ -716,7 +689,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     var texture = Track(ImportSplitAlphaTexture("bounds"));
                     var split = Track(SplitAlphaMaterial(texture));
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     var sourceMesh = Track(CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRenderer(
                         root, "body", sourceMesh, split, transparent);
@@ -801,9 +774,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var texture = Track(ImportSplitAlphaTexture("indices"));
                     var first = Track(SplitAlphaMaterial(texture));
                     var second = Track(SplitAlphaMaterial(texture));
-                    var firstSwap = Track(VerifiedOpaqueMaterial());
-                    var secondSwap = Track(VerifiedOpaqueMaterial());
-                    var transparent = Track(VerifiedTransparentMaterial());
+                    var firstSwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var secondSwap = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
                     first.name = "amuse split first";
                     second.name = "amuse split second";
                     firstSwap.name = "amuse split first swap";

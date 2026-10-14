@@ -118,8 +118,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "persistence"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var first = Track(VerifiedOpaqueMaterial());
-                    var second = Track(VerifiedOpaqueMaterial());
+                    var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
@@ -315,8 +315,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "registry"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var first = Track(VerifiedOpaqueMaterial());
-                    var second = Track(VerifiedOpaqueMaterial());
+                    var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
@@ -429,8 +429,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             "preservation"));
                     var split = Track(
                         AlphaSeparationSplitTests.SplitAlphaMaterial(texture));
-                    var first = Track(VerifiedOpaqueMaterial());
-                    var second = Track(VerifiedOpaqueMaterial());
+                    var first = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                    var second = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
@@ -752,14 +752,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         // --- Fixture helpers -------------------------------------------------
-
-        private static Material VerifiedOpaqueMaterial()
-        {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
-            material.SetFloat("_AlphaForceOpaque", 1f);
-            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
-            return material;
-        }
 
         /// <summary>
         /// A single UV'd triangle for the transparent extension renderer:
