@@ -190,15 +190,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     context.GetState<TransientUnlockWindowState>();
                 window.ConsentGranted =
                     TransientUnlockTestKnobs.ConsentGranted;
-                var availability =
-                    new TransientUnlockSwapIn.Availability(
-                        TransientUnlockAvailability
-                            .CreateProductionRestore());
+                var restore =
+                    TransientUnlockAvailability.CreateProductionRestore();
                 TransientUnlockTestKnobs.LastSwapSummary =
                     TransientUnlockSwapIn.SwapIn(
                         context,
                         window,
-                        availability,
+                        restore,
                         TransientUnlockTestKnobs.OriginalAttestation ??
                             (_ => true));
                 TransientUnlockTestKnobs.Window = window;

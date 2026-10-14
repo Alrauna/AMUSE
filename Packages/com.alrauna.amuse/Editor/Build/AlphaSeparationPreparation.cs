@@ -193,10 +193,8 @@ namespace Alrauna.Amuse.Editor.Build
                                     plan, submesh.SourceSubmeshIndex))
                             {
                                 reportedAnisotropySlots.Add(slotIndex);
-                                state.RecordSlotRefusal(
-                                    AlphaSeparationSlotRefusal
-                                        .AnisotropyDifferences);
-                                AmuseReports.SlotSeparationRefusal(
+                                AmuseReports.RecordRefusal(
+                                    state,
                                     target.Renderer,
                                     slotIndex,
                                     AlphaSeparationSlotRefusal
@@ -382,10 +380,8 @@ namespace Alrauna.Amuse.Editor.Build
                         // submeshes that bind one slot.
                         if (reportedAnisotropySlots.Add(coverageSlotIndex))
                         {
-                            state.RecordSlotRefusal(
-                                AlphaSeparationSlotRefusal
-                                    .AnisotropyDifferences);
-                            AmuseReports.SlotSeparationRefusal(
+                            AmuseReports.RecordRefusal(
+                                state,
                                 target.Renderer,
                                 coverageSlotIndex,
                                 AlphaSeparationSlotRefusal
@@ -394,10 +390,8 @@ namespace Alrauna.Amuse.Editor.Build
                     }
                     else
                     {
-                        state.RecordSlotRefusal(
-                            AlphaSeparationSlotRefusal
-                                .OpaqueCoverageBelowMinimum);
-                        AmuseReports.SlotSeparationRefusal(
+                        AmuseReports.RecordRefusal(
+                            state,
                             target.Renderer,
                             coverageSlotIndex,
                             AlphaSeparationSlotRefusal
@@ -449,10 +443,8 @@ namespace Alrauna.Amuse.Editor.Build
 
                 if (markerCarries)
                 {
-                    state.RecordSlotRefusal(
-                        AlphaSeparationSlotRefusal
-                            .MarkerClipCarriesSlotBinding);
-                    AmuseReports.SlotSeparationRefusal(
+                    AmuseReports.RecordRefusal(
+                        state,
                         target.Renderer,
                         slotIndex,
                         AlphaSeparationSlotRefusal
@@ -571,8 +563,8 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     var lastRefusal =
                         collectedRefusals[collectedRefusals.Count - 1];
-                    state.RecordSlotRefusal(slotRefusal);
-                    AmuseReports.SlotSeparationRefusal(
+                    AmuseReports.RecordRefusal(
+                        state,
                         target.Renderer,
                         slotIndex,
                         slotRefusal,
@@ -737,20 +729,7 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var outcomes = plan.Source.Submeshes[submeshIndex].Outcomes;
-            if (outcomes == null)
-            {
-                return false;
-            }
-
-            for (var i = 0; i < outcomes.Count; i++)
-            {
-                if (outcomes[i] == TriangleAlphaOutcome.Unknown)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return outcomes?.Contains(TriangleAlphaOutcome.Unknown) == true;
         }
 
         /// <summary>
@@ -772,14 +751,11 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                state.RecordSlotRefusal(reason);
-                AmuseReports.SlotSeparationRefusal(
+                AmuseReports.RecordRefusal(
+                    state,
                     target.Renderer,
                     submesh.SourceMaterialBindingIndex,
-                    reason,
-                    target.Renderer != null
-                        ? target.Renderer.gameObject.name
-                        : null);
+                    reason);
             }
 
             return null;

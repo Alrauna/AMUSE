@@ -579,7 +579,7 @@ namespace Alrauna.Amuse.Editor.Build
             TransientUnlockSwapIn.SwapIn(
                 context,
                 context.GetState<TransientUnlockWindowState>(),
-                TransientUnlockSwapIn.Availability.FromProduction(),
+                TransientUnlockAvailability.CreateProductionRestore(),
                 lockedOriginalAttestation);
 
             // From here the run is reported, so the apply pass may
@@ -602,11 +602,16 @@ namespace Alrauna.Amuse.Editor.Build
 
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            var maxMipLevel = ProofMipCapFrom(optimizer);
-            var minTextureSize = MinTextureSizeFrom(optimizer);
-            var minimumOpaqueCoveragePercent = MinimumCoverageFrom(optimizer);
+            var maxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                optimizer?.PreserveTransparencyMaxMipLevel ?? -1);
+            var minTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                optimizer?.PreserveTransparencyMinTextureSize ?? -1);
+            var minimumOpaqueCoveragePercent =
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    optimizer?.MinimumOpaqueCoveragePercent ?? 0);
             var minimumOpaqueCoverageToPreservePercent =
-                MinimumPreserveCoverageFrom(optimizer);
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    optimizer?.MinimumOpaqueCoverageToPreservePercent ?? 0);
             var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
             var polygonClampPercent = PolygonClampPercentFrom(optimizer);
             var densityCapPercent =
@@ -1094,81 +1099,6 @@ namespace Alrauna.Amuse.Editor.Build
             return component != null && !component.AmuseDisabled
                 ? component
                 : null;
-        }
-
-        /// <summary>
-        /// Maps the optimizer's "Preserve Transparency Maximum Mipmap"
-        /// policy to the proof's mip cap: a stored -1 (All Mips) becomes
-        /// "no cap". A missing component cannot reach the renderer loop —
-        /// the trigger already required one — but the defensive read keeps
-        /// the loop's behavior total anyway.
-        /// </summary>
-        internal static int ProofMipCapFrom(
-            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
-        {
-            if (optimizer == null)
-            {
-                return int.MaxValue;
-            }
-            return RuntimeStateResolution.ProofMipCapFrom(
-                optimizer.PreserveTransparencyMaxMipLevel);
-        }
-
-        /// <summary>
-        /// Maps the optimizer's "Preserve Transparency Minimum Texture
-        /// Size" policy to the proof's minimum: a stored -1 (All
-        /// Sizes) becomes 1, which every level satisfies. A missing
-        /// component also maps to 1. The defensive read mirrors
-        /// <see cref="ProofMipCapFrom"/>.
-        /// </summary>
-        internal static int MinTextureSizeFrom(
-            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
-        {
-            if (optimizer == null)
-            {
-                return 1;
-            }
-            return RuntimeStateResolution.MinTextureSizeFrom(
-                optimizer.PreserveTransparencyMinTextureSize);
-        }
-
-        /// <summary>
-        /// Maps the optimizer's "Minimum Opaque Coverage to Convert (Per Material)"
-        /// policy to the gate: a stored value below zero is a defect
-        /// against the Range attribute, and the defensive read treats
-        /// it as 0, which always splits on at least one proven
-        /// triangle. The read mirrors <see cref="ProofMipCapFrom"/>.
-        /// </summary>
-        internal static int MinimumCoverageFrom(
-            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
-        {
-            if (optimizer == null)
-            {
-                return 0;
-            }
-            return RuntimeStateResolution.MinimumCoverageFrom(
-                optimizer.MinimumOpaqueCoveragePercent);
-        }
-
-        /// <summary>
-        /// Maps the optimizer's "Minimum Opaque Coverage to Preserve (Per
-        /// Material)" policy to the fold gate. A stored value below zero
-        /// is a defect against the Range attribute. The defensive read
-        /// treats it as 0, which never flattens. A stored value above 100
-        /// clamps to 100. The high side is the aggressive direction for
-        /// this gate, so the clamp caps how large an unproven share a
-        /// slot may hold and still flatten. The read mirrors
-        /// <see cref="MinimumCoverageFrom"/>.
-        /// </summary>
-        internal static int MinimumPreserveCoverageFrom(
-            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
-        {
-            if (optimizer == null)
-            {
-                return 0;
-            }
-            return RuntimeStateResolution.MinimumPreserveCoverageFrom(
-                optimizer.MinimumOpaqueCoverageToPreservePercent);
         }
 
         /// <summary>

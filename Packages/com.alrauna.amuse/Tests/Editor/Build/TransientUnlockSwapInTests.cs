@@ -289,10 +289,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             TransientUnlockTestKnobs.BuildPath =
                 AmuseBuildPath.ApplyOnPlay;
 
-            var availability =
-                TransientUnlockSwapIn.Availability.FromProduction();
+            var restore =
+                TransientUnlockAvailability.CreateProductionRestore();
 
-            Assert.That(availability.Restore, Is.Not.Null,
+            Assert.That(restore, Is.Not.Null,
                 "the resolved availability must carry the in-memory " +
                 "restore, with no vendor-shaped gate left to refuse it");
         }

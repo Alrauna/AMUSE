@@ -210,6 +210,32 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// Records one slot refusal in the finish state census.
+        /// Emits the corresponding report entry.
+        /// </summary>
+        internal static void RecordRefusal(
+            AmusePlatformFinishState finishState,
+            Renderer renderer,
+            int slotIndex,
+            AlphaSeparationSlotRefusal cause,
+            string rendererName = null,
+            Material offendingMaterial = null,
+            System.Collections.Generic.IReadOnlyDictionary<Material, Material>
+                provenMapping = null,
+            string detail = null)
+        {
+            finishState?.RecordSlotRefusal(cause);
+            SlotSeparationRefusal(
+                renderer,
+                slotIndex,
+                cause,
+                rendererName,
+                offendingMaterial,
+                provenMapping,
+                detail);
+        }
+
+        /// <summary>
         /// One Information entry per slot whose prepared separation was
         /// dropped, with the slot index, the exact separation refusal, the
         /// renderer name, and — when the refusal names one — the offending

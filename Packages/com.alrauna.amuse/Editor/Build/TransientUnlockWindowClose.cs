@@ -162,17 +162,12 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var slot in pair.Slots)
             {
-                finishState.RecordSlotRefusal(
-                    AlphaSeparationSlotRefusal
-                        .TransientUnlockCloneRetained);
-                AmuseReports.SlotSeparationRefusal(
+                AmuseReports.RecordRefusal(
+                    finishState,
                     slot.Renderer,
                     slot.SlotIndex,
                     AlphaSeparationSlotRefusal
-                        .TransientUnlockCloneRetained,
-                    slot.Renderer != null
-                        ? slot.Renderer.gameObject.name
-                        : null);
+                        .TransientUnlockCloneRetained);
             }
 
             return false;

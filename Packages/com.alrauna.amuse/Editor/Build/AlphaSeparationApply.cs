@@ -162,10 +162,8 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     foreach (var candidate in prepared.CandidateSlots)
                     {
-                        state.RecordSlotRefusal(
-                            AlphaSeparationSlotRefusal
-                                .SamplingPolicyChanged);
-                        AmuseReports.SlotSeparationRefusal(
+                        AmuseReports.RecordRefusal(
+                            state,
                             prepared.Target.Renderer,
                             candidate.Plan.SourceMaterialBindingIndex,
                             AlphaSeparationSlotRefusal
@@ -259,15 +257,12 @@ namespace Alrauna.Amuse.Editor.Build
                     // dropped and nothing else is affected.
                     foreach (var candidate in prepared.CandidateSlots)
                     {
-                        state.RecordSlotRefusal(
-                            AlphaSeparationSlotRefusal
-                                .RendererChangedSincePreparation);
-                        AmuseReports.SlotSeparationRefusal(
+                        AmuseReports.RecordRefusal(
+                            state,
                             renderer,
                             candidate.Plan.SourceMaterialBindingIndex,
                             AlphaSeparationSlotRefusal
                                 .RendererChangedSincePreparation);
-
                     }
 
                     rendererSurvivors.Add(survivors);
@@ -297,17 +292,13 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     foreach (var candidate in prepared.CandidateSlots)
                     {
-                        state.RecordSlotRefusal(
-                            AlphaSeparationSlotRefusal
-                                .RuntimeMaterialValueNotMapped);
-                        AmuseReports.SlotSeparationRefusal(
+                        AmuseReports.RecordRefusal(
+                            state,
                             renderer,
                             candidate.Plan.SourceMaterialBindingIndex,
                             AlphaSeparationSlotRefusal
                                 .RuntimeMaterialValueNotMapped,
-                            renderer.gameObject.name,
-                            null,
-                            candidate.OpaqueOfAdmitted);
+                            provenMapping: candidate.OpaqueOfAdmitted);
                     }
 
                     rendererSurvivors.Add(
@@ -370,14 +361,13 @@ namespace Alrauna.Amuse.Editor.Build
                         targetBindings, splitCount, out var unmapped);
                     if (refusal != AlphaSeparationSlotRefusal.None)
                     {
-                        state.RecordSlotRefusal(refusal);
-                        AmuseReports.SlotSeparationRefusal(
+                        AmuseReports.RecordRefusal(
+                            state,
                             renderer,
                             candidate.Plan.SourceMaterialBindingIndex,
                             refusal,
-                            renderer.gameObject.name,
-                            unmapped,
-                            candidate.OpaqueOfAdmitted);
+                            offendingMaterial: unmapped,
+                            provenMapping: candidate.OpaqueOfAdmitted);
                         continue;
                     }
 
