@@ -407,12 +407,66 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 RowText.DisclosureSentence(1),
                 RowText.ErroredSentence(Path, TypeName),
                 RowText.NoRenderersSentence(),
+                RowText.RefusedSlotSentence(),
+                RowText.UntouchableSlotSentence(100),
+                RowText.SplittableSlotSentence(40, 100),
+                RowText.ConvertableSlotSentence(100),
             };
 
             foreach (var sentence in sentences)
             {
                 Assert.That(sentence, Is.Not.Null.And.Not.Empty);
             }
+        }
+
+        // --- Simplified transformation sentence tests ---
+
+        [Test]
+        public void RefusedSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.RefusedSlotSentence(),
+                Is.EqualTo("Refused: AMUSE currently does not support this material"));
+        }
+
+        [Test]
+        public void UntouchableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.UntouchableSlotSentence(100),
+                Is.EqualTo("Untouchable: 0 of out 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void UntouchableSlotSentenceHandlesZeroPolygons()
+        {
+            Assert.That(
+                RowText.UntouchableSlotSentence(0),
+                Is.EqualTo("Untouchable: 0 of out 0 polygons may be moved"));
+        }
+
+        [Test]
+        public void SplittableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.SplittableSlotSentence(40, 100),
+                Is.EqualTo("Splittable: 40 of out 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void ConvertableSlotSentenceMatchesSimplifiedSpec()
+        {
+            Assert.That(
+                RowText.ConvertableSlotSentence(100),
+                Is.EqualTo("Convertable: 100 out of 100 polygons may be moved"));
+        }
+
+        [Test]
+        public void ConvertableSlotSentenceHandlesZeroPolygons()
+        {
+            Assert.That(
+                RowText.ConvertableSlotSentence(0),
+                Is.EqualTo("Convertable: 0 out of 0 polygons may be moved"));
         }
     }
 }

@@ -156,6 +156,26 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// </summary>
     internal static class RowText
     {
+        internal static string RefusedSlotSentence()
+        {
+            return "Refused: AMUSE currently does not support this material";
+        }
+
+        internal static string UntouchableSlotSentence(int total)
+        {
+            return "Untouchable: 0 of out " + total + " polygons may be moved";
+        }
+
+        internal static string SplittableSlotSentence(int proven, int total)
+        {
+            return "Splittable: " + proven + " of out " + total + " polygons may be moved";
+        }
+
+        internal static string ConvertableSlotSentence(int total)
+        {
+            return "Convertable: " + total + " out of " + total + " polygons may be moved";
+        }
+
         internal static string SplitRowSentence(int slotIndex, int proven, int total)
         {
             // A slot with nothing proven cannot claim a split. A
