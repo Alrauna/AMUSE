@@ -46,14 +46,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class AlphaSeparationApplyTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
@@ -155,15 +155,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private void DestroyTracked()
         {
-            for (var index = tracked.Count - 1; index >= 0; index--)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
         }
 
         // --- Test-local plugins, platforms and the seam probe --------------
@@ -5400,8 +5392,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private sealed class TransparentParityResult : IDisposable
         {
-            private readonly List<UnityEngine.Object> owned =
-                new List<UnityEngine.Object>();
+            private readonly TestTransientScope _scope =
+                new TestTransientScope(allowDestroyingAssets: true);
 
             private GameObject root;
             private AnimationClip clip;
@@ -5424,7 +5416,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 if (obj != null)
                 {
-                    owned.Add(obj);
+                    _scope.Track(obj);
                 }
 
                 return obj;
@@ -5546,15 +5538,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DestroyCommittedClone(root, controller);
                 DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
-                for (var index = owned.Count - 1; index >= 0; index--)
-                {
-                    if (owned[index] != null)
-                    {
-                        UnityEngine.Object.DestroyImmediate(owned[index]);
-                    }
-                }
-
-                owned.Clear();
+                _scope.TearDown();
             }
         }
 

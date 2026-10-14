@@ -404,6 +404,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal const string TempFolder =
             "Assets/AmuseTests_TransientUnlock";
 
+        /// <summary>Deletes the temp folder the lifecycle created, if present.</summary>
+        internal static void DeleteTempFolder()
+        {
+            if (TempFolder != null && UnityEditor.AssetDatabase.IsValidFolder(TempFolder))
+            {
+                UnityEditor.AssetDatabase.DeleteAsset(TempFolder);
+            }
+        }
+
         internal static HostLifecycleFacts SupportedFacts()
         {
             return new HostLifecycleFacts(

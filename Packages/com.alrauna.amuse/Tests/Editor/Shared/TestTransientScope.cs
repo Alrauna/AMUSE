@@ -16,6 +16,8 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
         private readonly List<UnityEngine.Object> _transient =
             new List<UnityEngine.Object>();
 
+        private readonly bool _allowDestroyingAssets;
+
         /// <summary>
         /// The project-relative temp folder this scope owns, or null when
         /// the scope tracks objects only.
@@ -25,6 +27,12 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
         internal TestTransientScope(string tempFolder = null)
         {
             TempFolder = tempFolder;
+        }
+
+        internal TestTransientScope(bool allowDestroyingAssets, string tempFolder = null)
+        {
+            TempFolder = tempFolder;
+            _allowDestroyingAssets = allowDestroyingAssets;
         }
 
         /// <summary>Creates the temp folder when it is absent.</summary>
@@ -48,7 +56,8 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
             {
                 if (obj != null)
                 {
-                    UnityEngine.Object.DestroyImmediate(obj);
+                    UnityEngine.Object.DestroyImmediate(
+                        obj, _allowDestroyingAssets);
                 }
             }
 

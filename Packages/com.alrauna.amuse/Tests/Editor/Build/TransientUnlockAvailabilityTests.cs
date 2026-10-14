@@ -1,7 +1,7 @@
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -13,8 +13,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockAvailabilityTests
     {
-        private readonly List<UnityEngine.Object> _tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [SetUp]
         public void SetUp()
@@ -26,15 +26,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [TearDown]
         public void TearDown()
         {
-            foreach (var tracked in _tracked)
-            {
-                if (tracked != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked);
-                }
-            }
-
-            _tracked.Clear();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             Thry.ThryEditor.ShaderOptimizer.Reset();
         }
@@ -50,7 +42,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var clone = TransientUnlockTestLifecycle.LockedMaterial(
                 "SeamProbe");
-            _tracked.Add(clone);
+            _scope.Track(clone);
 
             var restore =
                 TransientUnlockAvailability.CreateProductionRestore();

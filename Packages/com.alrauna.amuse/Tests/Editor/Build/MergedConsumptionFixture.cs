@@ -82,8 +82,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal int Remaining;
         }
 
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
         protected readonly Dictionary<string, AuthoredTriangle> authored =
             new Dictionary<string, AuthoredTriangle>();
 
@@ -115,8 +115,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         protected T Track<T>(T asset) where T : UnityEngine.Object
         {
-            tracked.Add(asset);
-            return asset;
+            return _scope.Track(asset);
         }
 
         private AnisotropicFilteringPin _filteringPin;
@@ -132,21 +131,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             _filteringPin.Dispose();
             OptimizerMergeObservation.Reset();
-            foreach (var asset in tracked)
-            {
-                if (asset == null) continue;
-                if (AssetDatabase.Contains(asset))
-                {
-                    // Persistent assets go with the temp folder deletion
-                    // below; DestroyImmediate refuses them without the
-                    // asset flag and logs an error per object.
-                    continue;
-                }
-
-                UnityEngine.Object.DestroyImmediate(asset);
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
             authored.Clear();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {

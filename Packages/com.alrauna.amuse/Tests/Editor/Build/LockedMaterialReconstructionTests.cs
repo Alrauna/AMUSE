@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -70,27 +71,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "the resolved original shader does not declare the " +
             "optimizer flag property";
 
-        private readonly List<Object> tracked = new List<Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [TearDown]
         public void TearDown()
         {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
         }
 
         private T Track<T>(T obj) where T : Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;

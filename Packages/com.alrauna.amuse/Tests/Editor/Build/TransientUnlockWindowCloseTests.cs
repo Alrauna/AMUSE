@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Tests.Editor.Host;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf.animator;
 using NUnit.Framework;
@@ -21,13 +22,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockWindowCloseTests
     {
-        private readonly List<Object> tracked = new List<Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [SetUp]
         public void SetUp()
         {
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
             TransientUnlockTestLifecycle.OpenFixtureScene();
@@ -37,49 +39,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
-            DestroyTracked();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
         }
-
-        /// <summary>
-        /// Deletes the test-owned persistence folder if present. Called
-        /// from SetUp and TearDown: a container left by an earlier build
-        /// must never leak into the next build's asset-saver state.
-        /// </summary>
-        internal static void DeleteTempFolder()
-        {
-            if (AssetDatabase.IsValidFolder(
-                    TransientUnlockTestLifecycle.TempFolder))
-            {
-                AssetDatabase.DeleteAsset(
-                    TransientUnlockTestLifecycle.TempFolder);
-            }
-        }
-
 
         private T Track<T>(T obj) where T : Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
-        }
-
-        private void DestroyTracked()
-        {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
         }
 
         private GameObject BuildAvatarRoot(string name)

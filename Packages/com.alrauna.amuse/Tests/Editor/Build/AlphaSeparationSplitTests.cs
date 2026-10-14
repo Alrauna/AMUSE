@@ -325,8 +325,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         // --- Falsifier infrastructure ----------------------------------------
 
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         private AnisotropicFilteringPin _filteringPin;
 
@@ -340,7 +340,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
@@ -355,15 +355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private void DestroyTracked()
         {
-            for (var index = tracked.Count - 1; index >= 0; index--)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked[index]);
-                }
-            }
-
-            tracked.Clear();
+            _scope.TearDown();
         }
 
         private static Material VerifiedOpaqueMaterial()

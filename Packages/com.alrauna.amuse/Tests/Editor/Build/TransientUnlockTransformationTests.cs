@@ -4,6 +4,7 @@ using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using nadena.dev.ndmf.platform;
@@ -29,15 +30,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockTransformationTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [SetUp]
         public void SetUp()
         {
             TransientUnlockTestKnobs.Reset();
             TransientUnlockTransformationTestPlugin.ResetProbeState();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
             TransientUnlockTestLifecycle.OpenFixtureScene();
@@ -47,49 +48,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
-            DestroyTracked();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
             TransientUnlockTransformationTestPlugin.ResetProbeState();
-            DeleteTempFolder();
-        }
-
-        /// <summary>
-        /// Deletes the test-owned persistence folder if present. The
-        /// window's clone persistence is load-bearing, so a container left
-        /// by an earlier build must never leak into the next one.
-        /// </summary>
-        internal static void DeleteTempFolder()
-        {
-            if (AssetDatabase.IsValidFolder(
-                    TransientUnlockTestLifecycle.TempFolder))
-            {
-                AssetDatabase.DeleteAsset(
-                    TransientUnlockTestLifecycle.TempFolder);
-            }
+            TransientUnlockTestLifecycle.DeleteTempFolder();
         }
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
-        }
-
-        private void DestroyTracked()
-        {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
         }
 
         private GameObject BuildAvatarRoot(string name)

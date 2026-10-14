@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -107,24 +108,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string LockedStandInShaderName =
             "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
 
-        private readonly System.Collections.Generic.List<UnityEngine.Object>
-            _owned = new System.Collections.Generic.List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope();
 
         [TearDown]
         public void DestroyOwnedObjects()
         {
-            foreach (var value in _owned)
-            {
-                if (value != null) UnityEngine.Object.DestroyImmediate(value);
-            }
-
-            _owned.Clear();
+            _scope.TearDown();
         }
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
-            _owned.Add(obj);
-            return obj;
+            return _scope.Track(obj);
         }
 
         [Test]

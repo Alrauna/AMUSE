@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using UnityEditor;
 
@@ -20,14 +20,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class TransientUnlockSwapInTests
     {
-        private readonly List<UnityEngine.Object> tracked =
-            new List<UnityEngine.Object>();
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(allowDestroyingAssets: true);
 
         [SetUp]
         public void SetUp()
         {
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
             AssetDatabase.Refresh();
             TransientUnlockTestKnobs.DisableAaoForFixture();
             TransientUnlockTestLifecycle.OpenFixtureScene();
@@ -37,50 +37,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
-            DestroyTracked();
+            _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             TransientUnlockTestKnobs.Reset();
-            DeleteTempFolder();
+            TransientUnlockTestLifecycle.DeleteTempFolder();
         }
-
-        /// <summary>
-        /// Deletes the test-owned persistence folder if present. Called
-        /// from SetUp and TearDown: a container left by an earlier build
-        /// must never leak into the next build's asset-saver state.
-        /// </summary>
-        internal static void DeleteTempFolder()
-        {
-            if (AssetDatabase.IsValidFolder(
-                    TransientUnlockTestLifecycle.TempFolder))
-            {
-                AssetDatabase.DeleteAsset(
-                    TransientUnlockTestLifecycle.TempFolder);
-            }
-        }
-
 
         private T Track<T>(T obj) where T : UnityEngine.Object
         {
             if (obj != null)
             {
-                tracked.Add(obj);
+                _scope.Track(obj);
             }
 
             return obj;
-        }
-
-        private void DestroyTracked()
-        {
-            for (var index = 0; index < tracked.Count; index++)
-            {
-                if (tracked[index] != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(
-                        tracked[index], true);
-                }
-            }
-
-            tracked.Clear();
         }
 
         private GameObject BuildAvatarRoot(string name)
