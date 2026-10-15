@@ -459,6 +459,48 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void DrawTransformationRowFallsBackToSourceMaterialPathWhenSlotMaterialNull()
+        {
+            var go = new GameObject("TestAvatar");
+            var child = new GameObject("RendererObj");
+            child.transform.SetParent(go.transform, false);
+            var mr = child.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new Material[1]; // slot 0 is null
+
+            const string fallbackMatPath = "Assets/AmuseTests_FallbackMat.mat";
+            var fallbackMat = new Material(Shader.Find("Standard"));
+            AssetDatabase.CreateAsset(fallbackMat, fallbackMatPath);
+            fallbackMat = AssetDatabase.LoadAssetAtPath<Material>(fallbackMatPath);
+
+            UnityEngine.Object drawnMaterial = null;
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnMaterialObjectFieldDrawnForTest =
+                (obj, type, allowScene) => drawnMaterial = obj;
+
+            try
+            {
+                var row = MaterialTransformationRow.Slot(
+                    "RendererObj", typeof(MeshRenderer).FullName,
+                    0, 10, 10, "Splittable", fallbackMatPath);
+
+                var drawMethod = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                    .GetMethod("DrawTransformationRow", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+                RenderInHostWindow(() =>
+                {
+                    drawMethod.Invoke(null, new object[] { row, go.transform });
+                });
+
+                Assert.That(drawnMaterial, Is.SameAs(fallbackMat));
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnMaterialObjectFieldDrawnForTest = null;
+                AssetDatabase.DeleteAsset(fallbackMatPath);
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void OnEditorUpdateStepsDryRunUntilDone()
         {
             var component = NewHiddenComponent();

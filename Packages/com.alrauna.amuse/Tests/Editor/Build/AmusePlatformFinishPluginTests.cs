@@ -7029,6 +7029,47 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void RecordPlayModeRendererRefusalUsesScenePathAndResolvesMaterial()
+        {
+            var state = new AmusePlatformFinishState();
+            var sceneRoot = new GameObject("SceneRoot");
+            const string testMatPath = "Assets/AmuseTests_RefusalTestMat.mat";
+
+            try
+            {
+                var sceneChild = new GameObject("MyRenderer");
+                sceneChild.transform.SetParent(sceneRoot.transform, false);
+                var sourceMat = new Material(Shader.Find("Standard"));
+                AssetDatabase.CreateAsset(sourceMat, testMatPath);
+
+                var registry = new nadena.dev.ndmf.ObjectRegistry(sceneRoot.transform);
+                using (new nadena.dev.ndmf.ObjectRegistryScope(registry))
+                {
+                    var mr = sceneChild.AddComponent<MeshRenderer>();
+                    var cloneMat = new Material(sourceMat);
+                    mr.sharedMaterials = new[] { cloneMat };
+
+                    ((nadena.dev.ndmf.IObjectRegistry)registry).GetReference(mr, true);
+                    ((nadena.dev.ndmf.IObjectRegistry)registry).RegisterReplacedObject(sourceMat, cloneMat);
+
+                    AmusePlatformFinishPass.RecordPlayModeRendererRefusal(
+                        state, mr, "Armature/Hips/MyRenderer", typeof(MeshRenderer).FullName,
+                        RendererAnalysisRefusal.UnsupportedRendererType, 1, 1, null);
+
+                    Assert.That(state.PlayModeRendererRows.Count, Is.EqualTo(2));
+                    Assert.That(state.PlayModeRendererRows[0].rendererPath, Is.EqualTo("MyRenderer"));
+                    Assert.That(state.PlayModeRendererRows[1].rendererPath, Is.EqualTo("MyRenderer"));
+                    Assert.That(state.PlayModeRendererRows[1].sourceMaterialPath, Is.EqualTo(testMatPath));
+                }
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(testMatPath);
+                UnityEngine.Object.DestroyImmediate(sceneRoot);
+            }
+        }
+
         private static void AssertTwoSlotTriangleFixture(Mesh mesh)
         {
             Assert.That(

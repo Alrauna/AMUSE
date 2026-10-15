@@ -47,6 +47,7 @@ namespace Alrauna.Amuse.Editor
         internal static Action<string, MessageType> OnHelpBoxDrawnForTest;
         internal static Action<string, GUIStyle> OnRendererLabelDrawnForTest;
         internal static Action<UnityEngine.Object, Type, bool> OnRendererObjectFieldDrawnForTest;
+        internal static Action<UnityEngine.Object, Type, bool> OnMaterialObjectFieldDrawnForTest;
         internal static Action<string> OnButtonDrawnForTest;
         internal static Func<string, bool> ButtonClickOverrideForTest;
 
@@ -365,6 +366,19 @@ namespace Alrauna.Amuse.Editor
                         material = materials[row.SlotIndex];
                     }
 
+                    if (!string.IsNullOrEmpty(row.SourceMaterialPath))
+                    {
+                        var currentPath = material != null ? AssetDatabase.GetAssetPath(material) : null;
+                        if (currentPath != row.SourceMaterialPath)
+                        {
+                            var loaded = AssetDatabase.LoadAssetAtPath<Material>(row.SourceMaterialPath);
+                            if (loaded != null)
+                            {
+                                material = loaded;
+                            }
+                        }
+                    }
+
                     int indentOffset = EditorGUI.indentLevel * 15;
                     float halfWidth = Mathf.Max(60f, (EditorGUIUtility.currentViewWidth - indentOffset) / 2f - 20f);
                     using (new EditorGUILayout.HorizontalScope())
@@ -373,25 +387,19 @@ namespace Alrauna.Amuse.Editor
                         {
                             EditorGUILayout.ObjectField(renderer, typeof(Renderer), true, GUILayout.Width(halfWidth));
                             OnRendererObjectFieldDrawnForTest?.Invoke(renderer, typeof(Renderer), true);
-                            int originalIndent = EditorGUI.indentLevel;
-                            EditorGUI.indentLevel = 0;
-                            EditorGUILayout.ObjectField(material, typeof(Material), false);
-                            EditorGUI.indentLevel = originalIndent;
                         }
                         else
                         {
                             var pathLabel = row.RendererPath ?? string.Empty;
                             EditorGUILayout.LabelField(pathLabel, EditorStyles.boldLabel, GUILayout.Width(halfWidth));
                             OnRendererLabelDrawnForTest?.Invoke(pathLabel, EditorStyles.boldLabel);
-                            if (!string.IsNullOrEmpty(row.SourceMaterialPath))
-                            {
-                                var mat = AssetDatabase.LoadAssetAtPath<Material>(row.SourceMaterialPath);
-                                int originalIndent = EditorGUI.indentLevel;
-                                EditorGUI.indentLevel = 0;
-                                EditorGUILayout.ObjectField(mat, typeof(Material), false);
-                                EditorGUI.indentLevel = originalIndent;
-                            }
                         }
+
+                        int originalIndent = EditorGUI.indentLevel;
+                        EditorGUI.indentLevel = 0;
+                        EditorGUILayout.ObjectField(material, typeof(Material), false);
+                        OnMaterialObjectFieldDrawnForTest?.Invoke(material, typeof(Material), false);
+                        EditorGUI.indentLevel = originalIndent;
                     }
 
                     EditorGUI.indentLevel++;
