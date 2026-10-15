@@ -46,12 +46,18 @@ namespace Alrauna.Amuse.Editor.Host
         /// Process-local cache, keyed by source asset identity. The key
         /// is the asset GUID plus the source and .meta write times, so any
         /// re-import or settings change re-clones instead of serving stale
-        /// evidence. Editor-session scope only: nothing crosses restarts.
+        /// evidence. The cutoff rides in as the exact clamped float, not a
+        /// quantized bucket: two cutoffs inside one bucket can straddle a
+        /// texel byte and must not share a chain. The disk-fallback flag
+        /// rides in too, so a capture attempted under a disallowed
+        /// fallback is never served to a capture that allows the route.
+        /// Editor-session scope only: nothing crosses restarts.
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
-                    TextureChannel channel, int cutoffBits,
-                    AlphaPolicyBounds bounds), AlphaMipChain> Cache = new();
+                    TextureChannel channel, float cutoff,
+                    AlphaPolicyBounds bounds, bool diskFallbackAllowed),
+                AlphaMipChain> Cache = new();
 
         internal static bool AllowDiskFallback { get; set; } = true;
 
@@ -92,17 +98,20 @@ namespace Alrauna.Amuse.Editor.Host
             var guid = AssetDatabase.AssetPathToGUID(path);
             var sourceFile = new FileInfo(path);
             var metaFile = new FileInfo(path + ".meta");
-            var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
+            var cutoff = Mathf.Clamp01(cutoffThreshold);
             // The bounds ride in the key: two policies can share a cutoff
             // while building different chains, so a policy change must
             // re-capture instead of serving the other policy's evidence.
+            // AllowDiskFallback is the same value the capture gate below
+            // consults, so the key names the route that built the chain.
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
                 metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
                 channel,
-                cutoffBits,
-                bounds);
+                cutoff,
+                bounds,
+                AllowDiskFallback);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -188,7 +197,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // the bounds in the cache key, and a policy-active
                 // texture whose only route is this clone keeps a
                 // capture route.
-                var threshold = Mathf.Clamp01(cutoffThreshold);
+                var threshold = cutoff;
                 var levels = new AlphaTextureData[clone.mipmapCount];
                 for (var mip = 0; mip < levels.Length; mip++)
                 {

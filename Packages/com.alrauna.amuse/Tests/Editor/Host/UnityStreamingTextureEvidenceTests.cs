@@ -128,6 +128,37 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return loaded;
         }
 
+        /// <summary>
+        /// Imports a streaming-resident RGBA32 texture with a source
+        /// file, two texels: alpha byte 128 and alpha byte 0. Byte 128
+        /// decodes to 0.50196, so the cutoff pair 0.50196 and 0.50205
+        /// straddles it while both quantize into the same 1/10000
+        /// bucket the quantized key collapsed.
+        /// </summary>
+        private Texture2D ImportStreamingByte128Texture(string name)
+        {
+            const int width = 2;
+            const int height = 1;
+            var path = TempFolder + "/" + name + ".png";
+            var pixels = new Color32[width * height];
+            pixels[0] = new Color32(255, 255, 255, 128);
+            pixels[1] = new Color32(255, 255, 255, 0);
+            var loaded = TestTextureImport.WritePng(
+                path, width, height, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.streamingMipmaps = true;
+                });
+            Assert.That(
+                loaded.streamingMipmaps, Is.True,
+                "fixture precondition: the imported texture must be " +
+                "streaming-resident");
+            return loaded;
+        }
+
         [Test]
         public void StreamingCache_DoesNotServeInertEvidenceUnderGateOnBounds()
         {
@@ -170,6 +201,46 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 gateOnChain[0].GetAlpha(0, 0),
                 Is.EqualTo(AlphaTextureData.ErasedFlag));
+        }
+
+        /// <summary>
+        /// The streaming cache quantized the cutoff into a 1/10000
+        /// bucket, so two cutoffs inside one bucket straddling a texel
+        /// byte served one chain to both verdicts: the first capture's
+        /// verdict survived a second cutoff that must decide the other
+        /// way. The key carries the exact clamped cutoff, so each
+        /// cutoff captures its own chain.
+        /// </summary>
+        [Test]
+        public void TwoCutoffsInOneBucketStraddlingByte128CaptureSeparateChains()
+        {
+            var texture = ImportStreamingByte128Texture(
+                "streaming_cutoff_bucket_straddle");
+
+            AlphaMipChain first;
+            AlphaMipChain second;
+            using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+            {
+                UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.50196f,
+                    AlphaPolicyBounds.Inert,
+                    out first);
+                UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.50205f,
+                    AlphaPolicyBounds.Inert,
+                    out second);
+            }
+
+            // Byte 128 decodes to ~0.50196: it passes the first cutoff,
+            // fails the second.
+            Assert.That(
+                second[0].GetAlpha(0, 0),
+                Is.Not.EqualTo(first[0].GetAlpha(0, 0)),
+                "the quantized key served one chain to both cutoffs");
         }
 
         /// <summary>
