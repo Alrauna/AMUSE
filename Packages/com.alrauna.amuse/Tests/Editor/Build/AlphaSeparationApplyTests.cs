@@ -6058,5 +6058,142 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(state.PlayModeRendererRows[0].movedTriangles, Is.EqualTo(100));
             Assert.That(state.PlayModeRendererRows[1].movedTriangles, Is.EqualTo(0));
         }
+
+        /// <summary>
+        /// A surviving slot whose already-opaque material maps to itself
+        /// keeps its material in the applied write. The record must report
+        /// zero moved triangles for that slot. Only a slot whose material
+        /// the write actually changed reports its proven count.
+        /// </summary>
+        [Test]
+        public void ASelfMappedSurvivingSlotReportsZeroMovedTriangles()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var rendererObj = Track(new GameObject(
+                "AMUSE self-mapped slot renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source, selfMapped };
+
+            // Slot 0 converts: its opaque mapping is the clone. Slot 1 is
+            // already opaque and maps to itself, exactly as the preparation
+            // records an already-opaque source.
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 4, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            const string rendererPath = "Avatar/SelfMappedSlotRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                    },
+                };
+
+            // The write swaps only the converting slot's material. The
+            // self-mapped slot keeps its own material. This is what the
+            // production finalization builds for this surviving plan.
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    null,
+                    new[] { clone, selfMapped },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 0,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 1,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+
+            var appliedSlots = AlphaSeparationApply.CollectAppliedSlots(state);
+            AlphaSeparationApply.UpdateAppliedMovedTriangles(state, appliedSlots);
+
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
+                    .movedTriangles,
+                Is.EqualTo(0),
+                "the write kept the self-mapped slot's material, so the " +
+                "slot moved nothing");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 0)
+                    .movedTriangles,
+                Is.EqualTo(2),
+                "the write changed the converting slot's material, so its " +
+                "proven triangles moved");
+        }
     }
 }

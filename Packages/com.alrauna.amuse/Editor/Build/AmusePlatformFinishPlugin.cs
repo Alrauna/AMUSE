@@ -208,6 +208,21 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal List<List<PreparedSlotSeparation>> SeparationSurvivingCandidates { get; set; }
 
+        /// <summary>
+        /// The material slots the applied writes actually changed, keyed by
+        /// renderer and slot index. Apply derives this set from the same
+        /// comparison that counts the applied opaque triangles: a slot is
+        /// changed when the write's material differs from what the renderer
+        /// held. A surviving slot whose already-opaque material maps to
+        /// itself never enters the set, because its write kept the slot's
+        /// material. The play-mode record keys its moved-triangle rows on
+        /// this set. Live transient host capability, deliberately outside
+        /// the evidence graph.
+        /// </summary>
+        internal HashSet<(Renderer renderer, int slot)>
+            AppliedChangedMaterialSlots { get; } =
+            new HashSet<(Renderer renderer, int slot)>();
+
         internal List<SerializedTransformationRow> PlayModeAvatarRows { get; } =
             new List<SerializedTransformationRow>();
 

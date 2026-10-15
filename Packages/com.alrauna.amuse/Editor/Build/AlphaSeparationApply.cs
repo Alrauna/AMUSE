@@ -893,7 +893,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// the appended submeshes' triangles for surviving Split slots.
         /// Every candidate whose slot matches a changed material adds, so
         /// a slot that binds several folded submeshes counts each submesh
-        /// once.
+        /// once. The changed slots are recorded on the state, so the
+        /// play-mode record keys its moved-triangle rows on this same
+        /// determination.
         /// </summary>
         private static int CountOpaqueTriangles(
             AlphaSeparationRendererWrite write,
@@ -925,6 +927,12 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     continue;
                 }
+
+                // The play-mode moved-triangle rows key on this same
+                // determination. A surviving slot whose material the write
+                // kept is a self-mapped no-op: it never enters the changed
+                // set, so its row reports zero moved triangles.
+                state.AppliedChangedMaterialSlots.Add((write.Renderer, slot));
 
                 foreach (var candidate in prepared.CandidateSlots)
                 {
@@ -1090,6 +1098,16 @@ namespace Alrauna.Amuse.Editor.Build
                     foreach (var candidate in survivors)
                     {
                         var slotIdx = candidate.Plan.SourceMaterialBindingIndex;
+                        if (!state.AppliedChangedMaterialSlots.Contains(
+                                (renderer, slotIdx)))
+                        {
+                            // The applied write kept this slot's material.
+                            // An already-opaque self-mapped slot survives the
+                            // plan but moved nothing, so it is not an
+                            // applied slot.
+                            continue;
+                        }
+
                         if (scenePath != null)
                         {
                             appliedSlots.Add((scenePath, slotIdx));
