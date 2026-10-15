@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEngine;
@@ -854,11 +855,13 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<Vector3> positions,
             IReadOnlyList<Vector2> uv,
             AlphaResolution resolution,
-            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets)
+            IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets,
+            CancellationToken cancellationToken = default)
         {
             var outcomes = new TriangleAlphaOutcome[indices.Count / 3];
             if (!resolution.IsResolved)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 for (var triangle = 0; triangle < outcomes.Length; triangle++)
                 {
                     outcomes[triangle] = TriangleAlphaOutcome.Unknown;
@@ -869,6 +872,10 @@ namespace Alrauna.Amuse.Editor.Host
 
             for (var triangle = 0; triangle < outcomes.Length; triangle++)
             {
+                if ((triangle & 1023) == 0 && cancellationToken.IsCancellationRequested)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
                 var a = indices[triangle * 3];
                 var b = indices[triangle * 3 + 1];
                 var c = indices[triangle * 3 + 2];
