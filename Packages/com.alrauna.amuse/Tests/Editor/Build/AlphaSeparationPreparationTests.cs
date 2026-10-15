@@ -1400,7 +1400,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // record, through the production slot-record construction
                 // the barrier itself uses, and on no sibling record.
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
                 var refusal = slotRecords[0].CaptureRefusals[0];
@@ -6858,6 +6859,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new Dictionary<AlphaFieldKey, AlphaMipChain>()),
                     AlphaSamplingPolicy.ConservativeDesktop,
                     0,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                     VerifiedLilToonTestSeams.VerifiedAlphaOnly);
 
                 Assert.That(result.IsResolved, Is.False);

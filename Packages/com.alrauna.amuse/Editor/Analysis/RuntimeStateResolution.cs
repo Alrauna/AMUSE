@@ -3,9 +3,87 @@ using System.Collections.Generic;
 using System.Threading;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
+using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Analysis
 {
+    /// <summary>
+    /// Host-supplied structural refusal check over one renderer's captured
+    /// animation bindings. The Analysis pipeline owns the refusal
+    /// precedence; this function owns the Host-side recognizer for the
+    /// structural property names. It returns
+    /// <see cref="RendererAnalysisRefusal.None"/> when the bindings name no
+    /// structural property.
+    /// </summary>
+    internal delegate RendererAnalysisRefusal TryStructuralRefusalFor(
+        IReadOnlyList<CapturedFloatBinding> floats,
+        IReadOnlyList<CapturedObjectBinding> objects,
+        string rendererPath,
+        string rendererTypeName);
+
+    /// <summary>
+    /// Host-supplied proof-relevance resolution for one captured float
+    /// binding. It answers whether the binding could address a requested
+    /// material property, and on <see cref="ProofRelevantBindingResolution.RendererWide"/>
+    /// names the resolved property in <paramref name="reference"/>. The
+    /// <c>out</c> parameter is why this is a named delegate rather than a
+    /// <c>Func</c>.
+    /// </summary>
+    internal delegate ProofRelevantBindingResolution TryResolveProofRelevant(
+        CapturedFloatBinding binding,
+        string rendererPath,
+        MaterialEvidenceRequest relevance,
+        out AnimatedPropertyRef reference,
+        string rendererTypeName);
+
+    /// <summary>
+    /// Host-supplied conservative recognizer for object-reference bindings
+    /// that carry material property syntax addressing a proof-relevant
+    /// property. True refuses the renderer as unsupported syntax; false
+    /// means the binding is irrelevant and resolution continues.
+    /// </summary>
+    internal delegate bool UnrecognizedObjectMaterialBindingCheck(
+        CapturedObjectBinding binding,
+        string rendererPath,
+        MaterialEvidenceRequest relevance,
+        string rendererTypeName);
+
+    /// <summary>
+    /// Host-supplied parse of one object-reference binding's material-slot
+    /// syntax. It returns true with <paramref name="slotIndex"/> set when
+    /// the binding parses as a material-slot assignment on the analyzed
+    /// renderer by a compatible renderer type, and false otherwise.
+    /// </summary>
+    internal delegate bool TryParseMaterialSlotBindingFor(
+        string bindingPath,
+        string bindingTypeFullName,
+        string propertyName,
+        string rendererPath,
+        string rendererTypeFullName,
+        out int slotIndex);
+
+    /// <summary>
+    /// Host-supplied per-triangle classification of one admitted alpha
+    /// resolution over one submesh's geometry. The delegate instance is
+    /// created once per resolve call by the caller and invoked once per
+    /// resolution, never per submesh or per mip.
+    /// </summary>
+    internal delegate TriangleAlphaOutcome[] ClassifyTriangleOutcomes(
+        IReadOnlyList<int> indices,
+        IReadOnlyList<Vector3> positions,
+        IReadOnlyList<Vector2> uv,
+        AlphaResolution resolution,
+        IReadOnlyList<IReadOnlyList<Vector2>> extraUvSets,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Host-supplied intersection of the per-resolution triangle outcome
+    /// arrays into one outcome array for a submesh. A triangle is proven
+    /// only where every admitted resolution proves the same outcome.
+    /// </summary>
+    internal delegate TriangleAlphaOutcome[] IntersectTriangleOutcomes(
+        IReadOnlyList<TriangleAlphaOutcome[]> perResolutionOutcomes);
+
     /// <summary>
     /// The runtime-state pipeline the PlatformFinish barrier runs per
     /// renderer: slot admission from captured evidence, per-slot resolution
@@ -55,6 +133,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 string rendererPath,
                 CapturedAnimationEvidence evidence,
                 AlphaSamplingPolicy samplingPolicy,
+                AlphaFieldSet alphaFields,
+                string scaleOffsetSuffix,
+                TryStructuralRefusalFor structuralRefusalFor,
+                TryResolveProofRelevant resolveProofRelevant,
+                UnrecognizedObjectMaterialBindingCheck unrecognizedObjectMaterialBinding,
+                TryParseMaterialSlotBindingFor parseMaterialSlotBinding,
                 CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
                 int maxMipLevel = int.MaxValue,
                 int minTextureSize = 1,
@@ -75,7 +159,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 objects.AddRange(clip.ObjectBindings);
             }
 
-            var structural = UnityRendererAlphaAnalysis.StructuralRefusalFor(
+            var structural = structuralRefusalFor(
                 floats, objects, rendererPath, rendererTypeName);
             if (structural != RendererAnalysisRefusal.None)
                 return Refused(structural);
@@ -86,7 +170,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             foreach (var binding in floats)
             {
                 var resolution =
-                    UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    resolveProofRelevant(
                         binding,
                         rendererPath,
                         evidence.AlphaRelevanceRequest,
@@ -111,9 +195,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             // property is unsupported syntax rather than irrelevant.
             foreach (var binding in objects)
             {
-                if (UnityAnimationEvidenceCapture
-                        .IsUnrecognizedObjectMaterialBinding(
-                            binding, rendererPath, evidence.AlphaRelevanceRequest, rendererTypeName))
+                if (unrecognizedObjectMaterialBinding(
+                        binding, rendererPath, evidence.AlphaRelevanceRequest, rendererTypeName))
                 {
                     return Refused(
                         RendererAnalysisRefusal
@@ -136,11 +219,9 @@ namespace Alrauna.Amuse.Editor.Analysis
                         .UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty);
             }
 
-            var slots = MaterialSlotsFor(evidence, rendererPath, rendererTypeName);
-            var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                evidence.AdmittedMaterials,
-                maxMipLevel,
-                minTextureSize);
+            var slots = MaterialSlotsFor(
+                evidence, rendererPath, parseMaterialSlotBinding,
+                rendererTypeName);
 
             // Every slot is resolved; no slot's failure stops the loop. A
             // slot's admission failure is a fact about that slot's own admitted
@@ -180,9 +261,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                     evidence.AdmittedMaterials,
                     relevantBindings,
                     evidence.AlphaRelevanceRequest,
-                    fields,
+                    alphaFields,
                     samplingPolicy,
                     densityCapPercent,
+                    scaleOffsetSuffix,
                     resolveSemantics,
                     slotEntries);
                 if (!resolved.IsResolved)
@@ -303,6 +385,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static MeshSeparationPlan ClassifyRuntimeStates(
             UnityRendererAlphaSnapshot snapshot,
             IReadOnlyList<SlotResolutionResult> slotResults,
+            ClassifyTriangleOutcomes classify,
+            IntersectTriangleOutcomes intersectOutcomes,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -317,7 +401,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     submesh.Indices,
                     slot.IsResolved
                         ? IntersectResolvedOutcomes(
-                            snapshot, submesh, slot, cancellationToken)
+                            snapshot, submesh, slot,
+                            classify, intersectOutcomes, cancellationToken)
                         : UnprovenOutcomes(submesh.Indices.Count / 3)));
             }
 
@@ -329,6 +414,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             UnityRendererAlphaSnapshot snapshot,
             UnitySubmeshAlphaSnapshot submesh,
             SlotResolutionResult slot,
+            ClassifyTriangleOutcomes classify,
+            IntersectTriangleOutcomes intersectOutcomes,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -337,7 +424,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             foreach (var resolution in slot.Resolutions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var outcomes = UnityRendererAlphaAnalysis.Classify(
+                var outcomes = classify(
                     submesh.Indices,
                     snapshot.Positions,
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
@@ -347,7 +434,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 perResolution.Add(outcomes);
             }
 
-            return UnityRendererAlphaAnalysis.IntersectOutcomes(perResolution);
+            return intersectOutcomes(perResolution);
         }
 
         /// <summary>
@@ -390,6 +477,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             MaterialSlotsFor(
                 CapturedAnimationEvidence evidence,
                 string rendererPath,
+                TryParseMaterialSlotBindingFor parseMaterialSlotBinding,
                 string rendererTypeName = null)
         {
             var admittedBySlot = new List<int>[evidence.CurrentMaterialIndices.Count];
@@ -412,14 +500,13 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 foreach (var binding in clip.ObjectBindings)
                 {
-                    if (!UnityAnimationEvidenceCapture
-                            .TryParseMaterialSlotBindingFor(
-                                binding.Path,
-                                binding.TypeName,
-                                binding.PropertyName,
-                                rendererPath,
-                                rendererTypeName,
-                                out var slot))
+                    if (!parseMaterialSlotBinding(
+                            binding.Path,
+                            binding.TypeName,
+                            binding.PropertyName,
+                            rendererPath,
+                            rendererTypeName,
+                            out var slot))
                         continue;
 
                     foreach (var material in binding.AdmittedMaterialIndices)

@@ -5057,7 +5057,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // record through the production slot-record construction,
                 // and its reason family resolves on the report surface.
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
                 var refusal = slotRecords[0].CaptureRefusals[0];
@@ -5191,7 +5192,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var prepared = state.Separation.Renderers.Single();
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
 
                 // Both admitted materials of slot 0 carry the same refused
                 // texture, and the slot record collapses them to one named

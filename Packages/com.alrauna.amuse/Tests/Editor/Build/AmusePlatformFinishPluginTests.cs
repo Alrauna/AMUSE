@@ -5048,12 +5048,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     path,
                     evidence,
                     AlphaSamplingPolicy.ConservativeDesktop,
+                    UnityRendererAlphaAnalysis.GatherAlphaFields(
+                        evidence.AdmittedMaterials, int.MaxValue, 1),
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     VerifiedAlphaOnly);
                 (RendererAnalysisRefusal Refusal, int OpaqueCandidateTriangleCount) result =
                     resolved.Refusal == RendererAnalysisRefusal.None
                         ? (RendererAnalysisRefusal.None,
                             RuntimeStateResolution.ClassifyRuntimeStates(
-                                snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                                snapshot, resolved.SlotResults,
+                                UnityRendererAlphaAnalysis.TriangleClassifier,
+                                UnityRendererAlphaAnalysis.OutcomeIntersector)
+                                .OpaqueTriangleCount)
                         : (resolved.Refusal, 0);
 
                 Assert.That(result.Refusal,
@@ -5116,12 +5126,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     rendererPath,
                     evidence,
                     AlphaSamplingPolicy.ConservativeDesktop,
+                    UnityRendererAlphaAnalysis.GatherAlphaFields(
+                        evidence.AdmittedMaterials, int.MaxValue, 1),
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     VerifiedAlphaOnly);
                 (RendererAnalysisRefusal Refusal, int OpaqueCandidateTriangleCount) result =
                     resolved.Refusal == RendererAnalysisRefusal.None
                         ? (RendererAnalysisRefusal.None,
                             RuntimeStateResolution.ClassifyRuntimeStates(
-                                extraction.Snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                                extraction.Snapshot, resolved.SlotResults,
+                                UnityRendererAlphaAnalysis.TriangleClassifier,
+                                UnityRendererAlphaAnalysis.OutcomeIntersector)
+                                .OpaqueTriangleCount)
                         : (resolved.Refusal, 0);
 
                 Assert.That(result.Refusal,
@@ -7300,11 +7320,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // acceptance reaches the proof only through the real pass,
             // which captures the policy from the build avatar.
             var resolved = RuntimeStateResolution.ResolveRuntimeStates(
-                path, evidence, AlphaSamplingPolicy.ConservativeDesktop, VerifiedAlphaOnly);
+                path,
+                evidence,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                UnityRendererAlphaAnalysis.GatherAlphaFields(
+                    evidence.AdmittedMaterials, int.MaxValue, 1),
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                UnityRendererAlphaAnalysis.StructuralRefusal,
+                UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                VerifiedAlphaOnly);
             return resolved.Refusal == RendererAnalysisRefusal.None
                 ? (RendererAnalysisRefusal.None,
                     RuntimeStateResolution.ClassifyRuntimeStates(
-                        snapshot, resolved.SlotResults).OpaqueTriangleCount)
+                        snapshot, resolved.SlotResults,
+                        UnityRendererAlphaAnalysis.TriangleClassifier,
+                        UnityRendererAlphaAnalysis.OutcomeIntersector)
+                        .OpaqueTriangleCount)
                 : (resolved.Refusal, 0);
         }
 

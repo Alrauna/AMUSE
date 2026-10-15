@@ -338,7 +338,9 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var slots = RuntimeStateResolution.MaterialSlotsFor(
-                evidence, rendererPath, rendererTypeName);
+                evidence, rendererPath,
+                UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                rendererTypeName);
             var candidateSlots = new List<PreparedSlotSeparation>(
                 plan.Submeshes.Count);
 
@@ -1194,7 +1196,8 @@ namespace Alrauna.Amuse.Editor.Build
                     conversionBindings,
                     ConversionRequestForFamily(captured.Family),
                     out derived,
-                    out _))
+                    out _,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix))
             {
                 return AlphaSeparationSlotRefusal
                     .ConversionStateNotAdmitted;

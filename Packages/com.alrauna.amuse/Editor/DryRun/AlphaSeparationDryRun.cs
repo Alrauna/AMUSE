@@ -587,10 +587,18 @@ namespace Alrauna.Amuse.Editor.DryRun
 
                 RecordConsentFacts(evidence, admittedLive);
 
+                var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                    evidence.AdmittedMaterials, _maxMipLevel, _minTextureSize);
                 resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath,
                     evidence,
                     _samplingPolicy,
+                    alphaFields,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
                     _maxMipLevel,
                     _minTextureSize,
@@ -598,7 +606,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                     blockState,
                     rendererTypeName);
                 slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath, rendererTypeName);
+                    evidence, rendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                    rendererTypeName);
 
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
@@ -672,7 +682,10 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             _inFlightTask = Task.Run(
                 () => RuntimeStateResolution.ClassifyRuntimeStates(
-                    snapshot, slotResults, token),
+                    snapshot, slotResults,
+                    UnityRendererAlphaAnalysis.TriangleClassifier,
+                    UnityRendererAlphaAnalysis.OutcomeIntersector,
+                    token),
                 token);
             _state = DryRunState.ClassifyingBackground;
 
@@ -1255,6 +1268,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                         PoiyomiOpaqueConversion.ConversionEvidenceRequest,
                         out var derived,
                         out _,
+                        UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                         RuntimeStateResolution.FilterBlockEntriesForSlot(
                             blockState, slot),
                         evidence.AdmittedMaterials))

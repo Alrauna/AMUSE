@@ -839,14 +839,24 @@ namespace Alrauna.Amuse.Editor.Build
                         : null);
                 var blockState =
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
+                var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                    evidence.AdmittedMaterials, maxMipLevel, minTextureSize);
                 var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath, evidence, samplingPolicy,
+                    alphaFields,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
                 var slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath, rendererTypeName);
+                    evidence, rendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                    rendererTypeName);
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
                 // refusal names the renderer: one line per slot, no
@@ -955,7 +965,9 @@ namespace Alrauna.Amuse.Editor.Build
                     {
                         var plan = RuntimeStateResolution.ClassifyRuntimeStates(
                             extraction.Snapshot,
-                            resolved.SlotResults);
+                            resolved.SlotResults,
+                            UnityRendererAlphaAnalysis.TriangleClassifier,
+                            UnityRendererAlphaAnalysis.OutcomeIntersector);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
                         for (var slotIndex = 0;
                              slotIndex < slots.Count;
