@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
@@ -1116,6 +1117,109 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             dryRun.PumpAll();
             Assert.That(dryRun.Done, Is.True, "the run must finish after PumpAll");
             Assert.That(dryRun.RendererRows, Is.Not.Empty, "PumpAll must compute renderer rows");
+        }
+
+        [Test]
+        public void Step_SynchronousTrue_ExecutesToCompletionOnFixtureAvatar()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.Done, Is.False);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Idle));
+            Assert.That(dryRun.TotalRendererCount, Is.EqualTo(1));
+            Assert.That(dryRun.CurrentRendererIndex, Is.EqualTo(0));
+
+            var continues = dryRun.Step(synchronous: true);
+            Assert.That(continues, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Idle));
+            Assert.That(dryRun.CurrentRendererIndex, Is.EqualTo(1));
+            Assert.That(dryRun.RendererRows, Is.Not.Empty);
+
+            continues = dryRun.Step(synchronous: true);
+            Assert.That(continues, Is.False);
+            Assert.That(dryRun.Done, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Completed));
+        }
+
+        [Test]
+        public void Step_SynchronousFalse_TransitionsThroughStates()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Idle));
+
+            var continues = dryRun.Step(synchronous: false);
+            Assert.That(continues, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.ClassifyingBackground));
+            Assert.That(dryRun.CurrentRendererIndex, Is.EqualTo(0));
+
+            var timeout = DateTime.UtcNow.AddSeconds(5);
+            while (dryRun.State == DryRunState.ClassifyingBackground && DateTime.UtcNow < timeout)
+            {
+                Thread.Sleep(10);
+                dryRun.Step(synchronous: false);
+            }
+
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Idle));
+            Assert.That(dryRun.CurrentRendererIndex, Is.EqualTo(1));
+            Assert.That(dryRun.RendererRows, Is.Not.Empty);
+
+            continues = dryRun.Step(synchronous: false);
+            Assert.That(continues, Is.False);
+            Assert.That(dryRun.Done, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Completed));
+        }
+
+        [Test]
+        public void Cancel_AbortsInFlightRunAndSetsIsCancelled()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.IsCancelled, Is.False);
+
+            dryRun.Step(synchronous: false);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.ClassifyingBackground));
+
+            dryRun.Cancel(timeoutMs: 500);
+
+            Assert.That(dryRun.IsCancelled, Is.True);
+            Assert.That(dryRun.Done, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Completed));
+
+            var continues = dryRun.Step(synchronous: false);
+            Assert.That(continues, Is.False);
+        }
+
+        [Test]
+        public void PumpAll_CompletesMultiRendererAvatarsSynchronously()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var texture2 = ImportHalfTexture("half_255_second", 255);
+            var material2 = NewCutoutMaterial(texture2, 0.5f);
+            AddSkinnedRenderer(fixture.Root, TwoTriangleMesh(), material2);
+
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.TotalRendererCount, Is.EqualTo(2));
+            Assert.That(dryRun.Done, Is.False);
+
+            dryRun.PumpAll();
+
+            Assert.That(dryRun.Done, Is.True);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.Completed));
+            Assert.That(dryRun.CurrentRendererIndex, Is.EqualTo(2));
+            Assert.That(dryRun.RendererRows.Count, Is.GreaterThanOrEqualTo(2));
         }
     }
 }

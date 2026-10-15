@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -17,6 +19,13 @@ using Object = UnityEngine.Object;
 
 namespace Alrauna.Amuse.Editor.DryRun
 {
+    internal enum DryRunState
+    {
+        Idle,
+        ClassifyingBackground,
+        Completed
+    }
+
     /// <summary>
     /// The edit-time alpha separation dry run. It runs the same proof
     /// pipeline the PlatformFinish barrier runs, over the avatar in the
@@ -86,6 +95,21 @@ namespace Alrauna.Amuse.Editor.DryRun
         private bool _allowDepthTestChange;
 
         private int _rendererIndex;
+        private DryRunState _state = DryRunState.Idle;
+        private CancellationTokenSource _cts;
+        private Task<MeshSeparationPlan> _inFlightTask;
+        private Renderer _inFlightRenderer;
+        private string _inFlightRendererPath;
+        private string _inFlightRendererTypeName;
+        private string _inFlightRendererName;
+        private IReadOnlyList<Material> _inFlightAdmittedLive;
+        private IReadOnlyList<BlockStateEntry> _inFlightBlockState;
+        private CapturedAnimationEvidence _inFlightEvidence;
+        private RuntimeStateResolution.ResolvedRuntimeStates _inFlightResolved;
+        private IReadOnlyList<CapturedMaterialSlotEvidence> _inFlightSlots;
+        private string _inFlightRendererKey;
+        private string _inFlightCompositeKey;
+        private bool _inFlightRefreshOnly;
 
 
         /// <summary>
@@ -97,6 +121,10 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal Action RepaintRequested { get; set; }
 
         internal bool Done { get; private set; }
+        internal DryRunState State => _state;
+        internal bool IsCancelled { get; private set; }
+        internal int TotalRendererCount { get; private set; }
+        internal int CurrentRendererIndex => _rendererIndex;
 
         internal IReadOnlyList<MaterialTransformationRow> AvatarRows =>
             _avatarRows;
@@ -140,12 +168,18 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _avatarRows.Add(MaterialTransformationRow.Errored(
                     null, null, RowText.ErroredSentence(null, null)));
                 Done = true;
+                _state = DryRunState.Completed;
             }
         }
 
         private void BeginBody()
         {
             _avatarRoot = _component.transform.root.gameObject;
+            var renderers = _avatarRoot.GetComponentsInChildren<Renderer>(true);
+            TotalRendererCount = renderers.Length;
+            _rendererIndex = 0;
+            _state = DryRunState.Idle;
+            IsCancelled = false;
 
             // The switches short-circuit before any enumeration, so a
             // switched-off avatar proves no renderer and costs no capture.
@@ -153,6 +187,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 AddBanner(BannerKind.AmuseOff);
                 Done = true;
+                _state = DryRunState.Completed;
                 return;
             }
 
@@ -160,6 +195,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 AddBanner(BannerKind.SeparatorOff);
                 Done = true;
+                _state = DryRunState.Completed;
                 return;
             }
 
@@ -167,6 +203,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 AddBanner(BannerKind.RootRequired);
                 Done = true;
+                _state = DryRunState.Completed;
                 return;
             }
 
@@ -179,6 +216,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 AddBanner(BannerKind.NoSamplingPolicy);
                 Done = true;
+                _state = DryRunState.Completed;
                 return;
             }
 
@@ -196,6 +234,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 EmitStructuralRow();
                 Done = true;
+                _state = DryRunState.Completed;
                 return;
             }
 
@@ -248,6 +287,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 RowText.StructuralRowSentence(
                     StructuralPrefixFor(), sentence)));
             Done = true;
+            _state = DryRunState.Completed;
         }
 
         /// <summary>
@@ -346,35 +386,44 @@ namespace Alrauna.Amuse.Editor.DryRun
         // --- Step ------------------------------------------------------------
 
         /// <summary>
-        /// Advances one renderer per call. Returns true while the run
-        /// still has work, false once it completed. The renderer list is
-        /// re-enumerated each call, so a renderer that no longer exists
-        /// is skipped and a returning one is picked up.
+        /// Advances classification by one unit of work. When synchronous
+        /// is true, completes one renderer in full before returning.
+        /// When synchronous is false, transitions to background classification
+        /// and returns immediately to keep the main thread responsive.
         /// </summary>
-        internal bool Step()
+        internal bool Step(bool synchronous = true)
         {
-            if (Done || _avatarRoot == null)
+            if (Done || _avatarRoot == null || _state == DryRunState.Completed)
             {
+                _state = DryRunState.Completed;
+                Done = true;
                 return false;
             }
 
-            var renderers = _avatarRoot.GetComponentsInChildren<Renderer>(true);
-            if (_rendererIndex >= renderers.Length)
+            if (_state == DryRunState.Idle)
             {
-                CompleteRun();
-                return false;
+                if (!StepIdle(synchronous))
+                {
+                    return false;
+                }
+
+                if (_state != DryRunState.ClassifyingBackground)
+                {
+                    return true;
+                }
+
+                if (!synchronous)
+                {
+                    return true;
+                }
             }
 
-            var renderer = renderers[_rendererIndex];
-            _rendererIndex++;
-            if (renderer == null)
+            if (_state == DryRunState.ClassifyingBackground)
             {
-                // Unity's overloaded equality reports a destroyed object.
-                return true;
+                return StepClassifyingBackground(synchronous);
             }
 
-            ComputeRenderer(renderer);
-            return true;
+            return false;
         }
 
         /// <summary>
@@ -382,9 +431,58 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// </summary>
         internal void PumpAll()
         {
-            while (!Done && Step())
+            while (!Done && Step(synchronous: true))
             {
             }
+        }
+
+        internal void Cancel(int timeoutMs = 0)
+        {
+            if (_cts != null && !_cts.IsCancellationRequested)
+            {
+                _cts.Cancel();
+            }
+
+            if (timeoutMs > 0 && _inFlightTask != null && !_inFlightTask.IsCompleted)
+            {
+                try
+                {
+                    _inFlightTask.Wait(timeoutMs);
+                }
+                catch (Exception)
+                {
+                    // Suppress AggregateException and OperationCanceledException during shutdown wait.
+                }
+            }
+
+            ClearInFlight();
+            _state = DryRunState.Completed;
+            Done = true;
+            IsCancelled = true;
+            RepaintRequested?.Invoke();
+        }
+
+        private void ClearInFlight()
+        {
+            if (_inFlightTask == null || _inFlightTask.IsCompleted)
+            {
+                _cts?.Dispose();
+            }
+
+            _cts = null;
+            _inFlightTask = null;
+            _inFlightRenderer = null;
+            _inFlightRendererPath = null;
+            _inFlightRendererTypeName = null;
+            _inFlightRendererName = null;
+            _inFlightAdmittedLive = null;
+            _inFlightBlockState = null;
+            _inFlightEvidence = null;
+            _inFlightResolved = null;
+            _inFlightSlots = null;
+            _inFlightRendererKey = null;
+            _inFlightCompositeKey = null;
+            _inFlightRefreshOnly = false;
         }
 
         private void CompleteRun()
@@ -402,6 +500,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             }
 
             Done = true;
+            _state = DryRunState.Completed;
             RepaintRequested?.Invoke();
         }
 
@@ -411,8 +510,23 @@ namespace Alrauna.Amuse.Editor.DryRun
                 .Any(renderer => renderer != null);
         }
 
-        private void ComputeRenderer(Renderer renderer)
+        private bool StepIdle(bool synchronous)
         {
+            var renderers = _avatarRoot.GetComponentsInChildren<Renderer>(true);
+            if (_rendererIndex >= renderers.Length)
+            {
+                CompleteRun();
+                return false;
+            }
+
+            var renderer = renderers[_rendererIndex];
+            if (renderer == null)
+            {
+                // Unity overloaded equality reports a destroyed object.
+                _rendererIndex++;
+                return true;
+            }
+
             var rendererPath = AnimationUtility.CalculateTransformPath(
                 renderer.transform, _avatarRoot.transform);
             var rendererTypeName = renderer.GetType().FullName;
@@ -436,8 +550,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 if (DryRunCache.TryGetRenderer(composite, out var stored))
                 {
                     _rendererRows.AddRange(stored);
+                    _rendererIndex++;
                     RepaintRequested?.Invoke();
-                    return;
+                    return true;
                 }
 
                 if (DryRunCache.IsErrored(composite))
@@ -447,153 +562,266 @@ namespace Alrauna.Amuse.Editor.DryRun
                         rendererTypeName,
                         RowText.ErroredSentence(
                             rendererPath, rendererTypeName)));
+                    _rendererIndex++;
                     RepaintRequested?.Invoke();
-                    return;
+                    return true;
                 }
             }
 
-            // The one catch in the dry run. It wraps the compute leg only,
-            // so a defect cannot surface as a refusal row and a refusal
-            // cannot surface as a defect.
-            IReadOnlyList<MaterialTransformationRow> rows;
+            IReadOnlyList<BlockStateEntry> blockState;
+            CapturedAnimationEvidence evidence;
+            RuntimeStateResolution.ResolvedRuntimeStates resolved;
+            IReadOnlyList<CapturedMaterialSlotEvidence> slots;
+            UnityRendererAlphaExtraction extraction;
+
             try
             {
-                rows = ComputeRows(
-                    renderer, rendererPath, rendererTypeName, admittedLive);
+                blockState =
+                    EffectiveMaterialMaterialization.CaptureBlockState(renderer);
+                evidence = CaptureFor(
+                    rendererPath,
+                    renderer.sharedMaterials,
+                    RealCapturer(renderer),
+                    rendererTypeName,
+                    out _);
+
+                RecordConsentFacts(evidence, admittedLive);
+
+                resolved = RuntimeStateResolution.ResolveRuntimeStates(
+                    rendererPath,
+                    evidence,
+                    _samplingPolicy,
+                    UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
+                    _maxMipLevel,
+                    _minTextureSize,
+                    _densityCapPercent,
+                    blockState,
+                    rendererTypeName);
+                slots = RuntimeStateResolution.MaterialSlotsFor(
+                    evidence, rendererPath, rendererTypeName);
+
+                if (resolved.Refusal != RendererAnalysisRefusal.None)
+                {
+                    var refusalRows = BuildResolvedRefusalRows(
+                        renderer, rendererPath, rendererTypeName, resolved, slots);
+                    _rendererRows.AddRange(refusalRows);
+                    if (!refreshOnly && _avatarKey != null)
+                    {
+                        DryRunCache.StoreRenderer(_avatarKey, rendererKey, refusalRows);
+                    }
+
+                    _rendererIndex++;
+                    RepaintRequested?.Invoke();
+                    return true;
+                }
+
+                extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                    renderer, resolved.CurrentMaterials);
+                if (extraction.Refusal != RendererAnalysisRefusal.None)
+                {
+                    var refusalRows = new[]
+                    {
+                        RendererRefusedRow(
+                            rendererPath, rendererTypeName, extraction.Refusal,
+                            extraction.MeshSubMeshCount,
+                            extraction.MaterialSlotCount,
+                            renderer.gameObject.name)
+                    };
+                    _rendererRows.AddRange(refusalRows);
+                    if (!refreshOnly && _avatarKey != null)
+                    {
+                        DryRunCache.StoreRenderer(_avatarKey, rendererKey, refusalRows);
+                    }
+
+                    _rendererIndex++;
+                    RepaintRequested?.Invoke();
+                    return true;
+                }
             }
             catch (Exception failure)
             {
                 Debug.LogException(failure);
                 DryRunCache.MarkErrored(composite);
-                rows = new[]
-                {
-                    MaterialTransformationRow.Errored(
-                        rendererPath,
-                        rendererTypeName,
-                        RowText.ErroredSentence(
-                            rendererPath, rendererTypeName))
-                };
+                _rendererRows.Add(MaterialTransformationRow.Errored(
+                    rendererPath,
+                    rendererTypeName,
+                    RowText.ErroredSentence(
+                        rendererPath, rendererTypeName)));
+                _rendererIndex++;
+                RepaintRequested?.Invoke();
+                return true;
             }
 
-            _rendererRows.AddRange(rows);
-            // A live RenderTexture changes every frame, so its rows stay
-            // out of the session cache by rule, not by accident.
-            if (!refreshOnly && _avatarKey != null)
-            {
-                DryRunCache.StoreRenderer(_avatarKey, rendererKey, rows);
-            }
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            var snapshot = extraction.Snapshot;
+            var slotResults = resolved.SlotResults;
 
-            RepaintRequested?.Invoke();
+            _inFlightRenderer = renderer;
+            _inFlightRendererPath = rendererPath;
+            _inFlightRendererTypeName = rendererTypeName;
+            _inFlightRendererName = renderer.gameObject.name;
+            _inFlightAdmittedLive = admittedLive;
+            _inFlightBlockState = blockState;
+            _inFlightEvidence = evidence;
+            _inFlightResolved = resolved;
+            _inFlightSlots = slots;
+            _inFlightRendererKey = rendererKey;
+            _inFlightCompositeKey = composite;
+            _inFlightRefreshOnly = refreshOnly;
+
+            _inFlightTask = Task.Run(
+                () => RuntimeStateResolution.ClassifyRuntimeStates(
+                    snapshot, slotResults, token),
+                token);
+            _state = DryRunState.ClassifyingBackground;
+
+            return true;
         }
 
-        private IReadOnlyList<MaterialTransformationRow> ComputeRows(
+        private bool StepClassifyingBackground(bool synchronous)
+        {
+            if (synchronous && !_inFlightTask.IsCompleted)
+            {
+                try
+                {
+                    _inFlightTask.Wait();
+                }
+                catch (Exception)
+                {
+                    // Suppress AggregateException and OperationCanceledException during synchronous wait.
+                }
+            }
+
+            if (!_inFlightTask.IsCompleted)
+            {
+                return true;
+            }
+
+            if (_inFlightTask.IsCanceled)
+            {
+                ClearInFlight();
+                _state = DryRunState.Completed;
+                Done = true;
+                IsCancelled = true;
+                return false;
+            }
+
+            if (_inFlightTask.IsFaulted)
+            {
+                var exception = _inFlightTask.Exception?.InnerException ?? _inFlightTask.Exception;
+                Debug.LogException(exception);
+                DryRunCache.MarkErrored(_inFlightCompositeKey);
+                _rendererRows.Add(MaterialTransformationRow.Errored(
+                    _inFlightRendererPath,
+                    _inFlightRendererTypeName,
+                    RowText.ErroredSentence(
+                        _inFlightRendererPath, _inFlightRendererTypeName)));
+                ClearInFlight();
+                _rendererIndex++;
+                _state = DryRunState.Idle;
+                RepaintRequested?.Invoke();
+                return true;
+            }
+
+            try
+            {
+                var plan = _inFlightTask.Result;
+                var alreadyOpaqueBySlot = DeriveAlreadyOpaqueBySlot(
+                    _inFlightResolved,
+                    _inFlightEvidence,
+                    _inFlightAdmittedLive,
+                    _inFlightBlockState,
+                    _inFlightRendererPath,
+                    _inFlightRendererTypeName,
+                    _allowDepthTestChange);
+                var verdicts = SlotTransformDecision.Decide(
+                    plan,
+                    _inFlightResolved.SlotResults,
+                    alreadyOpaqueBySlot,
+                    _minimumOpaqueCoveragePercent,
+                    _minimumOpaqueCoverageToPreservePercent);
+                var rows = BuildRows(
+                    _inFlightRenderer,
+                    _inFlightRendererPath,
+                    _inFlightRendererTypeName,
+                    verdicts,
+                    _inFlightResolved.SlotResults,
+                    _inFlightSlots,
+                    _inFlightRendererName);
+
+                _rendererRows.AddRange(rows);
+                if (!_inFlightRefreshOnly && _avatarKey != null)
+                {
+                    DryRunCache.StoreRenderer(_avatarKey, _inFlightRendererKey, rows);
+                }
+            }
+            catch (Exception failure)
+            {
+                Debug.LogException(failure);
+                DryRunCache.MarkErrored(_inFlightCompositeKey);
+                _rendererRows.Add(MaterialTransformationRow.Errored(
+                    _inFlightRendererPath,
+                    _inFlightRendererTypeName,
+                    RowText.ErroredSentence(
+                        _inFlightRendererPath, _inFlightRendererTypeName)));
+            }
+            finally
+            {
+                ClearInFlight();
+                _rendererIndex++;
+                _state = DryRunState.Idle;
+                RepaintRequested?.Invoke();
+            }
+
+            return true;
+        }
+
+        private IReadOnlyList<MaterialTransformationRow> BuildResolvedRefusalRows(
             Renderer renderer,
             string rendererPath,
             string rendererTypeName,
-            IReadOnlyList<Material> admittedLive)
+            RuntimeStateResolution.ResolvedRuntimeStates resolved,
+            IReadOnlyList<CapturedMaterialSlotEvidence> slots)
         {
-            var blockState =
-                EffectiveMaterialMaterialization.CaptureBlockState(renderer);
-            var evidence = CaptureFor(
-                rendererPath,
-                renderer.sharedMaterials,
-                RealCapturer(renderer),
-                rendererTypeName,
-                out _);
+            var rows = new List<MaterialTransformationRow>();
+            var allDeferred = true;
+            var hasUnresolved = false;
 
-            RecordConsentFacts(evidence, admittedLive);
-
-            var resolved = RuntimeStateResolution.ResolveRuntimeStates(
-                rendererPath,
-                evidence,
-                _samplingPolicy,
-                UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
-                _maxMipLevel,
-                _minTextureSize,
-                _densityCapPercent,
-                blockState,
-                rendererTypeName);
-            var slots = RuntimeStateResolution.MaterialSlotsFor(
-                evidence, rendererPath, rendererTypeName);
-            if (resolved.Refusal != RendererAnalysisRefusal.None)
+            for (var slotIndex = 0;
+                 slotIndex < resolved.SlotResults.Length;
+                 slotIndex++)
             {
-                // The build reports every refused slot's own reason even
-                // when the first refusal names the renderer, so the dry
-                // run keeps the same discipline: the refused slot rows
-                // ride beside the renderer refusal row.
-                var rows = new List<MaterialTransformationRow>();
-                var allDeferred = true;
-                var hasUnresolved = false;
-
-                for (var slotIndex = 0;
-                     slotIndex < resolved.SlotResults.Length;
-                     slotIndex++)
+                if (resolved.SlotResults[slotIndex].IsResolved)
                 {
-                    if (resolved.SlotResults[slotIndex].IsResolved)
-                    {
-                        continue;
-                    }
-
-                    hasUnresolved = true;
-                    var slotEvidence = slotIndex < slots.Count ? slots[slotIndex] : null;
-                    if (!IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
-                    {
-                        allDeferred = false;
-                    }
-
-                    rows.Add(RefusedSlotRow(
-                        renderer,
-                        rendererPath,
-                        rendererTypeName,
-                        resolved.SlotResults[slotIndex],
-                        slotEvidence,
-                        slotIndex,
-                        renderer.gameObject.name));
+                    continue;
                 }
 
-                if (!hasUnresolved || !allDeferred)
+                hasUnresolved = true;
+                var slotEvidence = slotIndex < slots.Count ? slots[slotIndex] : null;
+                if (!IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
                 {
-                    rows.Insert(0, RendererRefusedRow(
-                        rendererPath, rendererTypeName, resolved.Refusal,
-                        -1, -1, renderer.gameObject.name));
+                    allDeferred = false;
                 }
 
-                return rows;
+                rows.Add(RefusedSlotRow(
+                    renderer,
+                    rendererPath,
+                    rendererTypeName,
+                    resolved.SlotResults[slotIndex],
+                    slotEvidence,
+                    slotIndex,
+                    renderer.gameObject.name));
             }
 
-            var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
-                renderer, resolved.CurrentMaterials);
-            if (extraction.Refusal != RendererAnalysisRefusal.None)
+            if (!hasUnresolved || !allDeferred)
             {
-                return new[]
-                {
-                    RendererRefusedRow(
-                        rendererPath, rendererTypeName, extraction.Refusal,
-                        extraction.MeshSubMeshCount,
-                        extraction.MaterialSlotCount,
-                        renderer.gameObject.name)
-                };
+                rows.Insert(0, RendererRefusedRow(
+                    rendererPath, rendererTypeName, resolved.Refusal,
+                    -1, -1, renderer.gameObject.name));
             }
 
-            var plan = RuntimeStateResolution.ClassifyRuntimeStates(
-                extraction.Snapshot, resolved.SlotResults);
-            var alreadyOpaqueBySlot = DeriveAlreadyOpaqueBySlot(
-                resolved, evidence, admittedLive, blockState,
-                rendererPath, rendererTypeName, _allowDepthTestChange);
-            var verdicts = SlotTransformDecision.Decide(
-                plan,
-                resolved.SlotResults,
-                alreadyOpaqueBySlot,
-                _minimumOpaqueCoveragePercent,
-                _minimumOpaqueCoverageToPreservePercent);
-            return BuildRows(
-                renderer,
-                rendererPath,
-                rendererTypeName,
-                verdicts,
-                resolved.SlotResults,
-                slots,
-                renderer.gameObject.name);
+            return rows;
         }
 
         // --- Capture wiring ---------------------------------------------------
