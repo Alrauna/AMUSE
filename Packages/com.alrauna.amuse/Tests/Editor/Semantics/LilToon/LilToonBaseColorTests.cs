@@ -420,11 +420,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "_UseBump2ndMap", "_UseAnisotropy",
                 "_UseEmission", "_EmissionBlendMode", "_EmissionBlend",
                 "_EmissionMap_UVMode", "_UseBumpMap", "_BumpScale",
+                "_IDMask1", "_IDMask2", "_IDMask3", "_IDMask4",
+                "_IDMask5", "_IDMask6", "_IDMask7", "_IDMask8",
+                "_IDMaskControlsDissolve",
             }));
-            // Combine unions in exactly three alpha scalars: _lilToonVersion,
-            // _Invisible, and _UDIMDiscardCompile. _Invisible is also a
-            // base-color writer gate, so the union holds 31 distinct names.
-            Assert.That(request.ScalarProperties.Count, Is.EqualTo(31));
+            // Combine unions in exactly twelve alpha scalars: _lilToonVersion,
+            // _Invisible, _UDIMDiscardCompile, _IDMask1 through _IDMask8, and
+            // _IDMaskControlsDissolve. _Invisible is also a base-color writer
+            // gate, so the union holds 40 distinct names.
+            Assert.That(request.ScalarProperties.Count, Is.EqualTo(40));
             Assert.That(request.ColorProperties, Is.EquivalentTo(new[]
             {
                 "_Color", "_BackfaceColor", "_EmissionColor",

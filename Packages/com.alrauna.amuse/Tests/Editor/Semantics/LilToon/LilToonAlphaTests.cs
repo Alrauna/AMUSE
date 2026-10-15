@@ -15,6 +15,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// </summary>
     public sealed class LilToonAlphaTests : LilToonFixtureTestBase
     {
+        private const string IdMaskOnePropertyName = "_IDMask1";
+
         [Test]
         public void OpaqueVariant_IsConstantOne()
         {
@@ -56,6 +58,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonSemanticOutput.Alpha,
                 LilToonSemanticDiagnosticCode.UnsupportedFeature,
                 property);
+        }
+
+        [Test]
+        public void OpaqueMaterialWithIdMaskValueSetAnswersUnknownNotConstantOpaque()
+        {
+            var material = NewFixtureMaterial();          // base-class helper, opaque lilToon
+            material.SetFloat(IdMaskOnePropertyName, 1f); // same property name the cutout suite sets
+            var answer = Interpret(material).Semantics.Alpha;
+            Assert.That(answer.IsComplete, Is.False,
+                "IDMask removes fragments at runtime; an unset gate answered constant opaque");
         }
 
         [Test]
