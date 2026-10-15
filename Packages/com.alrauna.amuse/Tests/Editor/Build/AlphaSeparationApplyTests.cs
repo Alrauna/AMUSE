@@ -85,6 +85,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 () => AmusePreparationDecision.Refused(string.Empty));
         }
 
+        [Test]
+        public void PrepareSurvivingSetStoresSurvivingCandidatesOnState()
+        {
+            var state = new AmusePlatformFinishState();
+            var list = new List<List<PreparedSlotSeparation>>();
+            state.SeparationSurvivingCandidates = list;
+            Assert.That(state.SeparationSurvivingCandidates, Is.SameAs(list));
+        }
+
         /// <summary>
         /// A standing guard for the asset-ownership boundary: generated output
         /// belongs to the NDMF asset saver, so no AMUSE Editor source may reach

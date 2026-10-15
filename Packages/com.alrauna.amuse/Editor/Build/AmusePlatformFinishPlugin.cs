@@ -206,6 +206,8 @@ namespace Alrauna.Amuse.Editor.Build
             set;
         }
 
+        internal List<List<PreparedSlotSeparation>> SeparationSurvivingCandidates { get; set; }
+
         internal List<SerializedTransformationRow> PlayModeAvatarRows { get; } =
             new List<SerializedTransformationRow>();
 

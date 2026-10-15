@@ -585,6 +585,7 @@ namespace Alrauna.Amuse.Editor.Build
                 ObjectRegistry.RegisterReplacedObject(
                     expectedMeshByRenderer[write.Renderer], write.Mesh);
             }
+            state.SeparationSurvivingCandidates = rendererSurvivors;
             finalization = new AlphaSeparationFinalization(writes);
             return writes.Count > 0
                 ? AmusePreparationDecision.Ready()
