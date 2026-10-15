@@ -189,5 +189,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(row.SlotCount, Is.EqualTo(2));
             Assert.That(row.Sentence, Is.EqualTo("Convertable: 50 out of 100 polygons may be moved"));
         }
+
+        [Test]
+        public void SerializedTransformationRowRoundtripsScenePathAndMaterialPath()
+        {
+            var record = new PlayModeBuildRecord
+            {
+                avatarKey = "Scene::Avatar",
+                policyFingerprint = "fp1",
+                avatarRows = Array.Empty<SerializedTransformationRow>(),
+                rendererRows = new[]
+                {
+                    new SerializedTransformationRow
+                    {
+                        kind = 3,
+                        rendererPath = "SceneRoot/Accessory/Mesh",
+                        rendererTypeName = "UnityEngine.SkinnedMeshRenderer",
+                        sourceMaterialPath = "Assets/Materials/Accessory.mat",
+                        slotIndex = 0,
+                        movedTriangles = 10,
+                        provenTriangles = 10,
+                        totalTriangles = 20,
+                        sentence = "Splittable: 10 of out 20 polygons may be moved"
+                    }
+                }
+            };
+
+            PlayModeBuildStore.Save(record);
+            var loaded = PlayModeBuildStore.TryLoad("Scene::Avatar", "fp1");
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(loaded.rendererRows.Length, Is.EqualTo(1));
+            Assert.That(loaded.rendererRows[0].rendererPath, Is.EqualTo("SceneRoot/Accessory/Mesh"));
+            Assert.That(loaded.rendererRows[0].sourceMaterialPath, Is.EqualTo("Assets/Materials/Accessory.mat"));
+        }
     }
 }

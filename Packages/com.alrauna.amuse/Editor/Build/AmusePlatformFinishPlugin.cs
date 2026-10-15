@@ -1376,7 +1376,7 @@ namespace Alrauna.Amuse.Editor.Build
             state.Separation.Add(prepared);
         }
 
-        private static void RecordPlayModeRendererRefusal(
+        internal static void RecordPlayModeRendererRefusal(
             AmusePlatformFinishState state,
             Renderer renderer,
             string rendererPath,
@@ -1386,6 +1386,12 @@ namespace Alrauna.Amuse.Editor.Build
             int materialSlotCount,
             string detail)
         {
+            var scenePath = renderer != null
+                ? (ObjectRegistry.ActiveRegistry as IObjectRegistry)?
+                    .GetReference(renderer, false)?.Path
+                : null;
+            var effectivePath = scenePath != null ? scenePath : rendererPath;
+
             var key = AmuseReportStrings.RendererKey(refusal);
             var refusalSentence = AmuseReportStrings.Has(key)
                 ? AmuseReportStrings.Format(
@@ -1399,9 +1405,9 @@ namespace Alrauna.Amuse.Editor.Build
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
                 kind = 2,
-                rendererPath = rendererPath,
+                rendererPath = effectivePath,
                 rendererTypeName = rendererTypeName,
-                sentence = rendererPath + " (" + rendererTypeName + "): refused. " + refusalSentence
+                sentence = effectivePath + " (" + rendererTypeName + "): refused. " + refusalSentence
             });
 
             var materials = renderer != null ? renderer.sharedMaterials : null;
@@ -1409,11 +1415,12 @@ namespace Alrauna.Amuse.Editor.Build
             for (var slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 var mat = materials != null && slotIndex < materials.Length ? materials[slotIndex] : null;
-                var sourcePath = mat != null ? AssetDatabase.GetAssetPath(mat) : string.Empty;
+                var sourceMat = mat != null ? RegisteredSourceIdentity.Resolve(mat) as Material ?? mat : null;
+                var sourcePath = sourceMat != null ? AssetDatabase.GetAssetPath(sourceMat) : string.Empty;
                 state.PlayModeRendererRows.Add(new SerializedTransformationRow
                 {
                     kind = 3,
-                    rendererPath = rendererPath,
+                    rendererPath = effectivePath,
                     rendererTypeName = rendererTypeName,
                     sourceMaterialPath = sourcePath,
                     slotIndex = slotIndex,
@@ -1450,7 +1457,7 @@ namespace Alrauna.Amuse.Editor.Build
             return (int)(mesh.GetIndexCount(slotIndex) / 3);
         }
 
-        private static void RecordPlayModeSlots(
+        internal static void RecordPlayModeSlots(
             AmusePlatformFinishState state,
             Renderer renderer,
             string rendererPath,
@@ -1459,6 +1466,12 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<SlotResolutionResult> slotResults,
             UnityRendererAlphaSnapshot snapshot)
         {
+            var scenePath = renderer != null
+                ? (ObjectRegistry.ActiveRegistry as IObjectRegistry)?
+                    .GetReference(renderer, false)?.Path
+                : null;
+            var effectivePath = scenePath != null ? scenePath : rendererPath;
+
             var materials = renderer != null ? renderer.sharedMaterials : null;
             var submeshesByBinding = new Dictionary<int, List<SubmeshSeparationPlan>>();
             foreach (var submesh in plan.Submeshes)
@@ -1475,7 +1488,8 @@ namespace Alrauna.Amuse.Editor.Build
             for (var slotIndex = 0; slotIndex < slotCount; slotIndex++)
             {
                 var mat = materials != null && slotIndex < materials.Length ? materials[slotIndex] : null;
-                var sourcePath = mat != null ? AssetDatabase.GetAssetPath(mat) : string.Empty;
+                var sourceMat = mat != null ? RegisteredSourceIdentity.Resolve(mat) as Material ?? mat : null;
+                var sourcePath = sourceMat != null ? AssetDatabase.GetAssetPath(sourceMat) : string.Empty;
 
                 if (slotResults != null && slotIndex < slotResults.Count && !slotResults[slotIndex].IsResolved)
                 {
@@ -1483,7 +1497,7 @@ namespace Alrauna.Amuse.Editor.Build
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
                         kind = 3,
-                        rendererPath = rendererPath,
+                        rendererPath = effectivePath,
                         rendererTypeName = rendererTypeName,
                         sourceMaterialPath = sourcePath,
                         slotIndex = slotIndex,
@@ -1535,7 +1549,7 @@ namespace Alrauna.Amuse.Editor.Build
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
                         kind = 3,
-                        rendererPath = rendererPath,
+                        rendererPath = effectivePath,
                         rendererTypeName = rendererTypeName,
                         sourceMaterialPath = sourcePath,
                         slotIndex = slotIndex,
