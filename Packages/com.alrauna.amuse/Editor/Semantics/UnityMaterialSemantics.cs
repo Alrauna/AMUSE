@@ -884,6 +884,13 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
         }
 
+        /// <summary>
+        /// The one identity-verify gate for a captured regular-family
+        /// material. The flag keeps one meaning in every arm: true runs
+        /// the family verify, and false skips it. A skip still demands
+        /// the family's own evidence, so a capture with no evidence
+        /// never attests.
+        /// </summary>
         private static bool IsAttestedAlphaMaterial(
             CapturedAlphaMaterial material,
             bool verifyIdentity)
@@ -900,30 +907,34 @@ namespace Alrauna.Amuse.Editor.Semantics
             switch (material.Family)
             {
                 case CapturedAlphaMaterialFamily.Poiyomi:
-                    return verifyIdentity &&
+                    return !verifyIdentity ||
                         PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
                     // The conjunction attests each Poiyomi identity against
                     // its own pinned GUID and digest, so the Two Pass
                     // original verifies through the same call.
-                    return verifyIdentity &&
+                    return !verifyIdentity ||
                         PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
                             material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.LilToon:
                     return material.LilToonEvidence != null &&
-                        LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                            material.LilToonEvidence, out _);
+                        (!verifyIdentity ||
+                            LilToonSourceAttestation
+                                .TryVerifyLilToonIdentity(
+                                    material.LilToonEvidence, out _));
                 case CapturedAlphaMaterialFamily.LilToonCutout:
                     return material.LilToonEvidence != null &&
-                        LilToonSourceAttestation
-                            .TryVerifyLilToonCutoutIdentity(
-                                material.LilToonEvidence, out _);
+                        (!verifyIdentity ||
+                            LilToonSourceAttestation
+                                .TryVerifyLilToonCutoutIdentity(
+                                    material.LilToonEvidence, out _));
                 case CapturedAlphaMaterialFamily.LilToonTransparent:
                     return material.LilToonEvidence != null &&
-                        LilToonSourceAttestation
-                            .TryVerifyLilToonTransparentIdentity(
-                                material.LilToonEvidence, out _);
+                        (!verifyIdentity ||
+                            LilToonSourceAttestation
+                                .TryVerifyLilToonTransparentIdentity(
+                                    material.LilToonEvidence, out _));
                 default:
                     return false;
             }

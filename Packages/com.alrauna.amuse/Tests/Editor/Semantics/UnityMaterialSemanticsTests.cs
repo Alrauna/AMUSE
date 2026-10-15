@@ -1302,6 +1302,58 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(honored.Semantics.Alpha.IsComplete, Is.True);
         }
 
+        /// <summary>
+        /// Finding 23 falsifier: the verifyIdentity knob keeps one meaning
+        /// in every family arm — false means skip verification, never
+        /// "never attested". The transferred entry drives both shader
+        /// families through the shared parameter, so an unattested
+        /// Poiyomi-family material and an unattested lilToon-family
+        /// material must both skip the identity verify instead of
+        /// answering UnattestedShader. The stand-in sources never attest,
+        /// so both captured evidences are deliberately stale.
+        /// </summary>
+        [Test]
+        public void TransferredAnalysisSkipsVerificationForBothFamiliesWhenAsked()
+        {
+            var poiyomi = NewMaterial(
+                "transferred-skip-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+            var lilToon = NewMaterial(
+                "transferred-skip-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var poiCaptured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { poiyomi });
+            var lilCaptured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { lilToon });
+
+            Assert.That(
+                poiCaptured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                lilCaptured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+
+            var poiTransferred = UnityMaterialSemantics
+                .AnalyzeAlphaMaterialTransferred(poiCaptured[0]);
+            var lilTransferred = UnityMaterialSemantics
+                .AnalyzeAlphaMaterialTransferred(lilCaptured[0]);
+
+            Assert.That(
+                poiTransferred.AlphaUnknownReason,
+                Is.Null,
+                "false means skip verification, not never attested");
+            Assert.That(poiTransferred.Semantics.Alpha.IsComplete, Is.True);
+            Assert.That(
+                lilTransferred.AlphaUnknownReason,
+                Is.Null,
+                "the lilToon arm must skip the verify through the " +
+                "same parameter");
+            Assert.That(lilTransferred.Semantics.Alpha.IsComplete, Is.True);
+        }
+
         [Test]
         public void AnalyzeAlphaMaterialUnsupportedFamilyIsAllUnknown()
         {
