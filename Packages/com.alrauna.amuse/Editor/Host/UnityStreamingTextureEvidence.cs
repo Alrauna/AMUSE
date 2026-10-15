@@ -48,10 +48,11 @@ namespace Alrauna.Amuse.Editor.Host
         /// re-import or settings change re-clones instead of serving stale
         /// evidence. The cutoff rides in as the exact clamped float, not a
         /// quantized bucket: two cutoffs inside one bucket can straddle a
-        /// texel byte and must not share a chain. The disk-fallback flag
-        /// rides in too, so a capture attempted under a disallowed
-        /// fallback is never served to a capture that allows the route.
-        /// Editor-session scope only: nothing crosses restarts.
+        /// texel byte and must not share a chain. The request's
+        /// disk-fallback decision rides in too, so a capture whose request
+        /// disallows the route is never served a chain that capture
+        /// captured through the route. Editor-session scope only: nothing
+        /// crosses restarts.
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
@@ -59,28 +60,13 @@ namespace Alrauna.Amuse.Editor.Host
                     AlphaPolicyBounds bounds, bool diskFallbackAllowed),
                 AlphaMipChain> Cache = new();
 
-        internal static bool AllowDiskFallback { get; set; } = true;
-
-        internal readonly struct DisallowDiskFallbackScope : IDisposable
-        {
-            private readonly bool _previous;
-            internal DisallowDiskFallbackScope(bool previous) => _previous = previous;
-            public void Dispose() => AllowDiskFallback = _previous;
-        }
-
-        internal static DisallowDiskFallbackScope DisallowDiskFallback()
-        {
-            var prev = AllowDiskFallback;
-            AllowDiskFallback = false;
-            return new DisallowDiskFallbackScope(prev);
-        }
-
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
             float cutoffThreshold,
             AlphaPolicyBounds bounds,
-            out AlphaMipChain chain)
+            out AlphaMipChain chain,
+            bool allowDiskFallback = true)
         {
             if (source == null)
             {
@@ -102,7 +88,7 @@ namespace Alrauna.Amuse.Editor.Host
             // The bounds ride in the key: two policies can share a cutoff
             // while building different chains, so a policy change must
             // re-capture instead of serving the other policy's evidence.
-            // AllowDiskFallback is the same value the capture gate below
+            // allowDiskFallback is the same value the capture gate below
             // consults, so the key names the route that built the chain.
             var key = (
                 guid,
@@ -111,7 +97,7 @@ namespace Alrauna.Amuse.Editor.Host
                 channel,
                 cutoff,
                 bounds,
-                AllowDiskFallback);
+                allowDiskFallback);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -125,7 +111,7 @@ namespace Alrauna.Amuse.Editor.Host
                 Cache[key] = chain;
                 return true;
             }
-            if (!AllowDiskFallback)
+            if (!allowDiskFallback)
             {
                 return false;
             }

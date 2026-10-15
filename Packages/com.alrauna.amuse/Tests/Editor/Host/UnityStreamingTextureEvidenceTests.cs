@@ -219,21 +219,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             AlphaMipChain first;
             AlphaMipChain second;
-            using (UnityStreamingTextureEvidence.DisallowDiskFallback())
-            {
-                UnityStreamingTextureEvidence.TryCapture(
-                    texture,
-                    TextureChannel.Alpha,
-                    0.50196f,
-                    AlphaPolicyBounds.Inert,
-                    out first);
-                UnityStreamingTextureEvidence.TryCapture(
-                    texture,
-                    TextureChannel.Alpha,
-                    0.50205f,
-                    AlphaPolicyBounds.Inert,
-                    out second);
-            }
+            UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                0.50196f,
+                AlphaPolicyBounds.Inert,
+                out first,
+                allowDiskFallback: false);
+            UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                0.50205f,
+                AlphaPolicyBounds.Inert,
+                out second,
+                allowDiskFallback: false);
 
             // Byte 128 decodes to ~0.50196: it passes the first cutoff,
             // fails the second.
@@ -380,15 +379,50 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(chain, Is.Null);
         }
 
+        /// <summary>
+        /// The disk-fallback switch rides the capture request, not
+        /// process state. One capture that allows the route caches a
+        /// clone-provenance chain; a later capture of the same texture
+        /// whose own request disallows the route is never served that
+        /// entry: the key names the route that built the chain, and the
+        /// disallowed capture refuses rather than serve it.
+        /// </summary>
         [Test]
-        public void DisallowDiskFallbackScopeRestoresStateAndBlocksClone()
+        public void ARequestDisallowingFallbackNeverReadsAFallbackCapturedChain()
         {
-            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
-            using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_fallback_request_strict");
+            try
             {
-                Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.False);
+                var okFallback = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out var fallbackChain);
+                Assert.That(
+                    okFallback, Is.True,
+                    "fixture precondition: the allowed capture must " +
+                    "reach the clone fallback");
+                Assert.That(fallbackChain, Is.Not.Null);
+
+                var okStrict = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out var strictChain,
+                    allowDiskFallback: false);
+                Assert.That(
+                    okStrict, Is.False,
+                    "a disallowing request must never be served the " +
+                    "fallback-provenance cache entry");
+                Assert.That(strictChain, Is.Null);
             }
-            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
+            finally
+            {
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
         }
 
         [Test]
@@ -397,17 +431,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var texture = ImportExrStreamingBandTexture("unreadable_streaming_for_guard");
             try
             {
-                using (UnityStreamingTextureEvidence.DisallowDiskFallback())
-                {
-                    var ok = UnityStreamingTextureEvidence.TryCapture(
-                        texture,
-                        TextureChannel.Alpha,
-                        1.0f,
-                        AlphaPolicyBounds.Inert,
-                        out var chain);
-                    Assert.That(ok, Is.False);
-                    Assert.That(chain, Is.Null);
-                }
+                var ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    1.0f,
+                    AlphaPolicyBounds.Inert,
+                    out var chain,
+                    allowDiskFallback: false);
+                Assert.That(ok, Is.False);
+                Assert.That(chain, Is.Null);
                 Assert.That(
                     AssetDatabase.IsValidFolder("Assets/Amuse.StreamingReadback"),
                     Is.False,

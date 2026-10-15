@@ -95,6 +95,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal bool CaptureKeywords { get; }
 
+        /// <summary>
+        /// Whether the capture may take the streaming route's disk-fallback
+        /// clone when the direct source-image read fails. The request model
+        /// is closed: the switch rides the request, never process state, so
+        /// a disallowing capture is never served a fallback-provenance
+        /// cache entry.
+        /// </summary>
+        internal bool AllowDiskFallback { get; }
+
         internal MaterialEvidenceRequest(
             bool shaderName,
             bool activeColorSpace,
@@ -103,7 +112,8 @@ namespace Alrauna.Amuse.Editor.Host
             IEnumerable<string> colorProperties,
             IEnumerable<string> vectorProperties,
             IEnumerable<TexturePropertyEvidenceRequest> textureProperties,
-            bool captureKeywords = false)
+            bool captureKeywords = false,
+            bool allowDiskFallback = true)
         {
             ShaderName = shaderName;
             ActiveColorSpace = activeColorSpace;
@@ -117,6 +127,7 @@ namespace Alrauna.Amuse.Editor.Host
                 vectorProperties, nameof(vectorProperties));
             TextureProperties = CopyTextures(textureProperties);
             CaptureKeywords = captureKeywords;
+            AllowDiskFallback = allowDiskFallback;
 
             var typed = new HashSet<string>(StringComparer.Ordinal);
             AddTyped(typed, ScalarProperties);
@@ -145,6 +156,10 @@ namespace Alrauna.Amuse.Editor.Host
             var shaderName = false;
             var activeColorSpace = false;
             var captureKeywords = false;
+            // The disk-fallback switch combines under the strictest rule:
+            // one constituent request disallowing the route disallows it
+            // for the combined request.
+            var allowDiskFallback = true;
             var presence = new SortedSet<string>(StringComparer.Ordinal);
             var scalars = new SortedSet<string>(StringComparer.Ordinal);
             var colors = new SortedSet<string>(StringComparer.Ordinal);
@@ -164,6 +179,7 @@ namespace Alrauna.Amuse.Editor.Host
                 shaderName |= request.ShaderName;
                 activeColorSpace |= request.ActiveColorSpace;
                 captureKeywords |= request.CaptureKeywords;
+                allowDiskFallback &= request.AllowDiskFallback;
                 presence.UnionWith(request.PresenceProperties);
                 scalars.UnionWith(request.ScalarProperties);
                 colors.UnionWith(request.ColorProperties);
@@ -210,7 +226,27 @@ namespace Alrauna.Amuse.Editor.Host
                 colors,
                 vectors,
                 textureRequests,
-                captureKeywords);
+                captureKeywords,
+                allowDiskFallback);
+        }
+
+        /// <summary>
+        /// The same request with the disk-fallback route withdrawn. The
+        /// DryRun capture uses this so its no-asset-writes guarantee rides
+        /// the request instead of process state.
+        /// </summary>
+        internal MaterialEvidenceRequest DisallowingDiskFallback()
+        {
+            return new MaterialEvidenceRequest(
+                ShaderName,
+                ActiveColorSpace,
+                PresenceProperties,
+                ScalarProperties,
+                ColorProperties,
+                VectorProperties,
+                TextureProperties,
+                CaptureKeywords,
+                allowDiskFallback: false);
         }
 
         private static IReadOnlyCollection<string> CopyNames(
@@ -1000,6 +1036,7 @@ namespace Alrauna.Amuse.Editor.Host
                     // share one field, whichever material was captured
                     // first.
                     shared.Evidence |= texture.RequestedEvidence;
+                    shared.AllowDiskFallback &= input.Request.AllowDiskFallback;
                     texture.Shared = shared;
                 }
             }
@@ -1014,7 +1051,8 @@ namespace Alrauna.Amuse.Editor.Host
                         shared.Source,
                         bounds,
                         shared.OriginMaterial,
-                        shared.CutoutThreshold);
+                        shared.CutoutThreshold,
+                        shared.AllowDiskFallback);
                 }
             }
 
@@ -1050,7 +1088,8 @@ namespace Alrauna.Amuse.Editor.Host
                                 default,
                                 bounds,
                                 material.SourceMaterial,
-                                texture.CutoutThreshold);
+                                texture.CutoutThreshold,
+                                material.AllowDiskFallback);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
                             distinctTextures.Add(capturedTexture);
@@ -1121,6 +1160,7 @@ namespace Alrauna.Amuse.Editor.Host
             var builder = new MaterialBuilder
             {
                 HasShaderName = isLive && request.ShaderName,
+                AllowDiskFallback = request.AllowDiskFallback,
                 SourceMaterial = input.SourceMaterial,
                 ShaderName = isLive && request.ShaderName
                     ? material.shader.name
@@ -1358,7 +1398,8 @@ namespace Alrauna.Amuse.Editor.Host
             TextureSourceId knownSource,
             AlphaPolicyBounds bounds,
             Material originMaterial,
-            float cutoffThreshold = 1.0f)
+            float cutoffThreshold = 1.0f,
+            bool allowDiskFallback = true)
         {
             var hasSource = hasKnownSource &&
                 (evidence & TextureEvidenceKinds.SourceIdentity) != 0;
@@ -1398,7 +1439,8 @@ namespace Alrauna.Amuse.Editor.Host
                     out _,
                     out alphaChannel,
                     out alphaRefusal,
-                    originMaterial: originMaterial);
+                    originMaterial: originMaterial,
+                    allowDiskFallback: allowDiskFallback);
             AlphaMipChain redChannel = null;
             var redRefusal = TextureCaptureRefusalReason.None;
             var hasRedChannel =
@@ -1411,7 +1453,8 @@ namespace Alrauna.Amuse.Editor.Host
                     out _,
                     out redChannel,
                     out redRefusal,
-                    originMaterial: originMaterial);
+                    originMaterial: originMaterial,
+                    allowDiskFallback: allowDiskFallback);
             if (hasRedChannel)
             {
                 AssertRedFieldContract(redChannel);
@@ -1554,6 +1597,7 @@ namespace Alrauna.Amuse.Editor.Host
         private sealed class MaterialBuilder
         {
             internal Material SourceMaterial;
+            internal bool AllowDiskFallback = true;
             internal bool HasShaderName;
             internal string ShaderName;
             internal bool HasActiveColorSpace;
@@ -1586,6 +1630,10 @@ namespace Alrauna.Amuse.Editor.Host
             internal readonly float CutoutThreshold;
             internal readonly Material OriginMaterial;
             internal TextureEvidenceKinds Evidence;
+            // The strictest contributing request governs the shared
+            // capture: one disallowing request in the bucket withdraws
+            // the route for it.
+            internal bool AllowDiskFallback = true;
             internal CapturedTextureEvidence Captured;
 
             internal SharedTextureBuilder(

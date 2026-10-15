@@ -32,7 +32,8 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// scene, and turns the outcome into display rows. It reads. It never
     /// writes: the capture transients it creates die inside the compute
     /// scope, and the one capture route that writes project assets stays
-    /// unreachable, because streaming capture runs under DisallowDiskFallback.
+    /// unreachable, because every capture request disallows the
+    /// disk-fallback route.
     /// <para>
     /// Begin runs the avatar facts once per open. Step computes one
     /// renderer per call, behind a probe pass and the session cache. An
@@ -968,7 +969,8 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>
         /// Materializes each admitted batch against property blocks.
         /// Transients die in the finally block.
-        /// Runs under DisallowDiskFallback to prevent asset creation on disk.
+        /// The capture request disallows the disk-fallback route, so no
+        /// capture creates assets on disk.
         /// </summary>
         private ClosedAlphaMaterialCapturer RealCapturer(Renderer renderer)
         {
@@ -984,11 +986,16 @@ namespace Alrauna.Amuse.Editor.DryRun
                     .MaterializeAdmitted(renderer, materials, out var clones);
                 try
                 {
-                    using (UnityStreamingTextureEvidence.DisallowDiskFallback())
-                    {
-                        return inner(
-                            effective, families, request, bounds, out outcome);
-                    }
+                    // The no-asset-writes guarantee rides the capture
+                    // request: the request withdraws the streaming route's
+                    // disk-fallback clone, so no capture in this batch can
+                    // create assets on disk.
+                    return inner(
+                        effective,
+                        families,
+                        request.DisallowingDiskFallback(),
+                        bounds,
+                        out outcome);
                 }
                 finally
                 {

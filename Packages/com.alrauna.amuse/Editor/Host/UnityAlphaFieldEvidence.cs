@@ -95,6 +95,13 @@ namespace Alrauna.Amuse.Editor.Host
         /// evaluated in a fixed order, so one texture always refuses with the
         /// same family.
         /// </param>
+        /// <param name="allowDiskFallback">
+        /// Whether the streaming route may clone the source into a
+        /// temporary asset when the direct source-image read fails. The
+        /// value rides the capture request, so a disallowing capture is
+        /// never served a route's cached chain; the default allows the
+        /// route.
+        /// </param>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
@@ -103,7 +110,8 @@ namespace Alrauna.Amuse.Editor.Host
             out TextureSourceId source,
             out AlphaMipChain chain,
             out TextureCaptureRefusalReason refusal,
-            Material originMaterial = null)
+            Material originMaterial = null,
+            bool allowDiskFallback = true)
         {
             source = default;
             chain = null;
@@ -215,7 +223,7 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
                             texture2D, channel, cutoffThreshold, bounds,
-                            out chain))
+                            out chain, allowDiskFallback))
                     {
                         refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;

@@ -903,6 +903,34 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "note must not be emitted when streaming texture decodes in memory");
         }
 
+        /// <summary>
+        /// The dry run's no-asset-writes guarantee rides the capture
+        /// request: every request the capturer receives disallows the
+        /// streaming route's disk-fallback clone, instead of relying on
+        /// process state around the call.
+        /// </summary>
+        [Test]
+        public void DryRunCaptureRequestDisallowsDiskFallback()
+        {
+            var fixture = NewComputeFixture(255, 0.5f, streaming: true);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            Assert.That(
+                _captureCalls,
+                Is.GreaterThan(0),
+                "fixture precondition: the run must dispatch a capture");
+            Assert.That(_seenRequests, Is.Not.Empty);
+            foreach (var request in _seenRequests)
+            {
+                Assert.That(
+                    request.AllowDiskFallback, Is.False,
+                    "the dry run capture request must disallow the " +
+                    "disk-fallback route");
+            }
+        }
+
         [Test]
         public void AttestedLockedMaterialReportsDeferredSentenceWithPolygonCount()
         {
