@@ -7091,6 +7091,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A play-mode slot refusal row must name the renderer's refusal
+        /// cause through the shared report string table. The generic
+        /// unsupported-material sentence survives only behind the
+        /// corrupt-key guard.
+        /// </summary>
+        [Test]
+        public void ARefusedSlotRowCarriesTheNamedCause()
+        {
+            var state = new AmusePlatformFinishState();
+            AmusePlatformFinishPass.RecordPlayModeRendererRefusal(
+                state, null, "Armature/Hips/MyRenderer", typeof(MeshRenderer).FullName,
+                RendererAnalysisRefusal.MissingMesh, 1, 2, null);
+
+            var slotRows = state.PlayModeRendererRows
+                .Where(row => row.kind == 3).ToList();
+            Assert.That(slotRows.Count, Is.EqualTo(2));
+            Assert.That(
+                slotRows.All(row => row.sentence.Contains("mesh")),
+                "the row names the cause; it is not the generic " +
+                "unsupported-material sentence");
+        }
+
+        /// <summary>
+        /// The slot resolution path must name the refusal cause the same
+        /// way: the unresolved slot's row reads the per-cause table
+        /// entry, not the fixed generic sentence.
+        /// </summary>
+        [Test]
+        public void ARefusedSlotResolutionRowCarriesTheNamedCause()
+        {
+            var state = new AmusePlatformFinishState();
+            var plan = new MeshSeparationPlan(
+                new MeshSeparationInput(0, new SubmeshSeparationInput[0]),
+                new SubmeshSeparationPlan[0],
+                false, false, 0, 0);
+            var slotResults = new[]
+            {
+                SlotResolutionResult.Refused(RendererAnalysisRefusal.MissingMesh)
+            };
+
+            AmusePlatformFinishPass.RecordPlayModeSlots(
+                state, null, "Armature/Hips/MyRenderer", typeof(MeshRenderer).FullName,
+                plan, slotResults, null);
+
+            var slotRows = state.PlayModeRendererRows
+                .Where(row => row.kind == 3).ToList();
+            Assert.That(slotRows.Count, Is.EqualTo(1));
+            Assert.That(
+                slotRows.All(row => row.sentence.Contains("mesh")),
+                "the row names the cause; it is not the generic " +
+                "unsupported-material sentence");
+        }
+
+        /// <summary>
         /// The preserve gate folds the mixed-half slot: one proven opaque
         /// triangle and one unproven triangle, with the stored preserve
         /// value at 100. Preparation re-cuts the plan, and the apply pass

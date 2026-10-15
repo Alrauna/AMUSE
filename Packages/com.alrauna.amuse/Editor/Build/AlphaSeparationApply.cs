@@ -1208,15 +1208,15 @@ namespace Alrauna.Amuse.Editor.Build
                             string sentence;
                             if (total > 0 && proven == total)
                             {
-                                sentence = "Convertable: " + total + " out of " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.ConvertableSlotSentence(total);
                             }
                             else if (proven > 0)
                             {
-                                sentence = "Splittable: " + proven + " of out " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.SplittableSlotSentence(proven, total);
                             }
                             else
                             {
-                                sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.UntouchableSlotSentence(total);
                             }
 
                             state.PlayModeRendererRows.Add(new SerializedTransformationRow

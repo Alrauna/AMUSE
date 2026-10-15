@@ -1463,7 +1463,8 @@ namespace Alrauna.Amuse.Editor.Build
             var effectivePath = scenePath != null ? scenePath : rendererPath;
 
             var key = AmuseReportStrings.RendererKey(refusal);
-            var refusalSentence = AmuseReportStrings.Has(key)
+            var hasCauseSentence = AmuseReportStrings.Has(key);
+            var refusalSentence = hasCauseSentence
                 ? AmuseReportStrings.Format(
                     key,
                     AmuseReports.SlotCountPhrase(meshSubMeshCount),
@@ -1471,6 +1472,14 @@ namespace Alrauna.Amuse.Editor.Build
                     renderer != null ? renderer.gameObject.name : "",
                     string.IsNullOrEmpty(detail) ? "" : detail)
                 : refusal.ToString();
+
+            // Every slot under a refused renderer carries the same named
+            // cause. The fixed generic sentence survives only behind the
+            // corrupt-key guard, like the lifecycle and structural
+            // refusals above.
+            var slotRefusalSentence = hasCauseSentence
+                ? refusalSentence
+                : "Refused: AMUSE currently does not support this material";
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
@@ -1497,7 +1506,7 @@ namespace Alrauna.Amuse.Editor.Build
                     movedTriangles = -1,
                     provenTriangles = -1,
                     totalTriangles = -1,
-                    sentence = "Refused: AMUSE currently does not support this material"
+                    sentence = slotRefusalSentence
                 });
             }
         }
@@ -1564,6 +1573,16 @@ namespace Alrauna.Amuse.Editor.Build
                 if (slotResults != null && slotIndex < slotResults.Count && !slotResults[slotIndex].IsResolved)
                 {
                     var total = SubmeshPolygonCount(renderer, slotIndex);
+                    var slotKey = AmuseReportStrings.RendererKey(
+                        slotResults[slotIndex].Refusal);
+                    var slotSentence = AmuseReportStrings.Has(slotKey)
+                        ? AmuseReportStrings.Format(
+                            slotKey,
+                            "",
+                            "",
+                            renderer != null ? renderer.gameObject.name : "",
+                            "")
+                        : "Refused: AMUSE currently does not support this material";
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
                         kind = 3,
@@ -1574,7 +1593,7 @@ namespace Alrauna.Amuse.Editor.Build
                         movedTriangles = -1,
                         provenTriangles = -1,
                         totalTriangles = total,
-                        sentence = "Refused: AMUSE currently does not support this material"
+                        sentence = slotSentence
                     });
                     continue;
                 }
