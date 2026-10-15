@@ -266,13 +266,10 @@ namespace Alrauna.Amuse.Editor.DryRun
             switch (index)
             {
                 case 0:
-                    return "This view runs the same proof on the avatar in "
-                        + "the scene. Other tools change the avatar later at "
-                        + "build time. This view cannot see those changes. A "
-                        + "tool can also add animations the build must obey. "
-                        + "Then the build proves less than this view shows. "
-                        + "A run in Play mode or an upload shows the true "
-                        + "result.";
+                    return "This view runs the same proof as a build on the avatar in "
+                        + "the scene. Other tools can change the avatar during build "
+                        + "time. Run a Play mode build and exit to see accurate "
+                        + "information.";
                 case 1:
                     return "The first open measures textures on the GPU. "
                         + "It can take a moment.";

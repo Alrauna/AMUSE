@@ -213,7 +213,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "run the build again.",
 
             ["amuse.avatar.UnrecognizedStateMachineBehaviour"] =
-                "This avatar has a state behaviour AMUSE does not know.",
+                "This avatar has a state behavior that AMUSE does not know. " +
+                "Run a Play mode build for accurate information.",
             ["amuse.avatar.UnrecognizedStateMachineBehaviour:description"] =
                 "A state in an animator controller carries a behaviour " +
                 "that AMUSE does not know. AMUSE cannot prove what that " +

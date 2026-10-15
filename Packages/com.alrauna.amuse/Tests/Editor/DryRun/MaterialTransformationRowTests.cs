@@ -123,12 +123,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 RowText.DisclosureSentence(0),
                 Is.EqualTo(
-                    "This view runs the same proof on the avatar in the " +
-                    "scene. Other tools change the avatar later at build " +
-                    "time. This view cannot see those changes. A tool can " +
-                    "also add animations the build must obey. Then the " +
-                    "build proves less than this view shows. A run in " +
-                    "Play mode or an upload shows the true result."));
+                    "This view runs the same proof as a build on the avatar in the " +
+                    "scene. Other tools can change the avatar during build time. " +
+                    "Run a Play mode build and exit to see accurate information."));
             Assert.That(
                 RowText.DisclosureSentence(1),
                 Is.EqualTo(
