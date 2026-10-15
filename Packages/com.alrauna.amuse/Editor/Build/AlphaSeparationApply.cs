@@ -97,6 +97,11 @@ namespace Alrauna.Amuse.Editor.Build
                     state.SamplingTarget,
                     state.SamplingPolicy);
             }
+
+            if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+            {
+                CaptureAndSavePlayModeBuildRecord(context, state);
+            }
         }
 
         /// <summary>
@@ -1043,5 +1048,111 @@ namespace Alrauna.Amuse.Editor.Build
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
         }
+        private static void CaptureAndSavePlayModeBuildRecord(
+            BuildContext context,
+            AmusePlatformFinishState state)
+        {
+            if (context == null || state == null) return;
+
+            if (state.Separation != null)
+            {
+                var finalization = state.AppliedFinalization;
+                var appliedRenderers = finalization != null
+                    ? new HashSet<Renderer>(finalization.Writes.Select(w => w.Renderer))
+                    : new HashSet<Renderer>();
+
+                if (state.PlayModeRendererRows.Count > 0)
+                {
+                    for (var i = 0; i < state.PlayModeRendererRows.Count; i++)
+                    {
+                        var row = state.PlayModeRendererRows[i];
+                        if (row.kind == 3 && row.provenTriangles > 0)
+                        {
+                            var isApplied = false;
+                            foreach (var writeRenderer in appliedRenderers)
+                            {
+                                if (writeRenderer != null)
+                                {
+                                    var path = AnimationUtility.CalculateTransformPath(
+                                        writeRenderer.transform, context.AvatarRootObject.transform);
+                                    if (path == row.rendererPath || writeRenderer.gameObject.name == row.rendererPath)
+                                    {
+                                        isApplied = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (isApplied)
+                            {
+                                row.movedTriangles = row.provenTriangles;
+                                state.PlayModeRendererRows[i] = row;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var prepared in state.Separation.Renderers)
+                    {
+                        var renderer = prepared.Target.Renderer;
+                        var rendererPath = prepared.RendererPath;
+                        var rendererTypeName = prepared.RendererTypeName;
+                        var materials = renderer != null ? renderer.sharedMaterials : null;
+                        var isApplied = appliedRenderers.Contains(renderer);
+
+                        foreach (var candidate in prepared.CandidateSlots)
+                        {
+                            var slotIndex = candidate.Plan.SourceMaterialBindingIndex;
+                            var proven = candidate.Plan.OpaqueTriangleOrdinals.Count;
+                            var total = candidate.Plan.OpaqueTriangleOrdinals.Count +
+                                candidate.Plan.TransparentTriangleOrdinals.Count;
+                            var moved = isApplied ? proven : 0;
+
+                            string sourcePath = string.Empty;
+                            foreach (var sourceMat in candidate.OpaqueOfAdmitted.Keys)
+                            {
+                                sourcePath = AssetDatabase.GetAssetPath(sourceMat);
+                                if (!string.IsNullOrEmpty(sourcePath)) break;
+                            }
+                            if (string.IsNullOrEmpty(sourcePath) && materials != null &&
+                                slotIndex < materials.Length && materials[slotIndex] != null)
+                            {
+                                sourcePath = AssetDatabase.GetAssetPath(materials[slotIndex]);
+                            }
+
+                            string sentence;
+                            if (total > 0 && proven == total)
+                            {
+                                sentence = "Convertable: " + total + " out of " + total + " polygons may be moved";
+                            }
+                            else if (proven > 0)
+                            {
+                                sentence = "Splittable: " + proven + " of out " + total + " polygons may be moved";
+                            }
+                            else
+                            {
+                                sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                            }
+
+                            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+                            {
+                                kind = 3,
+                                rendererPath = rendererPath,
+                                rendererTypeName = rendererTypeName,
+                                sourceMaterialPath = sourcePath,
+                                slotIndex = slotIndex,
+                                movedTriangles = moved,
+                                provenTriangles = proven,
+                                totalTriangles = total,
+                                sentence = sentence
+                            });
+                        }
+                    }
+                }
+            }
+
+            PlayModeBuildStore.SaveOutcome(context, state);
+        }
     }
+
 }

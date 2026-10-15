@@ -589,7 +589,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// grammatical for zero, one, and many, and an unreadable count
         /// never prints as a number.
         /// </summary>
-        private static string SlotCountPhrase(int count)
+        internal static string SlotCountPhrase(int count)
         {
             if (count < 0)
             {

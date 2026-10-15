@@ -66,7 +66,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             int totalTriangles,
             int refusedSlots,
             int slotCount,
-            string sentence)
+            string sentence,
+            string sourceMaterialPath = null)
         {
             // An empty sentence is a test failure, never a displayable
             // row. The guard turns a broken builder call into a throw
@@ -87,11 +88,13 @@ namespace Alrauna.Amuse.Editor.DryRun
             RefusedSlots = refusedSlots;
             SlotCount = slotCount;
             Sentence = sentence;
+            SourceMaterialPath = sourceMaterialPath;
         }
 
         internal MaterialTransformationRowKind Kind { get; }
         internal string RendererPath { get; }
         internal string RendererTypeName { get; }
+        public string SourceMaterialPath { get; }
         internal int SlotIndex { get; }
         internal int MovedTriangles { get; }
         internal int ProvenTriangles { get; }
@@ -138,13 +141,32 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         internal static MaterialTransformationRow Slot(
             string path, string typeName, int slotIndex,
-            int proven, int total, string sentence)
+            int proven, int total, string sentence,
+            string sourceMaterialPath = null)
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Slot,
                 path, typeName, slotIndex,
                 -1, proven, total, -1, -1,
-                sentence);
+                sentence,
+                sourceMaterialPath);
+        }
+
+        internal static MaterialTransformationRow FromSerialized(
+            SerializedTransformationRow row)
+        {
+            return new MaterialTransformationRow(
+                (MaterialTransformationRowKind)row.kind,
+                row.rendererPath,
+                row.rendererTypeName,
+                row.slotIndex,
+                row.movedTriangles,
+                row.provenTriangles,
+                row.totalTriangles,
+                row.refusedSlots,
+                row.slotCount,
+                row.sentence,
+                row.sourceMaterialPath);
         }
     }
 

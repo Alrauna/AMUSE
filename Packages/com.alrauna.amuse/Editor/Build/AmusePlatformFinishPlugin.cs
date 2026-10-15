@@ -205,6 +205,12 @@ namespace Alrauna.Amuse.Editor.Build
             get;
             set;
         }
+
+        internal List<SerializedTransformationRow> PlayModeAvatarRows { get; } =
+            new List<SerializedTransformationRow>();
+
+        internal List<SerializedTransformationRow> PlayModeRendererRows { get; } =
+            new List<SerializedTransformationRow>();
     }
 
     [RunsOnPlatforms(WellKnownPlatforms.VRChatAvatar30)]
@@ -457,6 +463,19 @@ namespace Alrauna.Amuse.Editor.Build
                 // nothing happened.
                 AmuseReports.LifecycleRefusal(
                     context.AvatarRootObject, lifecycle.Refusal);
+                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                {
+                    var refusalKey = AmuseReportStrings.HostKey(lifecycle.Refusal);
+                    var sentence = AmuseReportStrings.Has(refusalKey)
+                        ? AmuseReportStrings.Format(refusalKey)
+                        : "Lifecycle refusal: " + lifecycle.Refusal;
+                    state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 0,
+                        sentence = sentence
+                    });
+                    PlayModeBuildStore.SaveOutcome(context, state);
+                }
                 return;
             }
 
@@ -516,6 +535,19 @@ namespace Alrauna.Amuse.Editor.Build
                 state.AvatarRefusal = graph.Refusal;
                 AmuseReports.AvatarRefusal(
                     context.AvatarRootObject, graph.Refusal);
+                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                {
+                    var refusalKey = AmuseReportStrings.AvatarKey(graph.Refusal);
+                    var sentence = AmuseReportStrings.Has(refusalKey)
+                        ? AmuseReportStrings.Format(refusalKey)
+                        : "Structural refusal: " + graph.Refusal;
+                    state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 0,
+                        sentence = sentence
+                    });
+                    PlayModeBuildStore.SaveOutcome(context, state);
+                }
                 return;
             }
 
@@ -560,6 +592,15 @@ namespace Alrauna.Amuse.Editor.Build
                     consentPresenter ?? VersionConsentDialog.Present))
             {
                 AmuseReports.ConsentDeclined(subjects);
+                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                {
+                    state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 0,
+                        sentence = "Build consent was declined."
+                    });
+                    PlayModeBuildStore.SaveOutcome(context, state);
+                }
                 return;
             }
 
@@ -567,6 +608,14 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 context.GetState<TransientUnlockWindowState>()
                     .ConsentGranted = true;
+                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                {
+                    state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 1,
+                        sentence = "This avatar holds locked or transfer protected materials. A build with granted consent may convert further than this view shows."
+                    });
+                }
             }
 
             var transferShaders = grantedShaderNames != null;
@@ -649,12 +698,32 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 AmuseReports.UnsupportedSamplingTarget(
                     context.AvatarRootObject, samplingTarget);
+                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                {
+                    state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 0,
+                        sentence = "The active build target supports no sampling policy. A build on this target applies nothing. This view shows no results for it."
+                    });
+                }
             }
 
+            if (samplingTarget != BuildTarget.StandaloneWindows64 && lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+            {
+                state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                {
+                    kind = 0,
+                    sentence = "The active build target is not Windows. Texture proof needs the Windows import. This view can prove fewer triangles than a Windows build."
+                });
+            }
 
             foreach (var renderer in context.AvatarRootObject
                          .GetComponentsInChildren<Renderer>(true))
             {
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform, context.AvatarRootObject.transform);
+                var rendererTypeName = renderer.GetType().FullName;
+
                 var refusal = UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
                     renderer,
                     out var structuralMeshSubMeshCount,
@@ -667,12 +736,15 @@ namespace Alrauna.Amuse.Editor.Build
                         refusal,
                         structuralMeshSubMeshCount,
                         structuralMaterialSlotCount);
+                    if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                    {
+                        RecordPlayModeRendererRefusal(
+                            state, renderer, rendererPath, rendererTypeName,
+                            refusal, structuralMeshSubMeshCount, structuralMaterialSlotCount, null);
+                    }
                     continue;
                 }
 
-                var rendererPath = AnimationUtility.CalculateTransformPath(
-                    renderer.transform, context.AvatarRootObject.transform);
-                var rendererTypeName = renderer.GetType().FullName;
                 // The live build-copy materials behind the captured admitted
                 // set, index-aligned with evidence.AdmittedMaterials. Held as a
                 // local transient host capability, never inside the evidence.
@@ -931,6 +1003,13 @@ namespace Alrauna.Amuse.Editor.Build
                             allowDepthTestChange,
                             grantedShaderNames,
                             resolved.SlotResults);
+
+                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay && plan != null)
+                        {
+                            RecordPlayModeSlots(
+                                state, renderer, rendererPath, rendererTypeName,
+                                plan, resolved.SlotResults, extraction.Snapshot);
+                        }
                     }
                 }
 
@@ -955,6 +1034,19 @@ namespace Alrauna.Amuse.Editor.Build
                                 evidence.SlotClosureFailures[0].Failure)
                             : null);
                     // A renderer refusal suppresses the per-slot loops below,
+                    if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                    {
+                        var detail = refusal ==
+                            RendererAnalysisRefusal
+                                .MaterialDependencyClosureFailed &&
+                            evidence.SlotClosureFailures.Count > 0
+                                ? AmuseReports.ClosureFailureSentence(
+                                    evidence.SlotClosureFailures[0].Failure)
+                                : null;
+                        RecordPlayModeRendererRefusal(
+                            state, renderer, rendererPath, rendererTypeName,
+                            refusal, extractionMeshSubMeshCount, extractionMaterialSlotCount, detail);
+                    }
                     // so the slots' captured facts would die. Report exactly
                     // the facts that did not surface: with empty slot
                     // results, every slot; otherwise only resolved slots,
@@ -1280,6 +1372,178 @@ namespace Alrauna.Amuse.Editor.Build
 
             state.Separation ??= new PreparedAlphaSeparation();
             state.Separation.Add(prepared);
+        }
+
+        private static void RecordPlayModeRendererRefusal(
+            AmusePlatformFinishState state,
+            Renderer renderer,
+            string rendererPath,
+            string rendererTypeName,
+            RendererAnalysisRefusal refusal,
+            int meshSubMeshCount,
+            int materialSlotCount,
+            string detail)
+        {
+            var key = AmuseReportStrings.RendererKey(refusal);
+            var refusalSentence = AmuseReportStrings.Has(key)
+                ? AmuseReportStrings.Format(
+                    key,
+                    AmuseReports.SlotCountPhrase(meshSubMeshCount),
+                    AmuseReports.SlotCountPhrase(materialSlotCount),
+                    renderer != null ? renderer.gameObject.name : "",
+                    string.IsNullOrEmpty(detail) ? "" : detail)
+                : refusal.ToString();
+
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 2,
+                rendererPath = rendererPath,
+                rendererTypeName = rendererTypeName,
+                sentence = rendererPath + " (" + rendererTypeName + "): refused. " + refusalSentence
+            });
+
+            var materials = renderer != null ? renderer.sharedMaterials : null;
+            var slotCount = materials != null ? materials.Length : (materialSlotCount > 0 ? materialSlotCount : 0);
+            for (var slotIndex = 0; slotIndex < slotCount; slotIndex++)
+            {
+                var mat = materials != null && slotIndex < materials.Length ? materials[slotIndex] : null;
+                var sourcePath = mat != null ? AssetDatabase.GetAssetPath(mat) : string.Empty;
+                state.PlayModeRendererRows.Add(new SerializedTransformationRow
+                {
+                    kind = 3,
+                    rendererPath = rendererPath,
+                    rendererTypeName = rendererTypeName,
+                    sourceMaterialPath = sourcePath,
+                    slotIndex = slotIndex,
+                    movedTriangles = -1,
+                    provenTriangles = -1,
+                    totalTriangles = -1,
+                    sentence = "Refused: AMUSE currently does not support this material"
+                });
+            }
+        }
+
+        private static int SubmeshPolygonCount(Renderer renderer, int slotIndex)
+        {
+            Mesh mesh = null;
+            if (renderer is SkinnedMeshRenderer smr)
+            {
+                mesh = smr.sharedMesh;
+            }
+            else if (renderer is MeshRenderer && renderer.TryGetComponent<MeshFilter>(out var filter))
+            {
+                mesh = filter.sharedMesh;
+            }
+
+            if (mesh == null || slotIndex < 0 || slotIndex >= mesh.subMeshCount)
+            {
+                return -1;
+            }
+
+            if (mesh.GetTopology(slotIndex) != MeshTopology.Triangles)
+            {
+                return -1;
+            }
+
+            return (int)(mesh.GetIndexCount(slotIndex) / 3);
+        }
+
+        private static void RecordPlayModeSlots(
+            AmusePlatformFinishState state,
+            Renderer renderer,
+            string rendererPath,
+            string rendererTypeName,
+            MeshSeparationPlan plan,
+            IReadOnlyList<SlotResolutionResult> slotResults,
+            UnityRendererAlphaSnapshot snapshot)
+        {
+            var materials = renderer != null ? renderer.sharedMaterials : null;
+            var submeshesByBinding = new Dictionary<int, List<SubmeshSeparationPlan>>();
+            foreach (var submesh in plan.Submeshes)
+            {
+                if (!submeshesByBinding.TryGetValue(submesh.SourceMaterialBindingIndex, out var list))
+                {
+                    list = new List<SubmeshSeparationPlan>();
+                    submeshesByBinding.Add(submesh.SourceMaterialBindingIndex, list);
+                }
+                list.Add(submesh);
+            }
+
+            var slotCount = materials != null ? materials.Length : (slotResults != null ? slotResults.Count : 0);
+            for (var slotIndex = 0; slotIndex < slotCount; slotIndex++)
+            {
+                var mat = materials != null && slotIndex < materials.Length ? materials[slotIndex] : null;
+                var sourcePath = mat != null ? AssetDatabase.GetAssetPath(mat) : string.Empty;
+
+                if (slotResults != null && slotIndex < slotResults.Count && !slotResults[slotIndex].IsResolved)
+                {
+                    var total = SubmeshPolygonCount(renderer, slotIndex);
+                    state.PlayModeRendererRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 3,
+                        rendererPath = rendererPath,
+                        rendererTypeName = rendererTypeName,
+                        sourceMaterialPath = sourcePath,
+                        slotIndex = slotIndex,
+                        movedTriangles = -1,
+                        provenTriangles = -1,
+                        totalTriangles = total,
+                        sentence = "Refused: AMUSE currently does not support this material"
+                    });
+                    continue;
+                }
+
+                if (submeshesByBinding.TryGetValue(slotIndex, out var submeshes))
+                {
+                    var proven = 0;
+                    var total = 0;
+                    var isCandidate = false;
+                    foreach (var s in submeshes)
+                    {
+                        proven += s.OpaqueTriangleOrdinals.Count;
+                        total += s.OpaqueTriangleOrdinals.Count + s.TransparentTriangleOrdinals.Count;
+                        if (s.Disposition == SubmeshSeparationDisposition.WhollyOpaqueCandidate ||
+                            s.Disposition == SubmeshSeparationDisposition.Split)
+                        {
+                            isCandidate = true;
+                        }
+                    }
+
+                    string sentence;
+                    if (isCandidate)
+                    {
+                        if (total > 0 && proven == total)
+                        {
+                            sentence = "Convertable: " + total + " out of " + total + " polygons may be moved";
+                        }
+                        else if (proven > 0)
+                        {
+                            sentence = "Splittable: " + proven + " of out " + total + " polygons may be moved";
+                        }
+                        else
+                        {
+                            sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                        }
+                    }
+                    else
+                    {
+                        sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                    }
+
+                    state.PlayModeRendererRows.Add(new SerializedTransformationRow
+                    {
+                        kind = 3,
+                        rendererPath = rendererPath,
+                        rendererTypeName = rendererTypeName,
+                        sourceMaterialPath = sourcePath,
+                        slotIndex = slotIndex,
+                        movedTriangles = 0,
+                        provenTriangles = proven,
+                        totalTriangles = total,
+                        sentence = sentence
+                    });
+                }
+            }
         }
     }
 }
