@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Host
 {
     /// <summary>
-    /// Reads and decodes authoring texture images directly from disk (.png, .tga)
+    /// Reads and decodes authoring texture images directly from disk (.png)
     /// at native uncompressed resolution, building pure area-averaged box mip chains
     /// clamped to the material's cutout or opacity threshold. When an alpha policy
     /// is active and no shader cutoff applies, the chain is the masked policy
@@ -49,8 +49,8 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            var ext = Path.GetExtension(assetPath).ToLowerInvariant();
-            if (ext != ".png" && ext != ".tga")
+            if (!AdmitsExtension(
+                    Path.GetExtension(assetPath).ToLowerInvariant()))
             {
                 return false;
             }
@@ -167,6 +167,17 @@ namespace Alrauna.Amuse.Editor.Host
                 chain = null;
                 return false;
             }
+        }
+
+        /// <summary>
+        /// True when this route decodes the authoring file bytes directly.
+        /// ImageConversion.LoadImage decodes PNG and JPG bytes only, so a
+        /// TGA source can never decode here; TGA rides the readable-clone
+        /// route in UnityStreamingTextureEvidence instead.
+        /// </summary>
+        internal static bool AdmitsExtension(string extension)
+        {
+            return extension == ".png";
         }
 
         /// <summary>

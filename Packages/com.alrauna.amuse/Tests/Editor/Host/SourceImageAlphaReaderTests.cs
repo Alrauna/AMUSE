@@ -229,6 +229,23 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void TgaSourcesAreNotAdmittedByTheSourceImageRoute()
+        {
+            // ImageConversion.LoadImage decodes PNG and JPG bytes only, so
+            // a TGA source can never decode on this route. The route must
+            // not advertise TGA; TGA sources ride the readable-clone route
+            // in UnityStreamingTextureEvidence.
+            Assert.That(
+                SourceImageAlphaReader.AdmitsExtension(".tga"),
+                Is.False,
+                "LoadImage cannot decode TGA; the route must not advertise it");
+            Assert.That(
+                SourceImageAlphaReader.AdmitsExtension(".png"),
+                Is.True,
+                "PNG stays admitted on the source-image route");
+        }
+
+        [Test]
         public void TryReadSourceAlphaChain_TruncatedPngRefusesWithoutThrowing()
         {
             // Characterization, not RED: malformed data refuses through the
