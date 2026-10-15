@@ -648,6 +648,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                     minimumY,
                     maximumY);
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var y = minimumY; y <= maximumY; y++)
             {
                 for (var x = minimumX; x <= maximumX; x++)
@@ -660,6 +667,35 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        // A clamp edge texel's exact support interval is a
+                        // half line or the whole line at width or height
+                        // one, so the finite pre-filter box may not decide
+                        // for it while the triangle reaches past the box
+                        // edge: below zero at the first index, above the
+                        // size at the last.
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < 0 || v1x < 0 || v2x < 0)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width || v1x > texture.Width || v2x > texture.Width)) ||
+                                         (y == 0 && (v0y < 0 || v1y < 0 || v2y < 0)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height || v1y > texture.Height || v2y > texture.Height));
+                        // The translated extraction returns false past the
+                        // proven bound. Then no cheap rejection happens, and
+                        // the exact intersection test below decides alone.
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -0.5, 0.5, -0.5, 0.5,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
+                        {
+                            continue;
+                        }
                     }
                     if (ExactUvGeometry.Intersects(
                         domain,
@@ -715,6 +751,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return true;
             }
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var y = minimumY; y <= maximumY; y++)
             {
                 for (var x = minimumX; x <= maximumX; x++)
@@ -722,6 +765,30 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (texture.GetAlpha(x, y) == byte.MaxValue)
                     {
                         continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        // The same clamp edge guard the raw walk uses: an
+                        // edge texel's exact support reaches past the finite
+                        // pre-filter box, so the pre-filter stands down
+                        // while the triangle crosses the box edge.
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < 0 || v1x < 0 || v2x < 0)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width || v1x > texture.Width || v2x > texture.Width)) ||
+                                         (y == 0 && (v0y < 0 || v1y < 0 || v2y < 0)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height || v1y > texture.Height || v2y > texture.Height));
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -0.5, 0.5, -0.5, 0.5,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
+                        {
+                            continue;
+                        }
                     }
                     if (ExactUvGeometry.Intersects(
                         domain,
@@ -1553,6 +1620,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                     minimumY,
                     maximumY);
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
             {
                 var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
@@ -1565,6 +1639,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                         continue;
                     }
                     if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
+                    {
+                        continue;
+                    }
+                    // Every repeat support interval is the bounded unit
+                    // square at the unwrapped index, so the box never needs
+                    // a clamp edge guard.
+                    if (canPreFilter && !ConservativeBilinearSupportOverlapsTriangle(
+                            unwrappedX, unwrappedX + 1,
+                            unwrappedY, unwrappedY + 1,
+                            v0x, v0y, v1x, v1y, v2x, v2y))
                     {
                         continue;
                     }
@@ -1633,6 +1717,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return true;
             }
 
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
             for (var unwrappedY = minimumY; unwrappedY <= maximumY; unwrappedY++)
             {
                 var y = ExactUvGeometry.FloorMod(unwrappedY, texture.Height);
@@ -1640,6 +1731,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
                     if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    // Every repeat support interval is the bounded unit
+                    // square at the unwrapped index, so the box never needs
+                    // a clamp edge guard.
+                    if (canPreFilter && !ConservativeBilinearSupportOverlapsTriangle(
+                            unwrappedX, unwrappedX + 1,
+                            unwrappedY, unwrappedY + 1,
+                            v0x, v0y, v1x, v1y, v2x, v2y))
                     {
                         continue;
                     }
