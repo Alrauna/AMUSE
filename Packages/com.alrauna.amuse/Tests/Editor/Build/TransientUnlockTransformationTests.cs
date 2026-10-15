@@ -777,6 +777,57 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The eligibility gate must see the same material universe as
+        /// the consent-subject scan: a locked material whose only
+        /// reference is a swap-curve keyframe makes the window eligible,
+        /// so the documented clip-only unlock can fire. Scanning the
+        /// slot arrays alone leaves the window closed for exactly this
+        /// avatar, and the swap-in then no-ops on the ungranted consent.
+        /// </summary>
+        [Test]
+        public void LockedMaterialReferencedOnlyByAClipMakesTheWindowEligible()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE clip only eligibility fixture"));
+            var clipLocked = Track(
+                TransientUnlockTestLifecycle.LockedConvertibleMaterialWithOriginal(
+                    "ClipEligibilityCape",
+                    "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+            var sibling = Track(VerifiedOpaqueFixtureMaterial());
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var clipRenderer =
+                Track(TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, sibling));
+            TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, clipRenderer, 0, clipLocked);
+
+            Material clipClone = null;
+            TransientUnlockTestKnobs.BeforeClose = context =>
+            {
+                var pairs = context
+                    .GetState<TransientUnlockWindowState>().OpenPairs;
+                clipClone = pairs.Count > 0
+                    ? pairs[0].UnlockedClone
+                    : null;
+            };
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root,
+                TransientUnlockTransformationTestPlugin.PlatformInstance);
+            var window = context.GetState<TransientUnlockWindowState>();
+
+            Assert.That(window.ConsentGranted, Is.True,
+                "a locked material referenced only by a swap curve must " +
+                "make the window eligible");
+            Assert.That(clipClone, Is.Not.Null,
+                "the granted window opens the documented clip-only " +
+                "unlock");
+        }
+
+        /// <summary>
         /// Apply sweeps an output when no surviving slot uses it. The
         /// swept output must not touch the pair: the close reverts the
         /// untransformed pair to L through the primary reversion, with

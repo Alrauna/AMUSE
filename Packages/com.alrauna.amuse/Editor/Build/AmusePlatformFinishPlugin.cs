@@ -584,7 +584,7 @@ namespace Alrauna.Amuse.Editor.Build
             // opens the window.
             var windowEligible =
                 TransientUnlockAvailability.WindowEligibleForConsent(
-                    AllAssignedMaterials(context),
+                    AssignedAndSwapCurvedMaterials(context, graph),
                     lockedOriginalAttestation);
 
             if (subjects.Count > 0
