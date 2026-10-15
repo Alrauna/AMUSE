@@ -76,13 +76,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             DestroyTracked();
         }
 
+        /// <summary>
+        /// The refusal boundary is the closed <see cref="PreparationRefusal"/>
+        /// enum: <c>None</c> is not a refusal, so the factory answers the
+        /// prepared no-mutation decision, and a named refusal is never
+        /// prepared.
+        /// </summary>
         [Test]
         public void PreparationRefusalRequiresAReason()
         {
-            Assert.Throws<ArgumentException>(
-                () => AmusePreparationDecision.Refused(null));
-            Assert.Throws<ArgumentException>(
-                () => AmusePreparationDecision.Refused(string.Empty));
+            var none = AmusePreparationDecision.Refused(
+                PreparationRefusal.None);
+            Assert.That(none.IsPrepared, Is.True);
+            Assert.That(none.HasMutation, Is.False);
+
+            var refused = AmusePreparationDecision.Refused(
+                PreparationRefusal.StaleSamplingPolicy);
+            Assert.That(refused.IsPrepared, Is.False);
+            Assert.That(
+                refused.Refusal,
+                Is.EqualTo(PreparationRefusal.StaleSamplingPolicy));
         }
 
         [Test]

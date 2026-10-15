@@ -51,6 +51,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             _filteringPin.Dispose();
         }
 
+        /// <summary>
+        /// The avatar-level preparation decision carries its refusal as a
+        /// closed enum member, not a free string: the single gate that may
+        /// refuse the mutation names its refusal, and <c>None</c> is never
+        /// a refusal.
+        /// </summary>
+        [Test]
+        public void ThePreparationDecisionCarriesANamedRefusalNotAFreeString()
+        {
+            var decision = AmusePreparationDecision.Refused(
+                PreparationRefusal.StaleSamplingPolicy);
+            Assert.That(
+                decision.Refusal,
+                Is.EqualTo(PreparationRefusal.StaleSamplingPolicy));
+            Assert.That(
+                AmusePreparationDecision.Refused(PreparationRefusal.None)
+                    .IsPrepared,
+                Is.True);
+        }
+
         [Test]
         public void CandidateRendererProducesARetainedRecord()
         {

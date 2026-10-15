@@ -57,7 +57,7 @@ namespace Alrauna.Amuse.Editor.Build
                     // struct would otherwise preserve the input while
                     // explaining nothing, so it is reported as the preparation
                     // defect it is.
-                    if (string.IsNullOrEmpty(decision.RefusalReason))
+                    if (decision.Refusal == PreparationRefusal.None)
                     {
                         throw new InvalidOperationException(
                             "A preparation refusal must be created through " +
@@ -188,8 +188,7 @@ namespace Alrauna.Amuse.Editor.Build
                         .ToList());
 
                 return AmusePreparationDecision.Refused(
-                    AlphaSeparationSlotRefusal
-                        .SamplingPolicyChanged.ToString());
+                    PreparationRefusal.StaleSamplingPolicy);
             }
 
             // The reactivated extension owns the only live view of the
