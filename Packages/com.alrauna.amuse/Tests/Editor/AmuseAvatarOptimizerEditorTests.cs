@@ -399,6 +399,38 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void TheParseCacheInvalidatesOnRecordChangeButNotOnFingerprintAlone()
+        {
+            var rawRecord = JsonUtility.ToJson(new PlayModeBuildRecord
+            {
+                avatarKey = "cache-probe",
+                policyFingerprint = "fp-one",
+                avatarRows = new[]
+                {
+                    new SerializedTransformationRow
+                    {
+                        kind = (int)MaterialTransformationRowKind.Note,
+                        sentence = "cache probe note."
+                    }
+                },
+                rendererRows = new SerializedTransformationRow[0]
+            });
+            var otherRecord = JsonUtility.ToJson(new PlayModeBuildRecord
+            {
+                avatarKey = "cache-probe",
+                policyFingerprint = "fp-two",
+                avatarRows = new SerializedTransformationRow[0],
+                rendererRows = new SerializedTransformationRow[0]
+            });
+
+            var rows1 = PlayModeBuildStore.ParseCached(rawRecord);
+            var rows2 = PlayModeBuildStore.ParseCached(rawRecord);
+            Assert.That(rows2, Is.SameAs(rows1), "the same record string reuses the parse");
+            var rows3 = PlayModeBuildStore.ParseCached(otherRecord);
+            Assert.That(rows3, Is.Not.SameAs(rows1), "a changed record string reparses");
+        }
+
+        [Test]
         public void MissingRendererDrawsTextLabelFallback()
         {
             var row = MaterialTransformationRow.Slot(
