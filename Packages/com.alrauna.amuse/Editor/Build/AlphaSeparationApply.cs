@@ -147,7 +147,7 @@ namespace Alrauna.Amuse.Editor.Build
             // every prepared candidate of the whole avatar.
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            var liveTarget = EditorUserBuildSettings.activeBuildTarget;
+            var liveTarget = AmusePlatformFinishPlugin.ActiveBuildTarget();
             var livePolicyAdmitted = PlatformAlphaSamplingPolicy.TrySelect(
                 liveTarget,
                 optimizer != null &&

@@ -277,19 +277,21 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Test-only override for the disclosure path's build-target
-        /// read. Null in production. The sampling disclosure is the
-        /// only consumer; the apply and editor read sites keep the
+        /// Test-only override for the shared build-target read. Null in
+        /// production. The barrier pass and the apply staleness guard
+        /// are the consumers; every other editor read site keeps the
         /// real setting.
         /// </summary>
         internal static Func<BuildTarget> ActiveBuildTargetForTests = null;
 
         /// <summary>
-        /// Resolves the target the sampling policy captures: the armed
-        /// test override when present, otherwise the real active build
-        /// target. Tests set and restore the override so EditMode runs
-        /// never switch the editor's own build target. Internal because
-        /// the barrier pass reads it across the class boundary.
+        /// Resolves the build target the sampling policy captures and
+        /// re-selects against: the armed test override when present,
+        /// otherwise the real active build target. Tests set and
+        /// restore the override so EditMode runs never switch the
+        /// editor's own build target. Internal because the barrier
+        /// pass captures through it and the apply staleness guard
+        /// re-selects through it, both across the class boundary.
         /// </summary>
         internal static BuildTarget ActiveBuildTarget()
         {

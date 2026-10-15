@@ -1360,6 +1360,176 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The apply pass must read the build target through the shared
+        /// seam the barrier captures through, so a test-pinned target
+        /// re-selects the captured policy without ever switching the
+        /// editor's own build target. This falsifier pins the seam to
+        /// Android while the dev editor stays on Windows: the barrier
+        /// captures the pinned target, and the staleness guard must
+        /// resolve the same pinned target instead of the live editor
+        /// setting, or every prepared candidate refuses spuriously.
+        /// <para>
+        /// The fixture is the proven animated cutout shape: one fully
+        /// proven cutout slot whose swap set maps the cutout source to a
+        /// clone and the attested opaque stand-in to itself, so the
+        /// ungated apply provably writes the material assignment and
+        /// rewrites the committed curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TheApplyStalePolicyGuardHonorsThePinnedBuildTarget()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE pinned build target");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            var original = AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // The dev editor's live target must differ from the pin,
+                // or this falsifier proves nothing: the whole point is
+                // that the guard re-selects the pinned target, not the
+                // live one.
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "the dev editor must hold the Windows build target " +
+                    "for this pinned-target fixture to prove anything");
+
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                    () => BuildTarget.Android;
+
+                var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "pinned_target");
+                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
+                var swap = Track(
+                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
+
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
+                    "AMUSE pinned target swap", "body", 0,
+                    (0f, cutout), (1f, swap)));
+                controller = AlphaSeparationTestLifecycle.NewController(
+                    root, "AMUSE pinned target graph", clip);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ApplyTestPlatform.Instance);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(
+                    state.HasSamplingPolicy, Is.True,
+                    "fixture precondition: the barrier must capture a " +
+                    "sampling policy for the pinned target");
+                Assert.That(
+                    state.SamplingTarget,
+                    Is.EqualTo(BuildTarget.Android),
+                    "fixture precondition: the barrier must capture the " +
+                    "pinned target, not the editor's live target");
+                Assert.That(
+                    state.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "fixture precondition: the fixture's default " +
+                    "acceptance must capture the accepted non-anisotropic " +
+                    "mobile policy");
+                Assert.That(
+                    state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation");
+                var slot = state.Separation.Renderers[0].CandidateSlots[0];
+                Assert.That(
+                    slot.OpaqueOfAdmitted[cutout], Is.Not.SameAs(cutout),
+                    "fixture precondition: the opaque result must be a " +
+                    "clone, or the applied swap proves nothing");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.SamplingPolicyChanged),
+                    Is.Zero,
+                    "The pinned captured target must not read as stale: " +
+                    "the guard re-selects the captured policy through the " +
+                    "shared seam, so the differing live editor target " +
+                    "must not refuse the prepared candidate.");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        state.SlotRefusalCount(reason), Is.Zero,
+                        "a pinned captured target must refuse through no " +
+                        "reason at all: " + reason);
+                }
+                AssertNoFeatureRefusals(state);
+
+                Assert.That(
+                    state.AppliedRendererCount, Is.EqualTo(1),
+                    "The pinned captured target must apply the prepared " +
+                    "candidate.");
+                Assert.That(
+                    renderer.sharedMaterials[0],
+                    Is.SameAs(slot.OpaqueOfAdmitted[cutout]),
+                    "The pinned captured target must replace the cutout " +
+                    "source with its opaque result.");
+
+                var committedCurve = AnimationUtility.GetObjectReferenceCurve(
+                    AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
+                        root, "body", "m_Materials.Array.data[0]"),
+                    EditorCurveBinding.PPtrCurve(
+                        "body",
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[0]"));
+                Assert.That(committedCurve, Has.Length.EqualTo(2));
+                Assert.That(
+                    new[]
+                    {
+                        committedCurve[0].time.ToString("R"),
+                        committedCurve[1].time.ToString("R"),
+                    },
+                    Is.EqualTo(new[]
+                    {
+                        0f.ToString("R"),
+                        1f.ToString("R"),
+                    }),
+                    "the keyframe times must be preserved exactly");
+                Assert.That(committedCurve[0].value,
+                    Is.SameAs(slot.OpaqueOfAdmitted[cutout]),
+                    "The pinned captured target must rewrite the " +
+                    "committed curve to the opaque result.");
+                Assert.That(committedCurve[1].value, Is.SameAs(swap),
+                    "The pinned captured target must keep the attested " +
+                    "opaque stand-in unchanged.");
+            }
+            finally
+            {
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests = original;
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+        }
+
         // --- Falsifier 6: every swap value maps at identical times ---------
 
         [Test]
