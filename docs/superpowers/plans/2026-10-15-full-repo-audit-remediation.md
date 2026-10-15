@@ -65,7 +65,7 @@ public void TwoCutoffsInOneBucketStraddlingByte128CaptureSeparateChains()
 
 - [ ] **Step 2: RUN `UnityStreamingTextureEvidenceTests.TwoCutoffsInOneBucketStraddlingByte128CaptureSeparateChains`**
 
-Expected: FAIL — both cutoffs land in bucket 5020 today, so the fields match. Record the RED.
+Expected: FAIL — both cutoffs land in bucket 5020 on 2026-10-15 source, so the fields match. Record the RED.
 
 - [ ] **Step 3: Implement**
 
@@ -144,11 +144,11 @@ public void BlockAverageWithinHalfStepOfNoiseBoundIsNotErased()
 
 Adapt the argument names to the real `Build` signature; the suite shows the pattern.
 
-- [ ] **Step 2: RUN it.** Expected: FAIL — today `11 < 12` erases the block (flag byte 1). Record the RED.
+- [ ] **Step 2: RUN it.** Expected: FAIL — on 2026-10-15 source `11 < 12` erases the block (flag byte 1). Record the RED.
 
 - [ ] **Step 3: Implement**
 
-Integer rule in `BuildBlock` (`:90-99`): erase iff `count > 0 && sum <= (noiseBound - 1) * count` (bound 0 keeps today's disabled meaning); opaque iff `sum >= opaqueBound * count`; else 0. Block size 1 and sums exactly at `bound * count` keep today's verdicts. Add no state.
+Integer rule in `BuildBlock` (`:90-99`): erase iff `count > 0 && sum <= (noiseBound - 1) * count` (bound 0 keeps the disabled meaning of the 2026-10-15 code); opaque iff `sum >= opaqueBound * count`; else 0. Block size 1 and sums exactly at `bound * count` keep the 2026-10-15 verdicts. Add no state.
 
 - [ ] **Step 4: RUN `SourceImageMaskedChainTests` and `TriangleAlphaClassifierTests`**
 
@@ -231,7 +231,7 @@ public void AWrongTypedFieldReadsAsNoRecordThroughTheFingerprintGuard()
 }
 ```
 
-- [ ] **Step 2: RUN both.** Expected: PASS today (the blanket catch swallows everything). This is the recorded characterization the spec requires before the split — the observable corrupt-data behavior does not change with the fix. Record the counts and label them characterization, not RED.
+- [ ] **Step 2: RUN both.** Expected: PASS on 2026-10-15 source (the blanket catch swallows everything). This is the recorded characterization the spec requires before the split — the observable corrupt-data behavior does not change with the fix. Record the counts and label them characterization, not RED.
 
 - [ ] **Step 3: Implement the measured split**
 
@@ -260,7 +260,7 @@ Replace the bare `catch` with `catch (ArgumentException)` around the deserialize
   3. `IsUnrecognizedObjectMaterialBinding`-shaped predicate,
   4. `Classify` delegate over the snapshot inputs,
   5. `IntersectOutcomes` delegate,
-  plus two values: `AlphaFieldSet` (hoisted gather result, already a `ResolveSlot` parameter) and the `TextureScaleOffsetSuffix` const string. Build and DryRun pass the same Host method groups they call today.
+  plus two values: `AlphaFieldSet` (hoisted gather result, already a `ResolveSlot` parameter) and the `TextureScaleOffsetSuffix` const string. Build and DryRun pass the same Host method groups they call on 2026-10-15 source.
 
 - [ ] **Step 1: Characterization run before any edit**
 
@@ -335,7 +335,7 @@ public void ARequestDisallowingFallbackNeverReadsAFallbackCapturedChain()
 
 Assert provenance through the returned chain's route marker or the source-image decode the disallowed route takes; the suite's fixture patterns supply the capture.
 
-- [ ] **Step 2: RUN it.** Expected: FAIL today — the process-global is the only carrier and one-valued, so the second request silently shares the first route's entry. Record the RED.
+- [ ] **Step 2: RUN it.** Expected: FAIL on 2026-10-15 source — the process-global is the only carrier and one-valued, so the second request silently shares the first route's entry. Record the RED.
 
 - [ ] **Step 3: Implement**
 
@@ -379,7 +379,7 @@ public void ASecondCaptureOfTheSameTextureServesTheCachedChainInstance()
 }
 ```
 
-The first test's today-failure: the returned chain has `texture.mipmapCount` levels. The second's today-failure: each capture builds a fresh `AlphaMipChain`.
+The first test's failure against 2026-10-15 source: the returned chain has `texture.mipmapCount` levels. The second's failure against 2026-10-15 source: each capture builds a fresh `AlphaMipChain`.
 
 - [ ] **Step 2: RUN both.** Expected: both FAIL. Record the RED.
 
@@ -531,7 +531,7 @@ public void AViolatingRedChainStillThrows()
 }
 ```
 
-- [ ] **Step 2: RUN it.** Expected: PASS today — recorded as characterization; the throw-on-violation contract must survive the move. No count seam exists and none is built; the once-per-chain property is proven by source inspection (the assertion call moves from the per-renderer capture path to the dedup/cache-fill point), recorded in the task result.
+- [ ] **Step 2: RUN it.** Expected: PASS on 2026-10-15 source — recorded as characterization; the throw-on-violation contract must survive the move. No count seam exists and none is built; the once-per-chain property is proven by source inspection (the assertion call moves from the per-renderer capture path to the dedup/cache-fill point), recorded in the task result.
 
 - [ ] **Step 3: Implement** the move. Assertion semantics (throw on violation, same exception type) unchanged.
 
@@ -551,7 +551,7 @@ public void AViolatingRedChainStillThrows()
 
 - [ ] **Step 2: Branch on the verification**
 
-If a synchronous member exists: drive it through the existing `ListPackages` seam with a test asserting no sleep-loop use, run RED (today's loop is the only path), replace the loop, run green, commit `perf: read producer versions synchronously (finding 33)`.
+If a synchronous member exists: drive it through the existing `ListPackages` seam with a test asserting no sleep-loop use, run RED (on 2026-10-15 source the sleep loop is the only path), replace the loop, run green, commit `perf: read producer versions synchronously (finding 33)`.
 
 If none exists: correct the comment at `:30-46` to state the real reason for the loop and its 30-second bound, RUN the version-reading suites, record the finding as partially remediated per spec decision 13, and commit `docs: correct the version-reader comment on the spin bound (finding 33)`.
 
@@ -645,7 +645,7 @@ public void TheApplyStalePolicyGuardHonorsThePinnedBuildTarget()
 }
 ```
 
-- [ ] **Step 2: RUN it.** Expected: FAIL today (apply reads the live editor target at `:150`). Record the RED.
+- [ ] **Step 2: RUN it.** Expected: FAIL on 2026-10-15 source (apply reads the live editor target at `:150`). Record the RED.
 
 - [ ] **Step 3: Implement**: `AlphaSeparationApply.cs:150` calls `AmusePlatformFinishPlugin.ActiveBuildTarget()`; update the seam doc comment to name both consumers.
 
@@ -671,7 +671,7 @@ public void TheApplyStalePolicyGuardHonorsThePinnedBuildTarget()
 public void CancellingWhileInFlightDisposesTheSourceWhenTheTaskCompletes()
 {
     StartClassification();      // long-running in-flight task through the public entry
-    CancelWithZeroTimeout();    // abandons the task, per today's editor path
+    CancelWithZeroTimeout();    // abandons the task, per the editor path of 2026-10-15
     CompleteInFlightTask();     // let the continuation run
     Assert.That(TokenIsDisposed(), Is.True, "the continuation owns disposal");
     Assert.DoesNotThrow(() => CancelAgain(), "a later Cancel must not throw on the disposed source");
@@ -680,7 +680,7 @@ public void CancellingWhileInFlightDisposesTheSourceWhenTheTaskCompletes()
 
 `TokenIsDisposed()` reflects the private `_cts` field and probes `cts.Token` — it throws `ObjectDisposedException` after dispose. Deterministic, zero production plumbing.
 
-- [ ] **Step 2: RUN it.** Expected: FAIL (the source is abandoned undisposed today). Record the RED.
+- [ ] **Step 2: RUN it.** Expected: FAIL (the source is abandoned undisposed on 2026-10-15 source). Record the RED.
 
 - [ ] **Step 3: Implement** the continuation and the `Cancel()` guard. The completed-path dispose in `ClearInFlight` may stay (`Dispose` is idempotent).
 
@@ -709,7 +709,7 @@ public void AMissingSurvivingCandidateListIsAnInvariantFailureNotASilentApply()
 
 Adapt to the real method shape; `InvalidOperationException` is the production throw this task adds.
 
-- [ ] **Step 2: RUN it.** Expected: FAIL (the fallback returns prepared candidates today). Record the RED.
+- [ ] **Step 2: RUN it.** Expected: FAIL (the fallback returns prepared candidates on 2026-10-15 source). Record the RED.
 
 - [ ] **Step 3: Implement**: replace the fallback with a throw carrying a named message; no current path reaches it (verified in the investigation).
 
@@ -807,7 +807,7 @@ public void TransferredAnalysisSkipsVerificationForBothFamiliesWhenAskedit()
 }
 ```
 
-Adapt to the real entry the `:1275` test calls. The RED needs no attested fixture: the Poiyomi arms (`:903-905,909-911`) answer false/UnattestedShader for `verifyIdentity: false` today.
+Adapt to the real entry the `:1275` test calls. The RED needs no attested fixture: the Poiyomi arms (`:903-905,909-911`) answer false/UnattestedShader for `verifyIdentity: false` on 2026-10-15 source.
 
 - [ ] **Step 2: RUN it.** Expected: FAIL on the Poiyomi arm. Record the RED.
 
