@@ -209,6 +209,7 @@ namespace Alrauna.Amuse.Editor
                     PlayModeBuildStore.Clear(avatarKey);
                 }
 
+                _dryRun?.Cancel();
                 DryRunCache.Clear();
                 _dryRun = null;
                 _dryRunCompletedLatched = false;

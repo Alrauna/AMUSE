@@ -551,6 +551,7 @@ namespace Alrauna.Amuse.Tests.Editor
             {
                 RenderInHostWindow(() => editor.OnInspectorGUI());
                 Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+                Assert.That(buttonsDrawn.Contains("Cancel"), Is.True, "cancel button must be drawn while computing");
 
                 editor.DryRun.Cancel();
                 Assert.That(editor.DryRun.IsCancelled, Is.True, "dry run must be cancelled");
