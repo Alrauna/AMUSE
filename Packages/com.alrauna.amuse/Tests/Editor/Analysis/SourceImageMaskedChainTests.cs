@@ -156,5 +156,21 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(AlphaTextureData.ErasedFlag));
             Assert.That(levels[0].GetAlpha(1, 1), Is.EqualTo(255));
         }
+
+        [Test]
+        public void BlockAverageWithinHalfStepOfNoiseBoundIsNotErased()
+        {
+            // 2x1 source {5, 6}: exact average 5.5, noise bound 6. The imported
+            // chain stores round(5.5) = 6, which is not below the bound. The
+            // source route must agree: no erase, no opaque witness, verdict 0.
+            // From(50, 2) maps to the byte bounds O = 128 and n = 6. Level 1
+            // holds both texels in one block, so its sum is 11 against
+            // (n - 1) * 2 = 10.
+            var source = new byte[] { 5, 6 };
+            var levels = SourceImageMaskedChain.Build(
+                source, 2, 1, 2, AlphaPolicyBounds.From(50, 2));
+            Assert.That(levels[1].GetAlpha(0, 0), Is.EqualTo(0),
+                "a block whose rounded-up average reaches the bound is a live witness, not erased");
+        }
     }
 }

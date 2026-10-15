@@ -10,9 +10,12 @@ namespace Alrauna.Amuse.Editor.Host
     /// what the imported mip chain stores, so both capture routes resolve
     /// each level against the same effective content. The builder
     /// publishes the policy verdict of the average: a block at or above
-    /// the opaque bound stores 255, a block below the noise bound carries
-    /// the erased flag, and the rest store 0. All comparisons are exact
-    /// integers. No float crosses a verdict.
+    /// the opaque bound stores 255, a block whose sum stays at or below
+    /// (noise bound - 1) per texel carries the erased flag, and the rest
+    /// store 0. The erase rule is conservative under store rounding: a
+    /// block whose rounded-up average reaches the bound stays a live
+    /// witness. All comparisons are exact integers. No float crosses a
+    /// verdict.
     /// </summary>
     internal static class SourceImageMaskedChain
     {
@@ -88,7 +91,14 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
             var count = (long)(endX - startX) * (endY - startY);
-            if (bounds.NoiseBound > 0 && sum < (long)bounds.NoiseBound * count)
+            // Conservative under store rounding: erase only when the
+            // block's sum stays at or below (noise bound - 1) per texel.
+            // A rounded-up average that reaches the bound is a live
+            // witness. Count 1 reduces to the per-texel rule, and
+            // bound 0 keeps the disabled meaning.
+            if (bounds.NoiseBound > 0
+                && count > 0
+                && sum <= (long)(bounds.NoiseBound - 1) * count)
             {
                 return AlphaTextureData.ErasedFlag;
             }
