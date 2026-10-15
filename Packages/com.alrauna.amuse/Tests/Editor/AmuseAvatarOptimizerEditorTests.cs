@@ -320,7 +320,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 RenderInHostWindow(() => editor.OnInspectorGUI());
 
                 Assert.That(
-                    helpBoxesDrawn.Contains("AMUSE computes material transformations."),
+                    helpBoxesDrawn.Any(msg => msg.StartsWith("AMUSE computes material transformations")),
                     Is.True,
                     "computing status box must be drawn while dry run is not complete");
                 Assert.That(
@@ -494,13 +494,241 @@ namespace Alrauna.Amuse.Tests.Editor
                 var repainted = false;
                 editor.HostRepaintOverride = () => repainted = true;
 
-                for (var guard = 0; guard < 20 && !editor.DryRun.Done; guard++)
+                for (var guard = 0; guard < 200 && !editor.DryRun.Done; guard++)
                 {
                     editor.OnEditorUpdate();
+                    if (!editor.DryRun.Done)
+                    {
+                        System.Threading.Thread.Sleep(10);
+                    }
                 }
 
                 Assert.That(editor.DryRun.Done, Is.True, "editor update must advance dry run to completion");
                 Assert.That(repainted, Is.True, "completion must request repaint");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void CancelledDryRunDisplaysCancelledMessageAndComputeButton()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            var helpBoxesDrawn = new List<string>();
+            var buttonsDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
+                (msg, type) => helpBoxesDrawn.Add(msg);
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnButtonDrawnForTest =
+                name => buttonsDrawn.Add(name);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+
+                editor.DryRun.Cancel();
+                Assert.That(editor.DryRun.IsCancelled, Is.True, "dry run must be cancelled");
+
+                helpBoxesDrawn.Clear();
+                buttonsDrawn.Clear();
+
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                const string cancelledSentence =
+                    "AMUSE material transformation analysis was cancelled.";
+                Assert.That(
+                    helpBoxesDrawn.Contains(cancelledSentence),
+                    Is.True,
+                    "cancelled status box must be drawn when dry run is cancelled");
+                Assert.That(
+                    buttonsDrawn.Contains("Compute"),
+                    Is.True,
+                    "compute button must be drawn when dry run is cancelled");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnButtonDrawnForTest = null;
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void ClickingComputeResetsCancelledDryRunAndBeginsFreshRun()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                var oldDryRun = editor.DryRun;
+                Assert.That(oldDryRun, Is.Not.Null, "initial dry run must be created");
+
+                oldDryRun.Cancel();
+                Assert.That(oldDryRun.IsCancelled, Is.True, "dry run must be cancelled");
+
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.ButtonClickOverrideForTest =
+                    btn => btn == "Compute";
+
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.ButtonClickOverrideForTest = null;
+
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                Assert.That(editor.DryRun, Is.Not.Null, "a fresh dry run must be created");
+                Assert.That(editor.DryRun, Is.Not.SameAs(oldDryRun), "the dry run must be a new instance");
+                Assert.That(editor.DryRun.IsCancelled, Is.False, "fresh dry run must not be cancelled");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.ButtonClickOverrideForTest = null;
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void OnEditorUpdateCallsAsynchronousStepWithoutThrowing()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+
+                Assert.DoesNotThrow(() => editor.OnEditorUpdate());
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void LifecycleEventsCancelAndNullDryRun()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                var dryRun1 = editor.DryRun;
+                Assert.That(dryRun1, Is.Not.Null, "dry run must be created");
+
+                editor.OnBeforeAssemblyReload();
+                Assert.That(editor.DryRun, Is.Null, "assembly reload must null dry run");
+                Assert.That(dryRun1.IsCancelled, Is.True, "assembly reload must cancel previous dry run");
+
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                var dryRun2 = editor.DryRun;
+                Assert.That(dryRun2, Is.Not.Null, "fresh dry run must be created");
+
+                editor.OnPlayModeStateChanged(PlayModeStateChange.ExitingEditMode);
+                Assert.That(editor.DryRun, Is.Null, "exiting edit mode must null dry run");
+                Assert.That(dryRun2.IsCancelled, Is.True, "exiting edit mode must cancel previous dry run");
+
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                var dryRun3 = editor.DryRun;
+                Assert.That(dryRun3, Is.Not.Null, "fresh dry run must be created");
+
+                editor.OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+                Assert.That(editor.DryRun, Is.SameAs(dryRun3), "other play mode states must leave dry run intact");
             }
             finally
             {

@@ -47,15 +47,38 @@ namespace Alrauna.Amuse.Editor
         internal static Action<string, MessageType> OnHelpBoxDrawnForTest;
         internal static Action<string, GUIStyle> OnRendererLabelDrawnForTest;
         internal static Action<UnityEngine.Object, Type, bool> OnRendererObjectFieldDrawnForTest;
+        internal static Action<string> OnButtonDrawnForTest;
+        internal static Func<string, bool> ButtonClickOverrideForTest;
 
         private void OnEnable()
         {
+            AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             EditorApplication.update += OnEditorUpdate;
         }
 
         private void OnDisable()
         {
+            AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
             EditorApplication.update -= OnEditorUpdate;
+            _dryRun?.Cancel(timeoutMs: 200);
+            _dryRun = null;
+        }
+
+        internal void OnBeforeAssemblyReload()
+        {
+            _dryRun?.Cancel(timeoutMs: 200);
+            _dryRun = null;
+        }
+
+        internal void OnPlayModeStateChanged(PlayModeStateChange stateChange)
+        {
+            if (stateChange == PlayModeStateChange.ExitingEditMode)
+            {
+                _dryRun?.Cancel(timeoutMs: 100);
+                _dryRun = null;
+            }
         }
 
         /// <summary>
@@ -80,7 +103,7 @@ namespace Alrauna.Amuse.Editor
 
             if (_dryRun != null && !_dryRun.Done)
             {
-                _dryRun.Step();
+                _dryRun.Step(synchronous: false);
                 if (_dryRun.Done)
                 {
                     RequestHostRepaint();
@@ -261,12 +284,34 @@ namespace Alrauna.Amuse.Editor
                 RequestHostRepaint();
             }
 
+            if (_dryRun != null && _dryRun.IsCancelled)
+            {
+                EditorGUILayout.HelpBox("AMUSE material transformation analysis was cancelled.", MessageType.Info);
+                OnHelpBoxDrawnForTest?.Invoke("AMUSE material transformation analysis was cancelled.", MessageType.Info);
+                OnButtonDrawnForTest?.Invoke("Compute");
+                if (GUILayout.Button("Compute", GUILayout.Width(80)) ||
+                    (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Compute")))
+                {
+                    _dryRun = null;
+                    _dryRunCompletedLatched = false;
+                }
+                return;
+            }
+
             if (!_dryRunCompletedLatched)
             {
-                const string computingSentence =
-                    "AMUSE computes material transformations.";
-                EditorGUILayout.HelpBox(computingSentence, MessageType.Info);
-                OnHelpBoxDrawnForTest?.Invoke(computingSentence, MessageType.Info);
+                var text = _dryRun != null && _dryRun.TotalRendererCount > 0
+                    ? $"AMUSE computes material transformations: renderer {_dryRun.CurrentRendererIndex + 1} of {_dryRun.TotalRendererCount}."
+                    : "AMUSE computes material transformations.";
+                EditorGUILayout.HelpBox(text, MessageType.Info);
+                OnHelpBoxDrawnForTest?.Invoke(text, MessageType.Info);
+                OnButtonDrawnForTest?.Invoke("Cancel");
+                if (GUILayout.Button("Cancel", GUILayout.Width(60)) ||
+                    (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Cancel")))
+                {
+                    _dryRun?.Cancel();
+                    GUIUtility.ExitGUI();
+                }
                 return;
             }
 
