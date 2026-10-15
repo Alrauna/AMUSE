@@ -2105,7 +2105,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     reported,
                     Has.Some.Contains(
-                        "This avatar has a state behaviour AMUSE does not know"),
+                        "This avatar has a state behavior that AMUSE does not know. " +
+                        "Run a Play mode build for accurate information."),
                     "an avatar-scoped animation refusal is a user-facing stop " +
                     "and must never be silent");
             }

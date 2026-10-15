@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 
@@ -301,18 +302,22 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </summary>
         internal static MeshSeparationPlan ClassifyRuntimeStates(
             UnityRendererAlphaSnapshot snapshot,
-            IReadOnlyList<SlotResolutionResult> slotResults)
+            IReadOnlyList<SlotResolutionResult> slotResults,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var submeshes = new List<SubmeshSeparationInput>(
                 snapshot.Submeshes.Count);
             foreach (var submesh in snapshot.Submeshes)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var slot = slotResults[submesh.MaterialSlotIndex];
                 submeshes.Add(new SubmeshSeparationInput(
                     submesh.MaterialSlotIndex,
                     submesh.Indices,
                     slot.IsResolved
-                        ? IntersectResolvedOutcomes(snapshot, submesh, slot)
+                        ? IntersectResolvedOutcomes(
+                            snapshot, submesh, slot, cancellationToken)
                         : UnprovenOutcomes(submesh.Indices.Count / 3)));
             }
 
@@ -323,18 +328,22 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static TriangleAlphaOutcome[] IntersectResolvedOutcomes(
             UnityRendererAlphaSnapshot snapshot,
             UnitySubmeshAlphaSnapshot submesh,
-            SlotResolutionResult slot)
+            SlotResolutionResult slot,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var perResolution = new List<TriangleAlphaOutcome[]>(
                 slot.Resolutions.Count);
             foreach (var resolution in slot.Resolutions)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var outcomes = UnityRendererAlphaAnalysis.Classify(
                     submesh.Indices,
                     snapshot.Positions,
                     snapshot.HasUv0 ? snapshot.Uv0 : null,
                     resolution,
-                    snapshot.ExtraUvSets);
+                    snapshot.ExtraUvSets,
+                    cancellationToken);
                 perResolution.Add(outcomes);
             }
 
