@@ -1049,7 +1049,68 @@ namespace Alrauna.Amuse.Editor.Build
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
         }
-        private static void CaptureAndSavePlayModeBuildRecord(
+        internal static HashSet<(string path, int slot)> CollectAppliedSlots(
+            AmusePlatformFinishState state)
+        {
+            var appliedSlots = new HashSet<(string path, int slot)>();
+            var finalization = state?.AppliedFinalization;
+            if (finalization != null && state.Separation != null)
+            {
+                var writesByRenderer = new HashSet<Renderer>(
+                    finalization.Writes.Where(w => w.Renderer != null).Select(w => w.Renderer));
+
+                for (var rIdx = 0; rIdx < state.Separation.Renderers.Count; rIdx++)
+                {
+                    var prepared = state.Separation.Renderers[rIdx];
+                    var renderer = prepared.Target.Renderer;
+                    if (renderer == null || !writesByRenderer.Contains(renderer)) continue;
+
+                    var scenePath = (ObjectRegistry.ActiveRegistry as IObjectRegistry)?
+                        .GetReference(renderer, false)?.Path;
+                    var buildPath = prepared.RendererPath;
+
+                    var survivors = state.SeparationSurvivingCandidates != null &&
+                                    rIdx < state.SeparationSurvivingCandidates.Count
+                        ? state.SeparationSurvivingCandidates[rIdx]
+                        : prepared.CandidateSlots;
+
+                    foreach (var candidate in survivors)
+                    {
+                        var slotIdx = candidate.Plan.SourceMaterialBindingIndex;
+                        if (scenePath != null)
+                        {
+                            appliedSlots.Add((scenePath, slotIdx));
+                        }
+                        if (buildPath != null)
+                        {
+                            appliedSlots.Add((buildPath, slotIdx));
+                        }
+                    }
+                }
+            }
+            return appliedSlots;
+        }
+
+        internal static void UpdateAppliedMovedTriangles(
+            AmusePlatformFinishState state,
+            HashSet<(string path, int slot)> appliedSlots)
+        {
+            if (state == null || appliedSlots == null) return;
+            for (var i = 0; i < state.PlayModeRendererRows.Count; i++)
+            {
+                var row = state.PlayModeRendererRows[i];
+                if (row.kind == 3 && row.provenTriangles > 0)
+                {
+                    if (appliedSlots.Contains((row.rendererPath, row.slotIndex)))
+                    {
+                        row.movedTriangles = row.provenTriangles;
+                        state.PlayModeRendererRows[i] = row;
+                    }
+                }
+            }
+        }
+
+        internal static void CaptureAndSavePlayModeBuildRecord(
             BuildContext context,
             AmusePlatformFinishState state)
         {
@@ -1057,49 +1118,24 @@ namespace Alrauna.Amuse.Editor.Build
 
             if (state.Separation != null)
             {
-                var finalization = state.AppliedFinalization;
-                var appliedRenderers = finalization != null
-                    ? new HashSet<Renderer>(finalization.Writes.Select(w => w.Renderer))
-                    : new HashSet<Renderer>();
+                var appliedSlots = CollectAppliedSlots(state);
 
                 if (state.PlayModeRendererRows.Count > 0)
                 {
-                    for (var i = 0; i < state.PlayModeRendererRows.Count; i++)
-                    {
-                        var row = state.PlayModeRendererRows[i];
-                        if (row.kind == 3 && row.provenTriangles > 0)
-                        {
-                            var isApplied = false;
-                            foreach (var writeRenderer in appliedRenderers)
-                            {
-                                if (writeRenderer != null)
-                                {
-                                    var path = AnimationUtility.CalculateTransformPath(
-                                        writeRenderer.transform, context.AvatarRootObject.transform);
-                                    if (path == row.rendererPath || writeRenderer.gameObject.name == row.rendererPath)
-                                    {
-                                        isApplied = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (isApplied)
-                            {
-                                row.movedTriangles = row.provenTriangles;
-                                state.PlayModeRendererRows[i] = row;
-                            }
-                        }
-                    }
+                    UpdateAppliedMovedTriangles(state, appliedSlots);
                 }
                 else
                 {
                     foreach (var prepared in state.Separation.Renderers)
                     {
                         var renderer = prepared.Target.Renderer;
-                        var rendererPath = prepared.RendererPath;
+                        var scenePath = renderer != null
+                            ? (ObjectRegistry.ActiveRegistry as IObjectRegistry)?
+                                .GetReference(renderer, false)?.Path
+                            : null;
+                        var effectivePath = scenePath != null ? scenePath : prepared.RendererPath;
                         var rendererTypeName = prepared.RendererTypeName;
                         var materials = renderer != null ? renderer.sharedMaterials : null;
-                        var isApplied = appliedRenderers.Contains(renderer);
 
                         foreach (var candidate in prepared.CandidateSlots)
                         {
@@ -1107,18 +1143,26 @@ namespace Alrauna.Amuse.Editor.Build
                             var proven = candidate.Plan.OpaqueTriangleOrdinals.Count;
                             var total = candidate.Plan.OpaqueTriangleOrdinals.Count +
                                 candidate.Plan.TransparentTriangleOrdinals.Count;
+                            var isApplied = appliedSlots.Contains((effectivePath, slotIndex));
                             var moved = isApplied ? proven : 0;
 
                             string sourcePath = string.Empty;
                             foreach (var sourceMat in candidate.OpaqueOfAdmitted.Keys)
                             {
-                                sourcePath = AssetDatabase.GetAssetPath(sourceMat);
+                                var resolvedSource = sourceMat != null
+                                    ? RegisteredSourceIdentity.Resolve(sourceMat) as Material ?? sourceMat
+                                    : null;
+                                sourcePath = resolvedSource != null ? AssetDatabase.GetAssetPath(resolvedSource) : string.Empty;
                                 if (!string.IsNullOrEmpty(sourcePath)) break;
                             }
                             if (string.IsNullOrEmpty(sourcePath) && materials != null &&
                                 slotIndex < materials.Length && materials[slotIndex] != null)
                             {
-                                sourcePath = AssetDatabase.GetAssetPath(materials[slotIndex]);
+                                var rawMat = materials[slotIndex];
+                                var resolvedMat = rawMat != null
+                                    ? RegisteredSourceIdentity.Resolve(rawMat) as Material ?? rawMat
+                                    : null;
+                                sourcePath = resolvedMat != null ? AssetDatabase.GetAssetPath(resolvedMat) : string.Empty;
                             }
 
                             string sentence;
@@ -1138,7 +1182,7 @@ namespace Alrauna.Amuse.Editor.Build
                             state.PlayModeRendererRows.Add(new SerializedTransformationRow
                             {
                                 kind = 3,
-                                rendererPath = rendererPath,
+                                rendererPath = effectivePath,
                                 rendererTypeName = rendererTypeName,
                                 sourceMaterialPath = sourcePath,
                                 slotIndex = slotIndex,

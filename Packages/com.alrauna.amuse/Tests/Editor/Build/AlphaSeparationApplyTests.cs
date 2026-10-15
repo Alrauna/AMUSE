@@ -5755,5 +5755,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             return string.Join("|", parts);
         }
+
+        [Test]
+        public void UpdateAppliedMovedTrianglesUpdatesOnlyMatchingSlots()
+        {
+            var state = new AmusePlatformFinishState();
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = "SceneRoot/Renderer",
+                slotIndex = 0,
+                movedTriangles = 0,
+                provenTriangles = 100,
+                totalTriangles = 100
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = "SceneRoot/Renderer",
+                slotIndex = 1,
+                movedTriangles = 0,
+                provenTriangles = 50,
+                totalTriangles = 50
+            });
+
+            var appliedSlots = new HashSet<(string path, int slot)>
+            {
+                ("SceneRoot/Renderer", 0)
+            };
+
+            AlphaSeparationApply.UpdateAppliedMovedTriangles(state, appliedSlots);
+
+            Assert.That(state.PlayModeRendererRows[0].movedTriangles, Is.EqualTo(100));
+            Assert.That(state.PlayModeRendererRows[1].movedTriangles, Is.EqualTo(0));
+        }
     }
 }
