@@ -351,6 +351,19 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // The red field contract runs here, at the one point a
+                // unique chain is produced. The cache hit above skipped it,
+                // because that chain passed this check at its own fill. A
+                // violating chain throws and is never cached, so every
+                // chain this route serves passed the check exactly once.
+                // The contract binds an inert red chain only: an active
+                // policy erases noise texels on red by design.
+                if (channel == TextureChannel.Red &&
+                    bounds.Equals(AlphaPolicyBounds.Inert))
+                {
+                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+                }
+
                 SessionCache.Add(cacheKey, chain);
 
                 return true;

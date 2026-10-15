@@ -1527,10 +1527,6 @@ namespace Alrauna.Amuse.Editor.Host
                     originMaterial: originMaterial,
                     allowDiskFallback: allowDiskFallback,
                     rawMipCap: rawMipCap);
-            if (hasRedChannel)
-            {
-                AssertRedFieldContract(redChannel);
-            }
             // The alpha arm's predicate rides beside the chain: the routes
             // binarize a declared cutoff into the stored verdicts, so the
             // field's key must carry the threshold the bytes mean. Clamped
@@ -1557,12 +1553,14 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Asserts the Analysis field contract on a red chain at the capture
-        /// seam: byte 255 marks exactly the texels whose value is exactly 1
+        /// Asserts the Analysis field contract on a red chain when its route
+        /// produces and caches it, so each unique chain is checked once:
+        /// byte 255 marks exactly the texels whose value is exactly 1
         /// and every other byte marks a value strictly below 1, so an inert
         /// red chain carries only 255 and 0. The inert bounds never erase,
         /// so the erased flag byte proves a capture seam defect. A violation
-        /// throws instead of serving evidence the proof core would misread.
+        /// throws instead of caching or serving evidence the proof core
+        /// would misread.
         /// </summary>
         internal static void AssertRedFieldContract(AlphaMipChain chain)
         {

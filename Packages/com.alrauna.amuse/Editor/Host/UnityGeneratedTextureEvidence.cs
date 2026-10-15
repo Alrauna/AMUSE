@@ -250,6 +250,13 @@ namespace Alrauna.Amuse.Editor.Host
                 }
 
                 chain = new AlphaMipChain(levels, withoutEvidence);
+                // The red field contract runs at fill, once per unique
+                // inert red chain; a cache hit above already passed it.
+                if (channel == TextureChannel.Red &&
+                    bounds.Equals(AlphaPolicyBounds.Inert))
+                {
+                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+                }
                 SessionCache[key] = chain;
                 return true;
             }
