@@ -721,6 +721,74 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
+
+        [Test]
+        public void DisabledRendererWithToggledOnAnimationIsAdmittedAndOptimized()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE disabled toggled apply");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            try
+            {
+                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
+                renderer.enabled = false;
+
+                var clip = Track(new AnimationClip());
+                clip.SetCurve("body", typeof(SkinnedMeshRenderer), "m_Enabled", AnimationCurve.Linear(0f, 0f, 1f, 1f));
+                controller = AlphaSeparationTestLifecycle.NewController(root, "AMUSE toggled renderer graph", clip);
+
+                var context = AvatarProcessor.ProcessAvatar(root, ApplyTestPlatform.Instance);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                // Assertions
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the disabled renderer must analyze");
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the disabled renderer must analyze");
+                Assert.That(state.Separation, Is.Not.Null,
+                    "fixture precondition: the slot must be prepared");
+                Assert.That(state.Separation.CreatedClones, Has.Count.EqualTo(1),
+                    "fixture precondition: the material must convert");
+
+                var clone = state.Separation.OpaqueBySource[material];
+                Assert.That(renderer.sharedMaterials[0], Is.SameAs(clone),
+                    "the wholly opaque slot must carry the opaque result");
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                    "a wholly opaque slot must not touch the mesh");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(1));
+                Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(1));
+                AssertNoFeatureRefusals(state);
+
+                // Falsifier: An erroneous disabled renderer filter in AmusePlatformFinishPlugin causes AppliedRendererCount == 0.
+                Assert.That(state.AppliedRendererCount, Is.GreaterThan(0),
+                    "an erroneously filtered disabled renderer would yield zero applied renderers");
+
+                var committedClip = AlphaSeparationTestLifecycle.CommittedClips(root).First();
+                var enabledCurve = AnimationUtility.GetEditorCurve(committedClip,
+                    EditorCurveBinding.FloatCurve("body", typeof(SkinnedMeshRenderer), "m_Enabled"));
+                Assert.That(enabledCurve, Is.Not.Null,
+                    "the m_Enabled float curve must survive commit");
+                Assert.That(enabledCurve.length, Is.EqualTo(2),
+                    "the m_Enabled float curve keyframes must be preserved");
+
+                var authoredCurve = AnimationUtility.GetEditorCurve(clip,
+                    EditorCurveBinding.FloatCurve("body", typeof(SkinnedMeshRenderer), "m_Enabled"));
+                Assert.That(authoredCurve, Is.Not.Null,
+                    "authored clip must retain its curves");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
         // --- Falsifier: prepared under a block, block removed at apply ---
 
         /// <summary>
