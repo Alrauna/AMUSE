@@ -416,6 +416,23 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Matches the one signal NDMF 1.14.4 gives for an inactive
+        /// extension. A verification on 2026-10-15 read the NDMF source and
+        /// found no activity check, no optional accessor, and no dedicated
+        /// exception type. The source throws a plain
+        /// <c>System.Exception</c> from <c>BuildContext.Extension&lt;T&gt;()</c>
+        /// with the message text below
+        /// (Packages/nadena.dev.ndmf/Editor/API/BuildContext.cs). This
+        /// matcher couples to that exact message text.
+        ///
+        /// Two drift directions exist. One: NDMF rewords the text. Then no
+        /// failure matches, the exception escapes, and the build fails on
+        /// the wrong arm. Two: NDMF introduces a typed exception. Then the
+        /// plain-type check stops matching, and every build falls back to
+        /// the legacy capture arm without an error. Re-run the source
+        /// verification after each NDMF package upgrade.
+        /// </summary>
         private static bool IsInactiveExtensionSignal(Exception exception)
         {
             return exception.GetType() == typeof(Exception) &&
