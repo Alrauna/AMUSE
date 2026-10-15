@@ -236,7 +236,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         movedTriangles = 10,
                         provenTriangles = 10,
                         totalTriangles = 20,
-                        sentence = "Splittable: 10 of out 20 polygons may be moved"
+                        sentence = "Splittable: 10 out of 20 polygons may be moved"
                     }
                 }
             };

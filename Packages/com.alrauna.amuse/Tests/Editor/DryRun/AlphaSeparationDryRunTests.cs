@@ -480,7 +480,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.TotalTriangles, Is.EqualTo(2));
             Assert.That(
                 row.Sentence,
-                Is.EqualTo("Splittable: 1 of out 2 polygons may be moved"));
+                Is.EqualTo("Splittable: 1 out of 2 polygons may be moved"));
             Assert.That(
                 dryRun.RendererRows.Any(
                     item => item.Kind == MaterialTransformationRowKind.Renderer),
@@ -505,7 +505,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("Untouchable: 0 of out 2 polygons may be moved"));
+                Is.EqualTo("Untouchable: 0 out of 2 polygons may be moved"));
             Assert.That(
                 dryRun.RendererRows.Any(
                     item => item.Kind == MaterialTransformationRowKind.Renderer),
@@ -862,7 +862,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("Untouchable: 0 of out 2 polygons may be moved"));
+                Is.EqualTo("Untouchable: 0 out of 2 polygons may be moved"));
             var material = (Material)fixture.Renderer.sharedMaterials[0];
             Assert.That(
                 material.GetTexture("_MainTex"),
@@ -1008,7 +1008,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("Deferred: 0 of out 1 polygons may be moved (evaluates at build time)"));
+                Is.EqualTo("Deferred: 0 out of 1 polygons may be moved (evaluates at build time)"));
             Assert.That(
                 dryRun.RendererRows.Any(
                     row => row.Kind == MaterialTransformationRowKind.Renderer),
@@ -1093,7 +1093,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("Untouchable: 0 of out 1 polygons may be moved"));
+                Is.EqualTo("Untouchable: 0 out of 1 polygons may be moved"));
             Assert.That(
                 dryRun.RendererRows.Any(
                     row => row.Kind == MaterialTransformationRowKind.Renderer),

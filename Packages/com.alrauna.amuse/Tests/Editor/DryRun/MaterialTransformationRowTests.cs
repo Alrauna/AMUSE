@@ -288,7 +288,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             Assert.That(
                 RowText.UntouchableSlotSentence(100),
-                Is.EqualTo("Untouchable: 0 of out 100 polygons may be moved"));
+                Is.EqualTo("Untouchable: 0 out of 100 polygons may be moved"));
         }
 
         [Test]
@@ -296,7 +296,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             Assert.That(
                 RowText.UntouchableSlotSentence(0),
-                Is.EqualTo("Untouchable: 0 of out 0 polygons may be moved"));
+                Is.EqualTo("Untouchable: 0 out of 0 polygons may be moved"));
         }
 
         [Test]
@@ -304,7 +304,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         {
             Assert.That(
                 RowText.SplittableSlotSentence(40, 100),
-                Is.EqualTo("Splittable: 40 of out 100 polygons may be moved"));
+                Is.EqualTo("Splittable: 40 out of 100 polygons may be moved"));
         }
 
         [Test]
@@ -329,7 +329,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var sentence = RowText.DeferredSlotSentence(1234);
             Assert.That(
                 sentence,
-                Is.EqualTo("Deferred: 0 of out 1234 polygons may be moved (evaluates at build time)"));
+                Is.EqualTo("Deferred: 0 out of 1234 polygons may be moved (evaluates at build time)"));
         }
 
         [Test]
@@ -338,7 +338,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var sentence = RowText.DeferredSlotSentence(0);
             Assert.That(
                 sentence,
-                Is.EqualTo("Deferred: 0 of out 0 polygons may be moved (evaluates at build time)"));
+                Is.EqualTo("Deferred: 0 out of 0 polygons may be moved (evaluates at build time)"));
         }
     }
 }
