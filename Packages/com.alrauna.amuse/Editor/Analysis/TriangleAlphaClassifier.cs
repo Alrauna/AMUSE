@@ -637,17 +637,187 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             // The density gate decides whether erased texels act as
-            // witnesses. A policy of zero skips the pre-pass entirely.
-            var substituteErased = maxNoiseTexelPercent > 0 &&
-                PointClampSubstitutesErasedTexels(
-                    texture,
-                    domain,
-                    maxNoiseTexelPercent,
-                    minimumX,
-                    maximumX,
-                    minimumY,
-                    maximumY);
+            // witnesses. A policy of zero keeps the plain walk: erased
+            // texels stay witnesses, and no density evidence is collected.
+            if (maxNoiseTexelPercent == 0)
+            {
+                return PointClampHasWitness(
+                            texture,
+                            domain,
+                            false,
+                            minimumX,
+                            maximumX,
+                            minimumY,
+                            maximumY)
+                    ? TriangleAlphaOutcome.MustRemainTransparent
+                    : TriangleAlphaOutcome.ProvenOpaque;
+            }
 
+            // The gate is on: one walk collects the existence verdict and
+            // the density evidence together. Opaque texels never witness,
+            // so they stay unconsulted here. A consulted mid byte witnesses
+            // under either substitution verdict, so the walk returns on it
+            // at once. A consulted erased texel is only a candidate: it
+            // witnesses when substitution fails, and the substitution share
+            // is not known until the window has been fully walked.
+            var consulted = 0L;
+            var erased = 0L;
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        // A clamp edge texel's exact support interval is a
+                        // half line or the whole line at width or height
+                        // one, so the finite pre-filter box may not decide
+                        // for it while the triangle reaches past the box
+                        // edge: below zero at the first index, above the
+                        // size at the last.
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < 0 || v1x < 0 || v2x < 0)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width || v1x > texture.Width || v2x > texture.Width)) ||
+                                         (y == 0 && (v0y < 0 || v1y < 0 || v2y < 0)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height || v1y > texture.Height || v2y > texture.Height));
+                        // The translated extraction returns false past the
+                        // proven bound. Then no cheap rejection happens, and
+                        // the exact intersection test below decides alone.
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -0.5, 0.5, -0.5, 0.5,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
+                        {
+                            continue;
+                        }
+                    }
+                    if (!ExactUvGeometry.Intersects(
+                        domain,
+                        PointClampInterval(x, texture.Width, domain.TexelScale),
+                        PointClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (alpha == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                        continue;
+                    }
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
+            }
+
+            // Every consulted texel that reached the counters is an erased
+            // candidate: the mid bytes returned above. When the collected
+            // share meets the policy, the full count meets it too, because
+            // the full count also consults opaque texels. No witness
+            // remains, so the window proves opaque.
+            if (erased * 100 <= (long)maxNoiseTexelPercent * consulted)
+            {
+                return TriangleAlphaOutcome.ProvenOpaque;
+            }
+
+            // The collected share exceeds the policy, so a candidate could
+            // flip the verdict: the opaque consults may pull the share back
+            // to or under the cap. The fallback decides with the full count
+            // and the plain walk, exactly as the old two-pass did.
+            var substituteErased = PointClampSubstitutesErasedTexels(
+                texture,
+                domain,
+                maxNoiseTexelPercent,
+                minimumX,
+                maximumX,
+                minimumY,
+                maximumY);
+            return PointClampHasWitness(
+                        texture,
+                        domain,
+                        substituteErased,
+                        minimumX,
+                        maximumX,
+                        minimumY,
+                        maximumY)
+                ? TriangleAlphaOutcome.MustRemainTransparent
+                : TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyPointClamp: the same domain
+        /// construction, clamp window, budget guard, and interval
+        /// intersection, but the walk only asks whether one contributing
+        /// texel stores a byte below the opaque maximum. Erased texels count
+        /// as witnesses: the raw substitution policy speaks to the raw
+        /// witness verdict, not to a red value this proof reads. An
+        /// unbounded candidate window cannot claim a bounded witness set,
+        /// so it returns true - the witness bound that stays the honest
+        /// unknown through the map.
+        /// </summary>
+        private static bool HasMappedWitnessPointClamp(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
+            var minimumX = PointClampIndex(
+                ExactUvGeometry.Minimum(domain, true),
+                texture.Width,
+                domain.TexelScale);
+            var maximumX = PointClampIndex(
+                ExactUvGeometry.Maximum(domain, true),
+                texture.Width,
+                domain.TexelScale);
+            var minimumY = PointClampIndex(
+                ExactUvGeometry.Minimum(domain, false),
+                texture.Height,
+                domain.TexelScale);
+            var maximumY = PointClampIndex(
+                ExactUvGeometry.Maximum(domain, false),
+                texture.Height,
+                domain.TexelScale);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                // An unbounded window cannot claim a bounded witness set;
+                // unknown is the sound answer either way.
+                return true;
+            }
+
+            return PointClampHasWitness(texture, domain, false, minimumX, maximumX, minimumY, maximumY);
+        }
+
+        /// <summary>
+        /// The raw point clamp existence walk: one pass over the candidate
+        /// window. Opaque texels never witness. An erased texel witnesses
+        /// unless substitution skips it. The pre-filter stands down on
+        /// clamp edges exactly as in the classified walk.
+        /// </summary>
+        private static bool PointClampHasWitness(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            bool substituteErased,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -702,99 +872,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                         PointClampInterval(x, texture.Width, domain.TexelScale),
                         PointClampInterval(y, texture.Height, domain.TexelScale)))
                     {
-                        return TriangleAlphaOutcome.MustRemainTransparent;
-                    }
-                }
-            }
-            return TriangleAlphaOutcome.ProvenOpaque;
-        }
-
-        /// <summary>
-        /// The mapped mirror of ClassifyPointClamp: the same domain
-        /// construction, clamp window, budget guard, and interval
-        /// intersection, but the walk only asks whether one contributing
-        /// texel stores a byte below the opaque maximum. Erased texels count
-        /// as witnesses: the raw substitution policy speaks to the raw
-        /// witness verdict, not to a red value this proof reads. An
-        /// unbounded candidate window cannot claim a bounded witness set,
-        /// so it returns true - the witness bound that stays the honest
-        /// unknown through the map.
-        /// </summary>
-        private static bool HasMappedWitnessPointClamp(
-            TriangleAlphaInput triangle,
-            AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
-        {
-            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
-            var minimumX = PointClampIndex(
-                ExactUvGeometry.Minimum(domain, true),
-                texture.Width,
-                domain.TexelScale);
-            var maximumX = PointClampIndex(
-                ExactUvGeometry.Maximum(domain, true),
-                texture.Width,
-                domain.TexelScale);
-            var minimumY = PointClampIndex(
-                ExactUvGeometry.Minimum(domain, false),
-                texture.Height,
-                domain.TexelScale);
-            var maximumY = PointClampIndex(
-                ExactUvGeometry.Maximum(domain, false),
-                texture.Height,
-                domain.TexelScale);
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
-            {
-                // An unbounded window cannot claim a bounded witness set;
-                // unknown is the sound answer either way.
-                return true;
-            }
-
-            var canPreFilter = domain.Vertices.Count == 3;
-            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
-            if (canPreFilter)
-            {
-                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
-            }
-
-            for (var y = minimumY; y <= maximumY; y++)
-            {
-                for (var x = minimumX; x <= maximumX; x++)
-                {
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
-                    {
-                        continue;
-                    }
-                    if (canPreFilter)
-                    {
-                        // The same clamp edge guard the raw walk uses: an
-                        // edge texel's exact support reaches past the finite
-                        // pre-filter box, so the pre-filter stands down
-                        // while the triangle crosses the box edge.
-                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
-                                         (x == 0 && (v0x < 0 || v1x < 0 || v2x < 0)) ||
-                                         (x == texture.Width - 1 && (v0x > texture.Width || v1x > texture.Width || v2x > texture.Width)) ||
-                                         (y == 0 && (v0y < 0 || v1y < 0 || v2y < 0)) ||
-                                         (y == texture.Height - 1 && (v0y > texture.Height || v1y > texture.Height || v2y > texture.Height));
-                        if (!isBoundary &&
-                            TryExtractTexelVerticesRelativeToCandidate(
-                                domain, x, y,
-                                out var c0x, out var c0y,
-                                out var c1x, out var c1y,
-                                out var c2x, out var c2y) &&
-                            !ConservativeBilinearSupportOverlapsTriangle(
-                                -0.5, 0.5, -0.5, 0.5,
-                                c0x, c0y, c1x, c1y, c2x, c2y))
-                        {
-                            continue;
-                        }
-                    }
-                    if (ExactUvGeometry.Intersects(
-                        domain,
-                        PointClampInterval(x, texture.Width, domain.TexelScale),
-                        PointClampInterval(y, texture.Height, domain.TexelScale)))
-                    {
                         return true;
                     }
                 }
@@ -808,8 +885,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// whose support interval intersects the domain. Opaque candidates
         /// count too. Erasure substitutes when the erased share of the
         /// consulted candidates stays at or under the policy. Equality
-        /// moves. The existence walk runs first, so a window without
-        /// erasure never pays for the exact intersection count.
+        /// moves. The collection walk runs first, so this full count runs
+        /// only when the collected share exceeds the policy and the
+        /// verdict could still flip.
         /// </summary>
         private static bool PointClampSubstitutesErasedTexels(
             AlphaTextureData texture,
@@ -911,17 +989,31 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             // The density gate decides whether erased texels act as
-            // witnesses. A policy of zero skips the pre-pass entirely.
-            var substituteErased = maxNoiseTexelPercent > 0 &&
-                BilinearRepeatSubstitutesErasedTexels(
-                    texture,
-                    domain,
-                    maxNoiseTexelPercent,
-                    minimumX,
-                    maximumX,
-                    minimumY,
-                    maximumY);
+            // witnesses. A policy of zero keeps the plain walk: erased
+            // texels stay witnesses, and no density evidence is collected.
+            if (maxNoiseTexelPercent == 0)
+            {
+                return BilinearRepeatHasWitness(
+                            texture,
+                            domain,
+                            false,
+                            minimumX,
+                            maximumX,
+                            minimumY,
+                            maximumY)
+                    ? TriangleAlphaOutcome.MustRemainTransparent
+                    : TriangleAlphaOutcome.ProvenOpaque;
+            }
 
+            // The gate is on: one walk collects the existence verdict and
+            // the density evidence together. Opaque texels never witness,
+            // so they stay unconsulted here. A consulted mid byte witnesses
+            // under either substitution verdict, so the walk returns on it
+            // at once. A consulted erased texel is only a candidate: it
+            // witnesses when substitution fails, and the substitution share
+            // is not known until the window has been fully walked.
+            var consulted = 0L;
+            var erased = 0L;
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -940,10 +1032,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                     {
                         continue;
                     }
-                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
-                    {
-                        continue;
-                    }
                     if (canPreFilter && !ConservativeBilinearSupportOverlapsTriangle(
                             unwrappedX - 0.5, unwrappedX + 1.5,
                             unwrappedY - 0.5, unwrappedY + 1.5,
@@ -951,16 +1039,55 @@ namespace Alrauna.Amuse.Editor.Analysis
                     {
                         continue;
                     }
-                    if (ExactUvGeometry.Intersects(
+                    if (!ExactUvGeometry.Intersects(
                         domain,
                         BilinearRepeatInterval(unwrappedX, domain.TexelScale),
                         BilinearRepeatInterval(unwrappedY, domain.TexelScale)))
                     {
-                        return TriangleAlphaOutcome.MustRemainTransparent;
+                        continue;
                     }
+                    consulted++;
+                    if (alpha == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                        continue;
+                    }
+                    return TriangleAlphaOutcome.MustRemainTransparent;
                 }
             }
-            return TriangleAlphaOutcome.ProvenOpaque;
+
+            // Every consulted texel that reached the counters is an erased
+            // candidate: the mid bytes returned above. When the collected
+            // share meets the policy, the full count meets it too, because
+            // the full count also consults opaque texels. No witness
+            // remains, so the window proves opaque.
+            if (erased * 100 <= (long)maxNoiseTexelPercent * consulted)
+            {
+                return TriangleAlphaOutcome.ProvenOpaque;
+            }
+
+            // The collected share exceeds the policy, so a candidate could
+            // flip the verdict: the opaque consults may pull the share back
+            // to or under the cap. The fallback decides with the full count
+            // and the plain walk, exactly as the old two-pass did.
+            var substituteErased = BilinearRepeatSubstitutesErasedTexels(
+                texture,
+                domain,
+                maxNoiseTexelPercent,
+                minimumX,
+                maximumX,
+                minimumY,
+                maximumY);
+            return BilinearRepeatHasWitness(
+                        texture,
+                        domain,
+                        substituteErased,
+                        minimumX,
+                        maximumX,
+                        minimumY,
+                        maximumY)
+                ? TriangleAlphaOutcome.MustRemainTransparent
+                : TriangleAlphaOutcome.ProvenOpaque;
         }
 
         /// <summary>
@@ -1027,6 +1154,23 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return true;
             }
 
+            return BilinearRepeatHasWitness(texture, domain, false, minimumX, maximumX, minimumY, maximumY);
+        }
+
+        /// <summary>
+        /// The raw bilinear repeat existence walk: one pass over the
+        /// unwrapped candidate window. Opaque texels never witness. An
+        /// erased texel witnesses unless substitution skips it.
+        /// </summary>
+        private static bool BilinearRepeatHasWitness(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            bool substituteErased,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -1040,7 +1184,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -1069,9 +1218,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// candidate whose support interval intersects the domain. Opaque
         /// candidates count too. Erasure substitutes when the erased
         /// share of the consulted candidates stays at or under the
-        /// policy. Equality moves. The existence walk runs first, so a
-        /// window without erasure never pays for the exact intersection
-        /// count.
+        /// policy. Equality moves. The collection walk runs first, so
+        /// this full count runs only when the collected share exceeds
+        /// the policy and the verdict could still flip.
         /// </summary>
         private static bool BilinearRepeatSubstitutesErasedTexels(
             AlphaTextureData texture,
@@ -1164,17 +1313,177 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             // The density gate decides whether erased texels act as
-            // witnesses. A policy of zero skips the pre-pass entirely.
-            var substituteErased = maxNoiseTexelPercent > 0 &&
-                BilinearClampSubstitutesErasedTexels(
-                    texture,
-                    domain,
-                    maxNoiseTexelPercent,
-                    minimumX,
-                    maximumX,
-                    minimumY,
-                    maximumY);
+            // witnesses. A policy of zero keeps the plain walk: erased
+            // texels stay witnesses, and no density evidence is collected.
+            if (maxNoiseTexelPercent == 0)
+            {
+                return BilinearClampHasWitness(
+                            texture,
+                            domain,
+                            false,
+                            minimumX,
+                            maximumX,
+                            minimumY,
+                            maximumY)
+                    ? TriangleAlphaOutcome.MustRemainTransparent
+                    : TriangleAlphaOutcome.ProvenOpaque;
+            }
 
+            // The gate is on: one walk collects the existence verdict and
+            // the density evidence together. Opaque texels never witness,
+            // so they stay unconsulted here. A consulted mid byte witnesses
+            // under either substitution verdict, so the walk returns on it
+            // at once. A consulted erased texel is only a candidate: it
+            // witnesses when substitution fails, and the substitution share
+            // is not known until the window has been fully walked.
+            var consulted = 0L;
+            var erased = 0L;
+            var canPreFilter = domain.Vertices.Count == 3;
+            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
+            if (canPreFilter)
+            {
+                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
+            }
+
+            for (var y = minimumY; y <= maximumY; y++)
+            {
+                for (var x = minimumX; x <= maximumX; x++)
+                {
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (canPreFilter)
+                    {
+                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
+                                         (x == 0 && (v0x < -0.5 || v1x < -0.5 || v2x < -0.5)) ||
+                                         (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
+                                         (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
+                                         (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
+                        // The translated extraction returns false past the
+                        // proven bound. Then no cheap rejection happens, and
+                        // the exact intersection test below decides alone.
+                        if (!isBoundary &&
+                            TryExtractTexelVerticesRelativeToCandidate(
+                                domain, x, y,
+                                out var c0x, out var c0y,
+                                out var c1x, out var c1y,
+                                out var c2x, out var c2y) &&
+                            !ConservativeBilinearSupportOverlapsTriangle(
+                                -1, 1, -1, 1,
+                                c0x, c0y, c1x, c1y, c2x, c2y))
+                        {
+                            continue;
+                        }
+                    }
+                    if (!ExactUvGeometry.Intersects(
+                        domain,
+                        BilinearClampInterval(x, texture.Width, domain.TexelScale),
+                        BilinearClampInterval(y, texture.Height, domain.TexelScale)))
+                    {
+                        continue;
+                    }
+                    consulted++;
+                    if (alpha == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                        continue;
+                    }
+                    return TriangleAlphaOutcome.MustRemainTransparent;
+                }
+            }
+
+            // Every consulted texel that reached the counters is an erased
+            // candidate: the mid bytes returned above. When the collected
+            // share meets the policy, the full count meets it too, because
+            // the full count also consults opaque texels. No witness
+            // remains, so the window proves opaque.
+            if (erased * 100 <= (long)maxNoiseTexelPercent * consulted)
+            {
+                return TriangleAlphaOutcome.ProvenOpaque;
+            }
+
+            // The collected share exceeds the policy, so a candidate could
+            // flip the verdict: the opaque consults may pull the share back
+            // to or under the cap. The fallback decides with the full count
+            // and the plain walk, exactly as the old two-pass did.
+            var substituteErased = BilinearClampSubstitutesErasedTexels(
+                texture,
+                domain,
+                maxNoiseTexelPercent,
+                minimumX,
+                maximumX,
+                minimumY,
+                maximumY);
+            return BilinearClampHasWitness(
+                        texture,
+                        domain,
+                        substituteErased,
+                        minimumX,
+                        maximumX,
+                        minimumY,
+                        maximumY)
+                ? TriangleAlphaOutcome.MustRemainTransparent
+                : TriangleAlphaOutcome.ProvenOpaque;
+        }
+
+        /// <summary>
+        /// The mapped mirror of ClassifyBilinearClamp: the same clamped
+        /// window, budget guard, boundary exception, pre-filter, and
+        /// footprint interval intersection, but the walk only asks whether
+        /// one contributing texel stores a byte below the opaque maximum.
+        /// Erased texels count as witnesses, and an over-budget candidate
+        /// window returns true: the witness bound that keeps red in [0, 1)
+        /// and the decision honest through the map.
+        /// </summary>
+        private static bool HasMappedWitnessBilinearClamp(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            AlphaUvEnvelope envelope)
+        {
+            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
+            var minimumX = Math.Max(0, PointClampIndex(
+                ExactUvGeometry.Minimum(domain, true),
+                texture.Width,
+                domain.TexelScale) - 1);
+            var maximumX = Math.Min(texture.Width - 1, PointClampIndex(
+                ExactUvGeometry.Maximum(domain, true),
+                texture.Width,
+                domain.TexelScale) + 1);
+            var minimumY = Math.Max(0, PointClampIndex(
+                ExactUvGeometry.Minimum(domain, false),
+                texture.Height,
+                domain.TexelScale) - 1);
+            var maximumY = Math.Min(texture.Height - 1, PointClampIndex(
+                ExactUvGeometry.Maximum(domain, false),
+                texture.Height,
+                domain.TexelScale) + 1);
+            var candidateCount = (long)(maximumX - minimumX + 1) *
+                                 (maximumY - minimumY + 1);
+            if (candidateCount > MaxSupportRegions)
+            {
+                return true;
+            }
+
+            return BilinearClampHasWitness(texture, domain, false, minimumX, maximumX, minimumY, maximumY);
+        }
+
+        /// <summary>
+        /// The raw bilinear clamp existence walk: one pass over the
+        /// candidate window. Opaque texels never witness. An erased texel
+        /// witnesses unless substitution skips it. The pre-filter stands
+        /// down on clamp edges exactly as in the classified walk.
+        /// </summary>
+        private static bool BilinearClampHasWitness(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            bool substituteErased,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -1223,94 +1532,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                         BilinearClampInterval(x, texture.Width, domain.TexelScale),
                         BilinearClampInterval(y, texture.Height, domain.TexelScale)))
                     {
-                        return TriangleAlphaOutcome.MustRemainTransparent;
-                    }
-                }
-            }
-            return TriangleAlphaOutcome.ProvenOpaque;
-        }
-
-        /// <summary>
-        /// The mapped mirror of ClassifyBilinearClamp: the same clamped
-        /// window, budget guard, boundary exception, pre-filter, and
-        /// footprint interval intersection, but the walk only asks whether
-        /// one contributing texel stores a byte below the opaque maximum.
-        /// Erased texels count as witnesses, and an over-budget candidate
-        /// window returns true: the witness bound that keeps red in [0, 1)
-        /// and the decision honest through the map.
-        /// </summary>
-        private static bool HasMappedWitnessBilinearClamp(
-            TriangleAlphaInput triangle,
-            AlphaTextureData texture,
-            AlphaUvEnvelope envelope)
-        {
-            var domain = ExactUvGeometry.CreateTextureScaledDomain(triangle, texture.Width, texture.Height, envelope);
-            var minimumX = Math.Max(0, PointClampIndex(
-                ExactUvGeometry.Minimum(domain, true),
-                texture.Width,
-                domain.TexelScale) - 1);
-            var maximumX = Math.Min(texture.Width - 1, PointClampIndex(
-                ExactUvGeometry.Maximum(domain, true),
-                texture.Width,
-                domain.TexelScale) + 1);
-            var minimumY = Math.Max(0, PointClampIndex(
-                ExactUvGeometry.Minimum(domain, false),
-                texture.Height,
-                domain.TexelScale) - 1);
-            var maximumY = Math.Min(texture.Height - 1, PointClampIndex(
-                ExactUvGeometry.Maximum(domain, false),
-                texture.Height,
-                domain.TexelScale) + 1);
-            var candidateCount = (long)(maximumX - minimumX + 1) *
-                                 (maximumY - minimumY + 1);
-            if (candidateCount > MaxSupportRegions)
-            {
-                return true;
-            }
-
-            var canPreFilter = domain.Vertices.Count == 3;
-            double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
-            if (canPreFilter)
-            {
-                ExtractTexelVertices(domain, out v0x, out v0y, out v1x, out v1y, out v2x, out v2y);
-            }
-
-            for (var y = minimumY; y <= maximumY; y++)
-            {
-                for (var x = minimumX; x <= maximumX; x++)
-                {
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
-                    {
-                        continue;
-                    }
-                    if (canPreFilter)
-                    {
-                        var isBoundary = texture.Width == 1 || texture.Height == 1 ||
-                                         (x == 0 && (v0x < -0.5 || v1x < -0.5 || v2x < -0.5)) ||
-                                         (x == texture.Width - 1 && (v0x > texture.Width - 0.5 || v1x > texture.Width - 0.5 || v2x > texture.Width - 0.5)) ||
-                                         (y == 0 && (v0y < -0.5 || v1y < -0.5 || v2y < -0.5)) ||
-                                         (y == texture.Height - 1 && (v0y > texture.Height - 0.5 || v1y > texture.Height - 0.5 || v2y > texture.Height - 0.5));
-                        // The translated extraction returns false past the
-                        // proven bound. Then no cheap rejection happens, and
-                        // the exact intersection test below decides alone.
-                        if (!isBoundary &&
-                            TryExtractTexelVerticesRelativeToCandidate(
-                                domain, x, y,
-                                out var c0x, out var c0y,
-                                out var c1x, out var c1y,
-                                out var c2x, out var c2y) &&
-                            !ConservativeBilinearSupportOverlapsTriangle(
-                                -1, 1, -1, 1,
-                                c0x, c0y, c1x, c1y, c2x, c2y))
-                        {
-                            continue;
-                        }
-                    }
-                    if (ExactUvGeometry.Intersects(
-                        domain,
-                        BilinearClampInterval(x, texture.Width, domain.TexelScale),
-                        BilinearClampInterval(y, texture.Height, domain.TexelScale)))
-                    {
                         return true;
                     }
                 }
@@ -1322,11 +1543,11 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the bilinear clamp
         /// candidate window substitute for witnesses. The gate counts every
         /// candidate whose support interval intersects the domain. Opaque
-        /// candidates count too. Erasure substitutes when the erased
+        /// count too. Erasure substitutes when the erased
         /// share of the consulted candidates stays at or under the
-        /// policy. Equality moves. The existence walk runs first, so a
-        /// window without erasure never pays for the exact intersection
-        /// count.
+        /// policy. Equality moves. The collection walk runs first, so
+        /// this full count runs only when the collected share exceeds
+        /// the policy and the verdict could still flip.
         /// </summary>
         private static bool BilinearClampSubstitutesErasedTexels(
             AlphaTextureData texture,
@@ -1609,17 +1830,31 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             // The density gate decides whether erased texels act as
-            // witnesses. A policy of zero skips the pre-pass entirely.
-            var substituteErased = maxNoiseTexelPercent > 0 &&
-                PointRepeatSubstitutesErasedTexels(
-                    texture,
-                    domain,
-                    maxNoiseTexelPercent,
-                    minimumX,
-                    maximumX,
-                    minimumY,
-                    maximumY);
+            // witnesses. A policy of zero keeps the plain walk: erased
+            // texels stay witnesses, and no density evidence is collected.
+            if (maxNoiseTexelPercent == 0)
+            {
+                return PointRepeatHasWitness(
+                            texture,
+                            domain,
+                            false,
+                            minimumX,
+                            maximumX,
+                            minimumY,
+                            maximumY)
+                    ? TriangleAlphaOutcome.MustRemainTransparent
+                    : TriangleAlphaOutcome.ProvenOpaque;
+            }
 
+            // The gate is on: one walk collects the existence verdict and
+            // the density evidence together. Opaque texels never witness,
+            // so they stay unconsulted here. A consulted mid byte witnesses
+            // under either substitution verdict, so the walk returns on it
+            // at once. A consulted erased texel is only a candidate: it
+            // witnesses when substitution fails, and the substitution share
+            // is not known until the window has been fully walked.
+            var consulted = 0L;
+            var erased = 0L;
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -1638,10 +1873,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                     {
                         continue;
                     }
-                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
-                    {
-                        continue;
-                    }
                     // Every repeat support interval is the bounded unit
                     // square at the unwrapped index, so the box never needs
                     // a clamp edge guard.
@@ -1652,16 +1883,55 @@ namespace Alrauna.Amuse.Editor.Analysis
                     {
                         continue;
                     }
-                    if (ExactUvGeometry.Intersects(
+                    if (!ExactUvGeometry.Intersects(
                         domain,
                         PointRepeatInterval(unwrappedX, domain.TexelScale),
                         PointRepeatInterval(unwrappedY, domain.TexelScale)))
                     {
-                        return TriangleAlphaOutcome.MustRemainTransparent;
+                        continue;
                     }
+                    consulted++;
+                    if (alpha == AlphaTextureData.ErasedFlag)
+                    {
+                        erased++;
+                        continue;
+                    }
+                    return TriangleAlphaOutcome.MustRemainTransparent;
                 }
             }
-            return TriangleAlphaOutcome.ProvenOpaque;
+
+            // Every consulted texel that reached the counters is an erased
+            // candidate: the mid bytes returned above. When the collected
+            // share meets the policy, the full count meets it too, because
+            // the full count also consults opaque texels. No witness
+            // remains, so the window proves opaque.
+            if (erased * 100 <= (long)maxNoiseTexelPercent * consulted)
+            {
+                return TriangleAlphaOutcome.ProvenOpaque;
+            }
+
+            // The collected share exceeds the policy, so a candidate could
+            // flip the verdict: the opaque consults may pull the share back
+            // to or under the cap. The fallback decides with the full count
+            // and the plain walk, exactly as the old two-pass did.
+            var substituteErased = PointRepeatSubstitutesErasedTexels(
+                texture,
+                domain,
+                maxNoiseTexelPercent,
+                minimumX,
+                maximumX,
+                minimumY,
+                maximumY);
+            return PointRepeatHasWitness(
+                        texture,
+                        domain,
+                        substituteErased,
+                        minimumX,
+                        maximumX,
+                        minimumY,
+                        maximumY)
+                ? TriangleAlphaOutcome.MustRemainTransparent
+                : TriangleAlphaOutcome.ProvenOpaque;
         }
 
         /// <summary>
@@ -1717,6 +1987,23 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return true;
             }
 
+            return PointRepeatHasWitness(texture, domain, false, minimumX, maximumX, minimumY, maximumY);
+        }
+
+        /// <summary>
+        /// The raw point repeat existence walk: one pass over the
+        /// unwrapped candidate window. Opaque texels never witness. An
+        /// erased texel witnesses unless substitution skips it.
+        /// </summary>
+        private static bool PointRepeatHasWitness(
+            AlphaTextureData texture,
+            ExactUvDomain domain,
+            bool substituteErased,
+            int minimumX,
+            int maximumX,
+            int minimumY,
+            int maximumY)
+        {
             var canPreFilter = domain.Vertices.Count == 3;
             double v0x = 0, v0y = 0, v1x = 0, v1y = 0, v2x = 0, v2y = 0;
             if (canPreFilter)
@@ -1730,7 +2017,12 @@ namespace Alrauna.Amuse.Editor.Analysis
                 for (var unwrappedX = minimumX; unwrappedX <= maximumX; unwrappedX++)
                 {
                     var x = ExactUvGeometry.FloorMod(unwrappedX, texture.Width);
-                    if (texture.GetAlpha(x, y) == byte.MaxValue)
+                    var alpha = texture.GetAlpha(x, y);
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha == AlphaTextureData.ErasedFlag && substituteErased)
                     {
                         continue;
                     }
@@ -1762,8 +2054,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// whose support interval intersects the domain. Opaque candidates
         /// count too. Erasure substitutes when the erased share of the
         /// consulted candidates stays at or under the policy. Equality
-        /// moves. The existence walk runs first, so a window without
-        /// erasure never pays for the exact intersection count.
+        /// moves. The collection walk runs first, so this full count runs
+        /// only when the collected share exceeds the policy and the
+        /// verdict could still flip.
         /// </summary>
         private static bool PointRepeatSubstitutesErasedTexels(
             AlphaTextureData texture,
