@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
@@ -278,6 +280,234 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(row.Sentence, Does.Contain("100"));
         }
 
+        [Test]
+        public void LazyLoadingWithholdsRowsUntilDone()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            var rowsDrawn = new List<MaterialTransformationRow>();
+            var helpBoxesDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnTransformationRowDrawnForTest =
+                (row, avatarRoot) => rowsDrawn.Add(row);
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
+                (msg, type) => helpBoxesDrawn.Add(msg);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                Assert.That(
+                    helpBoxesDrawn.Contains("AMUSE computes material transformations."),
+                    Is.True,
+                    "computing status box must be drawn while dry run is not complete");
+                Assert.That(
+                    rowsDrawn.Count,
+                    Is.EqualTo(0),
+                    "transformation rows must be withheld while dry run is not complete");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnTransformationRowDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void PlayModeRecordDisplaysBannerAndBypassesDryRun()
+        {
+            var component = NewHiddenComponent();
+            var avatarKey = PlayModeBuildStore.ComputeAvatarKey(component.transform);
+            var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                component, EditorUserBuildSettings.activeBuildTarget);
+
+            var record = new PlayModeBuildRecord
+            {
+                avatarKey = avatarKey,
+                policyFingerprint = fingerprint,
+                avatarRows = new SerializedTransformationRow[]
+                {
+                    new SerializedTransformationRow
+                    {
+                        kind = (int)MaterialTransformationRowKind.Note,
+                        sentence = "Play mode note row."
+                    }
+                },
+                rendererRows = new SerializedTransformationRow[0]
+            };
+            PlayModeBuildStore.Save(record);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            var helpBoxesDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
+                (msg, type) => helpBoxesDrawn.Add(msg);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                Assert.That(
+                    helpBoxesDrawn.Contains(
+                        "This view shows accurate results from the Play mode build."),
+                    Is.True,
+                    "play mode accuracy banner must be drawn");
+                Assert.That(
+                    editor.DryRun,
+                    Is.Null,
+                    "dry run must be bypassed when a valid play mode record exists");
+            }
+            finally
+            {
+                PlayModeBuildStore.Clear(avatarKey);
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void MissingRendererDrawsTextLabelFallback()
+        {
+            var row = MaterialTransformationRow.Slot(
+                "Armature/MissingRenderer",
+                "UnityEngine.SkinnedMeshRenderer",
+                0,
+                0,
+                100,
+                "Deferred: 0 out of 100 polygons may be moved",
+                "Assets/MissingMaterial.mat");
+
+            var dummyRoot = new GameObject("DummyAvatarRoot").transform;
+            _scope.Track(dummyRoot.gameObject);
+
+            string drawnLabel = null;
+            GUIStyle drawnStyle = null;
+            bool objectFieldDrawn = false;
+
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnRendererLabelDrawnForTest =
+                (label, style) =>
+                {
+                    drawnLabel = label;
+                    drawnStyle = style;
+                };
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnRendererObjectFieldDrawnForTest =
+                (obj, type, allowScene) =>
+                {
+                    objectFieldDrawn = true;
+                };
+
+            try
+            {
+                var method = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor).GetMethod(
+                    "DrawTransformationRow", BindingFlags.NonPublic | BindingFlags.Static);
+                RenderInHostWindow(() =>
+                {
+                    method.Invoke(null, new object[] { row, dummyRoot });
+                });
+
+                Assert.That(
+                    drawnLabel,
+                    Is.EqualTo("Armature/MissingRenderer"),
+                    "missing renderer must draw text label with RendererPath");
+                Assert.That(
+                    drawnStyle,
+                    Is.EqualTo(EditorStyles.boldLabel),
+                    "text label fallback must use bold label style");
+                Assert.That(
+                    objectFieldDrawn,
+                    Is.False,
+                    "missing renderer must not draw empty renderer ObjectField");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnRendererLabelDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnRendererObjectFieldDrawnForTest = null;
+            }
+        }
+
+        [Test]
+        public void OnEditorUpdateStepsDryRunUntilDone()
+        {
+            var component = NewHiddenComponent();
+            var root = component.gameObject;
+            var renderer = root.AddComponent<MeshRenderer>();
+            var filter = root.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[] { Vector3.zero, Vector3.up, Vector3.right };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            _scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            _scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+                Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+
+                var repainted = false;
+                editor.HostRepaintOverride = () => repainted = true;
+
+                for (var guard = 0; guard < 20 && !editor.DryRun.Done; guard++)
+                {
+                    editor.OnEditorUpdate();
+                }
+
+                Assert.That(editor.DryRun.Done, Is.True, "editor update must advance dry run to completion");
+                Assert.That(repainted, Is.True, "completion must request repaint");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
         [UnityTest]
         public IEnumerator SeparatorOffPaintsBannerOnly()
         {
@@ -430,14 +660,37 @@ namespace Alrauna.Amuse.Tests.Editor
         /// behavior, and a longer probe keeps calling and repainting
         /// until the hosted run reports done.
         /// </summary>
+        private void RenderInHostWindow(Action guiAction)
+        {
+            var window = EditorWindow.GetWindow<RepaintHostWindow>(
+                true, "AMUSE repaint host", false);
+            try
+            {
+                window.CustomOnGUI = guiAction;
+                window.RepaintImmediately();
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
         private sealed class RepaintHostWindow : EditorWindow
         {
             internal UnityEditor.Editor HostedEditor;
             internal Func<bool> CompletionProbe = () => true;
+            internal Action CustomOnGUI;
             internal bool Painted;
 
             private void OnGUI()
             {
+                if (CustomOnGUI != null)
+                {
+                    CustomOnGUI();
+                    Painted = true;
+                    return;
+                }
+
                 if (HostedEditor == null)
                 {
                     return;
@@ -451,6 +704,17 @@ namespace Alrauna.Amuse.Tests.Editor
                 }
 
                 Painted = true;
+            }
+
+            internal void RepaintImmediately()
+            {
+                var parentField = typeof(EditorWindow).GetField(
+                    "m_Parent", BindingFlags.Instance | BindingFlags.NonPublic);
+                var parent = parentField?.GetValue(this);
+                var method = parent?.GetType().GetMethod(
+                    "RepaintImmediately",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                method?.Invoke(parent, null);
             }
         }
     }

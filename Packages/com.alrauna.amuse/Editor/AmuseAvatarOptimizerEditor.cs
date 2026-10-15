@@ -38,6 +38,61 @@ namespace Alrauna.Amuse.Editor
         private AlphaSeparationDryRun _dryRun;
 
         /// <summary>
+        /// True when the dry run completed on or before the layout pass.
+        /// It latches during Layout events to prevent layout mismatches.
+        /// </summary>
+        private bool _dryRunCompletedLatched;
+
+        internal static Action<MaterialTransformationRow, Transform> OnTransformationRowDrawnForTest;
+        internal static Action<string, MessageType> OnHelpBoxDrawnForTest;
+        internal static Action<string, GUIStyle> OnRendererLabelDrawnForTest;
+        internal static Action<UnityEngine.Object, Type, bool> OnRendererObjectFieldDrawnForTest;
+
+        private void OnEnable()
+        {
+            EditorApplication.update += OnEditorUpdate;
+        }
+
+        private void OnDisable()
+        {
+            EditorApplication.update -= OnEditorUpdate;
+        }
+
+        /// <summary>
+        /// Steps the dry run during editor updates.
+        /// </summary>
+        internal void OnEditorUpdate()
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            if (!_materialTransformationsOpen || !_alphaSeparationTransformationsOpen)
+            {
+                return;
+            }
+
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                return;
+            }
+
+            if (_dryRun != null && !_dryRun.Done)
+            {
+                _dryRun.Step();
+                if (_dryRun.Done)
+                {
+                    RequestHostRepaint();
+                }
+            }
+            else if (_dryRun != null && _dryRun.Done && !_dryRunCompletedLatched)
+            {
+                RequestHostRepaint();
+            }
+        }
+
+        /// <summary>
         /// The host repaint override for the verified harness. The
         /// production host is the inspector window, so null keeps the
         /// editor's own Repaint, and the harness aims the repaint at
@@ -105,10 +160,7 @@ namespace Alrauna.Amuse.Editor
         /// Alpha Separation view. The view shows outcomes, not
         /// policy, so it sits outside the Advanced Settings reveal,
         /// like the Alpha Separator toggle, and no serialized field
-        /// stores its state. The dry run drive runs after the rows
-        /// draw and only on a repaint pass, so a compute never
-        /// mutates the row set between a frame's Layout and Repaint
-        /// events, and at most one renderer computes per repaint.
+        /// stores its state.
         /// </summary>
         private void DrawMaterialTransformations()
         {
@@ -121,13 +173,22 @@ namespace Alrauna.Amuse.Editor
                 return;
             }
 
+            var optimizer = (AmuseAvatarOptimizer)target;
+            var avatarRoot = optimizer?.transform;
+            var avatarKey = avatarRoot != null
+                ? PlayModeBuildStore.ComputeAvatarKey(avatarRoot)
+                : null;
+
             if (GUILayout.Button("Refresh"))
             {
-                // Clear drops every stored row and every errored
-                // mark, and it empties the one avatar slot, so
-                // the next pass recomputes from a clean session.
+                if (!string.IsNullOrEmpty(avatarKey))
+                {
+                    PlayModeBuildStore.Clear(avatarKey);
+                }
+
                 DryRunCache.Clear();
                 _dryRun = null;
+                _dryRunCompletedLatched = false;
             }
 
             _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
@@ -146,46 +207,77 @@ namespace Alrauna.Amuse.Editor
                 RowText.DisclosureSentence(1),
                 EditorStyles.wordWrappedLabel);
 
-            // The rows draw from the state this frame's layout pass
-            // computed. Nothing below a draw mutates it before the
-            // next layout pass.
-            var avatarRoot = ((AmuseAvatarOptimizer)target)?.transform;
-            if (_dryRun != null)
+            if (Event.current.type == EventType.Layout)
             {
-                foreach (var row in _dryRun.AvatarRows)
-                {
-                    DrawTransformationRow(row, avatarRoot);
-                }
-
-                foreach (var row in _dryRun.RendererRows)
-                {
-                    DrawTransformationRow(row, avatarRoot);
-                }
+                _dryRunCompletedLatched = _dryRun != null && _dryRun.Done;
             }
 
-            if (Event.current.type != EventType.Repaint)
+            var fingerprint = optimizer != null
+                ? PlayModeBuildStore.ComputePolicyFingerprint(
+                    optimizer, EditorUserBuildSettings.activeBuildTarget)
+                : null;
+            var playRecord = (!string.IsNullOrEmpty(avatarKey) && !string.IsNullOrEmpty(fingerprint))
+                ? PlayModeBuildStore.TryLoad(avatarKey, fingerprint)
+                : null;
+
+            if (playRecord != null)
             {
+                const string playSentence =
+                    "This view shows accurate results from the Play mode build.";
+                EditorGUILayout.HelpBox(playSentence, MessageType.Info);
+                OnHelpBoxDrawnForTest?.Invoke(playSentence, MessageType.Info);
+
+                if (playRecord.avatarRows != null)
+                {
+                    foreach (var serializedRow in playRecord.avatarRows)
+                    {
+                        DrawTransformationRow(
+                            MaterialTransformationRow.FromSerialized(serializedRow),
+                            avatarRoot);
+                    }
+                }
+
+                if (playRecord.rendererRows != null)
+                {
+                    foreach (var serializedRow in playRecord.rendererRows)
+                    {
+                        DrawTransformationRow(
+                            MaterialTransformationRow.FromSerialized(serializedRow),
+                            avatarRoot);
+                    }
+                }
+
                 return;
             }
 
             if (_dryRun == null)
             {
                 _dryRun = new AlphaSeparationDryRun(
-                    (AmuseAvatarOptimizer)target,
+                    optimizer,
                     () => EditorUserBuildSettings.activeBuildTarget);
                 _dryRun.RepaintRequested = RequestHostRepaint;
                 _dryRun.Begin();
-                if (!_dryRun.Done)
-                {
-                    _dryRun.RepaintRequested?.Invoke();
-                }
+                _dryRunCompletedLatched = false;
+                RequestHostRepaint();
+            }
 
+            if (!_dryRunCompletedLatched)
+            {
+                const string computingSentence =
+                    "AMUSE computes material transformations.";
+                EditorGUILayout.HelpBox(computingSentence, MessageType.Info);
+                OnHelpBoxDrawnForTest?.Invoke(computingSentence, MessageType.Info);
                 return;
             }
 
-            if (!_dryRun.Done)
+            foreach (var row in _dryRun.AvatarRows)
             {
-                _dryRun.Step();
+                DrawTransformationRow(row, avatarRoot);
+            }
+
+            foreach (var row in _dryRun.RendererRows)
+            {
+                DrawTransformationRow(row, avatarRoot);
             }
         }
 
@@ -193,13 +285,15 @@ namespace Alrauna.Amuse.Editor
         /// One display row. A banner row, an errored row, and a
         /// refused renderer row draw as warnings. A slot row renders
         /// the renderer object field and material object field side by
-        /// side on line one. The second line shows the indented status
-        /// sentence. Every other row draws as a plain line.
+        /// side on line one. When the renderer is null, a bold label
+        /// renders the path instead. The second line shows the indented
+        /// status sentence. Every other row draws as a plain line.
         /// </summary>
         private static void DrawTransformationRow(
             MaterialTransformationRow row,
             Transform avatarRoot)
         {
+            OnTransformationRowDrawnForTest?.Invoke(row, avatarRoot);
             switch (row.Kind)
             {
                 case MaterialTransformationRowKind.Banner:
@@ -229,11 +323,29 @@ namespace Alrauna.Amuse.Editor
                     float halfWidth = Mathf.Max(60f, (EditorGUIUtility.currentViewWidth - indentOffset) / 2f - 20f);
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        EditorGUILayout.ObjectField(renderer, typeof(Renderer), true, GUILayout.Width(halfWidth));
-                        int originalIndent = EditorGUI.indentLevel;
-                        EditorGUI.indentLevel = 0;
-                        EditorGUILayout.ObjectField(material, typeof(Material), false);
-                        EditorGUI.indentLevel = originalIndent;
+                        if (renderer != null)
+                        {
+                            EditorGUILayout.ObjectField(renderer, typeof(Renderer), true, GUILayout.Width(halfWidth));
+                            OnRendererObjectFieldDrawnForTest?.Invoke(renderer, typeof(Renderer), true);
+                            int originalIndent = EditorGUI.indentLevel;
+                            EditorGUI.indentLevel = 0;
+                            EditorGUILayout.ObjectField(material, typeof(Material), false);
+                            EditorGUI.indentLevel = originalIndent;
+                        }
+                        else
+                        {
+                            var pathLabel = row.RendererPath ?? string.Empty;
+                            EditorGUILayout.LabelField(pathLabel, EditorStyles.boldLabel, GUILayout.Width(halfWidth));
+                            OnRendererLabelDrawnForTest?.Invoke(pathLabel, EditorStyles.boldLabel);
+                            if (!string.IsNullOrEmpty(row.SourceMaterialPath))
+                            {
+                                var mat = AssetDatabase.LoadAssetAtPath<Material>(row.SourceMaterialPath);
+                                int originalIndent = EditorGUI.indentLevel;
+                                EditorGUI.indentLevel = 0;
+                                EditorGUILayout.ObjectField(mat, typeof(Material), false);
+                                EditorGUI.indentLevel = originalIndent;
+                            }
+                        }
                     }
 
                     EditorGUI.indentLevel++;

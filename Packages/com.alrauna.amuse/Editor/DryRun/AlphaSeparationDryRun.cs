@@ -377,6 +377,16 @@ namespace Alrauna.Amuse.Editor.DryRun
             return true;
         }
 
+        /// <summary>
+        /// Advances every remaining step until the run completes.
+        /// </summary>
+        internal void PumpAll()
+        {
+            while (!Done && Step())
+            {
+            }
+        }
+
         private void CompleteRun()
         {
             if (_rendererRows.Count == 0 && !_avatarCacheHit &&

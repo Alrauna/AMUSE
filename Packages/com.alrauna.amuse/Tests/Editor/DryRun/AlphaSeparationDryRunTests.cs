@@ -1104,5 +1104,18 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False,
                 "the streaming readback route must stay unreachable");
         }
+
+        [Test]
+        public void PumpAllAdvancesUntilDone()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+            Assert.That(dryRun.Done, Is.False, "the run must not finish on begin");
+            dryRun.PumpAll();
+            Assert.That(dryRun.Done, Is.True, "the run must finish after PumpAll");
+            Assert.That(dryRun.RendererRows, Is.Not.Empty, "PumpAll must compute renderer rows");
+        }
     }
 }
