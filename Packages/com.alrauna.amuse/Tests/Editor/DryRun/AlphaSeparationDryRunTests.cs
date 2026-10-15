@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
@@ -166,6 +168,48 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             };
             mesh.subMeshCount = 1;
             mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Many triangle pairs sharing the two-triangle UV footprint, each
+        /// pair offset along X so the geometry stays finite and distinct.
+        /// Classification cost scales with the triangle count, so the dry
+        /// run's background task stays in flight long enough for a test to
+        /// cancel while it runs.
+        /// </summary>
+        private Mesh ManyTriangleMesh(int groupCount)
+        {
+            var mesh = _scope.Track(new Mesh());
+            var vertices = new Vector3[groupCount * 6];
+            var uvs = new Vector2[groupCount * 6];
+            var indices = new int[groupCount * 6];
+            for (var group = 0; group < groupCount; group++)
+            {
+                var x = group * 0.001f;
+                var v = group * 6;
+                vertices[v] = new Vector3(x, 0f, 0f);
+                vertices[v + 1] = new Vector3(1f + x, 0f, 0f);
+                vertices[v + 2] = new Vector3(x, 1f, 0f);
+                vertices[v + 3] = new Vector3(1f + x, 1f, 0f);
+                vertices[v + 4] = new Vector3(2f + x, 0f, 0f);
+                vertices[v + 5] = new Vector3(2f + x, 1f, 0f);
+                uvs[v] = new Vector2(0.05f, 0.05f);
+                uvs[v + 1] = new Vector2(0.45f, 0.05f);
+                uvs[v + 2] = new Vector2(0.05f, 0.45f);
+                uvs[v + 3] = new Vector2(0.55f, 0.55f);
+                uvs[v + 4] = new Vector2(0.95f, 0.55f);
+                uvs[v + 5] = new Vector2(0.55f, 0.95f);
+                for (var corner = 0; corner < 6; corner++)
+                {
+                    indices[v + corner] = v + corner;
+                }
+            }
+
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.subMeshCount = 1;
+            mesh.SetTriangles(indices, 0);
             return mesh;
         }
 
@@ -1225,6 +1269,137 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
             var continues = dryRun.Step(synchronous: false);
             Assert.That(continues, Is.False);
+        }
+
+        [Test]
+        public void CancellingWhileInFlightDisposesTheSourceWhenTheTaskCompletes()
+        {
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-heavy-root"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("half_heavy", 255);
+            var material = NewCutoutMaterial(texture, 0.5f);
+            var renderer = AddSkinnedRenderer(
+                root, ManyTriangleMesh(16384), material);
+            var fixture = new Fixture
+            {
+                Root = root, Optimizer = optimizer, Renderer = renderer
+            };
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            dryRun.Step(synchronous: false);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.ClassifyingBackground));
+
+            var source = InFlightSource(dryRun);
+            Assert.That(source, Is.Not.Null, "the run must own a cancellation source");
+            var inFlight = InFlightTask(dryRun);
+            Assert.That(inFlight, Is.Not.Null, "the run must own an in-flight task");
+
+            WaitUntilRunning(inFlight);
+
+            dryRun.Cancel(timeoutMs: 0);
+            Assert.That(
+                inFlight.IsCompleted,
+                Is.False,
+                "the task must still be running when Cancel abandons it");
+            Assert.That(dryRun.IsCancelled, Is.True);
+
+            WaitUntilDisposed(source);
+
+            Assert.That(
+                TokenIsDisposed(source),
+                Is.True,
+                "the completion continuation owns disposal");
+            Assert.DoesNotThrow(
+                () => dryRun.Cancel(),
+                "a later Cancel must not throw on the disposed source");
+        }
+
+        [Test]
+        public void CancelAfterNormalCompletionToleratesDisposedSource()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            dryRun.Step(synchronous: false);
+            Assert.That(dryRun.State, Is.EqualTo(DryRunState.ClassifyingBackground));
+
+            var source = InFlightSource(dryRun);
+            var inFlight = InFlightTask(dryRun);
+            Assert.That(source, Is.Not.Null, "the run must own a cancellation source");
+
+            var timeout = DateTime.UtcNow.AddSeconds(5);
+            while (!inFlight.IsCompleted && DateTime.UtcNow < timeout)
+            {
+                Thread.Sleep(10);
+            }
+
+            Assert.That(inFlight.IsCompleted, Is.True, "the task must complete");
+            WaitUntilDisposed(source);
+
+            Assert.That(
+                TokenIsDisposed(source),
+                Is.True,
+                "the completion continuation owns disposal");
+            Assert.DoesNotThrow(
+                () => dryRun.Cancel(),
+                "teardown Cancel must tolerate the disposed source");
+        }
+
+        private static CancellationTokenSource InFlightSource(
+            AlphaSeparationDryRun dryRun)
+        {
+            var field = typeof(AlphaSeparationDryRun).GetField(
+                "_cts", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(field, Is.Not.Null, "the dry run must declare _cts");
+            return (CancellationTokenSource)field.GetValue(dryRun);
+        }
+
+        private static Task InFlightTask(AlphaSeparationDryRun dryRun)
+        {
+            var field = typeof(AlphaSeparationDryRun).GetField(
+                "_inFlightTask", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(field, Is.Not.Null, "the dry run must declare _inFlightTask");
+            return (Task)field.GetValue(dryRun);
+        }
+
+        private static void WaitUntilRunning(Task inFlight)
+        {
+            var timeout = DateTime.UtcNow.AddSeconds(5);
+            while (inFlight.Status != TaskStatus.Running &&
+                   DateTime.UtcNow < timeout)
+            {
+            }
+
+            Assert.That(
+                inFlight.Status,
+                Is.EqualTo(TaskStatus.Running),
+                "the in-flight task must be running before Cancel");
+        }
+
+        private static void WaitUntilDisposed(CancellationTokenSource source)
+        {
+            var timeout = DateTime.UtcNow.AddSeconds(5);
+            while (!TokenIsDisposed(source) && DateTime.UtcNow < timeout)
+            {
+                Thread.Sleep(10);
+            }
+        }
+
+        private static bool TokenIsDisposed(CancellationTokenSource source)
+        {
+            try
+            {
+                _ = source.Token;
+                return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                return true;
+            }
         }
 
         [Test]

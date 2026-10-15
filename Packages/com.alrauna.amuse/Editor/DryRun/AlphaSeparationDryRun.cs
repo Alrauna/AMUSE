@@ -441,7 +441,15 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             if (_cts != null && !_cts.IsCancellationRequested)
             {
-                _cts.Cancel();
+                try
+                {
+                    _cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The completion continuation disposed the source after
+                    // the task finished but before teardown reached Cancel.
+                }
             }
 
             if (timeoutMs > 0 && _inFlightTask != null && !_inFlightTask.IsCompleted)
@@ -664,7 +672,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             }
 
             _cts = new CancellationTokenSource();
-            var token = _cts.Token;
+            var source = _cts;
+            var token = source.Token;
             var snapshot = extraction.Snapshot;
             var slotResults = resolved.SlotResults;
 
@@ -688,6 +697,17 @@ namespace Alrauna.Amuse.Editor.DryRun
                     UnityRendererAlphaAnalysis.OutcomeIntersector,
                     token),
                 token);
+            // Side continuation owning disposal: it runs exactly when the
+            // task completes, even if cancellation abandoned the task and
+            // ClearInFlight never saw a completed task to dispose for. The
+            // source is captured in a local so a later run's source can
+            // never be disposed by this continuation. ClearInFlight's
+            // completed-path dispose stays; Dispose is idempotent.
+            _inFlightTask.ContinueWith(
+                _ => source.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             _state = DryRunState.ClassifyingBackground;
 
             return true;
