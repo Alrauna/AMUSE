@@ -175,6 +175,30 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
     }
 
+    /// <summary>
+    /// The position facts one triangle contributes to classification,
+    /// decoded once per triangle per admitted state: whether all three
+    /// vertices are finite, and the exact degeneracy verdict over the
+    /// decoded coordinates. Both facts are mip-invariant, so every level of
+    /// the mip chain consumes the same record instead of repeating the
+    /// decode. The record never throws; a non-finite vertex is recorded,
+    /// not raised, and the classifier entry keeps the malformed-geometry
+    /// contract for it.
+    /// </summary>
+    internal readonly struct TrianglePositionValidity
+    {
+        internal bool PositionsFinite { get; }
+
+        /// <summary>The verdict over the decoded positions; read only when the positions are finite.</summary>
+        internal bool IsDegenerate { get; }
+
+        internal TrianglePositionValidity(bool positionsFinite, bool isDegenerate)
+        {
+            PositionsFinite = positionsFinite;
+            IsDegenerate = isDegenerate;
+        }
+    }
+
     internal static class ExactUvGeometry
     {
         internal static ExactDyadic DecodeFloat(float value)
@@ -243,6 +267,43 @@ namespace Alrauna.Amuse.Editor.Analysis
             return ay * bz - az * by == BigInteger.Zero &&
                    az * bx - ax * bz == BigInteger.Zero &&
                    ax * by - ay * bx == BigInteger.Zero;
+        }
+
+        /// <summary>
+        /// Decodes one triangle's positions once per triangle per state and
+        /// records the mip-invariant facts: vertex finiteness and the exact
+        /// degeneracy verdict. The decode is pure, so hoisting it above a
+        /// mip loop changes no outcome and no exception timing: the record
+        /// itself never throws, and the classifier entry keeps the
+        /// malformed-geometry contract. The per-level UV decodes stay with
+        /// the per-level classification because they depend on each level's
+        /// texture window.
+        /// </summary>
+        internal static TrianglePositionValidity DecodePositionValidity(
+            TriangleAlphaInput triangle)
+        {
+            var finite =
+                IsFinite(triangle.Position0.x) &&
+                IsFinite(triangle.Position0.y) &&
+                IsFinite(triangle.Position0.z) &&
+                IsFinite(triangle.Position1.x) &&
+                IsFinite(triangle.Position1.y) &&
+                IsFinite(triangle.Position1.z) &&
+                IsFinite(triangle.Position2.x) &&
+                IsFinite(triangle.Position2.y) &&
+                IsFinite(triangle.Position2.z);
+            if (!finite)
+            {
+                return new TrianglePositionValidity(false, false);
+            }
+
+            return new TrianglePositionValidity(
+                true, IsDegenerateGeometry(triangle));
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static BigInteger[] Align(

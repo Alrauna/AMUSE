@@ -443,6 +443,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
+            // Position facts do not vary across the chain: vertex finiteness
+            // and the exact degeneracy verdict are decoded once per triangle
+            // and the record threads through every level into the classifier.
+            // The per-level UV decodes stay inside the classifier because
+            // they depend on the level's texture window.
+            var positionValidity = ExactUvGeometry.DecodePositionValidity(
+                transformed);
+
             var sawUnknown = false;
             for (var index = 0; index < _chain.Count; index++)
             {
@@ -458,10 +466,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var outcome = _map == null
                     ? TriangleAlphaClassifier.Classify(
                         transformed, _chain[index], _sampling, envelope,
-                        _maxNoiseTexelPercent)
+                        _maxNoiseTexelPercent, positionValidity)
                     : TriangleAlphaClassifier.ClassifyMapped(
                         transformed, _chain[index], _sampling, envelope,
-                        _map.Value);
+                        _map.Value, positionValidity);
                 if (outcome == TriangleAlphaOutcome.MustRemainTransparent)
                 {
                     return TriangleAlphaOutcome.MustRemainTransparent;

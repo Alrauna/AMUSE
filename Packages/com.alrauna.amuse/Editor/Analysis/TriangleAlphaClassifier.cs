@@ -300,11 +300,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         private const double PreFilterSafeCoordinateBound = 256;
 
         /// <summary>
-        /// Classifies with the per-polygon noise density policy. A policy
-        /// of zero keeps erasure inert. An erased texel then behaves
-        /// exactly like a witness byte. A positive policy lets an erased
-        /// texel skip the witness check only when the erased share of
-        /// the consulted texels stays at or under the policy.
+        /// Classifies with the per-polygon noise density policy, decoding
+        /// the triangle's position validity first. The decoding overload
+        /// below is the precomputed form a mip loop uses.
         /// </summary>
         internal static TriangleAlphaOutcome Classify(
             TriangleAlphaInput triangle,
@@ -313,16 +311,47 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaUvEnvelope envelope,
             int maxNoiseTexelPercent)
         {
+            return Classify(
+                triangle, texture, sampling, envelope, maxNoiseTexelPercent,
+                ExactUvGeometry.DecodePositionValidity(triangle));
+        }
+
+        /// <summary>
+        /// Classifies with the per-polygon noise density policy. A policy
+        /// of zero keeps erasure inert. An erased texel then behaves
+        /// exactly like a witness byte. A positive policy lets an erased
+        /// texel skip the witness check only when the erased share of
+        /// the consulted texels stays at or under the policy.
+        /// <para>
+        /// The position validity — vertex finiteness and the exact
+        /// degeneracy verdict — is mip-invariant, so a caller classifying a
+        /// chain decodes it once per triangle and passes the record here
+        /// for every level. The record keeps the malformed-geometry
+        /// contract: a recorded non-finite vertex still throws from this
+        /// entry, exactly as the per-level validation it replaced did.
+        /// </para>
+        /// </summary>
+        internal static TriangleAlphaOutcome Classify(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            TextureSampling sampling,
+            AlphaUvEnvelope envelope,
+            int maxNoiseTexelPercent,
+            TrianglePositionValidity positionValidity)
+        {
             if (texture == null)
             {
                 throw new ArgumentNullException(nameof(texture));
             }
             ValidateDensityPolicy(maxNoiseTexelPercent);
-            ValidateFinite(triangle.Position0, nameof(triangle.Position0));
-            ValidateFinite(triangle.Position1, nameof(triangle.Position1));
-            ValidateFinite(triangle.Position2, nameof(triangle.Position2));
+            if (!positionValidity.PositionsFinite)
+            {
+                throw new ArgumentException(
+                    "Geometry positions must be finite.",
+                    nameof(triangle));
+            }
 
-            if (ExactUvGeometry.IsDegenerateGeometry(triangle))
+            if (positionValidity.IsDegenerate)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
@@ -396,6 +425,24 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         /// <summary>
         /// Classifies one triangle's mapped mask term saturate(r * s + v)
+        /// under the same filter dispatch as the raw path, decoding the
+        /// triangle's position validity first. The precomputed form below
+        /// is what a mip loop uses.
+        /// </summary>
+        internal static TriangleAlphaOutcome ClassifyMapped(
+            TriangleAlphaInput triangle,
+            AlphaTextureData texture,
+            TextureSampling sampling,
+            AlphaUvEnvelope envelope,
+            AffineAlphaMap map)
+        {
+            return ClassifyMapped(
+                triangle, texture, sampling, envelope, map,
+                ExactUvGeometry.DecodePositionValidity(triangle));
+        }
+
+        /// <summary>
+        /// Classifies one triangle's mapped mask term saturate(r * s + v)
         /// under the same filter dispatch as the raw path. The walk answers
         /// one question: does the triangle's contributing domain contain a
         /// texel below byte 255? The field contract then bounds the filtered
@@ -407,13 +454,20 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// texels always count as witnesses: their red is unknown in [0, 1),
         /// and the raw erasure-substitution policy is a statement about the
         /// raw witness verdict, not about a red value this proof reads.
+        /// <para>
+        /// The position validity is mip-invariant and is decoded once per
+        /// triangle by the chain caller; a recorded non-finite vertex still
+        /// throws from this entry, exactly as the per-level validation it
+        /// replaced did.
+        /// </para>
         /// </summary>
         internal static TriangleAlphaOutcome ClassifyMapped(
             TriangleAlphaInput triangle,
             AlphaTextureData texture,
             TextureSampling sampling,
             AlphaUvEnvelope envelope,
-            AffineAlphaMap map)
+            AffineAlphaMap map,
+            TrianglePositionValidity positionValidity)
         {
             if (texture == null)
             {
@@ -428,11 +482,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                     nameof(map));
             }
             ValidateDensityPolicy(0);
-            ValidateFinite(triangle.Position0, nameof(triangle.Position0));
-            ValidateFinite(triangle.Position1, nameof(triangle.Position1));
-            ValidateFinite(triangle.Position2, nameof(triangle.Position2));
+            if (!positionValidity.PositionsFinite)
+            {
+                throw new ArgumentException(
+                    "Geometry positions must be finite.",
+                    nameof(triangle));
+            }
 
-            if (ExactUvGeometry.IsDegenerateGeometry(triangle))
+            if (positionValidity.IsDegenerate)
             {
                 return TriangleAlphaOutcome.Unknown;
             }
@@ -1816,14 +1873,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
         }
 
-
-        private static void ValidateFinite(Vector3 value, string parameterName)
-        {
-            if (!IsFinite(value.x) || !IsFinite(value.y) || !IsFinite(value.z))
-            {
-                throw new ArgumentException("Geometry positions must be finite.", parameterName);
-            }
-        }
 
         private static void ValidateFinite(Vector2 value, string parameterName)
         {
