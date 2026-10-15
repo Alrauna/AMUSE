@@ -1475,7 +1475,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             return @"
         [HideInInspector] _lilToonVersion (""Version"", Int) = 45
         _Invisible (""Invisible"", Int) = 0
-        _UDIMDiscardCompile (""UDIM"", Int) = 0";
+        _UDIMDiscardCompile (""UDIM"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0";
         }
 
         /// <summary>
