@@ -989,11 +989,14 @@ namespace Alrauna.Amuse.Editor.DryRun
                     // The no-asset-writes guarantee rides the capture
                     // request: the request withdraws the streaming route's
                     // disk-fallback clone, so no capture in this batch can
-                    // create assets on disk.
+                    // create assets on disk. The optimizer's raw policy mip
+                    // cap rides the same request, so the proof reads back
+                    // only its own levels.
                     return inner(
                         effective,
                         families,
-                        request.DisallowingDiskFallback(),
+                        request.DisallowingDiskFallback()
+                            .WithRawMipCap(_maxMipLevel),
                         bounds,
                         out outcome);
                 }

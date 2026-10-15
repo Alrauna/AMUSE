@@ -455,6 +455,7 @@ namespace Alrauna.Amuse.Editor.Build
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
             UnityGeneratedTextureEvidence.ClearCache();
+            UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
@@ -788,7 +789,8 @@ namespace Alrauna.Amuse.Editor.Build
                             out admittedLiveMaterials,
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer ?? effectiveCapturer),
+                                renderer, capturer ?? effectiveCapturer,
+                                maxMipLevel),
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
@@ -805,7 +807,7 @@ namespace Alrauna.Amuse.Editor.Build
                         alphaPolicyBounds,
                         out admittedLiveMaterials,
                         CaptureThroughEffectiveMaterials(
-                            renderer, effectiveCapturer),
+                            renderer, effectiveCapturer, maxMipLevel),
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
                         LockedMaterialIdentity.PreCheckRefusal,
@@ -824,7 +826,7 @@ namespace Alrauna.Amuse.Editor.Build
                             alphaPolicyBounds,
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer),
+                                renderer, capturer, maxMipLevel),
                             out admittedLiveMaterials,
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
@@ -1138,13 +1140,16 @@ namespace Alrauna.Amuse.Editor.Build
         /// included. Identity flows stay on the live materials — the admitted
         /// set, the swap-value matching, and the retained live pairing keep
         /// the original references, so the write path still matches against
-        /// them. A null inner capturer keeps the production default. Every
-        /// clone dies inside the wrapper, on every exit path.
+        /// them. A null inner capturer keeps the production default. The
+        /// optimizer's raw policy mip cap rides the capture request, so the
+        /// GPU route reads back only the proof's levels. Every clone dies
+        /// inside the wrapper, on every exit path.
         /// </summary>
         private static ClosedAlphaMaterialCapturer
             CaptureThroughEffectiveMaterials(
                 Renderer renderer,
-                ClosedAlphaMaterialCapturer inner)
+                ClosedAlphaMaterialCapturer inner,
+                int rawMipCap)
         {
             if (inner == null)
             {
@@ -1171,7 +1176,8 @@ namespace Alrauna.Amuse.Editor.Build
                 try
                 {
                     return inner(
-                        effective, families, request, bounds, out transferred);
+                        effective, families, request.WithRawMipCap(rawMipCap),
+                        bounds, out transferred);
                 }
                 finally
                 {

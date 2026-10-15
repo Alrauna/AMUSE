@@ -1045,6 +1045,7 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             UnityGeneratedTextureEvidence.ClearCache();
+            UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
