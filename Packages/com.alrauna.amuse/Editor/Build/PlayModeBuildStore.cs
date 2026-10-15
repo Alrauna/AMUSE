@@ -78,20 +78,22 @@ namespace Alrauna.Amuse.Editor.Build
             var key = SessionPrefix + avatarKey;
             var json = SessionState.GetString(key, null);
             if (string.IsNullOrEmpty(json)) return null;
+            PlayModeBuildRecord record;
             try
             {
-                var record = JsonUtility.FromJson<PlayModeBuildRecord>(json);
-                if (record == null || record.policyFingerprint != expectedFingerprint)
-                {
-                    return null;
-                }
-                return record;
+                record = JsonUtility.FromJson<PlayModeBuildRecord>(json);
             }
-            catch
+            catch (ArgumentException)
             {
+                // Corrupt payloads are stale data, not defects: erase and start over.
                 SessionState.EraseString(key);
                 return null;
             }
+            if (record == null || record.policyFingerprint != expectedFingerprint)
+            {
+                return null;
+            }
+            return record;
         }
 
         public static void Clear(string avatarKey)
