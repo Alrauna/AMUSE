@@ -1627,6 +1627,58 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
+        /// The cache's correctness mechanism: Unity bumps the update counter
+        /// when capture-visible pixels change, so a texture mutated in place
+        /// re-keys instead of serving stale evidence. The update-count
+        /// element carries that correctness alone, because this route
+        /// cannot hash content without a readback (amended spec decision
+        /// 14). The fixture is a runtime-created texture asset: an in-place
+        /// mutation uploads to the GPU in the same editor step, which an
+        /// imported asset's upload pipeline does not guarantee.
+        /// </summary>
+        [Test]
+        public void AMutatedTextureBypassesTheCaptureCache()
+        {
+            var texture = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            texture.SetPixels32(UniformPixels(8, 8, 255));
+            texture.Apply(true);
+            AssetDatabase.CreateAsset(
+                texture, TempFolder + "/raw_cap_mutation.asset");
+            var asset = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TempFolder + "/raw_cap_mutation.asset");
+            Assert.That(
+                asset, Is.Not.Null,
+                "fixture precondition: the texture asset must load");
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    asset, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var cached, out _, rawMipCap: 2),
+                Is.True);
+            Assert.That(
+                cached[0].GetAlpha(0, 0), Is.EqualTo(255),
+                "fixture precondition: the cached chain is fully opaque");
+
+            var mutated = UniformPixels(8, 8, 255);
+            mutated[0] = new Color32(64, 32, 16, 128);
+            asset.SetPixels32(mutated);
+            asset.Apply(true);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    asset, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var fresh, out _, rawMipCap: 2),
+                Is.True);
+
+            Assert.That(
+                fresh, Is.Not.SameAs(cached),
+                "the mutated texture must re-key, not serve the stale chain");
+            Assert.That(
+                fresh[0].GetAlpha(0, 0), Is.EqualTo(0),
+                "the fresh chain carries the mutated below-one texel");
+        }
+
+        /// <summary>
         /// The three-state verdict through the real R8 predicate route, with
         /// the opaque bound pinned. Under the gate-on bounds From(80, 2) the
         /// noise bound is byte 6 and the opaque bound is byte 204. The stray
