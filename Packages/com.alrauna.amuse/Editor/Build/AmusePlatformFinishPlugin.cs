@@ -1025,7 +1025,7 @@ namespace Alrauna.Amuse.Editor.Build
                             }
                         }
 
-                        RetainPreparedSeparation(
+                        var prepared = RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
                             rendererPath,
@@ -1041,11 +1041,20 @@ namespace Alrauna.Amuse.Editor.Build
                             grantedShaderNames,
                             resolved.SlotResults);
 
-                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay && plan != null)
+                        // The apply pass executes the prepared plan, which
+                        // preparation re-cut under the preserve gate. The
+                        // play record reads that same plan, so its slot rows
+                        // name the outcome the build applies. A null result
+                        // means nothing survived preparation: no slot rows
+                        // for this renderer, and the refusal rows above
+                        // already cover refused renderers.
+                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay
+                            && prepared != null)
                         {
                             RecordPlayModeSlots(
                                 state, renderer, rendererPath, rendererTypeName,
-                                plan, resolved.SlotResults, extraction.Snapshot);
+                                prepared.Plan, resolved.SlotResults,
+                                extraction.Snapshot);
                         }
                     }
                 }
@@ -1370,12 +1379,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// validates and applies it. A renderer whose plan proves no triangle
         /// opaque has nothing to prepare and is not retained at all; neither
         /// is a renderer whose every candidate slot refused conversion.
+        /// Returns the prepared separation, or null when nothing survived
+        /// preparation. The prepared separation carries the re-cut plan the
+        /// apply pass executes, so the play record must read that plan.
         /// <para>
         /// Preparation mutates nothing but AMUSE-owned transient objects: no
         /// renderer, no clip, no source asset, and no asset saving.
         /// </para>
         /// </summary>
-        private static void RetainPreparedSeparation(
+        private static PreparedRendererSeparation RetainPreparedSeparation(
             AmusePlatformFinishState state,
             UnityRendererMutationTarget mutationTarget,
             string rendererPath,
@@ -1408,11 +1420,12 @@ namespace Alrauna.Amuse.Editor.Build
                 slotResults);
             if (prepared == null)
             {
-                return;
+                return null;
             }
 
             state.Separation ??= new PreparedAlphaSeparation();
             state.Separation.Add(prepared);
+            return prepared;
         }
 
         internal static void RecordPlayModeRendererRefusal(

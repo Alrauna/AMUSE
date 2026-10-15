@@ -7090,6 +7090,97 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The preserve gate folds the mixed-half slot: one proven opaque
+        /// triangle and one unproven triangle, with the stored preserve
+        /// value at 100. Preparation re-cuts the plan, and the apply pass
+        /// executes the re-cut plan. The play record must describe that
+        /// same re-cut plan: the folded slot reads as converted, not as
+        /// an unconverted splittable slot.
+        /// </summary>
+        [Test]
+        public void AFoldedSlotRecordsTheConvertedOutcomeNotTheUnfoldedOne()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE folded play row fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var optimizer = root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Mesh mesh = null;
+            Material material = null;
+
+            try
+            {
+                var serialized = new SerializedObject(optimizer);
+                serialized.FindProperty(
+                        "_minimumOpaqueCoverageToPreservePercent")
+                    .intValue = 100;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                EnsureSamplingPolicyFolder();
+                var mixed = ImportMixedHalfTexture(
+                    "folded_play_row_halves", MixedHalfAlphaPixels());
+                mesh = MixedHalfMesh();
+                material = SampledAlphaMaterial(mixed);
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[] { material };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(buildPath: AmuseBuildPath.ApplyOnPlay),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly,
+                    VerifiedPoiyomiTestSeams.VerifiedConversion);
+                var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(amuse.SemanticallyRefusedRendererCount,
+                    Is.Zero);
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the unfolded plan must prove " +
+                    "only the opaque-half triangle");
+                Assert.That(amuse.Separation, Is.Not.Null,
+                    "fixture precondition: the folded slot must survive " +
+                    "preparation, so the apply holds a plan to execute");
+
+                var rows = amuse.PlayModeRendererRows
+                    .Where(r => r.kind == 3 && r.slotIndex == 0)
+                    .ToList();
+                Assert.That(rows, Has.Count.EqualTo(1),
+                    "the resolved folded slot must record one play row");
+                var row = rows[0];
+                Assert.That(row.sentence, Is.Not.Contains("Splittable:"),
+                    "the folded slot must not read as an unconverted " +
+                    "splittable slot");
+                Assert.That(row.sentence, Is.EqualTo(
+                        "Convertable: 2 out of 2 polygons may be moved"),
+                    "the row must describe the converted outcome the " +
+                    "apply executes");
+                Assert.That(row.provenTriangles, Is.EqualTo(2),
+                    "the folded plan proves both triangles");
+                Assert.That(row.totalTriangles, Is.EqualTo(2));
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle
+                    .DestroyCommittedCloneRecursive(root, null);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (material != null) Object.DestroyImmediate(material);
+                if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+                }
+            }
+        }
+
         private static void AssertTwoSlotTriangleFixture(Mesh mesh)
         {
             Assert.That(
