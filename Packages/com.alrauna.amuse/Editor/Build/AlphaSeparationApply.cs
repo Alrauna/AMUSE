@@ -1098,13 +1098,22 @@ namespace Alrauna.Amuse.Editor.Build
                     foreach (var candidate in survivors)
                     {
                         var slotIdx = candidate.Plan.SourceMaterialBindingIndex;
-                        if (!state.AppliedChangedMaterialSlots.Contains(
-                                (renderer, slotIdx)))
+                        var isChanged = state.AppliedChangedMaterialSlots
+                            .Contains((renderer, slotIdx));
+                        if (!isChanged &&
+                            candidate.Plan.Disposition !=
+                            SubmeshSeparationDisposition.Split)
                         {
                             // The applied write kept this slot's material.
                             // An already-opaque self-mapped slot survives the
                             // plan but moved nothing, so it is not an
-                            // applied slot.
+                            // applied slot. A surviving Split is different:
+                            // the finalization keeps the slot's source
+                            // material on its own submesh and moves the
+                            // slot's opaque triangles to the appended
+                            // submesh, so the reference comparison never
+                            // sees it, yet the write really moved the
+                            // slot's triangles. A Split is always applied.
                             continue;
                         }
 

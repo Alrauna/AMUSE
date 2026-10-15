@@ -3432,6 +3432,45 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// One private static mesh with the asked submesh count, two
+        /// triangles per submesh. The applied-write fixtures use it so a
+        /// Split write can carry its appended submesh on the write mesh.
+        /// </summary>
+        private static Mesh TwoTriangleSubmeshesMesh(int submeshCount)
+        {
+            var vertices = new Vector3[submeshCount * 6];
+            for (var submesh = 0; submesh < submeshCount; submesh++)
+            {
+                var first = submesh * 6;
+                vertices[first] = new Vector3(submesh * 3f, 0f, 0f);
+                vertices[first + 1] = new Vector3(submesh * 3f + 1f, 0f, 0f);
+                vertices[first + 2] = new Vector3(submesh * 3f, 1f, 0f);
+                vertices[first + 3] = new Vector3(submesh * 3f + 2f, 0f, 0f);
+                vertices[first + 4] = new Vector3(submesh * 3f + 3f, 0f, 0f);
+                vertices[first + 5] = new Vector3(submesh * 3f + 2f, 1f, 0f);
+            }
+
+            var mesh = new Mesh
+            {
+                vertices = vertices,
+                subMeshCount = submeshCount,
+            };
+            for (var submesh = 0; submesh < submeshCount; submesh++)
+            {
+                var first = submesh * 6;
+                mesh.SetTriangles(
+                    new[]
+                    {
+                        first, first + 1, first + 2,
+                        first + 3, first + 4, first + 5,
+                    },
+                    submesh);
+            }
+
+            return mesh;
+        }
+
+        /// <summary>
         /// A fully folded renderer swaps its material in place. The folded
         /// slot is an ordinary wholly-opaque candidate to the apply pass,
         /// so the write rewrites the swap curve onto the opaque result,
@@ -6194,6 +6233,194 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(2),
                 "the write changed the converting slot's material, so its " +
                 "proven triangles moved");
+        }
+
+        /// <summary>
+        /// One applied write carries three surviving slots: one converts in
+        /// place, one is already opaque and maps to itself, and one is a
+        /// genuine Split. A Split keeps its source material on its own
+        /// submesh and moves its opaque triangles to the appended submesh,
+        /// so its row must report its proven count even though the write
+        /// kept the slot's material.
+        /// </summary>
+        [Test]
+        public void AnAppliedSplitSlotReportsItsProvenMovedTriangles()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var splitSource = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var splitOpaque = Track(new Material(splitSource.shader));
+            var rendererObj = Track(new GameObject(
+                "AMUSE applied split slot renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var sourceMesh = Track(TwoTriangleSubmeshesMesh(3));
+            // The write mesh mirrors the finalization recipe: the three
+            // source submeshes keep their layout, and the appended submesh
+            // carries exactly the Split's proven opaque triangles.
+            var writeMesh = Track(TwoTriangleSubmeshesMesh(3));
+            var appendedVertex = writeMesh.vertexCount;
+            var grown = new Vector3[appendedVertex + 3];
+            writeMesh.vertices.CopyTo(grown, 0);
+            grown[appendedVertex] = new Vector3(9f, 0f, 0f);
+            grown[appendedVertex + 1] = new Vector3(10f, 0f, 0f);
+            grown[appendedVertex + 2] = new Vector3(9f, 1f, 0f);
+            writeMesh.vertices = grown;
+            writeMesh.subMeshCount = 4;
+            writeMesh.SetTriangles(
+                new[]
+                {
+                    appendedVertex,
+                    appendedVertex + 1,
+                    appendedVertex + 2,
+                },
+                3);
+            renderer.sharedMesh = sourceMesh;
+            renderer.sharedMaterials = new[] { source, selfMapped, splitSource };
+
+            // Slot 0 converts in place. Slot 1 is already opaque and maps
+            // to itself. Slot 2 is a genuine Split: its source material
+            // stays bound to its own submesh and its opaque result lands
+            // on the appended submesh, exactly as the finalization builds
+            // a Split write.
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var splitMapping = new Dictionary<Material, Material>
+            {
+                [splitSource] = splitOpaque,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        2, 2,
+                        new[] { 0 }, new[] { 1 },
+                        SubmeshSeparationDisposition.Split),
+                },
+                true, false, 5, 1);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[2], splitMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            const string rendererPath = "Avatar/AppliedSplitSlotRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, sourceMesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                        candidates[2],
+                    },
+                };
+
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    writeMesh,
+                    new[] { clone, selfMapped, splitSource, splitOpaque },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 0,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 1,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 2,
+                movedTriangles = 0,
+                provenTriangles = 1,
+                totalTriangles = 2
+            });
+
+            var appliedSlots = AlphaSeparationApply.CollectAppliedSlots(state);
+            AlphaSeparationApply.UpdateAppliedMovedTriangles(state, appliedSlots);
+
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 0)
+                    .movedTriangles,
+                Is.EqualTo(2),
+                "the converting slot's proven triangles moved");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
+                    .movedTriangles,
+                Is.EqualTo(0),
+                "the self-mapped slot moved nothing");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 2)
+                    .movedTriangles,
+                Is.EqualTo(1),
+                "the applied Split moved its opaque triangle to the " +
+                "appended submesh, so its proven count moves even " +
+                "though the write kept its material");
+            Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(3),
+                "the summary counts the converted slot's triangles and " +
+                "the Split's appended triangle, so the rows must agree");
         }
     }
 }

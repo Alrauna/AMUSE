@@ -215,9 +215,12 @@ namespace Alrauna.Amuse.Editor.Build
         /// changed when the write's material differs from what the renderer
         /// held. A surviving slot whose already-opaque material maps to
         /// itself never enters the set, because its write kept the slot's
-        /// material. The play-mode record keys its moved-triangle rows on
-        /// this set. Live transient host capability, deliberately outside
-        /// the evidence graph.
+        /// material. A surviving Split never enters it either: the
+        /// finalization keeps the Split's source material and moves its
+        /// opaque triangles to the appended submesh. The play-mode record
+        /// keys its moved-triangle rows on this set plus surviving Split
+        /// dispositions. Live transient host capability, deliberately
+        /// outside the evidence graph.
         /// </summary>
         internal HashSet<(Renderer renderer, int slot)>
             AppliedChangedMaterialSlots { get; } =
