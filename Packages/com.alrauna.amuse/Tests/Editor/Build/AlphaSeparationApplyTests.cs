@@ -3759,6 +3759,90 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "their own triangles to the summary count");
         }
 
+        /// <summary>
+        /// The applied-slot collection reads the surviving-candidate list the
+        /// preparation pass wrote before any finalization is applied. A
+        /// missing list is a state invariant defect, so the collection
+        /// throws instead of silently reading the prepared candidate slots,
+        /// which would report refused slots as applied.
+        /// </summary>
+        [Test]
+        public void AMissingSurvivingCandidateListIsAnInvariantFailureNotASilentApply()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var rendererObj = Track(new GameObject(
+                "AMUSE missing survivors renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source };
+
+            var mapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 2, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], mapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                string.Empty,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+
+            var write = new AlphaSeparationRendererWrite(
+                renderer,
+                null,
+                new[] { clone },
+                Array.Empty<AlphaSeparationCurveEdit>());
+            state.AppliedFinalization =
+                new AlphaSeparationFinalization(new[] { write });
+
+            // A preparation that reaches an applied finalization always
+            // writes one surviving-candidate entry per prepared renderer
+            // first, so a null list here is an invariant defect and must
+            // not fall back to the prepared candidate slots.
+            var thrown = Assert.Throws<InvalidOperationException>(
+                () => AlphaSeparationApply.CollectAppliedSlots(state));
+            Assert.That(
+                thrown.Message,
+                Does.Contain("surviving-candidate"),
+                "the throw must name the surviving-candidate invariant");
+        }
+
         // --- Task 5 integration coverage: the cutout family end to end ------
 
         /// <summary>

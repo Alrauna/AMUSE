@@ -1071,10 +1071,21 @@ namespace Alrauna.Amuse.Editor.Build
                         .GetReference(renderer, false)?.Path;
                     var buildPath = prepared.RendererPath;
 
-                    var survivors = state.SeparationSurvivingCandidates != null &&
-                                    rIdx < state.SeparationSurvivingCandidates.Count
-                        ? state.SeparationSurvivingCandidates[rIdx]
-                        : prepared.CandidateSlots;
+                    if (state.SeparationSurvivingCandidates == null ||
+                        rIdx >= state.SeparationSurvivingCandidates.Count)
+                    {
+                        throw new InvalidOperationException(
+                            "An applied finalization has no surviving-" +
+                            "candidate list entry for prepared renderer " +
+                            "index " + rIdx + ". The preparation pass " +
+                            "writes one entry per prepared renderer before " +
+                            "any finalization is applied, so a missing or " +
+                            "short list is a state defect. Applying the " +
+                            "prepared candidate slots would apply refused " +
+                            "slots.");
+                    }
+
+                    var survivors = state.SeparationSurvivingCandidates[rIdx];
 
                     foreach (var candidate in survivors)
                     {
