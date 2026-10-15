@@ -2552,25 +2552,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The suite's synthetic-shader gather path: one fixture material on
-        /// the probe shader, captured through the production request and
-        /// gathered through the production entry point the suite drives.
+        /// The suite's synthetic-shader gather path: one fixture material,
+        /// captured through the production request and gathered through the
+        /// production entry point the suite drives.
         /// </summary>
+        private static LilToonSourceEvidence GatherSourceEvidence(
+            Material fixtureMaterial)
+        {
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    fixtureMaterial,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest),
+            })[0];
+
+            return LilToonSourceAttestation.GatherCutoutSourceEvidence(
+                fixtureMaterial.shader, captured);
+        }
+
         private static LilToonSourceEvidence GatherSourceEvidence(
             Shader fixtureShader)
         {
             var material = new Material(fixtureShader);
             try
             {
-                var captured = UnityMaterialEvidenceCapture.Capture(new[]
-                {
-                    new MaterialEvidenceCaptureInput(
-                        material,
-                        LilToonMaterialSemantics.AlphaEvidenceRequest),
-                })[0];
-
-                return LilToonSourceAttestation.GatherCutoutSourceEvidence(
-                    fixtureShader, captured);
+                return GatherSourceEvidence(material);
             }
             finally
             {
@@ -2598,6 +2604,61 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     second,
                     Is.SameAs(first),
                     "one gather serves repeated materials on one shader");
+            }
+            finally
+            {
+                DeleteSyntheticProbeFolder();
+            }
+        }
+
+        /// <summary>
+        /// Two materials on one shader with different serialized
+        /// _lilToonVersion stamps must each gather their own stamp. The
+        /// gather embeds the stamp it reads from the captured material, so
+        /// the memo key carries it: a key without the stamp lets the first
+        /// material's stamp serve every later material on the shader.
+        /// </summary>
+        [Test]
+        public void TwoMaterialsOnOneShaderWithDivergentStampsGatherTheirOwnEvidence()
+        {
+            try
+            {
+                var fixtureShader = WriteSyntheticCutoutProbeShader();
+                Assert.That(fixtureShader, Is.Not.Null, ProbeShaderPath);
+
+                var restamped = new Material(fixtureShader);
+                var untouched = new Material(fixtureShader);
+                try
+                {
+                    restamped.SetFloat("_lilToonVersion", 46f);
+
+                    // The restamped material gathers first. The untouched
+                    // material's serialized stamp is the shader default 45,
+                    // so first-gather-wins is observable: its 46 would
+                    // serve the untouched material too.
+                    var restampedEvidence = GatherSourceEvidence(restamped);
+                    var untouchedEvidence = GatherSourceEvidence(untouched);
+
+                    Assert.That(
+                        restampedEvidence.HasShaderFormatVersion,
+                        Is.True);
+                    Assert.That(
+                        restampedEvidence.ShaderFormatVersion,
+                        Is.EqualTo(46f));
+                    Assert.That(
+                        untouchedEvidence.HasShaderFormatVersion,
+                        Is.True);
+                    Assert.That(
+                        untouchedEvidence.ShaderFormatVersion,
+                        Is.EqualTo(45f),
+                        "the first gather's stamp was served to the " +
+                        "second material");
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(restamped);
+                    UnityEngine.Object.DestroyImmediate(untouched);
+                }
             }
             finally
             {

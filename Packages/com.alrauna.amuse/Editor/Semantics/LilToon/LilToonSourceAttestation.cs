@@ -2464,17 +2464,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// One gather serves every material on one unchanged shader until
         /// the build boundary. The key is the shader asset's project-relative
         /// path, the pass slot the profile names (null for the Multi
-        /// container gather), and the shader name override. The guard is the
-        /// UTC write times of the shader file and of every non-meta file
-        /// under the include folder. The shader file's write time alone
-        /// never guards an entry: the include tree is digested evidence, so
-        /// an include edit must invalidate too. The shape is the corrected
-        /// Poiyomi source-hash memo: identity plus write times plus the
-        /// per-build clear.
+        /// container gather), the shader name override, and the shader
+        /// format stamp the gather embeds, read from the captured material
+        /// and normalized to 0 when absent so the key stays equality-safe.
+        /// The guard is the UTC write times of the shader file and of every
+        /// non-meta file under the include folder. The shader file's write
+        /// time alone never guards an entry: the include tree is digested
+        /// evidence, so an include edit must invalidate too. The shape is
+        /// the corrected Poiyomi source-hash memo: identity plus write
+        /// times plus the per-build clear.
         /// </summary>
         private static readonly Dictionary<
             (string ShaderAssetPath, string PassShaderName,
-                string ShaderNameOverride),
+                string ShaderNameOverride, bool HasVersion, float Version),
             (string WriteTimes, LilToonSourceEvidence Evidence)>
             GatherMemo = new();
 
@@ -2554,15 +2556,37 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             StringBuilder writeTimes,
             string fullPath)
         {
+            if (fullPath == null)
+            {
+                // No absolute path: nothing to stamp. The gather for an
+                // in-memory shader bypasses the memo on identity anyway.
+                return;
+            }
+
             writeTimes.Append(fullPath)
                 .Append('|')
                 .Append(File.GetLastWriteTimeUtc(fullPath).Ticks)
                 .Append('\n');
         }
 
+        /// <summary>
+        /// The shader format stamp one gather embeds, read from the captured
+        /// material. Absent normalizes to 0: NaN never equals NaN, so an
+        /// unnormalized absent stamp would make its memo key unmatchable.
+        /// </summary>
+        private static (bool HasVersion, float Version) ShaderFormatStamp(
+            CapturedMaterialEvidence evidence)
+        {
+            return evidence.TryGetScalar(
+                ShaderFormatVersionProperty, out var version)
+                ? (true, version)
+                : (false, 0f);
+        }
+
         private static bool TryReadGatheredEvidence(
             (string ShaderAssetPath, string PassShaderName,
-                string ShaderNameOverride) key,
+                string ShaderNameOverride, bool HasVersion,
+                float Version) key,
             string writeTimes,
             out LilToonSourceEvidence evidence)
         {
@@ -2586,7 +2610,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         private static void StoreGatheredEvidence(
             (string ShaderAssetPath, string PassShaderName,
-                string ShaderNameOverride) key,
+                string ShaderNameOverride, bool HasVersion,
+                float Version) key,
             string writeTimes,
             LilToonSourceEvidence evidence)
         {
@@ -2604,19 +2629,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static GatherFrontHalf GatherSharedFrontHalf(
             Shader shader,
             CapturedMaterialEvidence evidence,
+            (bool HasVersion, float Version) formatStamp,
             string shaderAssetPath,
             string projectRoot,
             string shaderFullPath)
         {
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
-
-            var hasVersion = evidence.TryGetScalar(
-                ShaderFormatVersionProperty, out var version);
-            if (!hasVersion)
-            {
-                version = float.NaN;
-            }
 
             var package = UnityEditor.PackageManager.PackageInfo
                 .FindForAssetPath(shaderAssetPath);
@@ -2644,8 +2663,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return new GatherFrontHalf(
                 assetGuid,
-                hasVersion,
-                version,
+                formatStamp.HasVersion,
+                formatStamp.Version,
                 package,
                 projectRoot,
                 includeTree,
@@ -2674,8 +2693,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var projectRoot = TryGetProjectRoot();
             var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
 
+            var formatStamp = ShaderFormatStamp(evidence);
             var memoKey = (shaderAssetPath, profile.PassShaderName,
-                shaderNameOverride);
+                shaderNameOverride, formatStamp.HasVersion,
+                formatStamp.Version);
             var writeTimes = GatherWriteTimes(
                 shaderFullPath, IncludeFolderFullPath(shaderFullPath));
             if (TryReadGatheredEvidence(memoKey, writeTimes, out var memoized))
@@ -2688,6 +2709,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 evidence,
                 profile,
                 shaderNameOverride,
+                formatStamp,
                 shaderAssetPath,
                 projectRoot,
                 shaderFullPath);
@@ -2707,6 +2729,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             LilToonSourceProfile profile,
             string shaderNameOverride,
+            (bool HasVersion, float Version) formatStamp,
             string shaderAssetPath,
             string projectRoot,
             string shaderFullPath)
@@ -2714,6 +2737,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var frontHalf = GatherSharedFrontHalf(
                 shader,
                 evidence,
+                formatStamp,
                 shaderAssetPath,
                 projectRoot,
                 shaderFullPath);
@@ -2787,7 +2811,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // Null pass slot and null override: the Multi gather resolves no
             // pass half and never takes a shader name override.
-            var memoKey = (shaderAssetPath, (string)null, (string)null);
+            var formatStamp = ShaderFormatStamp(evidence);
+            var memoKey = (shaderAssetPath, (string)null, (string)null,
+                formatStamp.HasVersion, formatStamp.Version);
             var writeTimes = GatherWriteTimes(
                 shaderFullPath, IncludeFolderFullPath(shaderFullPath));
             if (TryReadGatheredEvidence(memoKey, writeTimes, out var memoized))
@@ -2798,6 +2824,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             var frontHalf = GatherSharedFrontHalf(
                 shader,
                 evidence,
+                formatStamp,
                 shaderAssetPath,
                 projectRoot,
                 shaderFullPath);
