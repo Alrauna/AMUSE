@@ -2514,6 +2514,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Drops every memoized source digest. Returns true when at least
+        /// one entry was dropped. The per-build clear blocks call this at
+        /// the build boundary, so a build never inherits a digest that an
+        /// earlier build memoized.
+        /// </summary>
+        internal static bool ClearSourceHashMemo()
+        {
+            var droppedAny = SourceHashMemo.Count > 0;
+            SourceHashMemo.Clear();
+            return droppedAny;
+        }
+
+        /// <summary>
         /// Evaluates the exact identity conjunction against already-read
         /// evidence. Returns true only for the canonical, unlocked source at
         /// the pinned revision; otherwise emits one material-scoped diagnostic
