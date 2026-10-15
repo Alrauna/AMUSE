@@ -1049,6 +1049,7 @@ namespace Alrauna.Amuse.Editor.Build
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
+            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
         }
         internal static HashSet<(string path, int slot)> CollectAppliedSlots(
             AmusePlatformFinishState state)

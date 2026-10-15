@@ -2490,54 +2490,128 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
-        [Test]
-        public void GatherCutout_MissingPassAsset_FailsClosedWithoutNameOnlyFallback()
+        /// <summary>
+        /// The stand-in asset folder the gather tests share.
+        /// </summary>
+        private const string ProbeFolder = "Assets/AmuseTests_LilToonAttestation";
+
+        private const string ProbeShaderPath =
+            ProbeFolder + "/LilToonCutoutAttestationProbe.shader";
+
+        /// <summary>
+        /// Writes the stand-in shader the gather tests share: a stand-in
+        /// carrying the pinned cutout identity, the exact shader name, the
+        /// exact pinned asset GUID (hand-written .meta), and the format
+        /// stamp. The pass asset Hidden/ltspass_cutout is deliberately never
+        /// created — this project has no resolvable cutout pass of its own,
+        /// which is the fail-closed premise the gather tests share.
+        /// </summary>
+        private static Shader WriteSyntheticCutoutProbeShader()
         {
-            const string folder = "Assets/AmuseTests_LilToonAttestation";
-            const string shaderPath =
-                folder + "/LilToonCutoutAttestationProbe.shader";
-            if (!AssetDatabase.IsValidFolder(folder))
+            if (!AssetDatabase.IsValidFolder(ProbeFolder))
             {
                 AssetDatabase.CreateFolder(
                     "Assets", "AmuseTests_LilToonAttestation");
             }
 
+            File.WriteAllText(
+                ProbeShaderPath,
+                "Shader \"Hidden/lilToonCutout\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        [HideInInspector] _lilToonVersion" +
+                " (\"Version\", Int) = 45\n" +
+                "        _Invisible (\"Invisible\", Int) = 0\n" +
+                "        _UDIMDiscardCompile (\"UDIM\", Int) = 0\n" +
+                "    }\n" +
+                "    SubShader { Pass {} }\n" +
+                "}\n");
+            File.WriteAllText(
+                ProbeShaderPath + ".meta",
+                "fileFormatVersion: 2\n" +
+                "guid: 85d6126cae43b6847aff4b13f4adb8ec\n" +
+                "ShaderImporter:\n" +
+                "  externalObjects: {}\n" +
+                "  defaultTextures: []\n" +
+                "  nonModifiableTextures: []\n" +
+                "  userData: \n" +
+                "  assetBundleName: \n" +
+                "  assetBundleVariant: \n");
+            AssetDatabase.ImportAsset(
+                ProbeShaderPath, ImportAssetOptions.ForceSynchronousImport);
+            return AssetDatabase.LoadAssetAtPath<Shader>(ProbeShaderPath);
+        }
+
+        private static void DeleteSyntheticProbeFolder()
+        {
+            if (AssetDatabase.IsValidFolder(ProbeFolder))
+            {
+                AssetDatabase.DeleteAsset(ProbeFolder);
+            }
+        }
+
+        /// <summary>
+        /// The suite's synthetic-shader gather path: one fixture material on
+        /// the probe shader, captured through the production request and
+        /// gathered through the production entry point the suite drives.
+        /// </summary>
+        private static LilToonSourceEvidence GatherSourceEvidence(
+            Shader fixtureShader)
+        {
+            var material = new Material(fixtureShader);
             try
             {
-                // A stand-in carrying the pinned cutout identity: the exact
-                // shader name, the exact pinned asset GUID (hand-written
-                // .meta), and the format stamp. The pass asset
-                // Hidden/ltspass_cutout is deliberately never created — this
-                // project has no resolvable cutout pass, which is the
-                // fail-closed premise under test.
-                File.WriteAllText(
-                    shaderPath,
-                    "Shader \"Hidden/lilToonCutout\"\n" +
-                    "{\n" +
-                    "    Properties\n" +
-                    "    {\n" +
-                    "        [HideInInspector] _lilToonVersion" +
-                    " (\"Version\", Int) = 45\n" +
-                    "        _Invisible (\"Invisible\", Int) = 0\n" +
-                    "        _UDIMDiscardCompile (\"UDIM\", Int) = 0\n" +
-                    "    }\n" +
-                    "    SubShader { Pass {} }\n" +
-                    "}\n");
-                File.WriteAllText(
-                    shaderPath + ".meta",
-                    "fileFormatVersion: 2\n" +
-                    "guid: 85d6126cae43b6847aff4b13f4adb8ec\n" +
-                    "ShaderImporter:\n" +
-                    "  externalObjects: {}\n" +
-                    "  defaultTextures: []\n" +
-                    "  nonModifiableTextures: []\n" +
-                    "  userData: \n" +
-                    "  assetBundleName: \n" +
-                    "  assetBundleVariant: \n");
-                AssetDatabase.ImportAsset(
-                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
-                var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
-                Assert.That(shader, Is.Not.Null, shaderPath);
+                var captured = UnityMaterialEvidenceCapture.Capture(new[]
+                {
+                    new MaterialEvidenceCaptureInput(
+                        material,
+                        LilToonMaterialSemantics.AlphaEvidenceRequest),
+                })[0];
+
+                return LilToonSourceAttestation.GatherCutoutSourceEvidence(
+                    fixtureShader, captured);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+
+        /// <summary>
+        /// One gather serves repeated materials on one shader until the
+        /// build boundary: the second gather answers with the first gather's
+        /// own evidence instance. The per-build clear sites drop the memo,
+        /// so the next build re-gathers.
+        /// </summary>
+        [Test]
+        public void AGatheredShaderSourceIsMemoizedUntilTheBuildBoundary()
+        {
+            try
+            {
+                var fixtureShader = WriteSyntheticCutoutProbeShader();
+                Assert.That(fixtureShader, Is.Not.Null, ProbeShaderPath);
+
+                var first = GatherSourceEvidence(fixtureShader);
+                var second = GatherSourceEvidence(fixtureShader);
+                Assert.That(
+                    second,
+                    Is.SameAs(first),
+                    "one gather serves repeated materials on one shader");
+            }
+            finally
+            {
+                DeleteSyntheticProbeFolder();
+            }
+        }
+
+        [Test]
+        public void GatherCutout_MissingPassAsset_FailsClosedWithoutNameOnlyFallback()
+        {
+            try
+            {
+                var shader = WriteSyntheticCutoutProbeShader();
+                Assert.That(shader, Is.Not.Null, ProbeShaderPath);
 
                 var material = new Material(shader);
                 try
@@ -2602,10 +2676,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
             finally
             {
-                if (AssetDatabase.IsValidFolder(folder))
-                {
-                    AssetDatabase.DeleteAsset(folder);
-                }
+                DeleteSyntheticProbeFolder();
             }
         }
 

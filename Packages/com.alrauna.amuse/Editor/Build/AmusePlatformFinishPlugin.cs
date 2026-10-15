@@ -459,6 +459,7 @@ namespace Alrauna.Amuse.Editor.Build
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
+            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
             if (!lifecycle.MayUsePositiveMutation)
             {
                 // V7: a lifecycle refusal is never silent. One plain
