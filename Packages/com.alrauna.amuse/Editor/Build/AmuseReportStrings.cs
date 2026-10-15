@@ -234,6 +234,17 @@ namespace Alrauna.Amuse.Editor.Build
                 "Remove the animation events if you want AMUSE to run on " +
                 "this avatar.",
 
+            ["amuse.avatar.MalformedControllerLayer"] =
+                "This avatar has a broken animation layer.",
+            ["amuse.avatar.MalformedControllerLayer:description"] =
+                "A layer in an animator controller has no state machine. " +
+                "A tool on this avatar wrote a broken controller. AMUSE " +
+                "cannot read that layer. The avatar keeps all its " +
+                "original materials.",
+            ["amuse.avatar.MalformedControllerLayer:hint"] =
+                "Fix or remove the broken layer if you want AMUSE to run " +
+                "on this avatar.",
+
             // --- Host lifecycle refusals ---
             ["amuse.host.UnsupportedUnityVersion"] =
                 "This Unity version is not supported.",
