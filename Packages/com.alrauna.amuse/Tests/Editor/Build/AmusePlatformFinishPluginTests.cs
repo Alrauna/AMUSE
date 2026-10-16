@@ -4750,10 +4750,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void RuntimeStateIntegration_AdditiveFlagAloneDoesNotRefuseRenderer()
+        public void RuntimeStateIntegration_AdditiveLayerMaterialSwapRefuses()
         {
+            // --- Falsifier 2: an implementation that narrows the renderer predicate but forgets the object-binding pass leaves the additive material swap admitted. This test must fail it. ---
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE additive flag only");
+            var root = new GameObject("AMUSE additive material swap");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -4778,11 +4779,252 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(evidence.Clips[0].FloatBindings, Is.Empty,
                     "fixture precondition: the control unexpectedly has a material " +
                     "property binding");
+                Assert.That(evidence.Clips[0].ObjectBindings,
+                    Has.Count.EqualTo(1),
+                    "no-op guard: the material swap was not captured as an " +
+                    "object binding, so the refusal below proves nothing");
                 Assert.That(result.Refusal,
                     Is.EqualTo(RendererAnalysisRefusal
                         .AdditiveLayerWithProofRelevantMaterialProperty),
                     "the additive material swap refuses under per-clip " +
                     "provenance");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AdditivePoseLayerDoesNotRefuseOverrideAnimatedRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var rootA = new GameObject("AMUSE additive pose layer");
+            var rootB = new GameObject("AMUSE pose layer control");
+            var fixtureA = default(AnalyzableRendererFixture);
+            var fixtureB = default(AnalyzableRendererFixture);
+            AnimatorController controllerA = null;
+            AnimatorController controllerB = null;
+            AnimationClip floatClipA = null;
+            AnimationClip floatClipB = null;
+            AnimationClip poseClip = null;
+
+            try
+            {
+                // Root A: the Override first layer animates a proof-relevant
+                // float of the fixture renderer; a second, additive layer
+                // animates only a transform.
+                FixtureAvatarIdentity.AttachVrcDescriptor(rootA);
+                rootA.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(rootA);
+                fixtureA = AddVerifiedOpaqueRenderer(rootA);
+                floatClipA = new AnimationClip { name = "AMUSE override float" };
+                AddAgreeingAnimatedProperty(floatClipA);
+                poseClip = new AnimationClip { name = "AMUSE additive pose" };
+                AnimationUtility.SetEditorCurve(
+                    poseClip,
+                    EditorCurveBinding.FloatCurve(
+                        string.Empty,
+                        typeof(Transform),
+                        "m_LocalPosition.x"),
+                    AnimationCurve.Constant(0f, 1f, 0f));
+                controllerA = new AnimatorController
+                {
+                    name = "AMUSE pose layer graph",
+                };
+                controllerA.AddLayer("L0");
+                controllerA.layers[0].stateMachine.AddState("S0").motion =
+                    floatClipA;
+                controllerA.AddLayer("L1");
+                var layers = controllerA.layers;
+                layers[1].blendingMode = AnimatorLayerBlendingMode.Additive;
+                controllerA.layers = layers;
+                controllerA.layers[1].stateMachine.AddState("S0").motion =
+                    poseClip;
+                rootA.AddComponent<Animator>().runtimeAnimatorController =
+                    controllerA;
+
+                // Root B: the identical fixture without the additive layer.
+                FixtureAvatarIdentity.AttachVrcDescriptor(rootB);
+                rootB.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(rootB);
+                fixtureB = AddVerifiedOpaqueRenderer(rootB);
+                floatClipB = new AnimationClip { name = "AMUSE override float" };
+                AddAgreeingAnimatedProperty(floatClipB);
+                controllerB = new AnimatorController
+                {
+                    name = "AMUSE float graph",
+                };
+                controllerB.AddLayer("L0");
+                controllerB.layers[0].stateMachine.AddState("S0").motion =
+                    floatClipB;
+                rootB.AddComponent<Animator>().runtimeAnimatorController =
+                    controllerB;
+
+                var resultA = AnalyzeVerifiedRuntimeStates(
+                    rootA, fixtureA.Renderer, out var evidenceA, 2);
+                var resultB = AnalyzeVerifiedRuntimeStates(
+                    rootB, fixtureB.Renderer, out _);
+
+                Assert.That(evidenceA.Clips, Has.Count.EqualTo(2),
+                    "fixture precondition: the additive pose clip was not " +
+                    "captured beside the override float clip");
+                Assert.That(
+                    evidenceA.Clips.Count(clip => clip.IsFromAdditiveLayer),
+                    Is.EqualTo(1),
+                    "fixture precondition: the additive layer's clip did " +
+                    "not carry additive provenance");
+                Assert.That(resultA.Refusal,
+                    Is.Not.EqualTo(RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty),
+                    "a transform-only additive layer must not refuse the " +
+                    "override-animated renderer");
+                Assert.That(resultB.Refusal,
+                    Is.Not.EqualTo(RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty),
+                    "fixture precondition: the control renderer refused");
+                Assert.That(resultA.Refusal, Is.EqualTo(resultB.Refusal),
+                    "the additive pose layer changed the renderer's own " +
+                    "refusal");
+                Assert.That(resultA.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(resultB.OpaqueCandidateTriangleCount),
+                    "the additive pose layer changed the proven opacity");
+                Assert.That(resultA.OpaqueCandidateTriangleCount,
+                    Is.GreaterThan(0),
+                    "the override float did not reach a proven opaque " +
+                    "outcome");
+                Assert.That(resultA.SlotResults,
+                    Has.Length.EqualTo(resultB.SlotResults.Length));
+                for (var slot = 0; slot < resultA.SlotResults.Length; slot++)
+                {
+                    Assert.That(resultA.SlotResults[slot].IsResolved,
+                        Is.EqualTo(resultB.SlotResults[slot].IsResolved),
+                        "the additive pose layer changed slot " + slot +
+                        "'s resolved-or-refused outcome");
+                    Assert.That(resultA.SlotResults[slot].Refusal,
+                        Is.EqualTo(resultB.SlotResults[slot].Refusal),
+                        "the additive pose layer changed slot " + slot +
+                        "'s refusal reason");
+                }
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixtureA);
+                DisposeAnalyzableRenderer(fixtureB);
+                Object.DestroyImmediate(rootA);
+                Object.DestroyImmediate(rootB);
+                if (floatClipA != null) Object.DestroyImmediate(floatClipA);
+                if (floatClipB != null) Object.DestroyImmediate(floatClipB);
+                if (poseClip != null) Object.DestroyImmediate(poseClip);
+                if (controllerA != null) DestroyControllerGraph(controllerA);
+                if (controllerB != null) DestroyControllerGraph(controllerB);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_SharedClipOnAdditiveAndOverrideLayersStillRefuses()
+        {
+            // --- Falsifier 1: an implementation that marks provenance from the first observation only, or that drops additive occurrences when the same clip also appears on an Override layer, lets the additive contribution through. This test must fail it. ---
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE shared additive clip");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                clip = new AnimationClip { name = "AMUSE shared float clip" };
+                AddAgreeingAnimatedProperty(clip);
+                controller = new AnimatorController
+                {
+                    name = "AMUSE shared clip graph",
+                };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion = clip;
+                controller.AddLayer("L1");
+                var layers = controller.layers;
+                layers[1].blendingMode = AnimatorLayerBlendingMode.Additive;
+                controller.layers = layers;
+                controller.layers[1].stateMachine.AddState("S0").motion = clip;
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence, 2);
+
+                Assert.That(evidence.Clips, Has.Count.EqualTo(2),
+                    "fixture precondition: the shared clip was not captured " +
+                    "once per referencing layer");
+                Assert.That(evidence.Clips[0].Name,
+                    Is.EqualTo(evidence.Clips[1].Name),
+                    "fixture precondition: the two occurrences are not the " +
+                    "same clip");
+                Assert.That(evidence.Clips[0].IsFromAdditiveLayer, Is.False,
+                    "fixture precondition: the Override layer was not " +
+                    "enumerated first");
+                Assert.That(evidence.Clips[1].IsFromAdditiveLayer, Is.True,
+                    "no-op guard: the additive occurrence lost its " +
+                    "provenance, so the refusal below proves nothing");
+                Assert.That(result.Refusal,
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty),
+                    "a clip shared with an Override layer keeps the " +
+                    "refusal on its additive occurrence");
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                Object.DestroyImmediate(root);
+                if (clip != null) Object.DestroyImmediate(clip);
+                if (controller != null) DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        public void RuntimeStateIntegration_AdditiveLayerFloatAnimationStillRefuses()
+        {
+            // Characterization guard: this passes on the implementation as
+            // of 2026-10-16 as well. It is regression protection against
+            // overshoot, not RED evidence.
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE additive float guard");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var fixture = default(AnalyzableRendererFixture);
+            AnimatorController controller = null;
+            AnimationClip clip = null;
+
+            try
+            {
+                fixture = AddVerifiedOpaqueRenderer(root);
+                controller = AddAnimatedMaterialAssignment(
+                    root, fixture.Material, out clip);
+                AddAgreeingAnimatedProperty(clip);
+                SetFirstLayerBlendingMode(
+                    controller, AnimatorLayerBlendingMode.Additive);
+
+                var result = AnalyzeVerifiedRuntimeStates(
+                    root, fixture.Renderer, out var evidence);
+
+                Assert.That(evidence.Clips[0].IsFromAdditiveLayer, Is.True,
+                    "fixture precondition: the clip was not captured from " +
+                    "the additive layer");
+                Assert.That(evidence.Clips[0].FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._AlphaForceOpaque"),
+                    "fixture precondition: no relevant material property " +
+                    "was captured");
+                Assert.That(result.Refusal, Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty));
             }
             finally
             {
@@ -7453,13 +7695,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private static (RendererAnalysisRefusal Refusal,
-                        int OpaqueCandidateTriangleCount)
+                        int OpaqueCandidateTriangleCount,
+                        SlotResolutionResult[] SlotResults)
             AnalyzeVerifiedRuntimeStates(
                 GameObject root,
                 Renderer renderer,
-                out CapturedAnimationEvidence evidence)
+                out CapturedAnimationEvidence evidence,
+                int expectedLayerCount = 1,
+                int expectedClipCount = 1)
         {
-            evidence = CaptureVerifiedRuntimeStateEvidence(root, renderer);
+            evidence = CaptureVerifiedRuntimeStateEvidence(
+                root, renderer, expectedLayerCount, expectedClipCount);
             var path = AnimationUtility.CalculateTransformPath(
                 renderer.transform, root.transform);
             var snapshot = CaptureRuntimeStateGeometry(renderer, evidence);
@@ -7484,8 +7730,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         snapshot, resolved.SlotResults,
                         UnityRendererAlphaAnalysis.TriangleClassifier,
                         UnityRendererAlphaAnalysis.OutcomeIntersector)
-                        .OpaqueTriangleCount)
-                : (resolved.Refusal, 0);
+                        .OpaqueTriangleCount,
+                    resolved.SlotResults)
+                : (resolved.Refusal, 0, resolved.SlotResults);
         }
 
         private static UnityRendererAlphaSnapshot CaptureRuntimeStateGeometry(
@@ -7514,13 +7761,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static CapturedAnimationEvidence
             CaptureVerifiedRuntimeStateEvidence(
                 GameObject root,
-                Renderer renderer)
+                Renderer renderer,
+                int expectedLayerCount = 1,
+                int expectedClipCount = 1)
         {
             var graph = CommittedControllerGraph.Enumerate(
                 root, GenericPlatformAnimatorBindings.Instance);
             Assert.That(graph.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
-            Assert.That(graph.Layers, Has.Count.EqualTo(1));
-            Assert.That(graph.Layers[0].Clips, Has.Count.EqualTo(1));
+            Assert.That(graph.Layers, Has.Count.EqualTo(expectedLayerCount));
+            Assert.That(graph.Layers[0].Clips,
+                Has.Count.EqualTo(expectedClipCount));
 
             // The same path production derives, so this helper exercises the real
             // renderer-scoped capture rather than a stand-in path.
